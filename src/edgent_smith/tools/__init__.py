@@ -11,7 +11,7 @@ from edgent_smith.tools.base_tools import (
 )
 
 
-def get_default_tools() -> list[Tool]:  # type: ignore[type-arg]
+def get_default_tools() -> list[Tool]:
     """Return the default tool set for edge agents."""
     return [
         Tool(current_datetime_tool, takes_ctx=True),

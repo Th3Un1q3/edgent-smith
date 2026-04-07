@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 LEDGER_PATH = REPO_ROOT / "experiments" / "ledger.json"
@@ -36,7 +35,7 @@ def append_ledger(entry: dict[str, Any]) -> None:
 
 
 def now_iso() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
 def fail(msg: str) -> None:

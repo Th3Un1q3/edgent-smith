@@ -1,0 +1,60 @@
+name: Experiment Eval
+
+on:
+  push:
+    branches: ["experiment/**"]
+  workflow_dispatch:
+    inputs:
+      experiment_name:
+        description: "Experiment slug"
+        required: true
+      suite:
+        description: "Eval suite (smoke|benchmark|holdout)"
+        default: smoke
+        required: false
+
+jobs:
+  eval:
+    name: Run Candidate Eval
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Derive experiment name from branch
+        id: exp
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          NAME="${BRANCH#experiment/}"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "suite=${{ github.event.inputs.suite || 'smoke' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Check manifest exists
+        run: |
+          MANIFEST="experiments/manifests/${{ steps.exp.outputs.name }}.json"
+          if [ ! -f "$MANIFEST" ]; then
+            echo "No manifest found at $MANIFEST"
+            echo "Run: python experiments/scripts/init_experiment.py --name ${{ steps.exp.outputs.name }} ..."
+            exit 1
+          fi
+
+      - name: Validate import
+        run: python -c "from edgent_smith.main import create_app; print('import OK')"
+
+      - name: Run tests (guard)
+        run: python -m pytest tests/ -q --tb=short
+
+      - name: Upload manifest artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: experiment-manifest-${{ steps.exp.outputs.name }}
+          path: experiments/manifests/${{ steps.exp.outputs.name }}.json
+          if-no-files-found: ignore

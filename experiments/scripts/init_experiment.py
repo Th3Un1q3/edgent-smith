@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import MANIFESTS_DIR, now_iso, fail
+from _common import MANIFESTS_DIR, fail, now_iso
 
 
 def main() -> None:

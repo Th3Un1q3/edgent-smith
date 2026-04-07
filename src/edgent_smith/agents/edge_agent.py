@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import structlog
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent
 
 from edgent_smith.config.settings import Settings, get_settings
 from edgent_smith.providers import get_provider
@@ -58,7 +58,7 @@ class EdgeAgent:
         return Agent(
             model,
             deps_type=AgentDeps,
-            result_type=AgentResult,
+            output_type=AgentResult,
             system_prompt=SYSTEM_PROMPT,
             tools=tools,
         )
@@ -67,12 +67,13 @@ class EdgeAgent:
         """Execute the agent with the given prompt and dependencies."""
         logger.info("agent.run.start", run_id=deps.run_id, prompt_len=len(prompt))
         result = await self._agent.run(prompt, deps=deps)
+        output: AgentResult = result.output
         logger.info(
             "agent.run.complete",
             run_id=deps.run_id,
-            confidence=result.data.confidence,
+            confidence=output.confidence,
         )
-        return result.data
+        return output
 
 
 def build_edge_agent(settings: Settings | None = None) -> EdgeAgent:

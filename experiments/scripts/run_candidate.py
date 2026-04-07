@@ -2,7 +2,8 @@
 """Run eval suites against a candidate experiment.
 
 Usage:
-    python experiments/scripts/run_candidate.py --name <experiment-name> [--suite smoke|benchmark|holdout|all]
+    python experiments/scripts/run_candidate.py \\
+        --name <experiment-name> [--suite smoke|benchmark|holdout|all]
 
 Reads the manifest from experiments/manifests/<name>.json,
 runs the specified eval suite, and persists results.
@@ -19,14 +20,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import MANIFESTS_DIR, RESULTS_DIR, now_iso, fail
+from _common import MANIFESTS_DIR, RESULTS_DIR, fail, now_iso
 
 
 async def run_suite(suite_name: str) -> dict:  # type: ignore[type-arg]
     from eval.harness import EvalHarness
-    from eval.suites.smoke import SMOKE_CASES
     from eval.suites.benchmark import BENCHMARK_CASES
     from eval.suites.holdout import HOLDOUT_CASES
+    from eval.suites.smoke import SMOKE_CASES
 
     suite_map = {
         "smoke": SMOKE_CASES,

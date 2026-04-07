@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 import structlog
 
@@ -112,7 +113,7 @@ class EvalHarness:
     async def run_suite(self, cases: list[EvalCase], suite_name: str) -> SuiteResult:
         """Run a list of eval cases and return aggregated results."""
         results: list[EvalResult] = []
-        ts = datetime.now(tz=timezone.utc).isoformat()
+        ts = datetime.now(tz=UTC).isoformat()
 
         for case in cases:
             result = await self._run_case(case)
@@ -241,7 +242,7 @@ class EvalHarness:
 
     def _persist(self, suite_result: SuiteResult) -> None:
         """Persist suite result as JSON."""
-        ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%S")
+        ts = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%S")
         out_file = self._results_dir / f"{suite_result.suite}_{ts}.json"
         out_file.write_text(json.dumps(suite_result.to_dict(), indent=2))
         logger.info("eval.persisted", file=str(out_file))

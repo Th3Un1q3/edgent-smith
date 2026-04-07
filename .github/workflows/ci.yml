@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "experiment/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Ruff lint
+        run: python -m ruff check src/ tests/ eval/ experiments/
+
+      - name: Mypy type check
+        run: python -m mypy src/edgent_smith/
+
+  tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest tests/ -q --tb=short
+
+  eval-smoke:
+    name: Eval Smoke (offline)
+    runs-on: ubuntu-latest
+    # Only run on experiment branches and main
+    if: >
+      github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/heads/experiment/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run eval harness import check
+        run: |
+          python -c "from eval.harness import EvalHarness; print('eval harness OK')"
+          python -c "from eval.suites.smoke import SMOKE_CASES; print(f'{len(SMOKE_CASES)} smoke cases')"
+          python -c "from eval.suites.benchmark import BENCHMARK_CASES; print(f'{len(BENCHMARK_CASES)} benchmark cases')"
+          python -c "from eval.suites.holdout import HOLDOUT_CASES; print(f'{len(HOLDOUT_CASES)} holdout cases')"
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]" pip-audit
+
+      - name: Audit dependencies
+        run: pip-audit
+        continue-on-error: true

@@ -24,9 +24,9 @@ from _common import BASELINES_DIR, now_iso
 
 async def run_baseline(suite: str) -> dict:  # type: ignore[type-arg]
     from eval.harness import EvalHarness
-    from eval.suites.smoke import SMOKE_CASES
     from eval.suites.benchmark import BENCHMARK_CASES
     from eval.suites.holdout import HOLDOUT_CASES
+    from eval.suites.smoke import SMOKE_CASES
 
     # Minimal mock runner – replace with real agent for live baseline
     async def mock_runner(prompt: str) -> object:

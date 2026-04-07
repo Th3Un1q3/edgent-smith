@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from pydantic import BaseModel
@@ -31,7 +31,7 @@ class SearchInput(BaseModel):
 
 async def current_datetime_tool(ctx: RunContext[AgentDepsProtocol]) -> str:
     """Return the current UTC datetime as an ISO 8601 string."""
-    now = datetime.now(tz=timezone.utc).isoformat()
+    now = datetime.now(tz=UTC).isoformat()
     logger.debug("tool.current_datetime", run_id=ctx.deps.run_id, result=now)
     return now
 

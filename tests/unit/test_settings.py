@@ -23,7 +23,7 @@ def test_settings_from_env(monkeypatch):
 
 
 def test_max_tokens_bounds():
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         Settings(max_tokens=0)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         Settings(max_tokens=99999)

@@ -7,8 +7,8 @@ and stores results for polling by the REST API.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 import structlog
@@ -20,7 +20,7 @@ from edgent_smith.config.settings import get_settings
 logger = structlog.get_logger(__name__)
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -34,7 +34,7 @@ class Job(BaseModel):
     prompt: str
     result: Any | None = None
     error: str | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
     completed_at: datetime | None = None
 
 
@@ -91,12 +91,12 @@ class JobExecutor:
             result = await agent.run(job.prompt, deps)
             job.result = result.model_dump()
             job.status = JobStatus.COMPLETED
-            job.completed_at = datetime.now(tz=timezone.utc)
+            job.completed_at = datetime.now(tz=UTC)
             logger.info("job.completed", job_id=job.job_id)
         except Exception as exc:
             job.status = JobStatus.FAILED
             job.error = str(exc)
-            job.completed_at = datetime.now(tz=timezone.utc)
+            job.completed_at = datetime.now(tz=UTC)
             logger.error("job.failed", job_id=job.job_id, error=str(exc))
 
 

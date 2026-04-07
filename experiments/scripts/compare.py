@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import BASELINES_DIR, MANIFESTS_DIR, append_ledger, now_iso, fail
+from _common import BASELINES_DIR, MANIFESTS_DIR, append_ledger, fail, now_iso
 
 # Thresholds – part of the immutable judge
 SMOKE_MIN_PASS_RATE = 1.0      # Must pass all smoke cases
