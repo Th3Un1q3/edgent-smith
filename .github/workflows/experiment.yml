@@ -13,10 +13,15 @@ on:
         default: smoke
         required: false
 
+permissions:
+  contents: read
+
 jobs:
   eval:
     name: Run Candidate Eval
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
