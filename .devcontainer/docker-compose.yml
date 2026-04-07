@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  devcontainer:
+    image: mcr.microsoft.com/devcontainers/python:3.11
+    volumes:
+      - ..:/workspace:cached
+    command: sleep infinity
+    environment:
+      EDGENT_OLLAMA_BASE_URL: http://ollama:11434
+      EDGENT_MODEL_PROVIDER: ollama
+      EDGENT_MODEL_NAME: gemma3:4b
+    depends_on:
+      - ollama
+    networks:
+      - edgent-dev
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - edgent-dev
+
+networks:
+  edgent-dev:
+
+volumes:
+  ollama_data:

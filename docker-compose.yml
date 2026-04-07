@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  edgent-smith:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    ports:
+      - "8000:8000"
+    environment:
+      EDGENT_MODEL_PROVIDER: ollama
+      EDGENT_OLLAMA_BASE_URL: http://ollama:11434
+      EDGENT_MODEL_NAME: gemma3:4b
+      EDGENT_LOG_LEVEL: INFO
+      EDGENT_MAX_TOKENS: "512"
+      EDGENT_TIMEOUT_SECONDS: "30"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/readyz')"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
