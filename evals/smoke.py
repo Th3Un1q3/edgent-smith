@@ -2,6 +2,19 @@
 
 Uses pydantic_evals (shipped with pydantic-ai[evals]) – no custom wrapper code.
 
+Scoring
+-------
+The CI score is the **count of fully-passing cases** (not an average ratio).
+A case is fully passing when all of its assertions are ``True`` *and* all of
+its keyword-match scores equal ``1.0``.
+
+This means:
+
+* Adding a new case that passes → score increases (improvement).
+* Adding a new case that fails  → score is unchanged (no penalty for growth).
+* An existing case starts failing → score decreases AND a regression is
+  flagged, which blocks promotion regardless of the total count.
+
 Run:
     python evals/smoke.py
 """
@@ -10,19 +23,45 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import Evaluator, EvaluatorContext, IsInstance
+from pydantic_evals.reporting import EvaluationReport
 
 from agents.edge import AgentOutput, run_agent
 
 _BASELINE_FILE = Path(__file__).parent / "baseline.json"
 
 
-def _read_baseline() -> tuple[float, dict]:  # type: ignore[type-arg]
-    """Return (score, raw_data) from evals/baseline.json."""
+def _read_baseline() -> tuple[int, list[str], dict[str, Any]]:
+    """Return (score, passing_cases, raw_data) from evals/baseline.json.
+
+    ``score`` is the count of fully-passing cases recorded at the last baseline
+    update.  ``passing_cases`` is the list of their names — any case in this
+    list that fails in the current run is treated as a regression.
+    """
     data = json.loads(_BASELINE_FILE.read_text())
-    return float(data["score"]), data
+    return int(data["score"]), list(data.get("passing_cases", [])), data
+
+
+def case_pass_results(report: EvaluationReport) -> dict[str, bool]:
+    """Return ``{case_name: passed}`` for every case in *report*.
+
+    A case is considered fully passing when:
+
+    * it did not raise an exception during execution (not in ``report.failures``), AND
+    * all of its boolean assertions are ``True``, AND
+    * all of its numeric scores equal ``1.0``.
+
+    Cases that appear in ``report.failures`` are recorded as ``False``.
+    """
+    results: dict[str, bool] = {f.name: False for f in report.failures}
+    for case in report.cases:
+        assertions_ok = all(r.value for r in case.assertions.values())
+        scores_ok = all(v.value >= 1.0 for v in case.scores.values()) if case.scores else True
+        results[case.name] = assertions_ok and scores_ok
+    return results
 
 
 # ── Custom evaluator ───────────────────────────────────────────────────────────
@@ -109,26 +148,36 @@ if __name__ == "__main__":
     _report = smoke_dataset.evaluate_sync(run_agent)
     _report.print(include_input=True, include_output=True)
 
-    _avg = _report.averages()
-    _score = float(_avg.assertions) if _avg and _avg.assertions is not None else 0.0
-    _baseline, _baseline_data = _read_baseline()
-    print(f"\nCI score: {_score:.4f}  (baseline: {_baseline})", flush=True)
+    _pass_results = case_pass_results(_report)
+    _passing_now = [name for name, passed in _pass_results.items() if passed]
+    _score = len(_passing_now)
+    _baseline_score, _baseline_passing, _baseline_data = _read_baseline()
+    _regressions = [name for name in _baseline_passing if not _pass_results.get(name, False)]
+
+    print(f"\nCI score: {_score}  (baseline: {_baseline_score})", flush=True)
+    if _regressions:
+        print(f"REGRESSIONS detected: {_regressions}", flush=True)
+
+    _ci_passed = _score >= _baseline_score and not _regressions
 
     if _args.update_baseline:
-        if _score > _baseline:
-            _baseline_data["score"] = round(_score, 4)
+        if _score > _baseline_score:
+            _baseline_data["score"] = _score
+            _baseline_data["passing_cases"] = _passing_now
             _BASELINE_FILE.write_text(json.dumps(_baseline_data, indent=2) + "\n")
-            print(f"Baseline updated: {_baseline} → {_score:.4f}", flush=True)
-        elif _score == _baseline:
-            print(f"Baseline unchanged: {_baseline} (score equal)", flush=True)
+            print(f"Baseline updated: {_baseline_score} → {_score}", flush=True)
+        elif _score == _baseline_score:
+            print(f"Baseline unchanged: {_baseline_score} (score equal)", flush=True)
         else:
-            print(f"Baseline NOT updated: score {_score:.4f} < baseline {_baseline}", flush=True)
+            print(f"Baseline NOT updated: score {_score} < baseline {_baseline_score}", flush=True)
 
     if _args.score_file:
         _result = {
-            "score": round(_score, 4),
-            "baseline": _baseline,
-            "passed": _score >= _baseline,
+            "score": _score,
+            "baseline": _baseline_score,
+            "passed": _ci_passed,
             "cases_total": len(smoke_dataset.cases),
+            "passing_cases": _passing_now,
+            "regressions": _regressions,
         }
         Path(_args.score_file).write_text(json.dumps(_result, indent=2))

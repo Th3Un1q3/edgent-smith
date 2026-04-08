@@ -54,7 +54,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 from agents.edge import AgentOutput
 from agents.edge import agent as edge_agent
-from evals.smoke import _BASELINE_FILE, _read_baseline, smoke_dataset
+from evals.smoke import _BASELINE_FILE, _read_baseline, case_pass_results, smoke_dataset
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -148,29 +148,39 @@ if __name__ == "__main__":
     _report = smoke_dataset.evaluate_sync(_run)
     _report.print(include_input=True, include_output=True)
 
-    _avg = _report.averages()
-    _score = float(_avg.assertions) if _avg and _avg.assertions is not None else 0.0
-    _baseline, _baseline_data = _read_baseline()
-    print(f"\nCI score: {_score:.4f}  (baseline: {_baseline})", flush=True)
+    _pass_results = case_pass_results(_report)
+    _passing_now = [name for name, passed in _pass_results.items() if passed]
+    _score = len(_passing_now)
+    _baseline_score, _baseline_passing, _baseline_data = _read_baseline()
+    _regressions = [name for name in _baseline_passing if not _pass_results.get(name, False)]
+
+    print(f"\nCI score: {_score}  (baseline: {_baseline_score})", flush=True)
+    if _regressions:
+        print(f"REGRESSIONS detected: {_regressions}", flush=True)
+
+    _ci_passed = _score >= _baseline_score and not _regressions
 
     if _args.update_baseline:
-        if _score > _baseline:
-            _baseline_data["score"] = round(_score, 4)
+        if _score > _baseline_score:
+            _baseline_data["score"] = _score
+            _baseline_data["passing_cases"] = _passing_now
             _BASELINE_FILE.write_text(json.dumps(_baseline_data, indent=2) + "\n")
-            print(f"Baseline updated: {_baseline} → {_score:.4f}", flush=True)
-        elif _score == _baseline:
-            print(f"Baseline unchanged: {_baseline} (score equal)", flush=True)
+            print(f"Baseline updated: {_baseline_score} → {_score}", flush=True)
+        elif _score == _baseline_score:
+            print(f"Baseline unchanged: {_baseline_score} (score equal)", flush=True)
         else:
-            print(f"Baseline NOT updated: score {_score:.4f} < baseline {_baseline}", flush=True)
+            print(f"Baseline NOT updated: score {_score} < baseline {_baseline_score}", flush=True)
 
     if _args.score_file:
         Path(_args.score_file).write_text(
             json.dumps(
                 {
-                    "score": round(_score, 4),
-                    "baseline": _baseline,
-                    "passed": _score >= _baseline,
+                    "score": _score,
+                    "baseline": _baseline_score,
+                    "passed": _ci_passed,
                     "cases_total": len(smoke_dataset.cases),
+                    "passing_cases": _passing_now,
+                    "regressions": _regressions,
                     "model": _args.model,
                     "provider": "github-copilot",
                 },
