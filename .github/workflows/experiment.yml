@@ -149,6 +149,16 @@ ${ISSUE_BODY}"
 
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Update baseline to the new score so it reflects a real eval result.
+          python3 -c "
+import json, pathlib
+p = pathlib.Path('evals/baseline.json')
+data = json.loads(p.read_text())
+data['score'] = float('${SCORE}')
+p.write_text(json.dumps(data, indent=2) + '\n')
+"
+
           git add -A
           git diff --cached --quiet \
             || git commit -m "experiment: issue #${ISSUE_NUMBER} — ${ISSUE_TITLE}"

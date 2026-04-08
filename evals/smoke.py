@@ -16,9 +16,13 @@ from pydantic_evals.evaluators import Evaluator, EvaluatorContext, IsInstance
 
 from agents.edge import AgentOutput, run_agent
 
-# Minimum assertion pass-rate (0.0–1.0) required for experiment promotion.
-# Mirrors evals/baseline.json — update both together.
-BASELINE_SCORE: float = 0.8
+_BASELINE_FILE = Path(__file__).parent / "baseline.json"
+
+
+def _read_baseline() -> float:
+    """Return the current baseline score from evals/baseline.json."""
+    return float(json.loads(_BASELINE_FILE.read_text())["score"])
+
 
 # ── Custom evaluator ───────────────────────────────────────────────────────────
 
@@ -101,13 +105,14 @@ if __name__ == "__main__":
 
     _avg = _report.averages()
     _score = float(_avg.assertions) if _avg and _avg.assertions is not None else 0.0
-    print(f"\nCI score: {_score:.4f}  (baseline: {BASELINE_SCORE})", flush=True)
+    _baseline = _read_baseline()
+    print(f"\nCI score: {_score:.4f}  (baseline: {_baseline})", flush=True)
 
     if _args.score_file:
         _result = {
             "score": round(_score, 4),
-            "baseline": BASELINE_SCORE,
-            "passed": _score >= BASELINE_SCORE,
+            "baseline": _baseline,
+            "passed": _score >= _baseline,
             "cases_total": len(smoke_dataset.cases),
         }
         Path(_args.score_file).write_text(json.dumps(_result, indent=2))
