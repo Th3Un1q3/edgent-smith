@@ -73,8 +73,8 @@ with the `gpt-5-mini` model. It requires one secret set in
 
 ## Baseline score
 
-The minimum assertion pass-rate is defined in `evals/baseline.json` (default: **0.80**).  
-Update both `evals/baseline.json` and `BASELINE_SCORE` in `evals/smoke.py` together.
+The minimum assertion pass-rate is stored in `evals/baseline.json`.  
+It is updated automatically: run `python evals/smoke.py --update-baseline` inside the DevContainer and the file is overwritten whenever the new score exceeds the current value.
 
 ---
 

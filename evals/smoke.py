@@ -19,9 +19,10 @@ from agents.edge import AgentOutput, run_agent
 _BASELINE_FILE = Path(__file__).parent / "baseline.json"
 
 
-def _read_baseline() -> float:
-    """Return the current baseline score from evals/baseline.json."""
-    return float(json.loads(_BASELINE_FILE.read_text())["score"])
+def _read_baseline() -> tuple[float, dict]:  # type: ignore[type-arg]
+    """Return (score, raw_data) from evals/baseline.json."""
+    data = json.loads(_BASELINE_FILE.read_text())
+    return float(data["score"]), data
 
 
 # ── Custom evaluator ───────────────────────────────────────────────────────────
@@ -98,6 +99,11 @@ if __name__ == "__main__":
         metavar="PATH",
         help="Write JSON score report to this file (for CI use).",
     )
+    _parser.add_argument(
+        "--update-baseline",
+        action="store_true",
+        help="Overwrite evals/baseline.json when the new score exceeds the current baseline.",
+    )
     _args = _parser.parse_args()
 
     _report = smoke_dataset.evaluate_sync(run_agent)
@@ -105,8 +111,18 @@ if __name__ == "__main__":
 
     _avg = _report.averages()
     _score = float(_avg.assertions) if _avg and _avg.assertions is not None else 0.0
-    _baseline = _read_baseline()
+    _baseline, _baseline_data = _read_baseline()
     print(f"\nCI score: {_score:.4f}  (baseline: {_baseline})", flush=True)
+
+    if _args.update_baseline:
+        if _score > _baseline:
+            _baseline_data["score"] = round(_score, 4)
+            _BASELINE_FILE.write_text(json.dumps(_baseline_data, indent=2) + "\n")
+            print(f"Baseline updated: {_baseline} → {_score:.4f}", flush=True)
+        elif _score == _baseline:
+            print(f"Baseline unchanged: {_baseline} (score equal)", flush=True)
+        else:
+            print(f"Baseline NOT updated: score {_score:.4f} < baseline {_baseline}", flush=True)
 
     if _args.score_file:
         _result = {
