@@ -12,6 +12,7 @@ agents/
   edge.py                      # Edge agent – single file, inline tools, pydantic-ai
 evals/
   smoke.py                     # Smoke eval dataset (pydantic_evals)
+  copilot_runner.py            # Fallback eval runner using GitHub Copilot API (no Ollama needed)
   baseline.json                # Minimum score threshold for experiment promotion
 tests/
   test_edge_agent.py
@@ -94,6 +95,63 @@ python evals/smoke.py
 # Run tests  (uses TestModel – no Ollama needed)
 pytest tests/ -q
 ```
+
+### Starting the DevContainer from the CLI (no VS Code)
+
+If you are in a headless environment (e.g. a CI sandbox or Copilot agent
+workspace), start the DevContainer with the
+[DevContainer CLI](https://github.com/devcontainers/cli):
+
+```bash
+# Install the CLI (Node 18+)
+npm install -g @devcontainers/cli
+
+# Build and start (Python 3.13 + Ollama sidecar)
+devcontainer up --workspace-folder .
+
+# Install the package inside the running container
+docker exec devcontainer-devcontainer-1 pip install -e '/workspace/.[dev]'
+
+# Run tests
+docker exec devcontainer-devcontainer-1 pytest tests/ -q
+
+# Run smoke evals (after pulling the model)
+docker exec devcontainer-ollama-1 ollama pull gemma4:e2b
+docker exec devcontainer-devcontainer-1 python evals/smoke.py
+```
+
+---
+
+## Running evals without Ollama (Copilot API fallback)
+
+The Ollama registry (`registry.ollama.ai`) is blocked in some sandbox
+environments.  Use `evals/copilot_runner.py` as a drop-in replacement.
+
+> **Network note:** `api.githubcopilot.com` is reachable from the **sandbox
+> host** but is blocked inside the DevContainer's Docker network.  Run this
+> script on the host, not inside the container.
+
+```bash
+# Install on the host (ignoring the Python 3.13 version constraint)
+pip install -e ".[dev]" --ignore-requires-python
+
+# GITHUB_COPILOT_API_TOKEN is already set in the Copilot agent sandbox
+python evals/copilot_runner.py
+
+# Choose a different model
+python evals/copilot_runner.py --model gpt-4o-2024-11-20
+
+# Write a CI-compatible score file
+python evals/copilot_runner.py --score-file /tmp/score.json
+
+# Update baseline.json when the new score beats the current one
+python evals/copilot_runner.py --update-baseline
+```
+
+`evals/copilot_runner.py` is functionally identical to `evals/smoke.py` but
+wires the agent to the GitHub Copilot chat-completions endpoint instead of
+Ollama.  It patches the missing `"object"` field that the Copilot endpoint
+omits so pydantic-ai parses responses correctly.
 
 ---
 
