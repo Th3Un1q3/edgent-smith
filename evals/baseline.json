@@ -1,0 +1,4 @@
+{
+  "score": 0.8,
+  "description": "Minimum assertion pass-rate (0.0–1.0) for experiment promotion to a PR. Update alongside BASELINE_SCORE in evals/smoke.py."
+}

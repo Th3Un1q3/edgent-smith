@@ -62,3 +62,6 @@ Thumbs.db
 # pydantic-ai inference cache (not intended for the repo)
 pi_cache/
 .pi_cache/
+
+# CI eval artefacts
+eval_result.json

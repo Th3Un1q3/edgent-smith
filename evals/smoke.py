@@ -8,10 +8,17 @@ Run:
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import Evaluator, EvaluatorContext, IsInstance
 
 from agents.edge import AgentOutput, run_agent
+
+# Minimum assertion pass-rate (0.0–1.0) required for experiment promotion.
+# Mirrors evals/baseline.json — update both together.
+BASELINE_SCORE: float = 0.8
 
 # ── Custom evaluator ───────────────────────────────────────────────────────────
 
@@ -79,5 +86,28 @@ smoke_dataset: Dataset[str, AgentOutput] = Dataset(
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    report = smoke_dataset.evaluate_sync(run_agent)
-    report.print(include_input=True, include_output=True)
+    import argparse
+
+    _parser = argparse.ArgumentParser(description="Run smoke evaluations for the edge agent.")
+    _parser.add_argument(
+        "--score-file",
+        metavar="PATH",
+        help="Write JSON score report to this file (for CI use).",
+    )
+    _args = _parser.parse_args()
+
+    _report = smoke_dataset.evaluate_sync(run_agent)
+    _report.print(include_input=True, include_output=True)
+
+    _avg = _report.averages()
+    _score = float(_avg.assertions) if _avg and _avg.assertions is not None else 0.0
+    print(f"\nCI score: {_score:.4f}  (baseline: {BASELINE_SCORE})", flush=True)
+
+    if _args.score_file:
+        _result = {
+            "score": round(_score, 4),
+            "baseline": BASELINE_SCORE,
+            "passed": _score >= BASELINE_SCORE,
+            "cases_total": len(smoke_dataset.cases),
+        }
+        Path(_args.score_file).write_text(json.dumps(_result, indent=2))

@@ -1,7 +1,7 @@
 ---
 name: Experiment Proposal
-about: Propose a new agent experiment
-labels: experiment
+about: Propose a new agent experiment (add the 'auto-research' label to trigger automation)
+labels: ''
 ---
 
 ## Hypothesis
@@ -27,8 +27,8 @@ labels: experiment
 
 ## Justification (if more complex)
 
-## Checklist before submitting
+---
 
-- [ ] Mutation surface is restricted to `agents/edge.py` and/or `evals/smoke.py`
-- [ ] No changes to CI, devcontainer, or workflow files
-- [ ] No new dependencies required
+> **To trigger automation:** add the `auto-research` label to this issue.
+> The workflow will invoke the Copilot implement agent, run evaluations,
+> and open a PR automatically if the score exceeds the baseline.

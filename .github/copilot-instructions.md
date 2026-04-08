@@ -6,9 +6,9 @@ This repository implements a minimal, edge-optimised agentic system.
 
 | Agent | File | Role |
 |---|---|---|
-| Edge Agent | `agents/edge.py` | pydantic-ai agent; inline tools; orchestrates workflow |
-| Brainstorm Agent | `agents/brainstorm.py` | Copilot custom agent; generates ideas; creates GitHub issues |
-| Implementation Agent | `agents/implement.py` | Copilot custom agent; implements experiments; creates PRs |
+| Edge Agent | `agents/edge.py` | pydantic-ai agent; inline tools; subject of experimentation |
+| Brainstorm Agent | `.github/agents/brainstorm.agent.md` | Copilot custom agent; generates ideas; creates `auto-research` issues |
+| Implementation Agent | `.github/agents/implement.agent.md` | Copilot custom agent; applies experiment changes to `agents/edge.py` |
 
 ## Before making any change
 
@@ -18,12 +18,17 @@ This repository implements a minimal, edge-optimised agentic system.
 
 ## Mutation boundaries
 
-- **Allowed during experiments**: `agents/edge.py` (system prompt, tools), `evals/smoke.py`.
+- **Allowed during experiments**: `agents/edge.py` (system prompt, tool descriptions), `evals/smoke.py` (cases only).
 - **Never change**: CI workflows, devcontainer, `tests/`, this file.
+
+## Agent definitions
+
+GitHub Copilot custom agents live in `.github/agents/*.agent.md`.
+They are invoked by the `auto-research` workflow via the GitHub Copilot CLI.
 
 ## Prompts
 
-All agent and workflow prompts live in `.github/prompts/*.prompt.md`.
+General prompts live in `.github/prompts/*.prompt.md`.
 
 ## Python runtime
 

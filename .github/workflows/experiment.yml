@@ -1,20 +1,20 @@
-name: Experiment Workflow
+name: Auto-Research
 
-# Experiment–issue lifecycle:
+# Triggered when an issue receives the 'auto-research' label.
 #
-#   1. Copilot Brainstorm Agent creates a GitHub issue labelled "experiment".
-#   2. This workflow fires when the "experiment" label is applied.
-#   3. The Copilot Implementation Agent runs inside the DevContainer.
-#   4. On success: a new branch + PR is opened; the issue is commented.
-#      On failure: a failure comment is posted on the issue.
-#   5. The Edge Agent (edge.py) reacts to the success/failure comment
-#      to continue orchestration (proceed, retry, or close).
+# Lifecycle:
+#   1. Create an experiment branch.
+#   2. Inside the DevContainer: invoke the Copilot implement agent via the
+#      GitHub Copilot CLI; it reads .github/agents/implement.agent.md and
+#      applies minimal changes to agents/edge.py.
+#   3. Validate (tests + lint) and run pydantic_evals smoke suite.
+#   4. Compare score to evals/baseline.json.
+#      ✅ score >= baseline → commit, push, open PR, comment on issue.
+#      ❌ score <  baseline → comment on issue with details; no PR.
 
 on:
   issues:
     types: [labeled]
-  issue_comment:
-    types: [created]
 
 permissions:
   contents: write
@@ -22,59 +22,143 @@ permissions:
   pull-requests: write
 
 jobs:
-  # ── Step 2-4: Run the Copilot Implementation Agent when an issue is labelled ──
-  implement-experiment:
-    name: Implement experiment
-    if: >
-      github.event_name == 'issues' &&
-      github.event.label.name == 'experiment'
+  auto-research:
+    name: Run auto-research experiment
+    if: github.event.label.name == 'auto-research'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
 
     steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history for branch creation
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Run inside the DevContainer – uses the Copilot CLI and gh CLI pre-installed.
-      - uses: devcontainers/ci@v0.3
+      # ── 2. Create experiment branch ────────────────────────────────────────
+      - name: Create experiment branch
+        id: branch
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          runCmd: >
-            pip install -e ".[dev]" --quiet &&
-            python agents/implement.py
-            --issue ${{ github.event.issue.number }}
-            --base ${{ github.event.repository.default_branch }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          SLUG=$(echo "$ISSUE_TITLE" \
+            | tr '[:upper:]' '[:lower:]' \
+            | tr -cs 'a-z0-9' '-' \
+            | sed 's/-*$//' \
+            | cut -c1-40)
+          BRANCH="auto-research/${ISSUE_NUMBER}-${SLUG}"
+          git checkout -b "$BRANCH"
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
-  # ── Step 5-6: Edge Agent reacts to issue comments (success/failure) ──────────
-  edge-continue:
-    name: Edge agent – process comment
-    if: >
-      github.event_name == 'issue_comment' &&
-      contains(github.event.issue.labels.*.name, 'experiment')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: devcontainers/ci@v0.3
+      # ── 3. Implement + evaluate inside DevContainer ────────────────────────
+      - name: Implement changes and run evaluations
+        uses: devcontainers/ci@v0.3
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          COMMENT_BODY: ${{ github.event.comment.body }}
-          COMMENT_URL: ${{ github.event.comment.html_url }}
         with:
-          runCmd: >
-            pip install -e ".[dev]" --quiet &&
-            python agents/edge.py
-            --issue-number "$ISSUE_NUMBER"
-            --comment-body "$COMMENT_BODY"
+          runCmd: |
+            set -euo pipefail
+            pip install -e ".[dev]" -q
+
+            # ── a. Pull the Ollama model (sidecar started via docker-compose) ─
+            ollama pull "$EDGENT_MODEL_NAME" 2>/dev/null || true
+
+            # ── b. Build agent prompt from agent file + issue context ─────────
+            ISSUE_TITLE=$(gh issue view "$ISSUE_NUMBER" --json title -q .title)
+            ISSUE_BODY=$(gh issue view  "$ISSUE_NUMBER" --json body  -q .body)
+            AGENT_DEF=$(cat .github/agents/implement.agent.md)
+
+            PROMPT="${AGENT_DEF}
+
+## Task: Issue #${ISSUE_NUMBER} — ${ISSUE_TITLE}
+
+${ISSUE_BODY}"
+
+            # ── c. Invoke the Copilot CLI to get implementation script ────────
+            # gh copilot suggest outputs a shell script in non-interactive
+            # (CI) mode; execute it to apply changes to agents/edge.py.
+            gh copilot suggest -t shell "$PROMPT" > /tmp/impl.sh 2>/dev/null \
+              || echo '# no-op: Copilot CLI produced no suggestion' > /tmp/impl.sh
+            bash /tmp/impl.sh
+
+            # ── d. Validate ───────────────────────────────────────────────────
+            python -m pytest tests/ -q
+            python -m ruff check agents/ evals/ tests/
+
+            # ── e. Run evaluations; write score to workspace ──────────────────
+            python evals/smoke.py --score-file eval_result.json
+
+      # ── 4. Read results ────────────────────────────────────────────────────
+      - name: Read eval results
+        id: results
+        run: |
+          SCORE=$(python3 -c \
+            "import json; print(json.load(open('eval_result.json'))['score'])")
+          BASELINE=$(python3 -c \
+            "import json; print(json.load(open('evals/baseline.json'))['score'])")
+          python3 -c "import sys; sys.exit(0 if float('$SCORE') >= float('$BASELINE') else 1)" \
+            && PASSED=true || PASSED=false
+          echo "score=$SCORE"       >> "$GITHUB_OUTPUT"
+          echo "baseline=$BASELINE" >> "$GITHUB_OUTPUT"
+          echo "passed=$PASSED"     >> "$GITHUB_OUTPUT"
+
+      # ── 5a. Score >= baseline → commit, push, PR ──────────────────────────
+      - name: Commit, push, and open PR
+        if: steps.results.outputs.passed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          BASE: ${{ github.event.repository.default_branch }}
+          SCORE: ${{ steps.results.outputs.score }}
+          BASELINE: ${{ steps.results.outputs.baseline }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          # Only commit if there are actual changes
+          git diff --cached --quiet \
+            || git commit -m "experiment: issue #${ISSUE_NUMBER} — ${ISSUE_TITLE}"
+          git push origin "$BRANCH"
+
+          PR_URL=$(gh pr create \
+            --title "experiment: ${ISSUE_TITLE}" \
+            --body "Closes #${ISSUE_NUMBER}
+
+**Eval score:** \`${SCORE}\`  **Baseline:** \`${BASELINE}\`
+
+Implemented by the [auto-research workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})." \
+            --base "$BASE" \
+            --head "$BRANCH")
+
+          gh issue comment "$ISSUE_NUMBER" --body "✅ **Experiment passed baseline.**
+
+| Metric   | Value |
+|----------|-------|
+| Score    | \`${SCORE}\` |
+| Baseline | \`${BASELINE}\` |
+| PR       | ${PR_URL} |
+
+The changes have been committed and a pull request has been opened for review."
+
+      # ── 5b. Score < baseline → comment failure details ─────────────────────
+      - name: Report below-baseline result
+        if: steps.results.outputs.passed == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          SCORE: ${{ steps.results.outputs.score }}
+          BASELINE: ${{ steps.results.outputs.baseline }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body "❌ **Experiment did not reach baseline.**
+
+| Metric   | Value |
+|----------|-------|
+| Score    | \`${SCORE}\` |
+| Baseline | \`${BASELINE}\` |
+| Run      | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
+
+Please review the hypothesis and consider refining the approach before re-labelling."

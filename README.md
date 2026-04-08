@@ -9,19 +9,21 @@ Three agents · pydantic-ai evaluations · DevContainer-first CI · issue-driven
 
 ```
 agents/
-  edge.py         # Edge agent – single file, inline tools, pydantic-ai
-  brainstorm.py   # Copilot Brainstorm Agent (creates GitHub experiment issues)
-  implement.py    # Copilot Implementation Agent (runs experiments from issues)
+  edge.py                      # Edge agent – single file, inline tools, pydantic-ai
 evals/
-  smoke.py        # Smoke eval dataset (pydantic_evals, no custom wrapper)
+  smoke.py                     # Smoke eval dataset (pydantic_evals)
+  baseline.json                # Minimum score threshold for experiment promotion
 tests/
   test_edge_agent.py
-.devcontainer/    # Python 3.13 + Ollama sidecar
+.devcontainer/                 # Python 3.13 + Ollama sidecar
 .github/
-  prompts/        # *.prompt.md – agent and workflow prompts
+  agents/
+    brainstorm.agent.md        # Copilot custom agent – generates experiment issues
+    implement.agent.md         # Copilot custom agent – implements experiments
+  prompts/                     # *.prompt.md – general agent prompts
   workflows/
-    ci.yml        # Lint + type-check + tests (runs inside DevContainer)
-    experiment.yml # Issue-driven experiment workflow (DevContainer + Copilot CLI)
+    ci.yml                     # Lint + type-check + tests (DevContainer)
+    experiment.yml             # Issue-driven auto-research workflow (DevContainer)
 ```
 
 ---
@@ -29,23 +31,48 @@ tests/
 ## Three-agent workflow
 
 ```
-Copilot Brainstorm Agent
-  └─ generates ideas → creates GitHub issues labelled "experiment"
+Copilot Brainstorm Agent  (.github/agents/brainstorm.agent.md)
+  └─ generates ideas → creates GitHub issues labelled "auto-research"
         │
         ▼  (issues.labeled trigger)
   experiment.yml workflow  ← runs inside DevContainer
         │
-        ▼
-  Copilot Implementation Agent  (agents/implement.py)
-        ├─ applies changes on a new branch
-        ├─ runs tests + lint
-        ├─ SUCCESS → opens PR, comments ✅ on issue
-        └─ FAILURE → comments ❌ on issue
-              │
-              ▼  (issue_comment.created trigger)
-        Edge Agent  (agents/edge.py)
-              └─ reacts to comment, continues orchestration
+        ├─ invokes Copilot implement agent (.github/agents/implement.agent.md)
+        │   via GitHub Copilot CLI (gh copilot suggest)
+        │   └─ applies minimal changes to agents/edge.py
+        │
+        ├─ runs pydantic_evals smoke suite → score
+        │
+        ├─ score >= baseline (evals/baseline.json)
+        │   └─ commit + push + open PR + comment ✅ on issue
+        │
+        └─ score < baseline
+            └─ comment ❌ on issue with details
 ```
+
+---
+
+## Triggering an experiment
+
+1. Create a GitHub issue describing the experiment hypothesis.
+2. Add the **`auto-research`** label.
+3. The workflow fires automatically inside the DevContainer.
+4. Monitor the issue for a ✅ or ❌ comment.
+
+Or brainstorm ideas via the Brainstorm agent:
+```bash
+# Read the agent instructions
+cat .github/agents/brainstorm.agent.md
+# Then invoke via gh copilot
+gh copilot suggest -t shell "$(cat .github/agents/brainstorm.agent.md)"
+```
+
+---
+
+## Baseline score
+
+The minimum assertion pass-rate is defined in `evals/baseline.json` (default: **0.80**).  
+Update both `evals/baseline.json` and `BASELINE_SCORE` in `evals/smoke.py` together.
 
 ---
 
@@ -76,30 +103,6 @@ Requires Python 3.13.
 pip install -e ".[dev]"
 pytest tests/ -q
 python -m ruff check agents/ evals/ tests/
-```
-
----
-
-## Trigger an experiment manually
-
-1. Create a GitHub issue labelled `experiment` describing the hypothesis.
-2. The `experiment.yml` workflow fires automatically.
-3. Monitor the issue for a ✅ or ❌ comment from the Implementation Agent.
-
-Or brainstorm ideas programmatically:
-
-```bash
-python agents/brainstorm.py --count 3
-```
-
----
-
-## Configuration
-
-Set `EDGENT_MODEL` to override the default model:
-
-```bash
-EDGENT_MODEL=ollama:llama3:8b python agents/edge.py "Hello"
 ```
 
 ---
