@@ -37,9 +37,9 @@ Copilot Brainstorm Agent  (.github/agents/brainstorm.agent.md)
         ▼  (issues.labeled trigger)
   experiment.yml workflow  ← runs inside DevContainer
         │
-        ├─ invokes Copilot implement agent (.github/agents/implement.agent.md)
-        │   via GitHub Copilot CLI (gh copilot suggest)
-        │   └─ applies minimal changes to agents/edge.py
+        ├─ invokes GitHub Copilot CLI (@github/copilot, model: gpt-5-mini)
+        │   with .github/agents/implement.agent.md as instructions
+        │   Copilot edits agents/edge.py directly with its file tools
         │
         ├─ runs pydantic_evals smoke suite → score
         │
@@ -59,13 +59,15 @@ Copilot Brainstorm Agent  (.github/agents/brainstorm.agent.md)
 3. The workflow fires automatically inside the DevContainer.
 4. Monitor the issue for a ✅ or ❌ comment.
 
-Or brainstorm ideas via the Brainstorm agent:
-```bash
-# Read the agent instructions
-cat .github/agents/brainstorm.agent.md
-# Then invoke via gh copilot
-gh copilot suggest -t shell "$(cat .github/agents/brainstorm.agent.md)"
-```
+### Required repository secret
+
+The auto-research workflow uses the real **GitHub Copilot CLI** (`@github/copilot`)
+with the `gpt-5-mini` model. It requires one secret set in
+**Settings → Secrets and variables → Actions**:
+
+| Secret | How to create |
+|--------|---------------|
+| `COPILOT_GITHUB_TOKEN` | Create a fine-grained PAT at [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new). Under **Permissions → Account permissions** add **Copilot Requests (read)**. |
 
 ---
 

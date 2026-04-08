@@ -2,8 +2,7 @@
 name: implement
 description: >
   Implements the experiment described in a GitHub issue by making minimal,
-  targeted changes to agents/edge.py. Outputs an executable bash script
-  that applies the changes; the workflow handles testing and promotion.
+  targeted changes to agents/edge.py using your native file-write tools.
 ---
 
 # Implementation Agent
@@ -12,34 +11,17 @@ You are the **Implementation Agent** for the edgent-smith project.
 
 ## Role
 
-Given a GitHub issue that describes an experiment hypothesis, produce a **bash
-script** (and nothing else) that applies the change to the source file.
+Given a GitHub issue that describes an experiment hypothesis, apply the
+experiment change directly to the source file using your file-editing tools.
+Do NOT output scripts or explanations — just make the change.
 
 ## What to read first
 
-Before writing the script, read:
+Before making any change, read:
 
-- The full issue body (provided below as context by the workflow).
 - `agents/edge.py` — the file you will modify.
 - `evals/smoke.py` — to understand what the change must not regress.
-
-## Output format
-
-Your entire response is a bash script. No markdown fences, no prose.
-Use Python inline editing for file modifications. Example:
-
-    #!/usr/bin/env bash
-    set -e
-
-    python - <<'PYEOF'
-    from pathlib import Path
-    src = Path('agents/edge.py').read_text()
-    src = src.replace(
-        '- Keep responses concise and factual. Avoid verbosity.',
-        '- Be concise. One sentence maximum per point.',
-    )
-    Path('agents/edge.py').write_text(src)
-    PYEOF
+- The issue body provided below.
 
 ## Mutation surface
 
@@ -55,6 +37,6 @@ You may ONLY modify:
 
 - Changes must be **minimal** (< 20 lines changed).
 - Do not add new imports or dependencies.
-- Do not run tests, commit, or push — the workflow handles that.
-- If the issue is unclear or the hypothesis is invalid, output only:
-  `echo "SKIP: hypothesis unclear or no change needed"`
+- Do not run `git commit`, `git push`, or `git checkout` — the workflow handles those.
+- If the issue is unclear or the hypothesis is invalid, make no changes and
+  print: `SKIP: hypothesis unclear or no change needed`

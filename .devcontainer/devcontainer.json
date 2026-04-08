@@ -6,7 +6,8 @@
 
   "features": {
     "ghcr.io/devcontainers/features/git:1": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" }
   },
 
   "customizations": {
@@ -28,7 +29,7 @@
     }
   },
 
-  "postCreateCommand": "pip install -e '.[dev]'",
+  "postCreateCommand": "pip install -e '.[dev]' && npm install -g @github/copilot",
   "remoteUser": "vscode",
 
   "forwardPorts": [8000, 11434],
