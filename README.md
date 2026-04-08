@@ -83,7 +83,7 @@ Update both `evals/baseline.json` and `BASELINE_SCORE` in `evals/smoke.py` toget
 ```bash
 # Open in VS Code → "Reopen in Container"
 # Pull a model
-docker exec -it $(docker ps --filter name=ollama --format '{{.Names}}' | head -1) ollama pull gemma3:4b
+docker exec -it $(docker ps --filter name=ollama --format '{{.Names}}' | head -1) ollama pull gemma4:e2b
 
 # Run the edge agent
 python agents/edge.py "What is the capital of France?"
