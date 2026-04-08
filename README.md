@@ -107,17 +107,18 @@ workspace), start the DevContainer with the
 npm install -g @devcontainers/cli
 
 # Build and start (Python 3.13 + Ollama sidecar)
+# GITHUB_COPILOT_API_TOKEN is forwarded automatically when set in the host env
 devcontainer up --workspace-folder .
 
 # Install the package inside the running container
 docker exec devcontainer-devcontainer-1 pip install -e '/workspace/.[dev]'
 
 # Run tests
-docker exec devcontainer-devcontainer-1 pytest tests/ -q
+docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && pytest tests/ -q"
 
 # Run smoke evals (after pulling the model)
 docker exec devcontainer-ollama-1 ollama pull gemma4:e2b
-docker exec devcontainer-devcontainer-1 python evals/smoke.py
+docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && python evals/smoke.py"
 ```
 
 ---
@@ -127,31 +128,34 @@ docker exec devcontainer-devcontainer-1 python evals/smoke.py
 The Ollama registry (`registry.ollama.ai`) is blocked in some sandbox
 environments.  Use `evals/copilot_runner.py` as a drop-in replacement.
 
-> **Network note:** `api.githubcopilot.com` is reachable from the **sandbox
-> host** but is blocked inside the DevContainer's Docker network.  Run this
-> script on the host, not inside the container.
+`docker-compose.yml` already forwards `GITHUB_COPILOT_API_TOKEN` and sets
+`SSL_CERT_FILE` to the system CA bundle, so the Copilot API is reachable from
+inside the DevContainer with no extra configuration.
 
 ```bash
-# Install on the host (ignoring the Python 3.13 version constraint)
-pip install -e ".[dev]" --ignore-requires-python
+# Start the DevContainer (token is forwarded automatically)
+devcontainer up --workspace-folder .
 
-# GITHUB_COPILOT_API_TOKEN is already set in the Copilot agent sandbox
-python evals/copilot_runner.py
+# Run evals via the Copilot API (same agent, same dataset, different model backend)
+docker exec devcontainer-devcontainer-1 \
+  bash -c "cd /workspace && python evals/copilot_runner.py"
 
 # Choose a different model
-python evals/copilot_runner.py --model gpt-4o-2024-11-20
+docker exec devcontainer-devcontainer-1 \
+  bash -c "cd /workspace && python evals/copilot_runner.py --model gpt-4o-2024-11-20"
 
 # Write a CI-compatible score file
-python evals/copilot_runner.py --score-file /tmp/score.json
+docker exec devcontainer-devcontainer-1 \
+  bash -c "cd /workspace && python evals/copilot_runner.py --score-file /tmp/score.json"
 
 # Update baseline.json when the new score beats the current one
-python evals/copilot_runner.py --update-baseline
+docker exec devcontainer-devcontainer-1 \
+  bash -c "cd /workspace && python evals/copilot_runner.py --update-baseline"
 ```
 
-`evals/copilot_runner.py` is functionally identical to `evals/smoke.py` but
-wires the agent to the GitHub Copilot chat-completions endpoint instead of
-Ollama.  It patches the missing `"object"` field that the Copilot endpoint
-omits so pydantic-ai parses responses correctly.
+`evals/copilot_runner.py` runs the same smoke dataset and the same edge agent
+as `evals/smoke.py`.  It overrides the agent's model to the Copilot API
+per-run so the full agent (system prompt + all registered tools) is exercised.
 
 ---
 

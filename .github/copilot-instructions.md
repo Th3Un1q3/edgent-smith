@@ -28,41 +28,49 @@ The sandbox has **no Ollama daemon**.
 npm install -g @devcontainers/cli
 
 # Start the DevContainer (Python 3.13 + Ollama sidecar)
+# GITHUB_COPILOT_API_TOKEN is forwarded automatically (see docker-compose.yml)
 devcontainer up --workspace-folder .
 
-# Then run commands inside it
-docker exec devcontainer-devcontainer-1 python evals/smoke.py
+# Run commands inside the container
+docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && python evals/smoke.py"
 ```
 
 If Ollama is unreachable (no network access to registry.ollama.ai) use the
 Copilot API fallback — see **Running evals without Ollama** below.
+The Copilot API is reachable from inside the DevContainer because
+`docker-compose.yml` forwards the token and sets `SSL_CERT_FILE` to the
+system CA bundle (which trusts the sandbox TLS proxy).
 
 ## Running evals without Ollama
 
 When the Ollama registry is not reachable (e.g., in the Copilot agent sandbox),
 run evals against the GitHub Copilot API using the version-controlled runner.
 
-> **Important:** `api.githubcopilot.com` is reachable from the **sandbox host**
-> but is blocked inside the DevContainer's Docker network.
-> Run `evals/copilot_runner.py` from the **host**, not from inside the container.
+The `docker-compose.yml` already forwards `GITHUB_COPILOT_API_TOKEN` and
+`SSL_CERT_FILE` into the container, so no special setup is needed beyond
+starting the DevContainer with the token present in the host environment.
 
 ```bash
-# Install the package on the host (ignoring the Python 3.13 constraint)
-pip install -e ".[dev]" --ignore-requires-python
+# Start the DevContainer (token is forwarded automatically)
+devcontainer up --workspace-folder .
 
-# GITHUB_COPILOT_API_TOKEN is already set in the Copilot agent sandbox
-python evals/copilot_runner.py
+# Run evals via Copilot API inside the DevContainer
+docker exec devcontainer-devcontainer-1 \
+  bash -c "cd /workspace && python evals/copilot_runner.py"
 
 # Write a score file (same format as evals/smoke.py --score-file)
-python evals/copilot_runner.py --score-file /tmp/score.json
+docker exec devcontainer-devcontainer-1 \
+  bash -c "cd /workspace && python evals/copilot_runner.py --score-file /tmp/score.json"
 
 # Update the baseline when the new score beats the current one
-python evals/copilot_runner.py --update-baseline
+docker exec devcontainer-devcontainer-1 \
+  bash -c "cd /workspace && python evals/copilot_runner.py --update-baseline"
 ```
 
-`evals/copilot_runner.py` is the authoritative fallback runner.
-It patches the missing `"object"` field that the Copilot endpoint omits, so
-pydantic-ai parses responses correctly.
+`evals/copilot_runner.py` runs the **same** smoke dataset and the **same**
+edge agent as `evals/smoke.py`.  The only difference is the model backend:
+it overrides the agent's model to use the Copilot API instead of Ollama, so
+the full agent (system prompt + all registered tools) is exercised.
 
 ## Scripts must be version-controlled
 

@@ -1,38 +1,37 @@
-"""Run smoke evaluations using the GitHub Copilot API as the model backend.
+"""Run smoke evaluations against the edge agent using the GitHub Copilot API.
 
-Use this script whenever Ollama is unavailable.  The most common scenario is
-the Copilot agent sandbox: the host has Python 3.12 and no Ollama daemon, and
-the Docker network inside the DevContainer blocks outbound traffic to
-``api.githubcopilot.com``.  In that case run this script **from the sandbox
-host** (not inside the DevContainer).
+Use this script whenever Ollama is unavailable (e.g. the Ollama registry is
+blocked in the sandbox).  It runs the *same* smoke dataset and the *same*
+edge agent that ``evals/smoke.py`` targets — the only difference is the model
+backend: instead of Ollama, the agent is driven by the GitHub Copilot API.
 
 The GitHub Copilot chat-completions endpoint is OpenAI-compatible but omits
 ``"object": "chat.completion"`` from its responses.  ``CopilotTransport``
 patches that field transparently before pydantic-ai deserialises the response.
 
-Network requirements
---------------------
-``api.githubcopilot.com`` must be reachable.  This is true on the sandbox host
-but **not** inside the DevContainer (Docker blocks outbound traffic to that
-host from within the container network).
-
 Requirements
 ------------
-- Package installed:  ``pip install -e ".[dev]" --ignore-requires-python``
-- Token exported:     ``export GITHUB_COPILOT_API_TOKEN=<token>``
+Run **inside the DevContainer** (``devcontainer up --workspace-folder .``).
+The devcontainer forwards ``GITHUB_COPILOT_API_TOKEN`` and sets
+``SSL_CERT_FILE`` automatically via ``docker-compose.yml``.
 
-The token is already available as ``GITHUB_COPILOT_API_TOKEN`` in the Copilot
-agent sandbox.
+If starting the container manually (e.g. with ``docker exec``), pass the
+token explicitly::
+
+    docker exec \\
+      -e GITHUB_COPILOT_API_TOKEN="$GITHUB_COPILOT_API_TOKEN" \\
+      -e SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \\
+      devcontainer-devcontainer-1 \\
+      bash -c "cd /workspace && python evals/copilot_runner.py"
 
 Usage
 -----
 ::
 
-    # Run from the sandbox host (not inside the DevContainer)
-    GITHUB_COPILOT_API_TOKEN=$GITHUB_COPILOT_API_TOKEN \\
-      python evals/copilot_runner.py
+    # Inside the DevContainer
+    python evals/copilot_runner.py
 
-    # Different model
+    # Choose a different model
     python evals/copilot_runner.py --model gpt-4o-2024-11-20
 
     # Write a JSON score report (same format as evals/smoke.py --score-file)
@@ -50,11 +49,11 @@ from pathlib import Path
 
 import httpx
 from openai import AsyncOpenAI
-from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-from agents.edge import _SYSTEM, AgentOutput
+from agents.edge import AgentOutput
+from agents.edge import agent as edge_agent
 from evals.smoke import _BASELINE_FILE, _read_baseline, smoke_dataset
 
 # ── Constants ──────────────────────────────────────────────────────────────────
@@ -93,11 +92,11 @@ class CopilotTransport(httpx.AsyncHTTPTransport):
         return response
 
 
-# ── Agent factory ──────────────────────────────────────────────────────────────
+# ── Model factory ──────────────────────────────────────────────────────────────
 
 
-def build_copilot_agent(model_name: str = _DEFAULT_MODEL) -> Agent[None, AgentOutput]:
-    """Return an edge agent that uses the GitHub Copilot API as its backend.
+def build_copilot_model(model_name: str = _DEFAULT_MODEL) -> OpenAIChatModel:
+    """Return an OpenAIChatModel backed by the GitHub Copilot API.
 
     Reads ``GITHUB_COPILOT_API_TOKEN`` from the environment.
     """
@@ -108,8 +107,7 @@ def build_copilot_agent(model_name: str = _DEFAULT_MODEL) -> Agent[None, AgentOu
         http_client=httpx.AsyncClient(transport=CopilotTransport()),
     )
     provider = OpenAIProvider(openai_client=openai_client)
-    model = OpenAIChatModel(model_name, provider=provider)
-    return Agent(model, output_type=AgentOutput, system_prompt=_SYSTEM)
+    return OpenAIChatModel(model_name, provider=provider)
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
@@ -118,7 +116,10 @@ if __name__ == "__main__":
     import argparse
 
     _parser = argparse.ArgumentParser(
-        description="Smoke evals via GitHub Copilot API (fallback when Ollama is unavailable)."
+        description=(
+            "Run smoke evals against the edge agent using the GitHub Copilot API "
+            "(fallback when Ollama is unavailable)."
+        )
     )
     _parser.add_argument(
         "--model",
@@ -138,10 +139,10 @@ if __name__ == "__main__":
     )
     _args = _parser.parse_args()
 
-    _agent = build_copilot_agent(_args.model)
+    _model = build_copilot_model(_args.model)
 
     async def _run(prompt: str) -> AgentOutput:
-        result = await _agent.run(prompt)
+        result = await edge_agent.run(prompt, model=_model)
         return result.output
 
     _report = smoke_dataset.evaluate_sync(_run)
@@ -176,3 +177,4 @@ if __name__ == "__main__":
                 indent=2,
             )
         )
+
