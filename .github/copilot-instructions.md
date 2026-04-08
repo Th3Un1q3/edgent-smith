@@ -6,7 +6,7 @@ This repository implements a minimal, edge-optimised agentic system.
 
 | Agent | File | Role |
 |---|---|---|
-| Edge Agent | `agents/edge.py` | pydantic-ai agent; inline tools; subject of experimentation |
+| Edge Agent | `agents/edge.py` | pydantic-ai agent; inline tools; executes core logic and orchestrates workflow |
 | Brainstorm Agent | `.github/agents/brainstorm.agent.md` | Copilot custom agent; generates ideas; creates `auto-research` issues |
 | Implementation Agent | `.github/agents/implement.agent.md` | Copilot custom agent; applies experiment changes to `agents/edge.py` |
 

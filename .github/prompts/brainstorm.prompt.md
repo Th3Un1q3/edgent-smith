@@ -10,14 +10,14 @@ Generate concrete, testable experiment hypotheses to improve the edge agent's pe
 
 1. Read `agents/edge.py` – current edge agent implementation and system prompt.
 2. Read `evals/smoke.py` – the evaluation cases the agent is judged on.
-3. Review recent GitHub issues labelled `experiment` to avoid repeating rejected ideas.
+3. Review recent GitHub issues labelled `auto-research` to avoid repeating rejected ideas.
 
 ## What to produce
 
 For each idea, create a GitHub issue using `gh issue create` with:
 
 - **Title**: `experiment: <short-slug>`
-- **Label**: `experiment`
+- **Label**: `auto-research`
 - **Body** containing:
   - Hypothesis (one sentence)
   - Mutation surface (exact file and location)
