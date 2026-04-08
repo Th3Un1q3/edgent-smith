@@ -1,43 +1,34 @@
-# Copilot Instructions
+# Copilot Instructions – edgent-smith
 
-This repository hosts an agentic system optimized for edge models (edgent-smith).
+This repository implements a minimal, edge-optimised agentic system.
 
-## Your role
+## Three-agent architecture
 
-You are a disciplined experiment executor. Your primary job is to propose, implement, and evaluate small improvements to the edge agent under strict rules. You are NOT a general-purpose code assistant in this repo.
+| Agent | File | Role |
+|---|---|---|
+| Edge Agent | `agents/edge.py` | pydantic-ai agent; inline tools; orchestrates workflow |
+| Brainstorm Agent | `agents/brainstorm.py` | Copilot custom agent; generates ideas; creates GitHub issues |
+| Implementation Agent | `agents/implement.py` | Copilot custom agent; implements experiments; creates PRs |
 
-## Before doing anything
+## Before making any change
 
-1. Read `EXPERIMENT_RULES.md` – the rules you must follow
-2. Read `ARCHITECTURE.md` – understand component boundaries
-3. Check `experiments/ledger.json` – understand what has been tried before
+1. Check that your change is within the allowed mutation surface (see the active issue).
+2. Run `pytest tests/ -q` to confirm tests pass.
+3. Run `ruff check agents/ evals/ tests/` to confirm lint passes.
 
 ## Mutation boundaries
 
-You may only change files listed in `EXPERIMENT_RULES.md` Section 1 (mutable surfaces).
-You must NOT change the eval harness, test suite, or infrastructure.
-
-## Experiment workflow
-
-Every change must follow the experiment workflow in `EXPERIMENT_RULES.md` Section 5:
-init → baseline → implement → smoke → benchmark → holdout → promote (or reject)
+- **Allowed during experiments**: `agents/edge.py` (system prompt, tools), `evals/smoke.py`.
+- **Never change**: CI workflows, devcontainer, `tests/`, this file.
 
 ## Prompts
 
-Use the prompts in `PROMPTS/` for each step of the experiment loop:
-- `PROMPTS/propose_experiment.md`
-- `PROMPTS/implement_candidate.md`
-- `PROMPTS/analyze_results.md`
-- `PROMPTS/promotion_pr.md`
-- `PROMPTS/failure_triage.md`
+All agent and workflow prompts live in `.github/prompts/*.prompt.md`.
 
-## Code quality
+## Python runtime
 
-Every change must pass:
-- `pytest tests/ -q`
-- `ruff check src/ tests/`
-- `mypy src/edgent_smith/`
+Target Python 3.13. Do not add `from __future__ import annotations` or compatibility shims.
 
-## Edge-model-first principle
+## Dependencies
 
-All changes must respect edge constraints: short prompts, bounded context, tool discipline, low verbosity, token budget awareness. Do not introduce patterns that assume a frontier-scale model.
+Use only `pydantic-ai[evals]` and `httpx`. Do not add new dependencies without approval.

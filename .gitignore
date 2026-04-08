@@ -58,3 +58,7 @@ Thumbs.db
 
 # Ollama model cache (large binary files)
 .ollama/
+
+# pydantic-ai inference cache (not intended for the repo)
+pi_cache/
+.pi_cache/

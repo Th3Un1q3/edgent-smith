@@ -1,65 +1,80 @@
-name: Experiment Eval
+name: Experiment Workflow
+
+# Experiment–issue lifecycle:
+#
+#   1. Copilot Brainstorm Agent creates a GitHub issue labelled "experiment".
+#   2. This workflow fires when the "experiment" label is applied.
+#   3. The Copilot Implementation Agent runs inside the DevContainer.
+#   4. On success: a new branch + PR is opened; the issue is commented.
+#      On failure: a failure comment is posted on the issue.
+#   5. The Edge Agent (edge.py) reacts to the success/failure comment
+#      to continue orchestration (proceed, retry, or close).
 
 on:
-  push:
-    branches: ["experiment/**"]
-  workflow_dispatch:
-    inputs:
-      experiment_name:
-        description: "Experiment slug"
-        required: true
-      suite:
-        description: "Eval suite (smoke|benchmark|holdout)"
-        default: smoke
-        required: false
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
 
 permissions:
-  contents: read
+  contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
-  eval:
-    name: Run Candidate Eval
+  # ── Step 2-4: Run the Copilot Implementation Agent when an issue is labelled ──
+  implement-experiment:
+    name: Implement experiment
+    if: >
+      github.event_name == 'issues' &&
+      github.event.label.name == 'experiment'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history for branch creation
+
+      # Run inside the DevContainer – uses the Copilot CLI and gh CLI pre-installed.
+      - uses: devcontainers/ci@v0.3
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          runCmd: >
+            pip install -e ".[dev]" --quiet &&
+            python agents/implement.py
+            --issue ${{ github.event.issue.number }}
+            --base ${{ github.event.repository.default_branch }}
+
+  # ── Step 5-6: Edge Agent reacts to issue comments (success/failure) ──────────
+  edge-continue:
+    name: Edge agent – process comment
+    if: >
+      github.event_name == 'issue_comment' &&
+      contains(github.event.issue.labels.*.name, 'experiment')
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      issues: write
+
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: devcontainers/ci@v0.3
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_URL: ${{ github.event.comment.html_url }}
         with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
-
-      - name: Derive experiment name from branch
-        id: exp
-        run: |
-          BRANCH="${GITHUB_REF#refs/heads/}"
-          NAME="${BRANCH#experiment/}"
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          echo "suite=${{ github.event.inputs.suite || 'smoke' }}" >> "$GITHUB_OUTPUT"
-
-      - name: Check manifest exists
-        run: |
-          MANIFEST="experiments/manifests/${{ steps.exp.outputs.name }}.json"
-          if [ ! -f "$MANIFEST" ]; then
-            echo "No manifest found at $MANIFEST"
-            echo "Run: python experiments/scripts/init_experiment.py --name ${{ steps.exp.outputs.name }} ..."
-            exit 1
-          fi
-
-      - name: Validate import
-        run: python -c "from edgent_smith.main import create_app; print('import OK')"
-
-      - name: Run tests (guard)
-        run: python -m pytest tests/ -q --tb=short
-
-      - name: Upload manifest artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: experiment-manifest-${{ steps.exp.outputs.name }}
-          path: experiments/manifests/${{ steps.exp.outputs.name }}.json
-          if-no-files-found: ignore
+          runCmd: >
+            pip install -e ".[dev]" --quiet &&
+            python agents/edge.py
+            --issue-number "$ISSUE_NUMBER"
+            --comment-body "$COMMENT_BODY"

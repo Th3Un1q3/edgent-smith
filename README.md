@@ -1,149 +1,110 @@
 # edgent-smith
 
-**Agentic system optimized for edge models.** A production-quality platform built on [PydanticAI](https://ai.pydantic.dev/) with Ollama-backed local inference, a REST API, an immutable evaluation harness, and a closed-loop experiment framework for GitHub Copilot-driven evolution.
+Minimal agentic system optimised for edge models (Gemma/Ollama).  
+Three agents · pydantic-ai evaluations · DevContainer-first CI · issue-driven experiment loop.
 
 ---
 
-## Quick start (devcontainer)
+## Repository layout
 
-```bash
-# Open in VS Code Dev Containers (recommended)
-code .
-# → "Reopen in Container" → services start (app + Ollama)
-
-# Pull a model in the Ollama container
-docker exec -it <ollama-container> ollama pull gemma3:4b
 ```
-
-## Quick start (local)
-
-```bash
-# 1. Install
-pip install -e ".[dev]"
-
-# 2. Start Ollama separately and pull a model
-ollama pull gemma3:4b
-
-# 3. Configure
-cp .env.example .env   # edit as needed
-
-# 4. Run
-edgent-smith
-# → http://localhost:8000
-```
-
-## Run with Docker Compose
-
-```bash
-docker compose up --build
-# Service: http://localhost:8000
-# Ollama:  http://localhost:11434
+agents/
+  edge.py         # Edge agent – single file, inline tools, pydantic-ai
+  brainstorm.py   # Copilot Brainstorm Agent (creates GitHub experiment issues)
+  implement.py    # Copilot Implementation Agent (runs experiments from issues)
+evals/
+  smoke.py        # Smoke eval dataset (pydantic_evals, no custom wrapper)
+tests/
+  test_edge_agent.py
+.devcontainer/    # Python 3.13 + Ollama sidecar
+.github/
+  prompts/        # *.prompt.md – agent and workflow prompts
+  workflows/
+    ci.yml        # Lint + type-check + tests (runs inside DevContainer)
+    experiment.yml # Issue-driven experiment workflow (DevContainer + Copilot CLI)
 ```
 
 ---
 
-## REST API
+## Three-agent workflow
 
-Base URL: `http://localhost:8000/api/v1`
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/healthz` | GET | Health + provider status |
-| `/readyz` | GET | Readiness probe |
-| `/metrics` | GET | Job counters |
-| `/tasks` | POST | Submit task (sync or async) |
-| `/tasks/{job_id}` | GET | Poll async job |
-
-**Submit a task (synchronous):**
-```bash
-curl -s -X POST http://localhost:8000/api/v1/tasks \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "What is 2+2?", "async_execution": false}' | jq .
 ```
-
-**Submit async + poll:**
-```bash
-JOB=$(curl -s -X POST http://localhost:8000/api/v1/tasks \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Explain quantum entanglement.", "async_execution": true}' \
-  | jq -r .job_id)
-
-curl -s http://localhost:8000/api/v1/tasks/$JOB | jq .
-```
-
-**OpenAPI docs:** `http://localhost:8000/docs`
-
----
-
-## Run evals
-
-```bash
-# Register baseline (smoke suite)
-python experiments/scripts/register_baseline.py --suite smoke
-
-# Run smoke eval against current code
-python experiments/scripts/run_candidate.py --name my-exp --suite smoke
-
-# Compare against baseline
-python experiments/scripts/compare.py --name my-exp --suite smoke
+Copilot Brainstorm Agent
+  └─ generates ideas → creates GitHub issues labelled "experiment"
+        │
+        ▼  (issues.labeled trigger)
+  experiment.yml workflow  ← runs inside DevContainer
+        │
+        ▼
+  Copilot Implementation Agent  (agents/implement.py)
+        ├─ applies changes on a new branch
+        ├─ runs tests + lint
+        ├─ SUCCESS → opens PR, comments ✅ on issue
+        └─ FAILURE → comments ❌ on issue
+              │
+              ▼  (issue_comment.created trigger)
+        Edge Agent  (agents/edge.py)
+              └─ reacts to comment, continues orchestration
 ```
 
 ---
 
-## Run an experiment
+## Quick start (DevContainer)
 
 ```bash
-# 1. Initialize experiment manifest
-python experiments/scripts/init_experiment.py \
-  --name "shorter-system-prompt" \
-  --hypothesis "Shorter prompt reduces latency without quality loss" \
-  --mutation-surface "prompts/system/edge_agent.md"
+# Open in VS Code → "Reopen in Container"
+# Pull a model
+docker exec -it <ollama> ollama pull gemma3:4b
 
-# 2. Create branch
-git checkout -b experiment/shorter-system-prompt
+# Run the edge agent
+python agents/edge.py "What is the capital of France?"
 
-# 3. Mutate only the listed surface(s)
+# Run smoke evals  (requires a running Ollama instance)
+python evals/smoke.py
 
-# 4. Run staged evaluation
-python experiments/scripts/run_candidate.py --name shorter-system-prompt --suite smoke
-python experiments/scripts/compare.py --name shorter-system-prompt --suite smoke
-# If smoke passes → run benchmark → compare → holdout → compare
-
-# 5. Promote if accepted
-python experiments/scripts/promote.py --name shorter-system-prompt
-```
-
-See `EXPERIMENT_RULES.md` for the full rules.
-
----
-
-## How Copilot/Copilot CLI should be used
-
-This repository is designed for GitHub Copilot to act as a disciplined experiment executor:
-
-1. Read `EXPERIMENT_RULES.md` before starting any experiment
-2. Use `PROMPTS/propose_experiment.md` to form a hypothesis
-3. Use `PROMPTS/implement_candidate.md` to make changes
-4. Run evals and use `PROMPTS/analyze_results.md` to interpret them
-5. Use `PROMPTS/promotion_pr.md` to prepare a PR if accepted
-
----
-
-## Tests
-
-```bash
+# Run tests  (uses TestModel – no Ollama needed)
 pytest tests/ -q
 ```
 
+---
+
+## Local install (without DevContainer)
+
+Requires Python 3.13.
+
+```bash
+pip install -e ".[dev]"
+pytest tests/ -q
+python -m ruff check agents/ evals/ tests/
+```
+
+---
+
+## Trigger an experiment manually
+
+1. Create a GitHub issue labelled `experiment` describing the hypothesis.
+2. The `experiment.yml` workflow fires automatically.
+3. Monitor the issue for a ✅ or ❌ comment from the Implementation Agent.
+
+Or brainstorm ideas programmatically:
+
+```bash
+python agents/brainstorm.py --count 3
+```
+
+---
+
 ## Configuration
 
-All settings use the `EDGENT_` environment variable prefix. See `.env.example`.
+Set `EDGENT_MODEL` to override the default model:
 
-| Variable | Default | Description |
-|---|---|---|
-| `EDGENT_MODEL_PROVIDER` | `ollama` | Provider: `ollama` |
-| `EDGENT_MODEL_NAME` | `gemma3:4b` | Model identifier |
-| `EDGENT_OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API URL |
-| `EDGENT_MAX_TOKENS` | `512` | Output token budget |
-| `EDGENT_TIMEOUT_SECONDS` | `30.0` | Per-request timeout |
-| `EDGENT_MAX_TOOL_CALLS` | `5` | Max tool calls per run |
+```bash
+EDGENT_MODEL=ollama:llama3:8b python agents/edge.py "Hello"
+```
+
+---
+
+## CI
+
+CI runs inside the DevContainer via `devcontainers/ci@v0.3`.  
+No separate Python environment is provisioned.
