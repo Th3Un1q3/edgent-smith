@@ -4,18 +4,17 @@ name: Auto-Research
 #
 # Lifecycle:
 #   1. Create an experiment branch.
-#   2. Inside the DevContainer: invoke the GitHub Copilot CLI (pre-installed
+#   2. Label the issue `in_progress` (removed unconditionally on job exit).
+#   3. Inside the DevContainer: invoke the GitHub Copilot CLI (pre-installed
 #      via postCreateCommand) with the implement agent instructions + issue
 #      context. Copilot edits files directly using its native tools. Then
 #      validate (tests + lint) and run the pydantic_evals smoke suite.
-#   3. Compare score to evals/baseline.json.
+#   4. Compare score to evals/baseline.json.
 #      ✅ score >= baseline → label 'experiment-success', commit, push, PR.
 #      ❌ score <  baseline → label 'experiment-failure', comment with details.
 #      ⏱  job timeout        → label 'experiment-failure', comment "timed out".
 #      💥 unexpected error   → label 'experiment-failure', comment with details.
-#
-# The job has a hard timeout (timeout-minutes). Any exit path comments the issue
-# and applies the appropriate label so experiments never go unreported.
+#   5. Remove `in_progress` label (always, regardless of outcome).
 #
 # Required secrets:
 #   COPILOT_GITHUB_TOKEN — fine-grained PAT with "Copilot Requests" permission.
@@ -44,7 +43,16 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── 2. Create experiment branch ────────────────────────────────────────
+      # ── 2. Mark issue as in-progress ──────────────────────────────────────
+      - name: Mark issue in_progress
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh label create "in_progress" --color e4e669 --description "Experiment is currently running" --force
+          gh issue edit "$ISSUE_NUMBER" --add-label "in_progress"
+
+      # ── 3. Create experiment branch ────────────────────────────────────────
       - name: Create experiment branch
         id: branch
         env:
@@ -60,7 +68,7 @@ jobs:
           git checkout -b "$BRANCH"
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
-      # ── 3. Implement + validate + evaluate inside DevContainer ────────────
+      # ── 4. Implement + validate + evaluate inside DevContainer ────────────
       # Copilot CLI is pre-installed in the devcontainer (postCreateCommand).
       # COPILOT_GITHUB_TOKEN must be a fine-grained PAT with "Copilot Requests"
       # permission. See the repository README for setup instructions.
@@ -110,7 +118,7 @@ ${ISSUE_BODY}"
             # ── d. Run evaluations; write score report ────────────────────────
             python evals/smoke.py --score-file eval_result.json
 
-      # ── 4. Read results ────────────────────────────────────────────────────
+      # ── 5. Read results ────────────────────────────────────────────────────
       - name: Read eval results
         id: results
         run: |
@@ -124,7 +132,7 @@ ${ISSUE_BODY}"
           echo "baseline=$BASELINE" >> "$GITHUB_OUTPUT"
           echo "passed=$PASSED"     >> "$GITHUB_OUTPUT"
 
-      # ── 5a. Score >= baseline → label success + commit, push, PR ─────────
+      # ── 6a. Score >= baseline → label success + commit, push, PR ─────────
       - name: Commit, push, and open PR
         if: steps.results.outputs.passed == 'true'
         env:
@@ -166,7 +174,7 @@ Implemented by the [auto-research workflow](https://github.com/${{ github.reposi
 
 The changes have been committed and a pull request has been opened for review."
 
-      # ── 5b. Score < baseline → label failure + comment details ────────────
+      # ── 6b. Score < baseline → label failure + comment details ────────────
       - name: Report below-baseline result
         if: steps.results.outputs.passed == 'false'
         env:
@@ -189,7 +197,7 @@ The changes have been committed and a pull request has been opened for review."
 
 Please review the hypothesis and consider refining the approach before re-labelling."
 
-      # ── 5c. Unexpected error → label failure + comment details ────────────
+      # ── 6c. Unexpected error → label failure + comment details ────────────
       - name: Report unexpected failure
         if: failure()
         env:
@@ -208,7 +216,7 @@ Please review the hypothesis and consider refining the approach before re-labell
 
 Check the workflow logs for details. Please fix the issue before re-labelling."
 
-      # ── 5d. Job timed out → label failure + comment details ───────────────
+      # ── 6d. Job timed out → label failure + comment details ───────────────
       - name: Report timeout
         if: cancelled()
         env:
@@ -226,3 +234,12 @@ Check the workflow logs for details. Please fix the issue before re-labelling."
 | Run    | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
 
 Consider simplifying the experiment or raising the timeout before re-labelling."
+
+      # ── 7. Remove in_progress label (always runs) ──────────────────────────
+      - name: Remove in_progress label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --remove-label "in_progress" 2>/dev/null || true
