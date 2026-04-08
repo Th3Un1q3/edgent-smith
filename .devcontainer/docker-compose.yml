@@ -9,7 +9,7 @@ services:
     environment:
       EDGENT_OLLAMA_BASE_URL: http://ollama:11434
       EDGENT_MODEL_PROVIDER: ollama
-      EDGENT_MODEL_NAME: gemma3:4b
+      EDGENT_MODEL_NAME: gemma4:e2b
     depends_on:
       - ollama
     networks:

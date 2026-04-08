@@ -24,7 +24,10 @@ from pydantic_ai import Agent
 
 # ── Model ──────────────────────────────────────────────────────────────────────
 # Uses pydantic-ai's built-in Ollama provider; no custom wrapper needed.
-_MODEL = os.getenv("EDGENT_MODEL", "ollama:gemma3:4b")
+# Resolved from EDGENT_MODEL (full override) or EDGENT_MODEL_PROVIDER + EDGENT_MODEL_NAME.
+_provider = os.getenv("EDGENT_MODEL_PROVIDER", "ollama")
+_model_name = os.getenv("EDGENT_MODEL_NAME", "gemma4:e2b")
+_MODEL = os.getenv("EDGENT_MODEL", f"{_provider}:{_model_name}")
 
 # ── I/O schemas ────────────────────────────────────────────────────────────────
 
