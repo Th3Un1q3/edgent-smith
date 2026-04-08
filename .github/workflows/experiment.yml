@@ -4,12 +4,11 @@ name: Auto-Research
 #
 # Lifecycle:
 #   1. Create an experiment branch.
-#   2. On the host runner: install GitHub Copilot CLI, invoke it with the
-#      implement agent instructions + issue context. Copilot edits files
-#      directly using its native file-write and shell tools.
-#   3. Inside the DevContainer: validate (tests + lint) and run the
-#      pydantic_evals smoke suite; write eval_result.json.
-#   4. Compare score to evals/baseline.json.
+#   2. Inside the DevContainer: invoke the GitHub Copilot CLI (pre-installed
+#      via postCreateCommand) with the implement agent instructions + issue
+#      context. Copilot edits files directly using its native tools. Then
+#      validate (tests + lint) and run the pydantic_evals smoke suite.
+#   3. Compare score to evals/baseline.json.
 #      ✅ score >= baseline → commit, push, open PR, comment on issue.
 #      ❌ score <  baseline → comment on issue with details; no PR.
 #
@@ -55,47 +54,17 @@ jobs:
           git checkout -b "$BRANCH"
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
-      # ── 3. Install GitHub Copilot CLI ──────────────────────────────────────
-      # ubuntu-latest ships with Node.js 22; no extra setup needed.
-      - name: Install Copilot CLI
-        run: npm install -g @github/copilot
-
-      # ── 4. Run Copilot implement agent ─────────────────────────────────────
-      # Uses the programmatic interface (-p / --prompt) with --allow-all-tools
-      # so Copilot can read and write files without interactive prompts.
-      # git push and commit are denied — the workflow handles those itself.
+      # ── 3. Implement + validate + evaluate inside DevContainer ────────────
+      # Copilot CLI is pre-installed in the devcontainer (postCreateCommand).
       # COPILOT_GITHUB_TOKEN must be a fine-grained PAT with "Copilot Requests"
       # permission. See the repository README for setup instructions.
-      - name: Run Copilot implement agent
+      - name: Run Copilot agent, tests, and evaluations
+        uses: devcontainers/ci@v0.3
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          ISSUE_TITLE=$(gh issue view "$ISSUE_NUMBER" --json title -q .title)
-          ISSUE_BODY=$(gh issue view  "$ISSUE_NUMBER" --json body  -q .body)
-
-          PROMPT="$(cat .github/agents/implement.agent.md)
-
-## Task: Issue #${ISSUE_NUMBER} — ${ISSUE_TITLE}
-
-${ISSUE_BODY}"
-
-          copilot \
-            --model gpt-5-mini \
-            --prompt "$PROMPT" \
-            --allow-all-tools \
-            --deny-tool='shell(git push)' \
-            --deny-tool='shell(git commit)' \
-            --deny-tool='shell(git checkout)'
-
-      # ── 5. Validate + evaluate inside DevContainer ─────────────────────────
-      - name: Run tests and evaluations
-        uses: devcontainers/ci@v0.3
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           runCmd: |
             set -euo pipefail
@@ -104,14 +73,37 @@ ${ISSUE_BODY}"
             # Pull the Ollama model (sidecar started via docker-compose)
             ollama pull "$EDGENT_MODEL_NAME" 2>/dev/null || true
 
-            # Validate changes
+            # ── a. Build prompt from agent file + issue context ───────────────
+            ISSUE_TITLE=$(gh issue view "$ISSUE_NUMBER" --json title -q .title)
+            ISSUE_BODY=$(gh issue view  "$ISSUE_NUMBER" --json body  -q .body)
+
+            PROMPT="$(cat .github/agents/implement.agent.md)
+
+## Task: Issue #${ISSUE_NUMBER} — ${ISSUE_TITLE}
+
+${ISSUE_BODY}"
+
+            # ── b. Invoke Copilot CLI (installed via postCreateCommand) ───────
+            # Uses the programmatic interface (--prompt) with --allow-all-tools
+            # so Copilot can read and write files without interactive prompts.
+            # git push, commit, and checkout are denied — the workflow handles
+            # those itself.
+            copilot \
+              --model gpt-5-mini \
+              --prompt "$PROMPT" \
+              --allow-all-tools \
+              --deny-tool='shell(git push)' \
+              --deny-tool='shell(git commit)' \
+              --deny-tool='shell(git checkout)'
+
+            # ── c. Validate changes ───────────────────────────────────────────
             python -m pytest tests/ -q
             python -m ruff check agents/ evals/ tests/
 
-            # Run evaluations; write score report
+            # ── d. Run evaluations; write score report ────────────────────────
             python evals/smoke.py --score-file eval_result.json
 
-      # ── 6. Read results ────────────────────────────────────────────────────
+      # ── 4. Read results ────────────────────────────────────────────────────
       - name: Read eval results
         id: results
         run: |
@@ -125,7 +117,7 @@ ${ISSUE_BODY}"
           echo "baseline=$BASELINE" >> "$GITHUB_OUTPUT"
           echo "passed=$PASSED"     >> "$GITHUB_OUTPUT"
 
-      # ── 7a. Score >= baseline → commit, push, PR ──────────────────────────
+      # ── 5a. Score >= baseline → commit, push, PR ──────────────────────────
       - name: Commit, push, and open PR
         if: steps.results.outputs.passed == 'true'
         env:
@@ -164,7 +156,7 @@ Implemented by the [auto-research workflow](https://github.com/${{ github.reposi
 
 The changes have been committed and a pull request has been opened for review."
 
-      # ── 7b. Score < baseline → comment failure details ─────────────────────
+      # ── 5b. Score < baseline → comment failure details ─────────────────────
       - name: Report below-baseline result
         if: steps.results.outputs.passed == 'false'
         env:
