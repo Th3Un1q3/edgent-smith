@@ -1,4 +1,4 @@
 {
   "score": 0.8,
-  "description": "Minimum assertion pass-rate (0.0–1.0) for experiment promotion. Updated automatically by the experiment workflow when a new eval result exceeds it."
+  "description": "Minimum assertion pass-rate (0.0\u20131.0) for experiment promotion. Updated automatically by the experiment workflow when a new eval result exceeds it."
 }
