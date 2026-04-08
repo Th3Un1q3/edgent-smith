@@ -9,8 +9,13 @@ name: Auto-Research
 #      context. Copilot edits files directly using its native tools. Then
 #      validate (tests + lint) and run the pydantic_evals smoke suite.
 #   3. Compare score to evals/baseline.json.
-#      ✅ score >= baseline → commit, push, open PR, comment on issue.
-#      ❌ score <  baseline → comment on issue with details; no PR.
+#      ✅ score >= baseline → label 'experiment-success', commit, push, PR.
+#      ❌ score <  baseline → label 'experiment-failure', comment with details.
+#      ⏱  job timeout        → label 'experiment-failure', comment "timed out".
+#      💥 unexpected error   → label 'experiment-failure', comment with details.
+#
+# The job has a hard timeout (timeout-minutes). Any exit path comments the issue
+# and applies the appropriate label so experiments never go unreported.
 #
 # Required secrets:
 #   COPILOT_GITHUB_TOKEN — fine-grained PAT with "Copilot Requests" permission.
@@ -30,6 +35,7 @@ jobs:
     name: Run auto-research experiment
     if: github.event.label.name == 'auto-research'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       # ── 1. Checkout ────────────────────────────────────────────────────────
@@ -59,6 +65,7 @@ jobs:
       # COPILOT_GITHUB_TOKEN must be a fine-grained PAT with "Copilot Requests"
       # permission. See the repository README for setup instructions.
       - name: Run Copilot agent, tests, and evaluations
+        id: experiment
         uses: devcontainers/ci@v0.3
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
@@ -117,7 +124,7 @@ ${ISSUE_BODY}"
           echo "baseline=$BASELINE" >> "$GITHUB_OUTPUT"
           echo "passed=$PASSED"     >> "$GITHUB_OUTPUT"
 
-      # ── 5a. Score >= baseline → commit, push, PR ──────────────────────────
+      # ── 5a. Score >= baseline → label success + commit, push, PR ─────────
       - name: Commit, push, and open PR
         if: steps.results.outputs.passed == 'true'
         env:
@@ -129,6 +136,9 @@ ${ISSUE_BODY}"
           SCORE: ${{ steps.results.outputs.score }}
           BASELINE: ${{ steps.results.outputs.baseline }}
         run: |
+          gh label create "experiment-success" --color 0e8a16 --description "Experiment passed baseline" --force
+          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-success"
+
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
@@ -156,7 +166,7 @@ Implemented by the [auto-research workflow](https://github.com/${{ github.reposi
 
 The changes have been committed and a pull request has been opened for review."
 
-      # ── 5b. Score < baseline → comment failure details ─────────────────────
+      # ── 5b. Score < baseline → label failure + comment details ────────────
       - name: Report below-baseline result
         if: steps.results.outputs.passed == 'false'
         env:
@@ -165,12 +175,54 @@ The changes have been committed and a pull request has been opened for review."
           SCORE: ${{ steps.results.outputs.score }}
           BASELINE: ${{ steps.results.outputs.baseline }}
         run: |
+          gh label create "experiment-failure" --color d93f0b --description "Experiment did not pass" --force
+          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-failure"
+
           gh issue comment "$ISSUE_NUMBER" --body "❌ **Experiment did not reach baseline.**
 
 | Metric   | Value |
 |----------|-------|
+| Reason   | Below-baseline performance |
 | Score    | \`${SCORE}\` |
 | Baseline | \`${BASELINE}\` |
 | Run      | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
 
 Please review the hypothesis and consider refining the approach before re-labelling."
+
+      # ── 5c. Unexpected error → label failure + comment details ────────────
+      - name: Report unexpected failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh label create "experiment-failure" --color d93f0b --description "Experiment did not pass" --force
+          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-failure"
+
+          gh issue comment "$ISSUE_NUMBER" --body "❌ **Experiment failed unexpectedly.**
+
+| Metric | Value |
+|--------|-------|
+| Reason | Workflow step error |
+| Run    | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
+
+Check the workflow logs for details. Please fix the issue before re-labelling."
+
+      # ── 5d. Job timed out → label failure + comment details ───────────────
+      - name: Report timeout
+        if: cancelled()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh label create "experiment-failure" --color d93f0b --description "Experiment did not pass" --force
+          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-failure"
+
+          gh issue comment "$ISSUE_NUMBER" --body "⏱ **Experiment timed out.**
+
+| Metric | Value |
+|--------|-------|
+| Reason | Job exceeded the \`timeout-minutes: 30\` limit |
+| Run    | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
+
+Consider simplifying the experiment or raising the timeout before re-labelling."
