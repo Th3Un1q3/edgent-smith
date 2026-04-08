@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, datetime
 
 import pytest
 from pydantic_ai import models
@@ -60,8 +60,6 @@ async def test_calculator_tool_rejects_unsafe() -> None:
 
 async def test_current_datetime_tool_is_iso() -> None:
     """current_datetime() must return a valid ISO 8601 string."""
-    from datetime import datetime
-
     from agents.edge import current_datetime
 
     ts = current_datetime()

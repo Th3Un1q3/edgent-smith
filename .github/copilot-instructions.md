@@ -27,7 +27,7 @@ All agent and workflow prompts live in `.github/prompts/*.prompt.md`.
 
 ## Python runtime
 
-Target Python 3.13. Do not add `from __future__ import annotations` or compatibility shims.
+Target Python 3.13. The codebase uses `from __future__ import annotations` for forward-reference compatibility; keep this import in all files.
 
 ## Dependencies
 

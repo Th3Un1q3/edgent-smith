@@ -1,4 +1,4 @@
-## Experiment Promotion: `<name>`
+## Experiment: `<name>`
 
 **Hypothesis:**
 
@@ -7,11 +7,9 @@
 
 **Eval results:**
 
-| Suite     | Pass Rate | Composite Score | Avg Latency |
-|-----------|-----------|-----------------|-------------|
-| Smoke     |           |                 |             |
-| Benchmark |           |                 |             |
-| Holdout   |           |                 |             |
+| Suite | Pass Rate | Avg Latency |
+|-------|-----------|-------------|
+| Smoke |           |             |
 
 **Decision:** ACCEPT –
 
@@ -21,11 +19,9 @@
 
 ## Checklist
 
-- [ ] All three eval stages passed their thresholds
+- [ ] Smoke eval 100% pass rate
 - [ ] Latency regression < 20% vs baseline
 - [ ] `pytest tests/ -q` passes
-- [ ] `ruff check src/ tests/` passes
-- [ ] `mypy src/edgent_smith/` passes
-- [ ] `experiments/baselines/current.json` updated
-- [ ] Manifest status = promoted
+- [ ] `ruff check agents/ evals/ tests/` passes
+- [ ] `mypy agents/ evals/` passes
 - [ ] CI is green

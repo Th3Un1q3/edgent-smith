@@ -10,16 +10,14 @@ labels: experiment
 
 ## Mutation surface
 
-> Which files will you change? (Must be in the allowed list from EXPERIMENT_RULES.md)
+> Which file(s) will you change? Only the allowed surfaces are permitted.
 
-- [ ] `prompts/system/edge_agent.md`
-- [ ] `src/edgent_smith/agents/edge_agent.py`
-- [ ] `src/edgent_smith/config/settings.py`
-- [ ] `src/edgent_smith/tools/`
+- [ ] `agents/edge.py` (system prompt `_SYSTEM`, tool descriptions)
+- [ ] `evals/smoke.py` (evaluation cases)
 
 ## Expected eval improvement
 
-> Which eval cases should improve? Why?
+> Which smoke eval cases should improve? Why?
 
 ## Simplicity check
 
@@ -31,6 +29,6 @@ labels: experiment
 
 ## Checklist before submitting
 
-- [ ] Checked `experiments/ledger.json` – this hypothesis hasn't been rejected before
-- [ ] Read `EXPERIMENT_RULES.md`
-- [ ] Mutation surfaces are in the allowed list
+- [ ] Mutation surface is restricted to `agents/edge.py` and/or `evals/smoke.py`
+- [ ] No changes to CI, devcontainer, or workflow files
+- [ ] No new dependencies required

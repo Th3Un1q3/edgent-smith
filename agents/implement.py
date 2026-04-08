@@ -136,9 +136,11 @@ def implement(issue_number: int, repo: str | None = None, base: str = "main") ->
 
     # 3. Apply the suggestion if it looks like a diff
     if suggestion.startswith("diff --git") or suggestion.startswith("---"):
-        diff_file = "/tmp/experiment.patch"  # noqa: S108
-        with open(diff_file, "w") as f:
-            f.write(suggestion)
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".patch", delete=False) as fh:
+            fh.write(suggestion)
+            diff_file = fh.name
         apply_result = _run(["git", "apply", "--check", diff_file], check=False)
         if apply_result.returncode == 0:
             _run(["git", "apply", diff_file])
