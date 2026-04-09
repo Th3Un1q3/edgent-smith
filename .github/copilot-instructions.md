@@ -31,8 +31,11 @@ npm install -g @devcontainers/cli
 # GITHUB_COPILOT_API_TOKEN is forwarded automatically (see docker-compose.yml)
 devcontainer up --workspace-folder .
 
+# If devcontainer CLI fails (e.g. build error in CI), start containers directly:
+docker compose -f .devcontainer/docker-compose.yml up -d
+
 # Run commands inside the container
-docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && python evals/smoke.py"
+docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && python evals/ollama_runner.py"
 ```
 
 If Ollama is unreachable (no network access to registry.ollama.ai) use the
@@ -40,6 +43,22 @@ Copilot API fallback — see **Running evals without Ollama** below.
 The Copilot API is reachable from inside the DevContainer because
 `docker-compose.yml` forwards the token and sets `SSL_CERT_FILE` to the
 system CA bundle (which trusts the sandbox TLS proxy).
+
+## Eval runner architecture
+
+Eval runners follow the **strategy pattern**: provider-specific model construction
+is isolated in each runner; shared eval loop logic lives in `evals/runner.py`.
+
+| File | Role |
+|------|------|
+| `evals/runner.py` | Shared `run_eval()` function – evaluate, score, baseline, report |
+| `evals/ollama_runner.py` | Builds an Ollama-backed model and calls `run_eval()` |
+| `evals/copilot_runner.py` | Builds a Copilot-backed model and calls `run_eval()` |
+| `evals/smoke.py` | Dataset, evaluators, and utilities; delegates `__main__` to `run_eval()` |
+
+The edge agent (`agents/edge.py`) is **model-agnostic**: it holds a plain string
+model and never references a provider.  The runner selects and injects the model
+at call-time via `agent.run(prompt, model=model)`.
 
 ## Running evals without Ollama
 
@@ -58,7 +77,7 @@ devcontainer up --workspace-folder .
 docker exec devcontainer-devcontainer-1 \
   bash -c "cd /workspace && python evals/copilot_runner.py"
 
-# Write a score file (same format as evals/smoke.py --score-file)
+# Write a score file (same format as evals/ollama_runner.py --score-file)
 docker exec devcontainer-devcontainer-1 \
   bash -c "cd /workspace && python evals/copilot_runner.py --score-file /tmp/score.json"
 
@@ -68,9 +87,8 @@ docker exec devcontainer-devcontainer-1 \
 ```
 
 `evals/copilot_runner.py` runs the **same** smoke dataset and the **same**
-edge agent as `evals/smoke.py`.  The only difference is the model backend:
-it overrides the agent's model to use the Copilot API instead of Ollama, so
-the full agent (system prompt + all registered tools) is exercised.
+edge agent as `evals/ollama_runner.py`.  The only difference is the model
+backend, so the full agent (system prompt + all registered tools) is exercised.
 
 ## Scripts must be version-controlled
 
@@ -85,8 +103,16 @@ Any script you create for running evaluations, experiments, or diagnostics
 | One-off experiment helper | `experiments/<name>.py` |
 | Build / CI helper | `scripts/<name>.sh` |
 
-If you catch yourself writing `cat > /tmp/something.py`, stop and create the
-file under the repo root instead.
+## Design principles
+
+When integrating with an external provider or library, identify the constructs
+that are both available and recommended by that library using the tools at your
+disposal (context7, documentation search).  Prefer patterns that allow future
+extensibility without requiring changes to the core agent.
+
+When adding a new capability that already has a parallel implementation (e.g. a
+second runner), extract the shared logic first so each new variant only has to
+supply what is genuinely different.
 
 ## Verify that your work actually runs
 

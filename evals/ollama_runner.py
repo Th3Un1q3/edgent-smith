@@ -36,17 +36,11 @@ Usage
 
 from __future__ import annotations
 
-import json
 import os
-from pathlib import Path
 
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.profiles.openai import OpenAIModelProfile
 from pydantic_ai.providers.ollama import OllamaProvider
-
-from agents.edge import AgentOutput
-from agents.edge import agent as edge_agent
-from evals.smoke import _read_baseline, baseline_file, case_pass_results, smoke_dataset
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -103,6 +97,8 @@ def build_ollama_model(
 if __name__ == "__main__":
     import argparse
 
+    from evals.runner import run_eval
+
     _parser = argparse.ArgumentParser(
         description="Run smoke evals against the edge agent using a local Ollama instance."
     )
@@ -130,53 +126,12 @@ if __name__ == "__main__":
     )
     _args = _parser.parse_args()
 
-    _baseline_path = baseline_file(f"ollama:{_args.model}")
     _model = build_ollama_model(_args.model, _args.base_url)
-
-    async def _run(prompt: str) -> AgentOutput:
-        result = await edge_agent.run(prompt, model=_model)
-        return result.output
-
-    _report = smoke_dataset.evaluate_sync(_run)
-    _report.print(include_input=True, include_output=True)
-
-    _pass_results = case_pass_results(_report)
-    _passing_now = [name for name, passed in _pass_results.items() if passed]
-    _score = len(_passing_now)
-    _baseline_score, _baseline_passing, _baseline_data = _read_baseline(_baseline_path)
-    _regressions = [name for name in _baseline_passing if not _pass_results.get(name, False)]
-
-    print(f"\nModel: ollama:{_args.model}", flush=True)
-    print(f"CI score: {_score}  (baseline: {_baseline_score})", flush=True)
-    if _regressions:
-        print(f"REGRESSIONS detected: {_regressions}", flush=True)
-
-    _ci_passed = _score >= _baseline_score and not _regressions
-
-    if _args.update_baseline:
-        if _score > _baseline_score:
-            _baseline_data["score"] = _score
-            _baseline_data["passing_cases"] = _passing_now
-            _baseline_path.write_text(json.dumps(_baseline_data, indent=2) + "\n")
-            print(f"Baseline updated: {_baseline_score} → {_score}", flush=True)
-        elif _score == _baseline_score:
-            print(f"Baseline unchanged: {_baseline_score} (score equal)", flush=True)
-        else:
-            print(f"Baseline NOT updated: score {_score} < baseline {_baseline_score}", flush=True)
-
-    if _args.score_file:
-        Path(_args.score_file).write_text(
-            json.dumps(
-                {
-                    "score": _score,
-                    "baseline": _baseline_score,
-                    "passed": _ci_passed,
-                    "cases_total": len(smoke_dataset.cases),
-                    "passing_cases": _passing_now,
-                    "regressions": _regressions,
-                    "model": _args.model,
-                    "provider": "ollama",
-                },
-                indent=2,
-            )
-        )
+    run_eval(
+        _model,
+        baseline_key=f"ollama:{_args.model}",
+        provider="ollama",
+        model_label=f"ollama:{_args.model}",
+        score_file=_args.score_file,
+        update_baseline=_args.update_baseline,
+    )

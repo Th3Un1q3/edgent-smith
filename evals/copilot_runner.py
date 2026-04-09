@@ -45,16 +45,11 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 
 import httpx
 from openai import AsyncOpenAI
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
-
-from agents.edge import AgentOutput
-from agents.edge import agent as edge_agent
-from evals.smoke import _read_baseline, baseline_file, case_pass_results, smoke_dataset
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -115,6 +110,8 @@ def build_copilot_model(model_name: str = _DEFAULT_MODEL) -> OpenAIChatModel:
 if __name__ == "__main__":
     import argparse
 
+    from evals.runner import run_eval
+
     _parser = argparse.ArgumentParser(
         description=(
             "Run smoke evals against the edge agent using the GitHub Copilot API "
@@ -139,54 +136,12 @@ if __name__ == "__main__":
     )
     _args = _parser.parse_args()
 
-    _baseline_path = baseline_file(_args.model)
     _model = build_copilot_model(_args.model)
-
-    async def _run(prompt: str) -> AgentOutput:
-        result = await edge_agent.run(prompt, model=_model)
-        return result.output
-
-    _report = smoke_dataset.evaluate_sync(_run)
-    _report.print(include_input=True, include_output=True)
-
-    _pass_results = case_pass_results(_report)
-    _passing_now = [name for name, passed in _pass_results.items() if passed]
-    _score = len(_passing_now)
-    _baseline_score, _baseline_passing, _baseline_data = _read_baseline(_baseline_path)
-    _regressions = [name for name in _baseline_passing if not _pass_results.get(name, False)]
-
-    print(f"\nModel: {_args.model}", flush=True)
-    print(f"CI score: {_score}  (baseline: {_baseline_score})", flush=True)
-    if _regressions:
-        print(f"REGRESSIONS detected: {_regressions}", flush=True)
-
-    _ci_passed = _score >= _baseline_score and not _regressions
-
-    if _args.update_baseline:
-        if _score > _baseline_score:
-            _baseline_data["score"] = _score
-            _baseline_data["passing_cases"] = _passing_now
-            _baseline_path.write_text(json.dumps(_baseline_data, indent=2) + "\n")
-            print(f"Baseline updated: {_baseline_score} → {_score}", flush=True)
-        elif _score == _baseline_score:
-            print(f"Baseline unchanged: {_baseline_score} (score equal)", flush=True)
-        else:
-            print(f"Baseline NOT updated: score {_score} < baseline {_baseline_score}", flush=True)
-
-    if _args.score_file:
-        Path(_args.score_file).write_text(
-            json.dumps(
-                {
-                    "score": _score,
-                    "baseline": _baseline_score,
-                    "passed": _ci_passed,
-                    "cases_total": len(smoke_dataset.cases),
-                    "passing_cases": _passing_now,
-                    "regressions": _regressions,
-                    "model": _args.model,
-                    "provider": "github-copilot",
-                },
-                indent=2,
-            )
-        )
+    run_eval(
+        _model,
+        baseline_key=_args.model,
+        provider="github-copilot",
+        score_file=_args.score_file,
+        update_baseline=_args.update_baseline,
+    )
 
