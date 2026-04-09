@@ -1,23 +1,126 @@
-"""Shared smoke-eval loop used by all provider-specific runners.
+"""Unified eval runner for the edge agent.
 
-Both ``evals/ollama_runner.py`` and ``evals/copilot_runner.py`` delegate to
-:func:`run_eval` so that the evaluate → score → baseline → report logic lives
-in exactly one place.  Each runner is responsible only for building a
-provider-specific model and supplying the handful of parameters that differ
-between providers (baseline key, provider label, etc.).
+Builds the right model (Ollama or GitHub Copilot) based on ``--provider`` and
+then runs the shared smoke-eval loop.  Provider is auto-detected when omitted:
+Copilot is used when ``GITHUB_COPILOT_API_TOKEN`` is present in the environment;
+Ollama is used otherwise.
+
+Usage
+-----
+::
+
+    # Auto-detect provider and run with defaults
+    python evals/runner.py
+
+    # Explicit provider
+    python evals/runner.py --provider ollama --model gemma4:e2b
+    python evals/runner.py --provider copilot --model gpt-4o-mini-2024-07-18
+
+    # Extra options
+    python evals/runner.py --score-file /tmp/score.json
+    python evals/runner.py --update-baseline
+    python evals/runner.py --provider ollama --base-url http://localhost:11434/v1
 """
 
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
+import httpx
+from openai import AsyncOpenAI
 from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.profiles.openai import OpenAIModelProfile
+from pydantic_ai.providers.ollama import OllamaProvider
+from pydantic_ai.providers.openai import OpenAIProvider
 
 from agents.edge import AgentOutput
 from agents.edge import agent as edge_agent
 from evals.smoke import _read_baseline, baseline_file, case_pass_results, smoke_dataset
+
+# ── Constants ──────────────────────────────────────────────────────────────────
+
+_OLLAMA_DEFAULT_MODEL = "gemma4:e2b"
+_OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
+_COPILOT_BASE_URL = "https://api.githubcopilot.com"
+_COPILOT_DEFAULT_MODEL = "gpt-4o-mini-2024-07-18"
+
+
+# ── Ollama model factory ───────────────────────────────────────────────────────
+
+
+def _resolve_ollama_base_url() -> str:
+    """Return the Ollama base URL with the required ``/v1`` suffix."""
+    if url := os.getenv("OLLAMA_BASE_URL"):
+        return url
+    raw = os.getenv("EDGENT_OLLAMA_BASE_URL", _OLLAMA_DEFAULT_BASE_URL).rstrip("/")
+    return raw if raw.endswith("/v1") else f"{raw}/v1"
+
+
+def build_ollama_model(
+    model_name: str = _OLLAMA_DEFAULT_MODEL,
+    base_url: str | None = None,
+) -> OpenAIChatModel:
+    """Return an ``OpenAIChatModel`` backed by a local Ollama instance."""
+    resolved_url = base_url or _resolve_ollama_base_url()
+    profile = OpenAIModelProfile(
+        default_structured_output_mode="native",
+        supports_json_schema_output=True,
+    )
+    return OpenAIChatModel(
+        model_name,
+        provider=OllamaProvider(base_url=resolved_url),
+        profile=profile,
+    )
+
+
+# ── Copilot model factory ──────────────────────────────────────────────────────
+
+
+class _CopilotTransport(httpx.AsyncHTTPTransport):
+    """Inject the missing ``"object": "chat.completion"`` field.
+
+    The Copilot endpoint omits this field; pydantic-ai requires it when
+    parsing OpenAI chat completion responses.
+    """
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        response = await super().handle_async_request(request)
+        if response.status_code == 200:
+            await response.aread()
+            try:
+                data = json.loads(response.content)
+                if isinstance(data, dict) and "choices" in data and "object" not in data:
+                    data["object"] = "chat.completion"
+                    patched = json.dumps(data).encode()
+                    response = httpx.Response(
+                        status_code=response.status_code,
+                        headers=dict(response.headers),
+                        content=patched,
+                        request=request,
+                    )
+            except (json.JSONDecodeError, KeyError):
+                pass
+        return response
+
+
+def build_copilot_model(model_name: str = _COPILOT_DEFAULT_MODEL) -> OpenAIChatModel:
+    """Return an ``OpenAIChatModel`` backed by the GitHub Copilot API.
+
+    Reads ``GITHUB_COPILOT_API_TOKEN`` from the environment.
+    """
+    token = os.environ["GITHUB_COPILOT_API_TOKEN"]
+    openai_client = AsyncOpenAI(
+        base_url=_COPILOT_BASE_URL,
+        api_key=token,
+        http_client=httpx.AsyncClient(transport=_CopilotTransport()),
+    )
+    return OpenAIChatModel(model_name, provider=OpenAIProvider(openai_client=openai_client))
+
+
+# ── Shared eval loop ───────────────────────────────────────────────────────────
 
 
 def run_eval(
@@ -35,8 +138,7 @@ def run_eval(
         model: Constructed model injected into the agent at call-time.
         baseline_key: Key used to look up / store the baseline file (e.g.
             ``"ollama:gemma4:e2b"`` or ``"gpt-4o-mini-2024-07-18"``).
-        provider: Provider label written to the score-file JSON (e.g.
-            ``"ollama"`` or ``"github-copilot"``).
+        provider: Provider label written to the score-file JSON.
         model_label: Human-readable label printed in the summary line.
             Defaults to *baseline_key*.
         score_file: Optional path; when given, a JSON score report is written.
@@ -94,3 +196,70 @@ def run_eval(
         Path(score_file).write_text(json.dumps(result_data, indent=2))
 
     return ci_passed
+
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import argparse
+
+    _auto_provider = "copilot" if os.getenv("GITHUB_COPILOT_API_TOKEN") else "ollama"
+
+    _parser = argparse.ArgumentParser(
+        description="Run smoke evals against the edge agent."
+    )
+    _parser.add_argument(
+        "--provider",
+        choices=["ollama", "copilot"],
+        default=_auto_provider,
+        help=(
+            f"Model provider (default: auto-detected as '{_auto_provider}' "
+            "based on GITHUB_COPILOT_API_TOKEN presence)"
+        ),
+    )
+    _parser.add_argument(
+        "--model",
+        default=None,
+        metavar="NAME",
+        help=(
+            f"Model name/tag (default: {_OLLAMA_DEFAULT_MODEL!r} for ollama, "
+            f"{_COPILOT_DEFAULT_MODEL!r} for copilot)"
+        ),
+    )
+    _parser.add_argument(
+        "--base-url",
+        default=None,
+        metavar="URL",
+        help="Ollama base URL including /v1 (ollama provider only; default: from env)",
+    )
+    _parser.add_argument(
+        "--score-file",
+        metavar="PATH",
+        help="Write JSON score report to this file (for CI use).",
+    )
+    _parser.add_argument(
+        "--update-baseline",
+        action="store_true",
+        help="Overwrite the model-specific baseline when the new score exceeds it.",
+    )
+    _args = _parser.parse_args()
+
+    if _args.provider == "ollama":
+        _model_name = _args.model or _OLLAMA_DEFAULT_MODEL
+        _model = build_ollama_model(_model_name, _args.base_url)
+        _baseline_key = f"ollama:{_model_name}"
+        _provider_label = "ollama"
+    else:
+        _model_name = _args.model or _COPILOT_DEFAULT_MODEL
+        _model = build_copilot_model(_model_name)
+        _baseline_key = _model_name
+        _provider_label = "github-copilot"
+
+    run_eval(
+        _model,
+        baseline_key=_baseline_key,
+        provider=_provider_label,
+        score_file=_args.score_file,
+        update_baseline=_args.update_baseline,
+    )
+

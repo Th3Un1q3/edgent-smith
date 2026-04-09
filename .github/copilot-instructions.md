@@ -35,60 +35,52 @@ devcontainer up --workspace-folder .
 docker compose -f .devcontainer/docker-compose.yml up -d
 
 # Run commands inside the container
-docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && python evals/ollama_runner.py"
+docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && python evals/runner.py"
 ```
 
-If Ollama is unreachable (no network access to registry.ollama.ai) use the
-Copilot API fallback — see **Running evals without Ollama** below.
+If Ollama is unreachable (no network access to registry.ollama.ai) set
+`GITHUB_COPILOT_API_TOKEN` in the host environment; the runner will
+auto-detect it and use the Copilot API instead.
 The Copilot API is reachable from inside the DevContainer because
 `docker-compose.yml` forwards the token and sets `SSL_CERT_FILE` to the
 system CA bundle (which trusts the sandbox TLS proxy).
 
 ## Eval runner architecture
 
-Eval runners follow the **strategy pattern**: provider-specific model construction
-is isolated in each runner; shared eval loop logic lives in `evals/runner.py`.
+`evals/runner.py` is the single entry point for all evals.  It contains the
+model factories for both providers, the shared eval loop, and a `__main__`
+that auto-detects the provider from the environment.
 
 | File | Role |
 |------|------|
-| `evals/runner.py` | Shared `run_eval()` function – evaluate, score, baseline, report |
-| `evals/ollama_runner.py` | Builds an Ollama-backed model and calls `run_eval()` |
-| `evals/copilot_runner.py` | Builds a Copilot-backed model and calls `run_eval()` |
-| `evals/smoke.py` | Dataset, evaluators, and utilities; delegates `__main__` to `run_eval()` |
+| `evals/runner.py` | Model factories, `run_eval()`, unified `__main__` |
+| `evals/smoke.py` | Dataset, evaluators, and utilities |
 
 The edge agent (`agents/edge.py`) is **model-agnostic**: it holds a plain string
 model and never references a provider.  The runner selects and injects the model
 at call-time via `agent.run(prompt, model=model)`.
 
-## Running evals without Ollama
-
-When the Ollama registry is not reachable (e.g., in the Copilot agent sandbox),
-run evals against the GitHub Copilot API using the version-controlled runner.
-
-The `docker-compose.yml` already forwards `GITHUB_COPILOT_API_TOKEN` and
-`SSL_CERT_FILE` into the container, so no special setup is needed beyond
-starting the DevContainer with the token present in the host environment.
+## Running evals
 
 ```bash
 # Start the DevContainer (token is forwarded automatically)
 devcontainer up --workspace-folder .
 
-# Run evals via Copilot API inside the DevContainer
+# Auto-detect provider (copilot if GITHUB_COPILOT_API_TOKEN is set, else ollama)
 docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/copilot_runner.py"
+  bash -c "cd /workspace && python evals/runner.py"
 
-# Write a score file (same format as evals/ollama_runner.py --score-file)
+# Force a specific provider
 docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/copilot_runner.py --score-file /tmp/score.json"
+  bash -c "cd /workspace && python evals/runner.py --provider copilot"
 
-# Update the baseline when the new score beats the current one
 docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/copilot_runner.py --update-baseline"
+  bash -c "cd /workspace && python evals/runner.py --provider ollama --model gemma4:e2b"
+
+# Write a score file and update the baseline
+docker exec devcontainer-devcontainer-1 \
+  bash -c "cd /workspace && python evals/runner.py --score-file /tmp/score.json --update-baseline"
 ```
-
-`evals/copilot_runner.py` runs the **same** smoke dataset and the **same**
-edge agent as `evals/ollama_runner.py`.  The only difference is the model
-backend, so the full agent (system prompt + all registered tools) is exercised.
 
 ## Scripts must be version-controlled
 

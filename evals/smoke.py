@@ -153,8 +153,7 @@ if __name__ == "__main__":
     import argparse
 
     from agents.edge import _MODEL as _EDGE_MODEL
-    from evals.ollama_runner import build_ollama_model
-    from evals.runner import run_eval
+    from evals.runner import build_ollama_model, run_eval
 
     _parser = argparse.ArgumentParser(description="Run smoke evaluations for the edge agent.")
     _parser.add_argument(
