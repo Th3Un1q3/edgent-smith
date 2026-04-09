@@ -27,7 +27,7 @@ from pydantic_ai import Agent
 # ── Model ──────────────────────────────────────────────────────────────────────
 # Resolved from EDGENT_MODEL (full override) or EDGENT_MODEL_PROVIDER + EDGENT_MODEL_NAME.
 # Provider-specific setup (base-URL, structured-output profile, etc.) is handled
-# by the eval runners (evals/ollama_runner.py, evals/copilot_runner.py), not here.
+# by the eval runner (evals/runner.py), not here.
 _provider = os.getenv("EDGENT_MODEL_PROVIDER", "ollama")
 _model_name = os.getenv("EDGENT_MODEL_NAME", "gemma4:e2b")
 _MODEL = os.getenv("EDGENT_MODEL", f"{_provider}:{_model_name}")

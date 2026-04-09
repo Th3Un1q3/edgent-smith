@@ -152,6 +152,9 @@ smoke_dataset: Dataset[str, AgentOutput] = Dataset(
 if __name__ == "__main__":
     import argparse
 
+    # NOTE: Prefer `python evals/runner.py` for interactive use — it auto-detects
+    # the provider (Ollama or Copilot) and supports --provider / --model overrides.
+    # This entry point is kept for backward compatibility and runs Ollama only.
     from agents.edge import _MODEL as _EDGE_MODEL
     from evals.runner import build_ollama_model, run_eval
 

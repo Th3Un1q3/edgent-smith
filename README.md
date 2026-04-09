@@ -11,10 +11,9 @@ Three agents · pydantic-ai evaluations · DevContainer-first CI · issue-driven
 agents/
   edge.py                      # Edge agent – single file, inline tools, pydantic-ai
 evals/
+  runner.py                    # Unified eval runner (Ollama + Copilot, auto-detected)
   smoke.py                     # Smoke eval dataset + utilities (pydantic_evals)
-  ollama_runner.py             # Eval runner using local Ollama (default backend)
-  copilot_runner.py            # Eval runner using GitHub Copilot API (no Ollama needed)
-  baseline.json                # Minimum score threshold for experiment promotion
+  *.baseline.json              # Per-model minimum score threshold for experiment promotion
 tests/
   test_edge_agent.py
 .devcontainer/                 # Python 3.13 + Ollama sidecar
@@ -45,7 +44,7 @@ Copilot Brainstorm Agent  (.github/agents/brainstorm.agent.md)
         │
         ├─ runs pydantic_evals smoke suite → score
         │
-        ├─ score >= baseline (evals/baseline.json)
+        ├─ score >= baseline
         │   └─ commit + push + open PR + comment ✅ on issue
         │
         └─ score < baseline
@@ -75,8 +74,15 @@ with the `gpt-5-mini` model. It requires one secret set in
 
 ## Baseline score
 
-The minimum assertion pass-rate is stored in `evals/baseline.json`.  
-It is updated automatically: run `python evals/ollama_runner.py --update-baseline` inside the DevContainer and the file is overwritten whenever the new score exceeds the current value.
+The minimum assertion pass-rate is stored per-model in `evals/<model>.baseline.json`.  
+It is updated automatically by the experiment workflow when a new score exceeds the current value,
+or you can update it manually:
+
+```bash
+# Inside the DevContainer — auto-detects provider
+docker exec devcontainer-devcontainer-1 \
+  bash -c "cd /workspace && python evals/runner.py --update-baseline"
+```
 
 ---
 
@@ -90,8 +96,8 @@ docker exec -it $(docker ps --filter name=ollama --format '{{.Names}}' | head -1
 # Run the edge agent
 python agents/edge.py "What is the capital of France?"
 
-# Run smoke evals  (requires a running Ollama instance)
-python evals/ollama_runner.py
+# Run smoke evals (auto-detects Ollama or Copilot provider)
+python evals/runner.py
 
 # Run tests  (uses TestModel – no Ollama needed)
 pytest tests/ -q
@@ -117,9 +123,14 @@ docker exec devcontainer-devcontainer-1 pip install -e '/workspace/.[dev]'
 # Run tests
 docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && pytest tests/ -q"
 
-# Run smoke evals (after pulling the model)
-docker exec devcontainer-ollama-1 ollama pull gemma4:e2b
-docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && python evals/ollama_runner.py"
+# Run smoke evals (auto-detects provider from GITHUB_COPILOT_API_TOKEN)
+docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && python evals/runner.py"
+
+# Force a specific provider
+docker exec devcontainer-devcontainer-1 \
+  bash -c "cd /workspace && python evals/runner.py --provider ollama --model gemma4:e2b"
+docker exec devcontainer-devcontainer-1 \
+  bash -c "cd /workspace && python evals/runner.py --provider copilot"
 ```
 
 ---
@@ -127,7 +138,10 @@ docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && python evals/o
 ## Running evals without Ollama (Copilot API fallback)
 
 The Ollama registry (`registry.ollama.ai`) is blocked in some sandbox
-environments.  Use `evals/copilot_runner.py` as a drop-in replacement.
+environments. The unified runner auto-detects the right provider:
+
+- **Copilot** is used when `GITHUB_COPILOT_API_TOKEN` is set in the environment.
+- **Ollama** is used otherwise.
 
 `docker-compose.yml` already forwards `GITHUB_COPILOT_API_TOKEN` and sets
 `SSL_CERT_FILE` to the system CA bundle, so the Copilot API is reachable from
@@ -137,26 +151,21 @@ inside the DevContainer with no extra configuration.
 # Start the DevContainer (token is forwarded automatically)
 devcontainer up --workspace-folder .
 
-# Run evals via the Copilot API (same agent, same dataset, different model backend)
+# Auto-detect provider
 docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/copilot_runner.py"
-
-# Choose a different model
-docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/copilot_runner.py --model gpt-4o-2024-11-20"
+  bash -c "cd /workspace && python evals/runner.py"
 
 # Write a CI-compatible score file
 docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/copilot_runner.py --score-file /tmp/score.json"
+  bash -c "cd /workspace && python evals/runner.py --score-file /tmp/score.json"
 
-# Update baseline.json when the new score beats the current one
+# Update the baseline when the new score beats the current one
 docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/copilot_runner.py --update-baseline"
+  bash -c "cd /workspace && python evals/runner.py --update-baseline"
 ```
 
-`evals/copilot_runner.py` runs the same smoke dataset and the same edge agent
-as `evals/ollama_runner.py`.  It overrides the agent's model to the Copilot API
-per-run so the full agent (system prompt + all registered tools) is exercised.
+The runner exercises the **same** smoke dataset and the **same** edge agent regardless
+of provider. The only difference is the model backend.
 
 ---
 
@@ -176,3 +185,4 @@ python -m ruff check agents/ evals/ tests/
 
 CI runs inside the DevContainer via `devcontainers/ci@v0.3`.  
 No separate Python environment is provisioned.
+

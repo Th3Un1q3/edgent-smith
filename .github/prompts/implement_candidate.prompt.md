@@ -13,7 +13,8 @@ Implement the experiment described in the GitHub issue assigned to you.
    - Mutation surface (file + location)
    - Acceptance criteria
 
-2. **Create a branch**: `experiment/<issue-number>/<slug>`
+2. **Work on the current branch** — the workflow has already created the experiment
+   branch (`auto-research/<issue-number>-<slug>`); do not create or switch branches.
 
 3. **Apply the minimal change** to the mutation surface only.
    - Use the GitHub Copilot CLI (`gh copilot suggest`) for code generation if needed.

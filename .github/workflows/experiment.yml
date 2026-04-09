@@ -115,8 +115,8 @@ ${ISSUE_BODY}"
             python -m pytest tests/ -q
             python -m ruff check agents/ evals/ tests/
 
-            # ── d. Run evaluations; write score report ────────────────────────
-            python evals/smoke.py --score-file eval_result.json
+            # ── d. Run evaluations; write score report; update baseline ──────
+            python evals/runner.py --score-file eval_result.json --update-baseline
 
       # ── 5. Read results ────────────────────────────────────────────────────
       - name: Read eval results
@@ -125,9 +125,9 @@ ${ISSUE_BODY}"
           SCORE=$(python3 -c \
             "import json; print(json.load(open('eval_result.json'))['score'])")
           BASELINE=$(python3 -c \
-            "import json; print(json.load(open('evals/baseline.json'))['score'])")
-          python3 -c "import sys; sys.exit(0 if float('$SCORE') >= float('$BASELINE') else 1)" \
-            && PASSED=true || PASSED=false
+            "import json; print(json.load(open('eval_result.json'))['baseline'])")
+          PASSED=$(python3 -c \
+            "import json; print('true' if json.load(open('eval_result.json'))['passed'] else 'false')")
           echo "score=$SCORE"       >> "$GITHUB_OUTPUT"
           echo "baseline=$BASELINE" >> "$GITHUB_OUTPUT"
           echo "passed=$PASSED"     >> "$GITHUB_OUTPUT"
@@ -149,15 +149,6 @@ ${ISSUE_BODY}"
 
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Update baseline to the new score so it reflects a real eval result.
-          python3 -c "
-import json, pathlib
-p = pathlib.Path('evals/baseline.json')
-data = json.loads(p.read_text())
-data['score'] = float('${SCORE}')
-p.write_text(json.dumps(data, indent=2) + '\n')
-"
 
           git add -A
           git diff --cached --quiet \

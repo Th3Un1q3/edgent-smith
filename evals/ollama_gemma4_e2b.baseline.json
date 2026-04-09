@@ -5,5 +5,6 @@
     "factual_geography",
     "extraction",
     "summarization"
-  ]
+  ],
+  "description": "Minimum count of fully-passing evaluation cases for experiment promotion. A case is fully passing when all assertions are True and all keyword-match scores equal 1.0. Updated automatically by the experiment workflow when a new eval result exceeds it. Adding new passing cases raises the score; a previously-passing case that starts failing is a regression and blocks promotion regardless of total count."
 }
