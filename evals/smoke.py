@@ -31,17 +31,37 @@ from pydantic_evals.reporting import EvaluationReport
 
 from agents.edge import AgentOutput, run_agent
 
-_BASELINE_FILE = Path(__file__).parent / "baseline.json"
+_BASELINE_DIR = Path(__file__).parent
 
 
-def _read_baseline() -> tuple[int, list[str], dict[str, Any]]:
-    """Return (score, passing_cases, raw_data) from evals/baseline.json.
+def baseline_file(model_name: str) -> Path:
+    """Return the path to the baseline file for *model_name*.
+
+    Baseline files are kept separate per model so that score changes caused by
+    a model upgrade are not conflated with agent-logic improvements.
+
+    Example::
+
+        baseline_file("gpt-4o-mini-2024-07-18")
+        # → evals/gpt-4o-mini-2024-07-18.baseline.json
+    """
+    safe_name = model_name.replace("/", "_").replace(":", "_")
+    return _BASELINE_DIR / f"{safe_name}.baseline.json"
+
+
+def _read_baseline(path: Path) -> tuple[int, list[str], dict[str, Any]]:
+    """Return (score, passing_cases, raw_data) from the given baseline file.
 
     ``score`` is the count of fully-passing cases recorded at the last baseline
     update.  ``passing_cases`` is the list of their names — any case in this
     list that fails in the current run is treated as a regression.
+
+    If the file does not exist yet (first run for a new model), returns
+    sensible defaults that allow any score to pass.
     """
-    data = json.loads(_BASELINE_FILE.read_text())
+    if not path.exists():
+        return 0, [], {"score": 0, "passing_cases": []}
+    data = json.loads(path.read_text())
     return int(data["score"]), list(data.get("passing_cases", [])), data
 
 
@@ -132,6 +152,8 @@ smoke_dataset: Dataset[str, AgentOutput] = Dataset(
 if __name__ == "__main__":
     import argparse
 
+    from agents.edge import _MODEL as _EDGE_MODEL
+
     _parser = argparse.ArgumentParser(description="Run smoke evaluations for the edge agent.")
     _parser.add_argument(
         "--score-file",
@@ -141,9 +163,11 @@ if __name__ == "__main__":
     _parser.add_argument(
         "--update-baseline",
         action="store_true",
-        help="Overwrite evals/baseline.json when the new score exceeds the current baseline.",
+        help="Overwrite the model-specific baseline when the new score exceeds it.",
     )
     _args = _parser.parse_args()
+
+    _baseline_path = baseline_file(_EDGE_MODEL)
 
     _report = smoke_dataset.evaluate_sync(run_agent)
     _report.print(include_input=True, include_output=True)
@@ -151,10 +175,11 @@ if __name__ == "__main__":
     _pass_results = case_pass_results(_report)
     _passing_now = [name for name, passed in _pass_results.items() if passed]
     _score = len(_passing_now)
-    _baseline_score, _baseline_passing, _baseline_data = _read_baseline()
+    _baseline_score, _baseline_passing, _baseline_data = _read_baseline(_baseline_path)
     _regressions = [name for name in _baseline_passing if not _pass_results.get(name, False)]
 
-    print(f"\nCI score: {_score}  (baseline: {_baseline_score})", flush=True)
+    print(f"\nModel: {_EDGE_MODEL}", flush=True)
+    print(f"CI score: {_score}  (baseline: {_baseline_score})", flush=True)
     if _regressions:
         print(f"REGRESSIONS detected: {_regressions}", flush=True)
 
@@ -164,7 +189,7 @@ if __name__ == "__main__":
         if _score > _baseline_score:
             _baseline_data["score"] = _score
             _baseline_data["passing_cases"] = _passing_now
-            _BASELINE_FILE.write_text(json.dumps(_baseline_data, indent=2) + "\n")
+            _baseline_path.write_text(json.dumps(_baseline_data, indent=2) + "\n")
             print(f"Baseline updated: {_baseline_score} → {_score}", flush=True)
         elif _score == _baseline_score:
             print(f"Baseline unchanged: {_baseline_score} (score equal)", flush=True)
@@ -179,5 +204,6 @@ if __name__ == "__main__":
             "cases_total": len(smoke_dataset.cases),
             "passing_cases": _passing_now,
             "regressions": _regressions,
+            "model": _EDGE_MODEL,
         }
         Path(_args.score_file).write_text(json.dumps(_result, indent=2))

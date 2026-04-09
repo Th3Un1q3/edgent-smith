@@ -37,7 +37,7 @@ Usage
     # Write a JSON score report (same format as evals/smoke.py --score-file)
     python evals/copilot_runner.py --score-file /tmp/score.json
 
-    # Update evals/baseline.json when the new score beats the current one
+    # Update evals/{model}.baseline.json when the new score beats the current one
     python evals/copilot_runner.py --update-baseline
 """
 
@@ -54,7 +54,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 from agents.edge import AgentOutput
 from agents.edge import agent as edge_agent
-from evals.smoke import _BASELINE_FILE, _read_baseline, case_pass_results, smoke_dataset
+from evals.smoke import _read_baseline, baseline_file, case_pass_results, smoke_dataset
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -135,10 +135,11 @@ if __name__ == "__main__":
     _parser.add_argument(
         "--update-baseline",
         action="store_true",
-        help="Overwrite evals/baseline.json when the new score exceeds the current baseline.",
+        help="Overwrite the model-specific baseline when the new score exceeds it.",
     )
     _args = _parser.parse_args()
 
+    _baseline_path = baseline_file(_args.model)
     _model = build_copilot_model(_args.model)
 
     async def _run(prompt: str) -> AgentOutput:
@@ -151,10 +152,11 @@ if __name__ == "__main__":
     _pass_results = case_pass_results(_report)
     _passing_now = [name for name, passed in _pass_results.items() if passed]
     _score = len(_passing_now)
-    _baseline_score, _baseline_passing, _baseline_data = _read_baseline()
+    _baseline_score, _baseline_passing, _baseline_data = _read_baseline(_baseline_path)
     _regressions = [name for name in _baseline_passing if not _pass_results.get(name, False)]
 
-    print(f"\nCI score: {_score}  (baseline: {_baseline_score})", flush=True)
+    print(f"\nModel: {_args.model}", flush=True)
+    print(f"CI score: {_score}  (baseline: {_baseline_score})", flush=True)
     if _regressions:
         print(f"REGRESSIONS detected: {_regressions}", flush=True)
 
@@ -164,7 +166,7 @@ if __name__ == "__main__":
         if _score > _baseline_score:
             _baseline_data["score"] = _score
             _baseline_data["passing_cases"] = _passing_now
-            _BASELINE_FILE.write_text(json.dumps(_baseline_data, indent=2) + "\n")
+            _baseline_path.write_text(json.dumps(_baseline_data, indent=2) + "\n")
             print(f"Baseline updated: {_baseline_score} → {_score}", flush=True)
         elif _score == _baseline_score:
             print(f"Baseline unchanged: {_baseline_score} (score equal)", flush=True)
