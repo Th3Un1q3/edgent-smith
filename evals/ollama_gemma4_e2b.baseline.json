@@ -1,0 +1,9 @@
+{
+  "score": 4,
+  "passing_cases": [
+    "arithmetic",
+    "factual_geography",
+    "extraction",
+    "summarization"
+  ]
+}

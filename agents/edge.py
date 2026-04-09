@@ -21,6 +21,9 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.profiles.openai import OpenAIModelProfile
+from pydantic_ai.providers.ollama import OllamaProvider
 
 # ── Model ──────────────────────────────────────────────────────────────────────
 # Uses pydantic-ai's built-in Ollama provider; no custom wrapper needed.
@@ -28,6 +31,17 @@ from pydantic_ai import Agent
 _provider = os.getenv("EDGENT_MODEL_PROVIDER", "ollama")
 _model_name = os.getenv("EDGENT_MODEL_NAME", "gemma4:e2b")
 _MODEL = os.getenv("EDGENT_MODEL", f"{_provider}:{_model_name}")
+
+# ── Ollama base-URL bridging ───────────────────────────────────────────────────
+# docker-compose.yml sets EDGENT_OLLAMA_BASE_URL; pydantic-ai reads OLLAMA_BASE_URL.
+# The OpenAI-compat path requires the /v1 suffix, so we normalise it here.
+if not os.getenv("OLLAMA_BASE_URL"):
+    _edgent_base = os.getenv("EDGENT_OLLAMA_BASE_URL", "")
+    if _edgent_base:
+        _edgent_base = _edgent_base.rstrip("/")
+        if not _edgent_base.endswith("/v1"):
+            _edgent_base += "/v1"
+        os.environ["OLLAMA_BASE_URL"] = _edgent_base
 
 # ── I/O schemas ────────────────────────────────────────────────────────────────
 
@@ -56,8 +70,26 @@ You are a precise, efficient assistant designed for edge deployment on constrain
 # ── Agent ──────────────────────────────────────────────────────────────────────
 # defer_model_check=True: model is validated lazily on first run, not at import.
 # This lets tests override with TestModel without needing OLLAMA_BASE_URL.
+#
+# For the Ollama provider the default structured-output mode is 'tool', but
+# small local models (e.g. gemma4:e2b) do not reliably emit tool-call JSON.
+# They *do* support response_format/json_schema natively, so we override the
+# profile to use 'json_schema' mode when the provider is ollama.
+if _provider == "ollama":
+    _ollama_profile = OpenAIModelProfile(
+        default_structured_output_mode="native",
+        supports_json_schema_output=True,
+    )
+    _agent_model: str | OpenAIChatModel = OpenAIChatModel(
+        _model_name,
+        provider=OllamaProvider(),
+        profile=_ollama_profile,
+    )
+else:
+    _agent_model = _MODEL
+
 agent: Agent[None, AgentOutput] = Agent(
-    _MODEL,
+    _agent_model,
     output_type=AgentOutput,
     system_prompt=_SYSTEM,
     defer_model_check=True,
