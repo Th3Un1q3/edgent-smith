@@ -11,8 +11,9 @@ Three agents · pydantic-ai evaluations · DevContainer-first CI · issue-driven
 agents/
   edge.py                      # Edge agent – single file, inline tools, pydantic-ai
 evals/
-  smoke.py                     # Smoke eval dataset (pydantic_evals)
-  copilot_runner.py            # Fallback eval runner using GitHub Copilot API (no Ollama needed)
+  smoke.py                     # Smoke eval dataset + utilities (pydantic_evals)
+  ollama_runner.py             # Eval runner using local Ollama (default backend)
+  copilot_runner.py            # Eval runner using GitHub Copilot API (no Ollama needed)
   baseline.json                # Minimum score threshold for experiment promotion
 tests/
   test_edge_agent.py
@@ -75,7 +76,7 @@ with the `gpt-5-mini` model. It requires one secret set in
 ## Baseline score
 
 The minimum assertion pass-rate is stored in `evals/baseline.json`.  
-It is updated automatically: run `python evals/smoke.py --update-baseline` inside the DevContainer and the file is overwritten whenever the new score exceeds the current value.
+It is updated automatically: run `python evals/ollama_runner.py --update-baseline` inside the DevContainer and the file is overwritten whenever the new score exceeds the current value.
 
 ---
 
@@ -90,7 +91,7 @@ docker exec -it $(docker ps --filter name=ollama --format '{{.Names}}' | head -1
 python agents/edge.py "What is the capital of France?"
 
 # Run smoke evals  (requires a running Ollama instance)
-python evals/smoke.py
+python evals/ollama_runner.py
 
 # Run tests  (uses TestModel – no Ollama needed)
 pytest tests/ -q
@@ -118,7 +119,7 @@ docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && pytest tests/ 
 
 # Run smoke evals (after pulling the model)
 docker exec devcontainer-ollama-1 ollama pull gemma4:e2b
-docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && python evals/smoke.py"
+docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && python evals/ollama_runner.py"
 ```
 
 ---
@@ -154,7 +155,7 @@ docker exec devcontainer-devcontainer-1 \
 ```
 
 `evals/copilot_runner.py` runs the same smoke dataset and the same edge agent
-as `evals/smoke.py`.  It overrides the agent's model to the Copilot API
+as `evals/ollama_runner.py`.  It overrides the agent's model to the Copilot API
 per-run so the full agent (system prompt + all registered tools) is exercised.
 
 ---

@@ -29,7 +29,7 @@ from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import Evaluator, EvaluatorContext, IsInstance
 from pydantic_evals.reporting import EvaluationReport
 
-from agents.edge import AgentOutput, run_agent
+from agents.edge import AgentOutput
 
 _BASELINE_DIR = Path(__file__).parent
 
@@ -153,6 +153,8 @@ if __name__ == "__main__":
     import argparse
 
     from agents.edge import _MODEL as _EDGE_MODEL
+    from agents.edge import agent as edge_agent
+    from evals.ollama_runner import build_ollama_model
 
     _parser = argparse.ArgumentParser(description="Run smoke evaluations for the edge agent.")
     _parser.add_argument(
@@ -169,7 +171,15 @@ if __name__ == "__main__":
 
     _baseline_path = baseline_file(_EDGE_MODEL)
 
-    _report = smoke_dataset.evaluate_sync(run_agent)
+    # Build the Ollama model and inject it at call-time so that provider setup
+    # stays outside the agent definition (see evals/ollama_runner.py).
+    _model = build_ollama_model()
+
+    async def _run(prompt: str) -> AgentOutput:
+        result = await edge_agent.run(prompt, model=_model)
+        return result.output
+
+    _report = smoke_dataset.evaluate_sync(_run)
     _report.print(include_input=True, include_output=True)
 
     _pass_results = case_pass_results(_report)
