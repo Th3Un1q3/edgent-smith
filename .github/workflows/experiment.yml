@@ -95,9 +95,9 @@ jobs:
 
             PROMPT="$(cat .github/agents/implement.agent.md)
 
-## Task: Issue #${ISSUE_NUMBER} — ${ISSUE_TITLE}
+            ## Task: Issue #${ISSUE_NUMBER} — ${ISSUE_TITLE}
 
-${ISSUE_BODY}"
+            ${ISSUE_BODY}"
 
             # ── b. Invoke Copilot CLI (installed via postCreateCommand) ───────
             # Uses the programmatic interface (--prompt) with --allow-all-tools
@@ -160,21 +160,21 @@ ${ISSUE_BODY}"
             --title "experiment: ${ISSUE_TITLE}" \
             --body "Closes #${ISSUE_NUMBER}
 
-**Eval score:** \`${SCORE}\`  **Baseline:** \`${BASELINE}\`
+          **Eval score:** \`${SCORE}\`  **Baseline:** \`${BASELINE}\`
 
-Implemented by the [auto-research workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})." \
+          Implemented by the [auto-research workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})." \
             --base "$BASE" \
             --head "$BRANCH")
 
           gh issue comment "$ISSUE_NUMBER" --body "✅ **Experiment passed baseline.**
 
-| Metric   | Value |
-|----------|-------|
-| Score    | \`${SCORE}\` |
-| Baseline | \`${BASELINE}\` |
-| PR       | ${PR_URL} |
+          | Metric   | Value |
+          |----------|-------|
+          | Score    | \`${SCORE}\` |
+          | Baseline | \`${BASELINE}\` |
+          | PR       | ${PR_URL} |
 
-The changes have been committed and a pull request has been opened for review."
+          The changes have been committed and a pull request has been opened for review."
 
       # ── 6b. Score < baseline → label failure + comment details ────────────
       - name: Report below-baseline result
@@ -190,14 +190,14 @@ The changes have been committed and a pull request has been opened for review."
 
           gh issue comment "$ISSUE_NUMBER" --body "❌ **Experiment did not reach baseline.**
 
-| Metric   | Value |
-|----------|-------|
-| Reason   | Below-baseline performance |
-| Score    | \`${SCORE}\` |
-| Baseline | \`${BASELINE}\` |
-| Run      | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
+          | Metric   | Value |
+          |----------|-------|
+          | Reason   | Below-baseline performance |
+          | Score    | \`${SCORE}\` |
+          | Baseline | \`${BASELINE}\` |
+          | Run      | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
 
-Please review the hypothesis and consider refining the approach before re-labelling."
+          Please review the hypothesis and consider refining the approach before re-labelling."
 
       # ── 6c. Unexpected error → label failure + comment details ────────────
       - name: Report unexpected failure
@@ -211,12 +211,12 @@ Please review the hypothesis and consider refining the approach before re-labell
 
           gh issue comment "$ISSUE_NUMBER" --body "❌ **Experiment failed unexpectedly.**
 
-| Metric | Value |
-|--------|-------|
-| Reason | Workflow step error |
-| Run    | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
+          | Metric | Value |
+          |--------|-------|
+          | Reason | Workflow step error |
+          | Run    | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
 
-Check the workflow logs for details. Please fix the issue before re-labelling."
+          Check the workflow logs for details. Please fix the issue before re-labelling."
 
       # ── 6d. Job timed out → label failure + comment details ───────────────
       - name: Report timeout
@@ -230,12 +230,12 @@ Check the workflow logs for details. Please fix the issue before re-labelling."
 
           gh issue comment "$ISSUE_NUMBER" --body "⏱ **Experiment timed out.**
 
-| Metric | Value |
-|--------|-------|
-| Reason | Job exceeded the \`timeout-minutes: 30\` limit |
-| Run    | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
+          | Metric | Value |
+          |--------|-------|
+          | Reason | Job exceeded the \`timeout-minutes: 30\` limit |
+          | Run    | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
 
-Consider simplifying the experiment or raising the timeout before re-labelling."
+          Consider simplifying the experiment or raising the timeout before re-labelling."
 
       # ── 7. Remove in_progress label (always runs) ──────────────────────────
       - name: Remove in_progress label
