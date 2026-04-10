@@ -24,6 +24,7 @@ Usage
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -51,12 +52,18 @@ _COPILOT_DEFAULT_MODEL = "gpt-4o-mini-2024-07-18"
 # ── Ollama model factory ───────────────────────────────────────────────────────
 
 
+def _ensure_ollama_v1_base_url(url: str) -> str:
+    """Return ``url`` normalised to an Ollama OpenAI-compatible ``/v1`` base URL."""
+    raw = url.rstrip("/")
+    return raw if raw.endswith("/v1") else f"{raw}/v1"
+
+
 def _resolve_ollama_base_url() -> str:
     """Return the Ollama base URL with the required ``/v1`` suffix."""
     if url := os.getenv("OLLAMA_BASE_URL"):
-        return url
-    raw = os.getenv("EDGENT_OLLAMA_BASE_URL", _OLLAMA_DEFAULT_BASE_URL).rstrip("/")
-    return raw if raw.endswith("/v1") else f"{raw}/v1"
+        return _ensure_ollama_v1_base_url(url)
+    raw = os.getenv("EDGENT_OLLAMA_BASE_URL", _OLLAMA_DEFAULT_BASE_URL)
+    return _ensure_ollama_v1_base_url(raw)
 
 
 def build_ollama_model(
@@ -95,9 +102,12 @@ class _CopilotTransport(httpx.AsyncHTTPTransport):
                 if isinstance(data, dict) and "choices" in data and "object" not in data:
                     data["object"] = "chat.completion"
                     patched = json.dumps(data).encode()
+                    patched_headers = dict(response.headers)
+                    for _hdr in ("content-length", "content-encoding", "transfer-encoding"):
+                        patched_headers.pop(_hdr, None)
                     response = httpx.Response(
                         status_code=response.status_code,
-                        headers=dict(response.headers),
+                        headers=patched_headers,
                         content=patched,
                         request=request,
                     )
@@ -106,16 +116,33 @@ class _CopilotTransport(httpx.AsyncHTTPTransport):
         return response
 
 
-def build_copilot_model(model_name: str = _COPILOT_DEFAULT_MODEL) -> OpenAIChatModel:
+def build_copilot_model(
+    model_name: str = _COPILOT_DEFAULT_MODEL,
+    http_client: httpx.AsyncClient | None = None,
+) -> OpenAIChatModel:
     """Return an ``OpenAIChatModel`` backed by the GitHub Copilot API.
 
     Reads ``GITHUB_COPILOT_API_TOKEN`` from the environment.
+
+    Args:
+        model_name: Copilot model identifier.
+        http_client: Optional pre-constructed ``httpx.AsyncClient`` with the
+            required transport.  When provided the caller is responsible for
+            closing it after the run.  When omitted a new client is created
+            with :class:`_CopilotTransport` — callers should close it via
+            ``asyncio.run(client.aclose())`` when they are done.
     """
-    token = os.environ["GITHUB_COPILOT_API_TOKEN"]
+    token = os.getenv("GITHUB_COPILOT_API_TOKEN")
+    if not token:
+        raise ValueError(
+            "GitHub Copilot API token is required for the 'copilot' provider. "
+            "Set the GITHUB_COPILOT_API_TOKEN environment variable before running."
+        )
+    client = http_client or httpx.AsyncClient(transport=_CopilotTransport())
     openai_client = AsyncOpenAI(
         base_url=_COPILOT_BASE_URL,
         api_key=token,
-        http_client=httpx.AsyncClient(transport=_CopilotTransport()),
+        http_client=client,
     )
     return OpenAIChatModel(model_name, provider=OpenAIProvider(openai_client=openai_client))
 
@@ -249,17 +276,23 @@ if __name__ == "__main__":
         _model = build_ollama_model(_model_name, _args.base_url)
         _baseline_key = f"ollama:{_model_name}"
         _provider_label = "ollama"
+        _http_client = None
     else:
         _model_name = _args.model or _COPILOT_DEFAULT_MODEL
-        _model = build_copilot_model(_model_name)
+        _http_client = httpx.AsyncClient(transport=_CopilotTransport())
+        _model = build_copilot_model(_model_name, http_client=_http_client)
         _baseline_key = _model_name
         _provider_label = "github-copilot"
 
-    run_eval(
-        _model,
-        baseline_key=_baseline_key,
-        provider=_provider_label,
-        score_file=_args.score_file,
-        update_baseline=_args.update_baseline,
-    )
+    try:
+        run_eval(
+            _model,
+            baseline_key=_baseline_key,
+            provider=_provider_label,
+            score_file=_args.score_file,
+            update_baseline=_args.update_baseline,
+        )
+    finally:
+        if _http_client is not None:
+            asyncio.run(_http_client.aclose())
 

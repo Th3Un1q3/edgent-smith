@@ -23,7 +23,7 @@ Before writing the script, read:
 
 - `agents/edge.py` — focus on `_SYSTEM` (system prompt) and tool docstrings.
 - `evals/smoke.py` — understand what cases are evaluated and which ones might fail.
-- `evals/baseline.json` — the minimum score threshold for promotion.
+- `evals/<safe-model-name>.baseline.json` — the per-model minimum score threshold for promotion.
 
 ## Output format
 

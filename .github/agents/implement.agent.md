@@ -31,7 +31,7 @@ You may ONLY modify:
 - `evals/smoke.py` — evaluation case `inputs` strings only (not evaluator logic).
 
 **Never touch:** CI workflows, devcontainer, `tests/`, `pyproject.toml`,
-`evals/baseline.json`, or any other file.
+`evals/*.baseline.json`, or any other file.
 
 ## Constraints
 

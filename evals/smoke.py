@@ -172,7 +172,7 @@ if __name__ == "__main__":
     _args = _parser.parse_args()
 
     run_eval(
-        build_ollama_model(),
+        build_ollama_model(_EDGE_MODEL),
         baseline_key=_EDGE_MODEL,
         provider="ollama",
         score_file=_args.score_file,

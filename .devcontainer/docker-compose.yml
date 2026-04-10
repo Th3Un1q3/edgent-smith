@@ -10,7 +10,7 @@ services:
       EDGENT_OLLAMA_BASE_URL: http://ollama:11434
       EDGENT_MODEL_PROVIDER: ollama
       EDGENT_MODEL_NAME: gemma4:e2b
-      # Forward the Copilot API token from the host so that evals/copilot_runner.py
+      # Forward the Copilot API token from the host so that evals/runner.py
       # can reach api.githubcopilot.com from inside the container.
       GITHUB_COPILOT_API_TOKEN: ${GITHUB_COPILOT_API_TOKEN:-}
       # The sandbox uses a TLS-intercepting proxy whose CA is trusted by the

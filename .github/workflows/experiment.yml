@@ -9,7 +9,8 @@ name: Auto-Research
 #      via postCreateCommand) with the implement agent instructions + issue
 #      context. Copilot edits files directly using its native tools. Then
 #      validate (tests + lint) and run the pydantic_evals smoke suite.
-#   4. Compare score to evals/baseline.json.
+#   4. Compare score to the baseline read from eval_result.json and any
+#      per-model *.baseline.json files.
 #      ✅ score >= baseline → label 'experiment-success', commit, push, PR.
 #      ❌ score <  baseline → label 'experiment-failure', comment with details.
 #      ⏱  job timeout        → label 'experiment-failure', comment "timed out".
