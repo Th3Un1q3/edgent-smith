@@ -1,0 +1,40 @@
+{
+  "name": "edgent-smith dev",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspace",
+
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.mypy-type-checker",
+        "charliermarsh.ruff",
+        "GitHub.copilot",
+        "GitHub.copilot-chat"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        }
+      }
+    }
+  },
+
+  "postCreateCommand": "pip install -e '.[dev]' && npm install -g @github/copilot",
+  "remoteUser": "vscode",
+
+  "forwardPorts": [8000, 11434],
+  "portsAttributes": {
+    "8000": { "label": "edgent-smith API" },
+    "11434": { "label": "Ollama" }
+  }
+}

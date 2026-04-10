@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pywz
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+
+# Type checking
+.mypy_cache/
+
+# Linting
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Experiment artifacts (machine-generated, large)
+experiments/results/*.json
+experiments/baselines/*.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# Ollama model cache (large binary files)
+.ollama/
+
+# pydantic-ai inference cache (not intended for the repo)
+pi_cache/
+.pi_cache/
+
+# CI eval artefacts
+eval_result.json

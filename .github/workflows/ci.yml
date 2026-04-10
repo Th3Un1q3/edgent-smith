@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "experiment/**", "auto-research/**", "copilot/**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Lint · Type-check · Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Run everything inside the existing DevContainer – no separate Python setup.
+      - uses: devcontainers/ci@v0.3
+        with:
+          runCmd: |
+            pip install -e ".[dev]" --quiet
+            echo "── ruff ──────────────────────────────────────────"
+            python -m ruff check agents/ evals/ tests/
+            echo "── mypy ──────────────────────────────────────────"
+            python -m mypy agents/ evals/
+            echo "── pytest ────────────────────────────────────────"
+            python -m pytest tests/ -q

@@ -1,0 +1,247 @@
+name: Auto-Research
+
+# Triggered when an issue receives the 'auto-research' label.
+#
+# Lifecycle:
+#   1. Create an experiment branch.
+#   2. Label the issue `in_progress` (removed unconditionally on job exit).
+#   3. Inside the DevContainer: invoke the GitHub Copilot CLI (pre-installed
+#      via postCreateCommand) with the implement agent instructions + issue
+#      context. Copilot edits files directly using its native tools. Then
+#      validate (tests + lint) and run the pydantic_evals smoke suite.
+#   4. Compare score to the baseline read from eval_result.json and any
+#      per-model *.baseline.json files.
+#      ✅ score >= baseline → label 'experiment-success', commit, push, PR.
+#      ❌ score <  baseline → label 'experiment-failure', comment with details.
+#      ⏱  job timeout        → label 'experiment-failure', comment "timed out".
+#      💥 unexpected error   → label 'experiment-failure', comment with details.
+#   5. Remove `in_progress` label (always, regardless of outcome).
+#
+# Required secrets:
+#   COPILOT_GITHUB_TOKEN — fine-grained PAT with "Copilot Requests" permission.
+#   See: https://github.com/settings/personal-access-tokens/new
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  auto-research:
+    name: Run auto-research experiment
+    if: github.event.label.name == 'auto-research'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 2. Mark issue as in-progress ──────────────────────────────────────
+      - name: Mark issue in_progress
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh label create "in_progress" --color e4e669 --description "Experiment is currently running" --force
+          gh issue edit "$ISSUE_NUMBER" --add-label "in_progress"
+
+      # ── 3. Create experiment branch ────────────────────────────────────────
+      - name: Create experiment branch
+        id: branch
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          SLUG=$(echo "$ISSUE_TITLE" \
+            | tr '[:upper:]' '[:lower:]' \
+            | tr -cs 'a-z0-9' '-' \
+            | sed 's/-*$//' \
+            | cut -c1-40)
+          BRANCH="auto-research/${ISSUE_NUMBER}-${SLUG}"
+          git checkout -b "$BRANCH"
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      # ── 4. Implement + validate + evaluate inside DevContainer ────────────
+      # Copilot CLI is pre-installed in the devcontainer (postCreateCommand).
+      # COPILOT_GITHUB_TOKEN must be a fine-grained PAT with "Copilot Requests"
+      # permission. See the repository README for setup instructions.
+      - name: Run Copilot agent, tests, and evaluations
+        id: experiment
+        uses: devcontainers/ci@v0.3
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        with:
+          runCmd: |
+            set -euo pipefail
+            pip install -e ".[dev]" -q
+
+            # Pull the Ollama model (sidecar started via docker-compose)
+            ollama pull "$EDGENT_MODEL_NAME" 2>/dev/null || true
+
+            # ── a. Build prompt from agent file + issue context ───────────────
+            ISSUE_TITLE=$(gh issue view "$ISSUE_NUMBER" --json title -q .title)
+            ISSUE_BODY=$(gh issue view  "$ISSUE_NUMBER" --json body  -q .body)
+
+            PROMPT="$(cat .github/agents/implement.agent.md)
+
+## Task: Issue #${ISSUE_NUMBER} — ${ISSUE_TITLE}
+
+${ISSUE_BODY}"
+
+            # ── b. Invoke Copilot CLI (installed via postCreateCommand) ───────
+            # Uses the programmatic interface (--prompt) with --allow-all-tools
+            # so Copilot can read and write files without interactive prompts.
+            # git push, commit, and checkout are denied — the workflow handles
+            # those itself.
+            copilot \
+              --model gpt-5-mini \
+              --prompt "$PROMPT" \
+              --allow-all-tools \
+              --deny-tool='shell(git push)' \
+              --deny-tool='shell(git commit)' \
+              --deny-tool='shell(git checkout)'
+
+            # ── c. Validate changes ───────────────────────────────────────────
+            python -m pytest tests/ -q
+            python -m ruff check agents/ evals/ tests/
+
+            # ── d. Run evaluations; write score report; update baseline ──────
+            python evals/runner.py --score-file eval_result.json --update-baseline
+
+      # ── 5. Read results ────────────────────────────────────────────────────
+      - name: Read eval results
+        id: results
+        run: |
+          SCORE=$(python3 -c \
+            "import json; print(json.load(open('eval_result.json'))['score'])")
+          BASELINE=$(python3 -c \
+            "import json; print(json.load(open('eval_result.json'))['baseline'])")
+          PASSED=$(python3 -c \
+            "import json; print('true' if json.load(open('eval_result.json'))['passed'] else 'false')")
+          echo "score=$SCORE"       >> "$GITHUB_OUTPUT"
+          echo "baseline=$BASELINE" >> "$GITHUB_OUTPUT"
+          echo "passed=$PASSED"     >> "$GITHUB_OUTPUT"
+
+      # ── 6a. Score >= baseline → label success + commit, push, PR ─────────
+      - name: Commit, push, and open PR
+        if: steps.results.outputs.passed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          BASE: ${{ github.event.repository.default_branch }}
+          SCORE: ${{ steps.results.outputs.score }}
+          BASELINE: ${{ steps.results.outputs.baseline }}
+        run: |
+          gh label create "experiment-success" --color 0e8a16 --description "Experiment passed baseline" --force
+          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-success"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git diff --cached --quiet \
+            || git commit -m "experiment: issue #${ISSUE_NUMBER} — ${ISSUE_TITLE}"
+          git push origin "$BRANCH"
+
+          PR_URL=$(gh pr create \
+            --title "experiment: ${ISSUE_TITLE}" \
+            --body "Closes #${ISSUE_NUMBER}
+
+**Eval score:** \`${SCORE}\`  **Baseline:** \`${BASELINE}\`
+
+Implemented by the [auto-research workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})." \
+            --base "$BASE" \
+            --head "$BRANCH")
+
+          gh issue comment "$ISSUE_NUMBER" --body "✅ **Experiment passed baseline.**
+
+| Metric   | Value |
+|----------|-------|
+| Score    | \`${SCORE}\` |
+| Baseline | \`${BASELINE}\` |
+| PR       | ${PR_URL} |
+
+The changes have been committed and a pull request has been opened for review."
+
+      # ── 6b. Score < baseline → label failure + comment details ────────────
+      - name: Report below-baseline result
+        if: steps.results.outputs.passed == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          SCORE: ${{ steps.results.outputs.score }}
+          BASELINE: ${{ steps.results.outputs.baseline }}
+        run: |
+          gh label create "experiment-failure" --color d93f0b --description "Experiment did not pass" --force
+          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-failure"
+
+          gh issue comment "$ISSUE_NUMBER" --body "❌ **Experiment did not reach baseline.**
+
+| Metric   | Value |
+|----------|-------|
+| Reason   | Below-baseline performance |
+| Score    | \`${SCORE}\` |
+| Baseline | \`${BASELINE}\` |
+| Run      | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
+
+Please review the hypothesis and consider refining the approach before re-labelling."
+
+      # ── 6c. Unexpected error → label failure + comment details ────────────
+      - name: Report unexpected failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh label create "experiment-failure" --color d93f0b --description "Experiment did not pass" --force
+          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-failure"
+
+          gh issue comment "$ISSUE_NUMBER" --body "❌ **Experiment failed unexpectedly.**
+
+| Metric | Value |
+|--------|-------|
+| Reason | Workflow step error |
+| Run    | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
+
+Check the workflow logs for details. Please fix the issue before re-labelling."
+
+      # ── 6d. Job timed out → label failure + comment details ───────────────
+      - name: Report timeout
+        if: cancelled()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh label create "experiment-failure" --color d93f0b --description "Experiment did not pass" --force
+          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-failure"
+
+          gh issue comment "$ISSUE_NUMBER" --body "⏱ **Experiment timed out.**
+
+| Metric | Value |
+|--------|-------|
+| Reason | Job exceeded the \`timeout-minutes: 30\` limit |
+| Run    | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
+
+Consider simplifying the experiment or raising the timeout before re-labelling."
+
+      # ── 7. Remove in_progress label (always runs) ──────────────────────────
+      - name: Remove in_progress label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --remove-label "in_progress" 2>/dev/null || true
