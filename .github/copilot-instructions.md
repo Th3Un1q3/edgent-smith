@@ -106,24 +106,26 @@ When adding a new capability that already has a parallel implementation (e.g. a
 second runner), extract the shared logic first so each new variant only has to
 supply what is genuinely different.
 
-## Working with unfamiliar tools or APIs
+## Using any tool, action, CLI, or API
 
-When you encounter a tool, action, CLI flag, or API whose correct behaviour is
-not obvious from the code alone, follow this process every time — do not guess.
+**Before writing or editing any usage of a tool, action, CLI flag, or API —
+regardless of how well you think you know it — always look it up first.**
+Familiarity is not a substitute for verification; most mistakes happen precisely
+because the agent assumed it already knew the correct behaviour.
 
-1. **Identify the issue.** State precisely what is unclear or broken.
-2. **Find authoritative sources.** In order of preference:
+Follow this process every time, without exception:
+
+1. **Find authoritative sources.** In order of preference:
    - Official documentation (linked from the repo, README, or action metadata)
    - `--help` / `man` output for CLI tools
    - Context7 (`context7-resolve-library-id` → `context7-query-docs`)
    - GitHub source / release notes for the specific version in use
-3. **Derive the solution from what the sources say** — not from memory or
+2. **Derive the correct usage from what the sources say** — not from memory or
    analogy.  Quote or cite the relevant passage so the reasoning is traceable.
-4. **Apply** the minimal change that resolves the issue consistently across
-   every place the same pattern appears.  Do not fix one call site while leaving
-   others broken.
-5. **Validate** — run the relevant tests, linter, or CI job to confirm the fix
-   works before marking the task done.
+3. **Apply** the result consistently across every place the same pattern
+   appears.  Do not fix one call site while leaving others broken.
+4. **Validate** — run the relevant tests, linter, or CI job to confirm the
+   result works before marking the task done.
 
 > **Example — `devcontainers/ci` env-passing.**
 > The [action docs](https://github.com/devcontainers/ci/blob/main/docs/github-action.md#environment-variables)
