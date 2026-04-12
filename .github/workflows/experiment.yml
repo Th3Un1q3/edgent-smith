@@ -91,9 +91,6 @@ jobs:
             set -euo pipefail
             pip install -e ".[dev]" -q
 
-            # Pull the Ollama model (sidecar started via docker-compose)
-            ollama pull "$EDGENT_MODEL_NAME" 2>/dev/null || true
-
             # ── a. Build prompt from agent file + issue context ───────────────
             ISSUE_TITLE=$(gh issue view "$ISSUE_NUMBER" --json title -q .title)
             ISSUE_BODY=$(gh issue view  "$ISSUE_NUMBER" --json body  -q .body)
@@ -109,20 +106,7 @@ jobs:
             # so Copilot can read and write files without interactive prompts.
             # git push, commit, and checkout are denied — the workflow handles
             # those itself.
-            copilot \
-              --model gpt-5-mini \
-              --prompt "$PROMPT" \
-              --allow-all-tools \
-              --deny-tool='shell(git push)' \
-              --deny-tool='shell(git commit)' \
-              --deny-tool='shell(git checkout)'
-
-            # ── c. Validate changes ───────────────────────────────────────────
-            python -m pytest tests/ -q
-            python -m ruff check agents/ evals/ tests/
-
-            # ── d. Run evaluations; write score report; update baseline ──────
-            python evals/runner.py --score-file eval_result.json --update-baseline
+            MODEL=gpt-5-mini PROMPT="$PROMPT" bash scripts/run_experiment.sh
 
       # ── 5. Read results ────────────────────────────────────────────────────
       - name: Read eval results
