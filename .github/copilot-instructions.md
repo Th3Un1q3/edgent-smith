@@ -106,46 +106,33 @@ When adding a new capability that already has a parallel implementation (e.g. a
 second runner), extract the shared logic first so each new variant only has to
 supply what is genuinely different.
 
-## GitHub Actions — `devcontainers/ci` environment variables
+## Working with unfamiliar tools or APIs
 
-**Always verify the `devcontainers/ci` docs before writing or editing any step
-that uses this action:**
-<https://github.com/devcontainers/ci/blob/main/docs/github-action.md#environment-variables>
+When you encounter a tool, action, CLI flag, or API whose correct behaviour is
+not obvious from the code alone, follow this process every time — do not guess.
 
-The key rule confirmed by those docs:
+1. **Identify the issue.** State precisely what is unclear or broken.
+2. **Find authoritative sources.** In order of preference:
+   - Official documentation (linked from the repo, README, or action metadata)
+   - `--help` / `man` output for CLI tools
+   - Context7 (`context7-resolve-library-id` → `context7-query-docs`)
+   - GitHub source / release notes for the specific version in use
+3. **Derive the solution from what the sources say** — not from memory or
+   analogy.  Quote or cite the relevant passage so the reasoning is traceable.
+4. **Apply** the minimal change that resolves the issue consistently across
+   every place the same pattern appears.  Do not fix one call site while leaving
+   others broken.
+5. **Validate** — run the relevant tests, linter, or CI job to confirm the fix
+   works before marking the task done.
 
-> Step-level `env:` on a `devcontainers/ci` step is **not** forwarded into the
-> container shell.  Use `with.env` to list the variable names that should be
-> forwarded.
-
-Practical pattern — every value from the GitHub Actions context (`${{ }}`) that
-is needed inside `runCmd` **must** follow this three-part convention.  Never
-embed `${{ }}` expressions directly in `runCmd`.
-
-```yaml
-- uses: devcontainers/ci@v0.3
-  env:
-    # 1. Bind Actions-context values to env vars at the runner level.
-    MY_VAR: ${{ github.event.some.value }}
-    SECRET_VAR: ${{ secrets.SOME_SECRET }}
-  with:
-    # 2. Forward those vars into the container by listing their names.
-    env: |
-      MY_VAR
-      SECRET_VAR
-    runCmd: |
-      # 3. Use the vars normally — no ${{ }} expressions here.
-      echo "$MY_VAR"
-```
-
-Violating this pattern (e.g. mixing inline `${{ }}` for some vars and `with.env`
-for others, or omitting `with.env` entirely) causes silent failures inside the
-container where variables are unset.
-
-**Same rule applies to the CI `push` trigger:** never add feature branches to
-`branches:` under `push:` if a `pull_request:` trigger already covers the same
-branches.  Doing so fires CI twice per PR push.  Only `[main]` belongs under
-`push:` in `ci.yml`.
+> **Example — `devcontainers/ci` env-passing.**
+> The [action docs](https://github.com/devcontainers/ci/blob/main/docs/github-action.md#environment-variables)
+> state that step-level `env:` is not forwarded into the container shell; only
+> variables listed under `with.env` are available inside `runCmd`.  Applying
+> that rule uniformly means: bind every `${{ }}` expression to a runner-level
+> env var, list it in `with.env`, and reference it as a plain shell variable
+> inside `runCmd` — with no inline `${{ }}` expressions anywhere in the shell
+> body.
 
 ## Verify that your work actually runs
 
