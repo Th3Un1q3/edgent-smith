@@ -106,6 +106,36 @@ When adding a new capability that already has a parallel implementation (e.g. a
 second runner), extract the shared logic first so each new variant only has to
 supply what is genuinely different.
 
+## Using any tool, action, CLI, or API
+
+**Before writing or editing any usage of a tool, action, CLI flag, or API —
+regardless of how well you think you know it — always look it up first.**
+Familiarity is not a substitute for verification; most mistakes happen precisely
+because the agent assumed it already knew the correct behaviour.
+
+Follow this process every time, without exception:
+
+1. **Find authoritative sources.** In order of preference:
+   - Official documentation (linked from the repo, README, or action metadata)
+   - `--help` / `man` output for CLI tools
+   - Context7 (`context7-resolve-library-id` → `context7-query-docs`)
+   - GitHub source / release notes for the specific version in use
+2. **Derive the correct usage from what the sources say** — not from memory or
+   analogy.  Quote or cite the relevant passage so the reasoning is traceable.
+3. **Apply** the result consistently across every place the same pattern
+   appears.  Do not fix one call site while leaving others broken.
+4. **Validate** — run the relevant tests, linter, or CI job to confirm the
+   result works before marking the task done.
+
+> **Example — `devcontainers/ci` env-passing.**
+> The [action docs](https://github.com/devcontainers/ci/blob/main/docs/github-action.md#environment-variables)
+> state that step-level `env:` is not forwarded into the container shell; only
+> variables listed under `with.env` are available inside `runCmd`.  Applying
+> that rule uniformly means: bind every `${{ }}` expression to a runner-level
+> env var, list it in `with.env`, and reference it as a plain shell variable
+> inside `runCmd` — with no inline `${{ }}` expressions anywhere in the shell
+> body.
+
 ## Verify that your work actually runs
 
 Do not mark a task complete until you have:
