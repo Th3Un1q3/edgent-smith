@@ -106,6 +106,47 @@ When adding a new capability that already has a parallel implementation (e.g. a
 second runner), extract the shared logic first so each new variant only has to
 supply what is genuinely different.
 
+## GitHub Actions — `devcontainers/ci` environment variables
+
+**Always verify the `devcontainers/ci` docs before writing or editing any step
+that uses this action:**
+<https://github.com/devcontainers/ci/blob/main/docs/github-action.md#environment-variables>
+
+The key rule confirmed by those docs:
+
+> Step-level `env:` on a `devcontainers/ci` step is **not** forwarded into the
+> container shell.  Use `with.env` to list the variable names that should be
+> forwarded.
+
+Practical pattern — every value from the GitHub Actions context (`${{ }}`) that
+is needed inside `runCmd` **must** follow this three-part convention.  Never
+embed `${{ }}` expressions directly in `runCmd`.
+
+```yaml
+- uses: devcontainers/ci@v0.3
+  env:
+    # 1. Bind Actions-context values to env vars at the runner level.
+    MY_VAR: ${{ github.event.some.value }}
+    SECRET_VAR: ${{ secrets.SOME_SECRET }}
+  with:
+    # 2. Forward those vars into the container by listing their names.
+    env: |
+      MY_VAR
+      SECRET_VAR
+    runCmd: |
+      # 3. Use the vars normally — no ${{ }} expressions here.
+      echo "$MY_VAR"
+```
+
+Violating this pattern (e.g. mixing inline `${{ }}` for some vars and `with.env`
+for others, or omitting `with.env` entirely) causes silent failures inside the
+container where variables are unset.
+
+**Same rule applies to the CI `push` trigger:** never add feature branches to
+`branches:` under `push:` if a `pull_request:` trigger already covers the same
+branches.  Doing so fires CI twice per PR push.  Only `[main]` belongs under
+`push:` in `ci.yml`.
+
 ## Verify that your work actually runs
 
 Do not mark a task complete until you have:

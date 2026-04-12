@@ -80,14 +80,15 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         with:
           env: |
             COPILOT_GITHUB_TOKEN
             GH_TOKEN
             GITHUB_TOKEN
+            ISSUE_NUMBER
           runCmd: |
             set -euo pipefail
-            ISSUE_NUMBER="${{ github.event.issue.number }}"
             pip install -e ".[dev]" -q
 
             # Pull the Ollama model (sidecar started via docker-compose)
