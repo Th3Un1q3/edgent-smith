@@ -81,6 +81,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          env: |
+            COPILOT_GITHUB_TOKEN
+            GH_TOKEN
+            GITHUB_TOKEN
           runCmd: |
             set -euo pipefail
             ISSUE_NUMBER="${{ github.event.issue.number }}"
