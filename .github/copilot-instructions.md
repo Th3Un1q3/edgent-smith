@@ -95,6 +95,24 @@ Any script you create for running evaluations, experiments, or diagnostics
 | One-off experiment helper | `experiments/<name>.py` |
 | Build / CI helper | `scripts/<name>.sh` |
 
+## Never assume software is installed
+
+Before using any CLI tool, binary, or external service in a script or workflow,
+verify it is available in the target environment. Do not assume that because a
+tool is common it is present.
+
+- **Check availability explicitly.** Use `command -v <tool>` in shell scripts
+  and branch on the result. Emit a clear warning or error if the tool is absent.
+- **Prefer environment-provided services over host-installed binaries.**
+  For example, use the Ollama HTTP API (`EDGENT_OLLAMA_BASE_URL`) rather than
+  the `ollama` CLI; use `curl` (universally available in the devcontainer) rather
+  than language-specific HTTP clients when reaching a sidecar.
+- **Document the requirement.** If a script genuinely requires a tool, state so
+  at the top of the file and fail fast with a descriptive message rather than
+  producing a silent or confusing error later.
+- **Test the absent-tool path.** When writing the availability guard, verify the
+  fallback (warning or skip) behaves correctly, not just the happy path.
+
 ## Design principles
 
 When integrating with an external provider or library, identify the constructs

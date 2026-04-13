@@ -41,7 +41,7 @@ if [[ -n "${EDGENT_MODEL_NAME:-}" ]]; then
     | grep -E '"status"|"error"' || true
 fi
 
-── Invoke Copilot CLI ────────────────────────────────────────────────────────
+# ── Invoke Copilot CLI ────────────────────────────────────────────────────────
 copilot \
   --agent implement \
   --model "$MODEL" \
