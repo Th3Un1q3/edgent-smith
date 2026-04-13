@@ -104,7 +104,7 @@ def build_github_model() -> OpenAIChatModel | None:
     """
     GitHub Inference API docs: https://docs.github.com/en/github-models/quickstart
     """
-    token = os.getenv("GITHUB_MODEL_API_TOKEN")
+    token = os.getenv("GITHUB_MODEL_API_TOKEN") or os.getenv("GITHUB_TOKEN")
     if not token:
         return None
     endpoint = "https://models.github.ai/inference"

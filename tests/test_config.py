@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import importlib
-import os
 import sys
 
 import pytest
 from openai import OpenAIError
 from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.ollama import OllamaProvider
 
 
 def reload_config():
