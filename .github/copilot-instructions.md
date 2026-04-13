@@ -12,9 +12,48 @@ This repository implements a minimal, edge-optimised agentic system.
 
 ## Before making any change
 
-1. Check that your change is within the allowed mutation surface (see the active issue).
-2. Run `pytest tests/ -q` to confirm tests pass.
-3. Run `python -m ruff check agents/ evals/ tests/` to confirm lint passes.
+**Read this entire file** to understand the architecture, design principles, and validation process.  It contains critical information about how the system is structured, how to run tests and evals, and how to ensure your changes are correct and safe.
+
+### Validation checklist (mandatory for any change that affects functionality)
+
+This checklist applies to any change to the repository that affects code, functionality, evaluations, configuration, scripts, or runtime flags. Before marking a task done, complete these functional and non-functional validations.
+
+#### Functional checks (what to run)
+
+- **Run unit tests**: `pytest tests/ -q`. If you changed a specific module, run its tests directly (e.g. `pytest tests/test_config.py -q`).
+- **Run the full test suite**: `pytest tests/ -q` to detect regressions across the repo.
+- **Run CLI & integration smoke checks**: exercise the code paths a user or CI would run, for example:
+
+```bash
+# Exercise the edge agent prompt path (uses EDGENT_MODEL/DEVCONTAINER settings)
+python agents/edge.py "What is 2+2?"
+
+# Run the smoke eval runner (auto-detects provider); write a score file to inspect results
+python evals/runner.py --score-file /tmp/score.json
+```
+
+#### Non-functional checks (static & regression)
+
+- **Run linters & type checks**: `python -m ruff check agents/ evals/ tests/` and fix warnings; prefer built-in generics and `X | None` annotations for Python 3.13.
+- **Validate mapping & parameter mapping logic**: add unit tests for `map_to_provider_params()` for each provider/endpoint touched; ensure `think`, `max_tokens`, and token caps map correctly.
+- **Enforce safety caps**: verify `HARD_MAX_OUTPUT_TOKENS` (or equivalent) is applied — either via unit tests or a quick runtime check.
+- **Secrets handling & logging checks**: ensure no secrets are printed in logs. Grep recent log outputs or run a brief script to confirm tokens are masked.
+
+#### Integration & CI expectations
+
+- **DevContainer execution**: run integration or smoke checks inside the DevContainer when appropriate (see DevContainer section). Do not assume host services match container networking.
+- **Mock external calls in tests**: provider clients (Ollama/Copilot) must be mocked for unit tests; CI should run mocked tests to avoid network dependency.
+- **Baseline/regression check for evals**: if changes affect the evals or agent behaviour, run `python evals/runner.py --score-file /tmp/score.json` and compare with the baseline in `evals/*.baseline.json`. Only update baseline files with `--update-baseline` when you have validated improvements and added tests.
+
+#### Governance & documentation
+
+- **Document changes**: update `.env.example`, `README.md`, and `docs/` with any new env vars, presets, or behavioural changes.
+- **Add audit/log entries**: when changing which params are passed to providers, write a small (masked) audit line to `logs/model_params_audit.log` and include it in the PR so reviewers can see the effective params used.
+- **Tests & coverage**: any behaviour change must be accompanied by unit tests demonstrating the expected behaviour and handling of edge cases.
+
+#### Enforcement
+
+Every time there is opportunity to automate checks, enforce them via CI. For example the change introduced new service in docker compose. Add step to check connectivity to that service in CI. If there is a new env var, add a check that it is set in CI. If there is a new eval, add a smoke check for it in CI. The goal is to catch any missed validation steps automatically and prevent regressions.
 
 ## Execution environment — MANDATORY
 
@@ -143,7 +182,7 @@ tool is common it is present.
 - **Check availability explicitly.** Use `command -v <tool>` in shell scripts
   and branch on the result. Emit a clear warning or error if the tool is absent.
 - **Prefer environment-provided services over host-installed binaries.**
-  For example, use the Ollama HTTP API (`EDGENT_OLLAMA_BASE_URL`) rather than
+  For example, use the Ollama HTTP API (`OLLAMA_BASE_URL`) rather than
   the `ollama` CLI; use `curl` (universally available in the devcontainer) rather
   than language-specific HTTP clients when reaching a sidecar.
 - **Document the requirement.** If a script genuinely requires a tool, state so

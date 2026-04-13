@@ -33,7 +33,7 @@ ${errors}" \
 
 # ── Pull Ollama model via the devcontainer sidecar ───────────────────────────
 if [[ -n "${EDGENT_MODEL_NAME:-}" ]]; then
-  OLLAMA_BASE_URL="${EDGENT_OLLAMA_BASE_URL:-http://ollama:11434}"
+  OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://ollama:11434}"
   echo "Pulling '${EDGENT_MODEL_NAME}' from ${OLLAMA_BASE_URL} ..."
   curl --fail --silent --show-error \
     "${OLLAMA_BASE_URL}/api/pull" \

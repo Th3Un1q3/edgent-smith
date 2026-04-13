@@ -24,150 +24,77 @@ Usage
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 from pathlib import Path
 from typing import Any
 
-import httpx
-from openai import AsyncOpenAI
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.profiles.openai import OpenAIModelProfile
-from pydantic_ai.providers.ollama import OllamaProvider
-from pydantic_ai.providers.openai import OpenAIProvider
+from agents.edge import AgentOutput, build_edge_agent
+from config import ModelConfig, resolve_model_config
+from evals.smoke import smoke_dataset
 
-from agents.edge import AgentOutput
-from agents.edge import agent as edge_agent
-from evals.smoke import _read_baseline, baseline_file, case_pass_results, smoke_dataset
+from pydantic_evals.reporting import EvaluationReport
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-_OLLAMA_DEFAULT_MODEL = "gemma4:e2b"
-_OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
-_COPILOT_BASE_URL = "https://api.githubcopilot.com"
-_COPILOT_DEFAULT_MODEL = "gpt-4o-mini-2024-07-18"
+_BASELINE_DIR = Path(__file__).parent
 
 
-# ── Ollama model factory ───────────────────────────────────────────────────────
+# ── Baseline helpers ──────────────────────────────────────────────────────────
 
 
-def _ensure_ollama_v1_base_url(url: str) -> str:
-    """Return ``url`` normalised to an Ollama OpenAI-compatible ``/v1`` base URL."""
-    raw = url.rstrip("/")
-    return raw if raw.endswith("/v1") else f"{raw}/v1"
+def baseline_file(model_name: str) -> Path:
+    """Return the path to the baseline file for *model_name*.
 
-
-def _resolve_ollama_base_url() -> str:
-    """Return the Ollama base URL with the required ``/v1`` suffix."""
-    if url := os.getenv("OLLAMA_BASE_URL"):
-        return _ensure_ollama_v1_base_url(url)
-    raw = os.getenv("EDGENT_OLLAMA_BASE_URL", _OLLAMA_DEFAULT_BASE_URL)
-    return _ensure_ollama_v1_base_url(raw)
-
-
-def build_ollama_model(
-    model_name: str = _OLLAMA_DEFAULT_MODEL,
-    base_url: str | None = None,
-) -> OpenAIChatModel:
-    """Return an ``OpenAIChatModel`` backed by a local Ollama instance."""
-    resolved_url = base_url or _resolve_ollama_base_url()
-    profile = OpenAIModelProfile(
-        default_structured_output_mode="native",
-        supports_json_schema_output=True,
-    )
-    return OpenAIChatModel(
-        model_name,
-        provider=OllamaProvider(base_url=resolved_url),
-        profile=profile,
-    )
-
-
-# ── Copilot model factory ──────────────────────────────────────────────────────
-
-
-class _CopilotTransport(httpx.AsyncHTTPTransport):
-    """Inject the missing ``"object": "chat.completion"`` field.
-
-    The Copilot endpoint omits this field; pydantic-ai requires it when
-    parsing OpenAI chat completion responses.
+    Baseline files are kept separate per model so that score changes caused by
+    a model upgrade are not conflated with agent-logic improvements.
     """
-
-    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        response = await super().handle_async_request(request)
-        if response.status_code == 200:
-            await response.aread()
-            try:
-                data = json.loads(response.content)
-                if isinstance(data, dict) and "choices" in data and "object" not in data:
-                    data["object"] = "chat.completion"
-                    patched = json.dumps(data).encode()
-                    patched_headers = dict(response.headers)
-                    for _hdr in ("content-length", "content-encoding", "transfer-encoding"):
-                        patched_headers.pop(_hdr, None)
-                    response = httpx.Response(
-                        status_code=response.status_code,
-                        headers=patched_headers,
-                        content=patched,
-                        request=request,
-                    )
-            except (json.JSONDecodeError, KeyError):
-                pass
-        return response
+    safe_name = model_name.replace("/", "_").replace(":", "_")
+    return _BASELINE_DIR / f"{safe_name}.baseline.json"
 
 
-def build_copilot_model(
-    model_name: str = _COPILOT_DEFAULT_MODEL,
-    http_client: httpx.AsyncClient | None = None,
-) -> OpenAIChatModel:
-    """Return an ``OpenAIChatModel`` backed by the GitHub Copilot API.
+def _read_baseline(path: Path) -> tuple[int, list[str], dict[str, Any]]:
+    """Return (score, passing_cases, raw_data) from the given baseline file.
 
-    Reads ``GITHUB_COPILOT_API_TOKEN`` from the environment.
-
-    Args:
-        model_name: Copilot model identifier.
-        http_client: Optional pre-constructed ``httpx.AsyncClient`` with the
-            required transport.  When provided the caller is responsible for
-            closing it after the run.  When omitted a new client is created
-            with :class:`_CopilotTransport` — callers should close it via
-            ``asyncio.run(client.aclose())`` when they are done.
+    If the file does not exist yet (first run for a new model), returns
+    sensible defaults that allow any score to pass.
     """
-    token = os.getenv("GITHUB_COPILOT_API_TOKEN")
-    if not token:
-        raise ValueError(
-            "GitHub Copilot API token is required for the 'copilot' provider. "
-            "Set the GITHUB_COPILOT_API_TOKEN environment variable before running."
-        )
-    client = http_client or httpx.AsyncClient(transport=_CopilotTransport())
-    openai_client = AsyncOpenAI(
-        base_url=_COPILOT_BASE_URL,
-        api_key=token,
-        http_client=client,
-    )
-    return OpenAIChatModel(model_name, provider=OpenAIProvider(openai_client=openai_client))
+    if not path.exists():
+        return 0, [], {"score": 0, "passing_cases": []}
+    data = json.loads(path.read_text())
+    return int(data["score"]), list(data.get("passing_cases", [])), data
+
+
+def case_pass_results(report: EvaluationReport) -> dict[str, bool]:
+    """Return ``{case_name: passed}`` for every case in *report*.
+
+    A case is considered fully passing when:
+
+    * it did not raise an exception during execution (not in ``report.failures``), AND
+    * all of its boolean assertions are ``True``, AND
+    * all of its numeric scores equal ``1.0``.
+    """
+    results: dict[str, bool] = {f.name: False for f in report.failures}
+    for case in report.cases:
+        assertions_ok = all(r.value for r in case.assertions.values())
+        scores_ok = all(v.value >= 1.0 for v in case.scores.values()) if case.scores else True
+        results[case.name] = assertions_ok and scores_ok
+    return results
 
 
 # ── Shared eval loop ───────────────────────────────────────────────────────────
 
 
 def run_eval(
-    model: OpenAIChatModel,
+    model_config: ModelConfig,
     *,
-    baseline_key: str,
-    provider: str,
-    model_label: str | None = None,
     score_file: str | Path | None = None,
     update_baseline: bool = False,
 ) -> bool:
-    """Run the smoke dataset with *model*; print results; return True if CI passed.
+    """Run the smoke dataset with *model_config*; print results; return True if CI passed.
 
     Args:
-        model: Constructed model injected into the agent at call-time.
-        baseline_key: Key used to look up / store the baseline file (e.g.
-            ``"ollama:gemma4:e2b"`` or ``"gpt-4o-mini-2024-07-18"``).
-        provider: Provider label written to the score-file JSON.
-        model_label: Human-readable label printed in the summary line.
-            Defaults to *baseline_key*.
+        model_config: Config object from the registry.
         score_file: Optional path; when given, a JSON score report is written.
         update_baseline: When ``True``, overwrites the baseline if score improved.
 
@@ -175,11 +102,12 @@ def run_eval(
         ``True`` if the score meets or exceeds the baseline and no regressions
         were detected; ``False`` otherwise.
     """
-    label = model_label or baseline_key
+    agent = build_edge_agent(edge_model_config=model_config)
+    baseline_key = model_config.alias
     baseline_path = baseline_file(baseline_key)
 
     async def _run(prompt: str) -> AgentOutput:
-        result = await edge_agent.run(prompt, model=model)
+        result = await agent.run(prompt)
         return result.output
 
     report = smoke_dataset.evaluate_sync(_run)
@@ -191,7 +119,7 @@ def run_eval(
     baseline_score, baseline_passing, baseline_data = _read_baseline(baseline_path)
     regressions = [name for name in baseline_passing if not pass_results.get(name, False)]
 
-    print(f"\nModel: {label}", flush=True)
+    print(f"\nModel: {baseline_key}", flush=True)
     print(f"CI score: {score}  (baseline: {baseline_score})", flush=True)
     if regressions:
         print(f"REGRESSIONS detected: {regressions}", flush=True)
@@ -218,7 +146,6 @@ def run_eval(
             "passing_cases": passing_now,
             "regressions": regressions,
             "model": baseline_key,
-            "provider": provider,
         }
         Path(score_file).write_text(json.dumps(result_data, indent=2))
 
@@ -230,34 +157,12 @@ def run_eval(
 if __name__ == "__main__":
     import argparse
 
-    _auto_provider = "copilot" if os.getenv("GITHUB_COPILOT_API_TOKEN") else "ollama"
-
-    _parser = argparse.ArgumentParser(
-        description="Run smoke evals against the edge agent."
-    )
-    _parser.add_argument(
-        "--provider",
-        choices=["ollama", "copilot"],
-        default=_auto_provider,
-        help=(
-            f"Model provider (default: auto-detected as '{_auto_provider}' "
-            "based on GITHUB_COPILOT_API_TOKEN presence)"
-        ),
-    )
+    _parser = argparse.ArgumentParser(description="Run smoke evals against the edge agent.")
     _parser.add_argument(
         "--model",
-        default=None,
-        metavar="NAME",
-        help=(
-            f"Model name/tag (default: {_OLLAMA_DEFAULT_MODEL!r} for ollama, "
-            f"{_COPILOT_DEFAULT_MODEL!r} for copilot)"
-        ),
-    )
-    _parser.add_argument(
-        "--base-url",
-        default=None,
-        metavar="URL",
-        help="Ollama base URL including /v1 (ollama provider only; default: from env)",
+        default=os.getenv("EDGENT_MODEL_ALIAS", "edge_agent_default"),
+        metavar="ALIAS",
+        help="Registry alias to run (default: edge_agent_default)",
     )
     _parser.add_argument(
         "--score-file",
@@ -271,28 +176,11 @@ if __name__ == "__main__":
     )
     _args = _parser.parse_args()
 
-    if _args.provider == "ollama":
-        _model_name = _args.model or _OLLAMA_DEFAULT_MODEL
-        _model = build_ollama_model(_model_name, _args.base_url)
-        _baseline_key = f"ollama:{_model_name}"
-        _provider_label = "ollama"
-        _http_client = None
-    else:
-        _model_name = _args.model or _COPILOT_DEFAULT_MODEL
-        _http_client = httpx.AsyncClient(transport=_CopilotTransport())
-        _model = build_copilot_model(_model_name, http_client=_http_client)
-        _baseline_key = _model_name
-        _provider_label = "github-copilot"
+    cfg = resolve_model_config(_args.model)
+    print(f"Using model alias: {cfg.alias}", flush=True)
 
-    try:
-        run_eval(
-            _model,
-            baseline_key=_baseline_key,
-            provider=_provider_label,
-            score_file=_args.score_file,
-            update_baseline=_args.update_baseline,
-        )
-    finally:
-        if _http_client is not None:
-            asyncio.run(_http_client.aclose())
-
+    run_eval(
+        cfg,
+        score_file=_args.score_file,
+        update_baseline=_args.update_baseline,
+    )

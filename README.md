@@ -98,7 +98,7 @@ devcontainer exec --workspace-folder . -- python evals/runner.py --update-baseli
 
 ```bash
 # Pull a model (Ollama is on the Docker network at the service name, not localhost)
-curl -s "${EDGENT_OLLAMA_BASE_URL:-http://ollama:11434}/api/pull" \
+curl -s "${OLLAMA_BASE_URL:-http://ollama:11434}/api/pull" \
   -d '{"model":"gemma4:e2b"}' | grep -E '"status"|"error"'
 
 # Run the edge agent
@@ -106,6 +106,10 @@ python agents/edge.py "What is the capital of France?"
 
 # Run smoke evals (auto-detects Ollama or Copilot provider)
 python evals/runner.py
+
+# Use a named model from the registry
+python evals/runner.py --named-model edge_agent_default
+EDGENT_NAMED_MODEL=edge_agent_fast python evals/runner.py --named-model edge_agent_fast
 
 # Run tests  (uses TestModel – no Ollama needed)
 pytest tests/ -q
@@ -214,4 +218,35 @@ python -m ruff check agents/ evals/ tests/
 
 CI runs inside the DevContainer via `devcontainers/ci@v0.3`.  
 No separate Python environment is provisioned.
+
+---
+
+## Model presets and configuration
+
+This repository now centralises model configuration in `config.py` and supports named presets and per-run overrides.
+
+- `EDGENT_PRESET`: Optional env var or `--preset` CLI flag to select a named preset (for example `fast` or `reasoned`).
+- `EDGENT_OVERRIDES`: Optional JSON string merged with the selected preset. Example: `'{"max_tokens":256,"think":false}'`.
+- `HARD_MAX_OUTPUT_TOKENS`: Safety cap preventing presets or overrides from requesting excessive output tokens (default `2000`).
+
+Usage examples:
+
+```bash
+# Run the smoke evals using a named preset
+python evals/runner.py --preset reasoned
+
+# Or set via environment
+EDGENT_PRESET=fast python evals/runner.py
+
+# Provide fine-grained overrides
+EDGENT_OVERRIDES='{"max_tokens":256,"think":false}' python evals/runner.py
+```
+
+Behavior and safety:
+- Presets are merged with any JSON overrides; explicit CLI arguments take precedence.
+- All numeric params are validated and normalized (e.g. `temperature` range, `top_p`, `max_tokens`).
+- Thinking traces (`think`) are opt-in only; defaults avoid enabling chain-of-thought by default.
+- Secrets (API tokens) are never logged and are masked in printed config values.
+
+See `config.py` for the canonical preset definitions and `docs/models.md` for a short per-model capability matrix.
 

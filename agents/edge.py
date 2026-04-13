@@ -14,26 +14,19 @@ Usage (CLI):
 
 from __future__ import annotations
 
+# isort: skip_file
+
 import ast
-import asyncio
-import operator
-import os
-import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
+import operator
+import os
+from typing import Any
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-# ── Model ──────────────────────────────────────────────────────────────────────
-# Resolved from EDGENT_MODEL (full override) or EDGENT_MODEL_PROVIDER + EDGENT_MODEL_NAME.
-# Provider-specific setup (base-URL, structured-output profile, etc.) is handled
-# by the eval runner (evals/runner.py), not here.
-_provider = os.getenv("EDGENT_MODEL_PROVIDER", "ollama")
-_model_name = os.getenv("EDGENT_MODEL_NAME", "gemma4:e2b")
-_MODEL = os.getenv("EDGENT_MODEL", f"{_provider}:{_model_name}")
-
-# ── I/O schemas ────────────────────────────────────────────────────────────────
+from config import ModelConfig, resolve_model_config
 
 
 class AgentOutput(BaseModel):
@@ -44,31 +37,41 @@ class AgentOutput(BaseModel):
         default="medium",
         description="Self-reported confidence: high | medium | low | abstain",
     )
-    tool_calls_used: int = Field(default=0, description="Number of tools invoked")
 
 
 # ── System prompt ──────────────────────────────────────────────────────────────
 _SYSTEM = """\
 You are a precise, efficient assistant designed for edge deployment on constrained hardware.
-- Keep responses concise and factual. Avoid verbosity.
-- Do NOT reveal chain-of-thought, step-by-step internal reasoning, or hidden deliberations.
-  Only provide final answers and necessary factual explanation.
-  Refuse requests for internal reasoning.
 - Use tools only when necessary and cite any external sources used.
 - If uncertain or the task is outside your knowledge, say so (confidence: abstain).
-- Never fabricate facts. Accuracy over completeness.
-- Respect the token budget: prefer shorter, correct answers.
 """
 
-# ── Agent ──────────────────────────────────────────────────────────────────────
-# defer_model_check=True: model is validated lazily on first run, not at import.
-# This lets tests override with TestModel without needing a real provider.
-agent: Agent[None, AgentOutput] = Agent(
-    _MODEL,
-    output_type=AgentOutput,
-    system_prompt=_SYSTEM,
-    defer_model_check=True,
-)
+
+def build_edge_agent(
+    edge_model_config: ModelConfig | None = None,
+) -> Agent[Any, AgentOutput]:
+    """Construct and return a configured `pydantic_ai.Agent`.
+
+    Args:
+        edge_model_config: Optional model config to use for the agent. If not provided, the config will be resolved from environment variables.
+    """
+    if edge_model_config is None:
+        edge_model_config = resolve_model_config("edge_agent_default")
+
+    agent = Agent(
+        edge_model_config.model,
+        output_type=AgentOutput,
+        system_prompt=_SYSTEM,
+        model_settings=edge_model_config.model_settings,
+        defer_model_check=True,
+        retries=3,
+    )
+
+    agent.tool_plain(current_datetime)
+    agent.tool_plain(calculator)
+    agent.tool_plain(web_search_stub)
+    return agent
+
 
 # ── Inline tools ───────────────────────────────────────────────────────────────
 
@@ -120,13 +123,11 @@ def _eval_ast(node: ast.expr) -> int | float:
     raise ValueError(f"unsupported expression type: {type(node).__name__}")
 
 
-@agent.tool_plain
 def current_datetime() -> str:
     """Return the current UTC date and time as an ISO 8601 string."""
     return datetime.now(tz=UTC).isoformat()
 
 
-@agent.tool_plain
 def calculator(expression: str) -> str:
     """Evaluate a simple arithmetic expression.
 
@@ -147,7 +148,6 @@ def calculator(expression: str) -> str:
         return "Error: result too large"
 
 
-@agent.tool_plain
 def web_search_stub(query: str) -> str:
     """Stub web-search tool for offline/edge environments.
 
@@ -158,66 +158,3 @@ def web_search_stub(query: str) -> str:
         "no external search backend is configured in this deployment. "
         "Answer from context only."
     )
-
-
-# ── Convenience runner ─────────────────────────────────────────────────────────
-
-
-async def run_agent(prompt: str) -> AgentOutput:
-    """Run the agent with *prompt* and return structured output."""
-    result = await agent.run(prompt)
-    return result.output
-
-
-# ── Issue-monitoring mode (called by experiment.yml workflow) ──────────────────
-
-
-def _handle_issue_comment(issue_number: str, comment_body: str) -> None:
-    """React to a success or failure comment posted on an experiment issue.
-
-    This is the Edge Agent's continuation logic (step 6 in the workflow):
-    - Success (✅): log and optionally trigger the next experiment.
-    - Failure (❌): log and optionally re-label the issue for retry.
-    """
-    import subprocess
-
-    body_lower = comment_body.lower()
-    if "✅" in comment_body or "experiment implemented" in body_lower:
-        print(f"Issue #{issue_number}: experiment succeeded – nothing more to do.")
-    elif "❌" in comment_body or "implementation failed" in body_lower:
-        print(f"Issue #{issue_number}: experiment failed – posting triage note.")
-        triage = (
-            "🔄 The Edge Agent has detected a failure. "
-            "Please review the error details above and update the issue body "
-            "with a revised hypothesis or contact the maintainer."
-        )
-        subprocess.run(  # noqa: S603
-            ["gh", "issue", "comment", issue_number, "--body", triage],
-            check=False,
-        )
-    else:
-        print(f"Issue #{issue_number}: unrecognised comment; no action taken.")
-
-
-# ── CLI entry point ────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    from argparse import ArgumentParser
-
-    parser = ArgumentParser(description="Edge agent – run a prompt or process an issue comment.")
-    parser.add_argument("prompt", nargs="?", help="Prompt to run (interactive mode)")
-    parser.add_argument("--issue-number", help="Issue number (workflow mode)")
-    parser.add_argument("--comment-body", help="Comment body to react to (workflow mode)")
-    args = parser.parse_args()
-
-    if args.issue_number and args.comment_body is not None:
-        _handle_issue_comment(args.issue_number, args.comment_body)
-    elif args.prompt:
-        output = asyncio.run(run_agent(args.prompt))
-        print(f"answer:     {output.answer}")
-        print(f"confidence: {output.confidence}")
-        print(f"tool_calls: {output.tool_calls_used}")
-    else:
-        parser.print_help(sys.stderr)
-        sys.exit(1)
-

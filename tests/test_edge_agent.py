@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 
 import pytest
 from pydantic_ai import models
 from pydantic_ai.models.test import TestModel
 
-from agents.edge import AgentOutput, agent, run_agent
+# Ensure config import-time builders that require env vars don't fail during
+# test collection by providing a harmless default token for Copilot.
+os.environ.setdefault("GITHUB_COPILOT_API_TOKEN", "test-token")
+
+from agents.edge import AgentOutput, build_edge_agent
+from config import ModelConfig
 
 # Prevent accidental real model requests in CI
 models.ALLOW_MODEL_REQUESTS = False
@@ -21,7 +27,10 @@ pytestmark = pytest.mark.anyio
 
 def test_agent_has_tools() -> None:
     """The agent must expose its three inline tools."""
-    toolset = agent._function_toolset  # type: ignore[attr-defined]
+    # Construct an agent backed by TestModel to avoid real network calls.
+    test_cfg = ModelConfig(alias="test", model=TestModel(), model_settings=None)
+    a = build_edge_agent(edge_model_config=test_cfg)
+    toolset = a._function_toolset
     tool_names = set(toolset.tools)  # dict keyed by name
     assert "calculator" in tool_names
     assert "current_datetime" in tool_names
@@ -33,8 +42,10 @@ def test_agent_has_tools() -> None:
 
 async def test_run_returns_agent_output() -> None:
     """A run with TestModel must return an AgentOutput instance."""
-    with agent.override(model=TestModel()):
-        result = await run_agent("Hello")
+    test_cfg = ModelConfig(alias="test", model=TestModel(), model_settings=None)
+    a = build_edge_agent(edge_model_config=test_cfg)
+    res = await a.run("Hello")
+    result = res.output
     assert isinstance(result, AgentOutput)
     assert isinstance(result.answer, str)
     assert result.confidence in {"high", "medium", "low", "abstain"}
