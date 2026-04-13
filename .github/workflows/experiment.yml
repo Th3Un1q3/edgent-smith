@@ -104,8 +104,10 @@ jobs:
           gh label create "in_progress" --color e4e669 --description "Experiment is currently running" --force
           gh issue edit "$ISSUE_NUMBER" --add-label "in_progress"
 
-      # ── 3. Create experiment branch ────────────────────────────────────────
-      - name: Create experiment branch
+      # ── 3. Compute experiment branch name ─────────────────────────────────
+      # Branch creation and push are handled later by peter-evans/create-pull-request,
+      # which safely creates or updates the remote branch without fast-forward issues.
+      - name: Compute experiment branch name
         id: branch
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -117,19 +119,6 @@ jobs:
             | sed 's/-*$//' \
             | cut -c1-40)
           BRANCH="auto-research/${ISSUE_NUMBER}-${SLUG}"
-
-          # If the experiment branch already exists on the remote (e.g. from a
-          # previous run of the same issue), fetch and reset to it so the push
-          # can fast-forward rather than being rejected as non-fast-forward.
-          # At this point the workspace is a fresh checkout with no local
-          # commits, so resetting to origin/$BRANCH loses nothing.
-          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-            git fetch origin "$BRANCH"
-            git checkout -B "$BRANCH" "origin/$BRANCH"
-          else
-            git checkout -b "$BRANCH"
-          fi
-
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
       # ── 4. Implement + validate + evaluate inside DevContainer ────────────
@@ -196,38 +185,41 @@ jobs:
           echo "passed=$PASSED"     >> "$GITHUB_OUTPUT"
 
       # ── 6a. Score >= baseline → label success + commit, push, PR ─────────
-      - name: Commit, push, and open PR
+      - name: Label experiment success
         if: steps.results.outputs.passed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          BRANCH: ${{ steps.branch.outputs.name }}
-          BASE: ${{ github.event.repository.default_branch }}
-          SCORE: ${{ steps.results.outputs.score }}
-          BASELINE: ${{ steps.results.outputs.baseline }}
         run: |
           gh label create "experiment-success" --color 0e8a16 --description "Experiment passed baseline" --force
           gh issue edit "$ISSUE_NUMBER" --add-label "experiment-success"
 
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Commit, push, and open PR
+        id: pr
+        if: steps.results.outputs.passed == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ steps.branch.outputs.name }}
+          base: ${{ github.event.repository.default_branch }}
+          commit-message: "experiment: issue #${{ github.event.issue.number }} — ${{ github.event.issue.title }}"
+          title: "experiment: ${{ github.event.issue.title }}"
+          body: |
+            Closes #${{ github.event.issue.number }}
 
-          git add -A
-          git diff --cached --quiet \
-            || git commit -m "experiment: issue #${ISSUE_NUMBER} — ${ISSUE_TITLE}"
-          git push origin HEAD:"$BRANCH"
+            **Eval score:** `${{ steps.results.outputs.score }}`  **Baseline:** `${{ steps.results.outputs.baseline }}`
 
-          PR_URL=$(gh pr create \
-            --title "experiment: ${ISSUE_TITLE}" \
-            --body "Closes #${ISSUE_NUMBER}
+            Implemented by the [auto-research workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
 
-          **Eval score:** \`${SCORE}\`  **Baseline:** \`${BASELINE}\`
-
-          Implemented by the [auto-research workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})." \
-            --base "$BASE" \
-            --head "$BRANCH")
-
+      - name: Comment success on issue
+        if: steps.results.outputs.passed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          SCORE: ${{ steps.results.outputs.score }}
+          BASELINE: ${{ steps.results.outputs.baseline }}
+          PR_URL: ${{ steps.pr.outputs.pull-request-url }}
+        run: |
           gh issue comment "$ISSUE_NUMBER" --body "✅ **Experiment passed baseline.**
 
           | Metric   | Value |
