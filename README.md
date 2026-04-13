@@ -76,22 +76,29 @@ with the `gpt-5-mini` model. It requires one secret set in
 
 The minimum assertion pass-rate is stored per-model in `evals/<model>.baseline.json`.  
 It is updated automatically by the experiment workflow when a new score exceeds the current value,
-or you can update it manually:
+or you can update it manually.
+
+Inside the DevContainer:
 
 ```bash
-# Inside the DevContainer — auto-detects provider
-docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/runner.py --update-baseline"
+python evals/runner.py --update-baseline
+```
+
+Outside the DevContainer:
+
+```bash
+devcontainer exec --workspace-folder . -- python evals/runner.py --update-baseline
 ```
 
 ---
 
 ## Quick start (DevContainer)
 
+### If you are already INSIDE the DevContainer (VS Code "Reopen in Container")
+
 ```bash
-# Open in VS Code → "Reopen in Container"
 # Pull a model
-docker exec -it $(docker ps --filter name=ollama --format '{{.Names}}' | head -1) ollama pull gemma4:e2b
+curl -s http://localhost:11434/api/pull -d '{"model":"gemma4:e2b"}' | grep -E '"status"|"error"'
 
 # Run the edge agent
 python agents/edge.py "What is the capital of France?"
@@ -118,20 +125,28 @@ npm install -g @devcontainers/cli
 devcontainer up --workspace-folder .
 
 # Install the package inside the running container
-docker exec devcontainer-devcontainer-1 pip install -e '/workspace/.[dev]'
+devcontainer exec --workspace-folder . -- pip install -e '.[dev]'
 
 # Run tests
-docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && pytest tests/ -q"
+devcontainer exec --workspace-folder . -- pytest tests/ -q
 
 # Run smoke evals (auto-detects provider from GITHUB_COPILOT_API_TOKEN)
-docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && python evals/runner.py"
+devcontainer exec --workspace-folder . -- python evals/runner.py
 
 # Force a specific provider
-docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/runner.py --provider ollama --model gemma4:e2b"
-docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/runner.py --provider copilot"
+devcontainer exec --workspace-folder . -- python evals/runner.py --provider ollama --model gemma4:e2b
+devcontainer exec --workspace-folder . -- python evals/runner.py --provider copilot
 ```
+
+> **Note:** The `docker-compose.yml` sets `DEVCONTAINER=true` inside the
+> container.  Scripts and agents can detect their environment with:
+> ```bash
+> if [ "${DEVCONTAINER:-}" = "true" ]; then
+>   echo "inside - run directly"
+> else
+>   echo "outside - prefix with: devcontainer exec --workspace-folder . --"
+> fi
+> ```
 
 ---
 
@@ -147,21 +162,33 @@ environments. The unified runner auto-detects the right provider:
 `SSL_CERT_FILE` to the system CA bundle, so the Copilot API is reachable from
 inside the DevContainer with no extra configuration.
 
+Inside the DevContainer:
+
+```bash
+# Auto-detect provider
+python evals/runner.py
+
+# Write a CI-compatible score file
+python evals/runner.py --score-file /tmp/score.json
+
+# Update the baseline when the new score beats the current one
+python evals/runner.py --update-baseline
+```
+
+Outside the DevContainer:
+
 ```bash
 # Start the DevContainer (token is forwarded automatically)
 devcontainer up --workspace-folder .
 
 # Auto-detect provider
-docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/runner.py"
+devcontainer exec --workspace-folder . -- python evals/runner.py
 
 # Write a CI-compatible score file
-docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/runner.py --score-file /tmp/score.json"
+devcontainer exec --workspace-folder . -- python evals/runner.py --score-file /tmp/score.json
 
 # Update the baseline when the new score beats the current one
-docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/runner.py --update-baseline"
+devcontainer exec --workspace-folder . -- python evals/runner.py --update-baseline
 ```
 
 The runner exercises the **same** smoke dataset and the **same** edge agent regardless

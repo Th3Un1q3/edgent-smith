@@ -21,22 +21,54 @@ This repository implements a minimal, edge-optimised agentic system.
 The sandbox host runs **Python 3.12**; this project requires **Python 3.13**.
 The sandbox has **no Ollama daemon**.
 
-**You must always execute Python inside the DevContainer**, not on the host.
+**All Python commands must run inside the DevContainer.**
+The `docker-compose.yml` sets `DEVCONTAINER=true` inside the container, so you
+can always detect your environment reliably:
 
 ```bash
-# Install DevContainer CLI if missing
+if [ "${DEVCONTAINER:-}" = "true" ]; then
+  echo "Inside DevContainer - run commands directly"
+else
+  echo "Outside DevContainer - prefix commands with: devcontainer exec --workspace-folder . --"
+fi
+```
+
+### If you are INSIDE the DevContainer
+
+Run commands directly (no prefix needed):
+
+```bash
+python evals/runner.py
+pytest tests/ -q
+python -m ruff check agents/ evals/ tests/
+```
+
+### If you are OUTSIDE the DevContainer
+
+Install the DevContainer CLI and start the container first:
+
+```bash
+# Install the CLI (Node 18+) if not already installed — check first:
+command -v npm >/dev/null 2>&1 || { echo "npm not found — install Node.js 18+ first: https://nodejs.org"; exit 1; }
 npm install -g @devcontainers/cli
 
 # Start the DevContainer (Python 3.13 + Ollama sidecar)
 # GITHUB_COPILOT_API_TOKEN is forwarded automatically (see docker-compose.yml)
 devcontainer up --workspace-folder .
-
-# If devcontainer CLI fails (e.g. build error in CI), start containers directly:
-docker compose -f .devcontainer/docker-compose.yml up -d
-
-# Run commands inside the container
-docker exec devcontainer-devcontainer-1 bash -c "cd /workspace && python evals/runner.py"
 ```
+
+Then prefix every command with `devcontainer exec --workspace-folder . --`:
+
+```bash
+devcontainer exec --workspace-folder . -- python evals/runner.py
+devcontainer exec --workspace-folder . -- pytest tests/ -q
+devcontainer exec --workspace-folder . -- python -m ruff check agents/ evals/ tests/
+```
+
+> **Never use `docker exec devcontainer-devcontainer-1 ...`** — that relies on
+> a hardcoded container name that may differ across environments.  Use
+> `devcontainer exec --workspace-folder .` instead; it resolves the correct
+> container automatically via the DevContainers spec.
 
 If Ollama is unreachable (no network access to registry.ollama.ai) set
 `GITHUB_COPILOT_API_TOKEN` in the host environment; the runner will
@@ -62,24 +94,30 @@ at call-time via `agent.run(prompt, model=model)`.
 
 ## Running evals
 
-```bash
-# Start the DevContainer (token is forwarded automatically)
-devcontainer up --workspace-folder .
+If you are **inside the DevContainer**, run directly:
 
+```bash
 # Auto-detect provider (copilot if GITHUB_COPILOT_API_TOKEN is set, else ollama)
-docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/runner.py"
+python evals/runner.py
 
 # Force a specific provider
-docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/runner.py --provider copilot"
-
-docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/runner.py --provider ollama --model gemma4:e2b"
+python evals/runner.py --provider copilot
+python evals/runner.py --provider ollama --model gemma4:e2b
 
 # Write a score file and update the baseline
-docker exec devcontainer-devcontainer-1 \
-  bash -c "cd /workspace && python evals/runner.py --score-file /tmp/score.json --update-baseline"
+python evals/runner.py --score-file /tmp/score.json --update-baseline
+```
+
+If you are **outside the DevContainer**, prefix each command with
+`devcontainer exec --workspace-folder . --`:
+
+```bash
+devcontainer up --workspace-folder .
+
+devcontainer exec --workspace-folder . -- python evals/runner.py
+devcontainer exec --workspace-folder . -- python evals/runner.py --provider copilot
+devcontainer exec --workspace-folder . -- python evals/runner.py --provider ollama --model gemma4:e2b
+devcontainer exec --workspace-folder . -- python evals/runner.py --score-file /tmp/score.json --update-baseline
 ```
 
 ## Scripts must be version-controlled
@@ -158,7 +196,9 @@ Follow this process every time, without exception:
 
 Do not mark a task complete until you have:
 
-1. Run the relevant command inside the DevContainer and seen it succeed.
+1. Detected your environment (`echo ${DEVCONTAINER:-outside}`) and run the
+   relevant command inside the DevContainer — directly if already inside, or
+   via `devcontainer exec --workspace-folder . --` if outside.
 2. Confirmed the output makes sense (score, test results, lint output).
 3. Committed **all** files you created or modified — including runner scripts.
 

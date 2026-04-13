@@ -7,6 +7,7 @@ services:
       - ..:/workspace:cached
     command: sleep infinity
     environment:
+      DEVCONTAINER: "true"
       EDGENT_OLLAMA_BASE_URL: http://ollama:11434
       EDGENT_MODEL_PROVIDER: ollama
       EDGENT_MODEL_NAME: gemma4:e2b
