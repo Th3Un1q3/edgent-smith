@@ -118,6 +118,11 @@ jobs:
             | cut -c1-40)
           BRANCH="auto-research/${ISSUE_NUMBER}-${SLUG}"
 
+          # If the experiment branch already exists on the remote (e.g. from a
+          # previous run of the same issue), fetch and reset to it so the push
+          # can fast-forward rather than being rejected as non-fast-forward.
+          # At this point the workspace is a fresh checkout with no local
+          # commits, so resetting to origin/$BRANCH loses nothing.
           if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
             git fetch origin "$BRANCH"
             git checkout -B "$BRANCH" "origin/$BRANCH"
