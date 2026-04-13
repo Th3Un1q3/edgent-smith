@@ -20,6 +20,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Ensure .env exists
+        run: |
+          if [ ! -f .env ]; then
+            cp .env.example .env
+            echo ".env created from .env.example"
+          else
+            echo ".env already exists, skipping"
+          fi
+
       # Run everything inside the existing DevContainer – no separate Python setup.
       - uses: devcontainers/ci@v0.3
         with:
