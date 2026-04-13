@@ -97,8 +97,9 @@ devcontainer exec --workspace-folder . -- python evals/runner.py --update-baseli
 ### If you are already INSIDE the DevContainer (VS Code "Reopen in Container")
 
 ```bash
-# Pull a model
-curl -s http://localhost:11434/api/pull -d '{"model":"gemma4:e2b"}' | grep -E '"status"|"error"'
+# Pull a model (Ollama is on the Docker network at the service name, not localhost)
+curl -s "${EDGENT_OLLAMA_BASE_URL:-http://ollama:11434}/api/pull" \
+  -d '{"model":"gemma4:e2b"}' | grep -E '"status"|"error"'
 
 # Run the edge agent
 python agents/edge.py "What is the capital of France?"
@@ -121,7 +122,8 @@ workspace), start the DevContainer with the
 npm install -g @devcontainers/cli
 
 # Build and start (Python 3.13 + Ollama sidecar)
-# GITHUB_COPILOT_API_TOKEN is forwarded automatically when set in the host env
+# GITHUB_COPILOT_API_TOKEN and COPILOT_GITHUB_TOKEN are forwarded automatically
+# when set in the host env (see docker-compose.yml)
 devcontainer up --workspace-folder .
 
 # Install the package inside the running container
@@ -158,7 +160,7 @@ environments. The unified runner auto-detects the right provider:
 - **Copilot** is used when `GITHUB_COPILOT_API_TOKEN` is set in the environment.
 - **Ollama** is used otherwise.
 
-`docker-compose.yml` already forwards `GITHUB_COPILOT_API_TOKEN` and sets
+`docker-compose.yml` already forwards `GITHUB_COPILOT_API_TOKEN` and `COPILOT_GITHUB_TOKEN`, and sets
 `SSL_CERT_FILE` to the system CA bundle, so the Copilot API is reachable from
 inside the DevContainer with no extra configuration.
 

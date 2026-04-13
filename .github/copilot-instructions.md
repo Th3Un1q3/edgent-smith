@@ -14,7 +14,7 @@ This repository implements a minimal, edge-optimised agentic system.
 
 1. Check that your change is within the allowed mutation surface (see the active issue).
 2. Run `pytest tests/ -q` to confirm tests pass.
-3. Run `ruff check agents/ evals/ tests/` to confirm lint passes.
+3. Run `python -m ruff check agents/ evals/ tests/` to confirm lint passes.
 
 ## Execution environment — MANDATORY
 
@@ -53,7 +53,8 @@ command -v npm >/dev/null 2>&1 || { echo "npm not found — install Node.js 18+ 
 npm install -g @devcontainers/cli
 
 # Start the DevContainer (Python 3.13 + Ollama sidecar)
-# GITHUB_COPILOT_API_TOKEN is forwarded automatically (see docker-compose.yml)
+# GITHUB_COPILOT_API_TOKEN and COPILOT_GITHUB_TOKEN are forwarded automatically
+# (see docker-compose.yml)
 devcontainer up --workspace-folder .
 ```
 
@@ -74,7 +75,7 @@ If Ollama is unreachable (no network access to registry.ollama.ai) set
 `GITHUB_COPILOT_API_TOKEN` in the host environment; the runner will
 auto-detect it and use the Copilot API instead.
 The Copilot API is reachable from inside the DevContainer because
-`docker-compose.yml` forwards the token and sets `SSL_CERT_FILE` to the
+`docker-compose.yml` forwards `GITHUB_COPILOT_API_TOKEN` and sets `SSL_CERT_FILE` to the
 system CA bundle (which trusts the sandbox TLS proxy).
 
 ## Eval runner architecture
