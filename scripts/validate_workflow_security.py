@@ -8,6 +8,8 @@ Checks:
   3. Rate limiter logic      — 0-2 runs → ALLOW; 3+ runs → BLOCK; fail-closed
   4. Prompt injection        — randomised sentinel, IMPORTANT precedes body
 
+Dependency-free: uses only the Python standard library (re, sys, pathlib).
+
 Run with: python scripts/validate_workflow_security.py
 """
 from __future__ import annotations
@@ -15,11 +17,6 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-
-try:
-    import yaml
-except ImportError:  # pragma: no cover
-    sys.exit("PyYAML is required: pip install pyyaml")
 
 WORKFLOW_PATH = (
     Path(__file__).parent.parent / ".github" / "workflows" / "experiment.yml"
@@ -62,14 +59,24 @@ def main() -> int:
         return 1
 
     raw = WORKFLOW_PATH.read_text()
-    wf = yaml.safe_load(raw)
 
-    job = wf["jobs"]["auto-research"]
-    job_perms = job.get("permissions", {})
-    wf_perms = wf.get("permissions", {})
-    concurrency = wf.get("concurrency", {})
-    steps = job.get("steps", [])
-    gate_script = steps[0].get("run", "") if steps else ""
+    # Split the file into pre-jobs and job sections so permission checks
+    # can be scoped to the correct YAML level without a YAML parser.
+    wf_section, _, job_section = raw.partition("jobs:")
+
+    # Extract job-level permissions block (between "permissions:" and "steps:").
+    job_perms_section = ""
+    m = re.search(r"\bpermissions:(.*?)\bsteps:", job_section, re.DOTALL)
+    if m:
+        job_perms_section = m.group(1)
+
+    # Extract the name of the first step (skipping comment lines between steps: and - name:).
+    first_step_name = ""
+    first_step_match = re.search(
+        r"steps:\s*\n(?:\s*#[^\n]*\n)*\s+- name:\s*(.+)", job_section
+    )
+    if first_step_match:
+        first_step_name = first_step_match.group(1).strip()
 
     r = _Results()
 
@@ -77,25 +84,25 @@ def main() -> int:
     section("1. YAML structure")
 
     r.check("concurrency.group == 'auto-research'",
-            concurrency.get("group") == "auto-research")
+            bool(re.search(r"concurrency:\s*\n\s+group:\s*auto-research", raw)))
     r.check("concurrency.cancel-in-progress == false",
-            concurrency.get("cancel-in-progress") is False)
+            bool(re.search(r"cancel-in-progress:\s*false", raw)))
     r.check("workflow-level permissions: contents == 'read'",
-            wf_perms.get("contents") == "read")
+            bool(re.search(r"^\s*contents:\s*read", wf_section, re.MULTILINE)))
     r.check("workflow-level permissions: no write/admin scopes",
-            all(v not in ("write", "admin") for v in wf_perms.values()))
+            not bool(re.search(r"^\s*\w[\w-]*:\s*(write|admin)\b", wf_section, re.MULTILINE)))
     r.check("job permissions: actions == 'read'",
-            job_perms.get("actions") == "read")
+            bool(re.search(r"^\s*actions:\s*read", job_perms_section, re.MULTILINE)))
     r.check("job permissions: contents == 'write'",
-            job_perms.get("contents") == "write")
+            bool(re.search(r"^\s*contents:\s*write", job_perms_section, re.MULTILINE)))
     r.check("job permissions: issues == 'write'",
-            job_perms.get("issues") == "write")
+            bool(re.search(r"^\s*issues:\s*write", job_perms_section, re.MULTILINE)))
     r.check("job permissions: pull-requests == 'write'",
-            job_perms.get("pull-requests") == "write")
+            bool(re.search(r"^\s*pull-requests:\s*write", job_perms_section, re.MULTILINE)))
     r.check("security gate is the first step",
-            steps[0].get("name", "").lower().startswith("check labeler"))
+            first_step_name.lower().startswith("check labeler"))
     r.check("permission gate uses collaborators API",
-            "collaborators" in gate_script)
+            "collaborators" in raw)
     r.check("rate limiter counts 'queued' runs",
             bool(re.search(r"\bqueued\b", raw)))
     r.check("rate limiter is fail-closed (! RECENT=...)",
@@ -107,8 +114,7 @@ def main() -> int:
     r.check("rate limiter uses MAX_RUNS variable",
             "MAX_RUNS=3" in raw)
     r.check("checkout uses actions/checkout@v4",
-            any(str(s.get("uses", "")).startswith("actions/checkout@v4")
-                for s in steps))
+            bool(re.search(r"uses:\s*actions/checkout@v4", raw)))
 
     # ── 2. Permission gate logic ───────────────────────────────────────────────
     section("2. Permission gate logic")

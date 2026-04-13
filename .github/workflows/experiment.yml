@@ -94,7 +94,7 @@ jobs:
             exit 1
           fi
           if [ "${RECENT}" -ge "${MAX_RUNS}" ]; then
-            echo "::error::Rate limit exceeded: ${RECENT} experiment run(s) started in the last hour (max ${MAX_RUNS}). Please wait before re-labelling."
+            echo "::error::Rate limit exceeded: ${RECENT} experiment run(s) created in the last hour (max ${MAX_RUNS}). Please wait before re-labelling."
             exit 1
           fi
           echo "Rate limit OK: ${RECENT}/${MAX_RUNS} runs in the last hour ✓"
