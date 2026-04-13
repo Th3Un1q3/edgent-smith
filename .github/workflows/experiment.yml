@@ -117,7 +117,14 @@ jobs:
             | sed 's/-*$//' \
             | cut -c1-40)
           BRANCH="auto-research/${ISSUE_NUMBER}-${SLUG}"
-          git checkout -b "$BRANCH"
+
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$BRANCH"
+            git checkout -B "$BRANCH" "origin/$BRANCH"
+          else
+            git checkout -b "$BRANCH"
+          fi
+
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
       # ── 4. Implement + validate + evaluate inside DevContainer ────────────
@@ -204,7 +211,7 @@ jobs:
           git add -A
           git diff --cached --quiet \
             || git commit -m "experiment: issue #${ISSUE_NUMBER} — ${ISSUE_TITLE}"
-          git push origin "$BRANCH"
+          git push origin HEAD:"$BRANCH"
 
           PR_URL=$(gh pr create \
             --title "experiment: ${ISSUE_TITLE}" \
