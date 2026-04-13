@@ -7,17 +7,20 @@ services:
       - ..:/workspace:cached
     command: sleep infinity
     environment:
+      DEVCONTAINER: "true"
       EDGENT_OLLAMA_BASE_URL: http://ollama:11434
       EDGENT_MODEL_PROVIDER: ollama
       EDGENT_MODEL_NAME: gemma4:e2b
-      # Forward the Copilot API token from the host so that evals/runner.py
-      # can reach api.githubcopilot.com from inside the container.
-      COPILOT_GITHUB_TOKEN: ${COPILOT_GITHUB_TOKEN:-}
       # The sandbox uses a TLS-intercepting proxy whose CA is trusted by the
       # system store but not by certifi.  Point Python's SSL layer at the
       # system CA bundle so that httpx/openai can verify the proxy's cert.
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      # Forward the Copilot CLI token (used by scripts/run_experiment.sh via the CLI).
+      COPILOT_GITHUB_TOKEN: ${COPILOT_GITHUB_TOKEN:-}
+      # Forward the Copilot API token so that evals/runner.py can reach
+      # api.githubcopilot.com from inside the container.
+      GITHUB_COPILOT_API_TOKEN: ${GITHUB_COPILOT_API_TOKEN:-}
     depends_on:
       - ollama
     networks:
