@@ -9,8 +9,8 @@ name: Auto-Research
 #      via postCreateCommand) with the implement agent instructions + issue
 #      context. Copilot edits files directly using its native tools. Then
 #      validate (tests + lint) and run the pydantic_evals smoke suite.
-#   4. Compare score to the baseline read from eval_result.json and any
-#      per-model *.baseline.json files.
+#   4. Compare the candidate score to the baseline via baseline-id detection
+#      using `just baseline-status` and any per-model *.baseline.json files.
 #      ✅ score >= baseline → label 'experiment-success', commit, push, PR.
 #      ❌ score <  baseline → label 'experiment-failure', comment with details.
 #      ⏱  job timeout        → label 'experiment-failure', comment "timed out".
@@ -48,6 +48,8 @@ jobs:
       issues: write
       pull-requests: write
 
+    env:
+      BASELINE_ID: auto_research
     steps:
       # ── 0. Security gate: labeler permission check + rate limit ────────────
       # Ensures the workflow was triggered by a trusted collaborator and that
@@ -143,12 +145,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+          BASELINE_ID: ${{ env.BASELINE_ID }}
         with:
           env: |
             COPILOT_GITHUB_TOKEN
             GH_TOKEN
             GITHUB_TOKEN
             ISSUE_NUMBER
+            BASELINE_ID
           runCmd: |
             set -euo pipefail
             uv pip install -e . --group dev
@@ -183,18 +187,18 @@ jobs:
             MODEL=gpt-5-mini PROMPT="$PROMPT" bash scripts/run_experiment.sh
 
       # ── 5. Read results ────────────────────────────────────────────────────
-      - name: Read eval results
+      - name: Read baseline status
         id: results
         run: |
-          SCORE=$(python3 -c \
-            "import json; print(json.load(open('eval_result.json'))['score'])")
-          BASELINE=$(python3 -c \
-            "import json; print(json.load(open('eval_result.json'))['baseline'])")
-          PASSED=$(python3 -c \
-            "import json; print('true' if json.load(open('eval_result.json'))['passed'] else 'false')")
-          echo "score=$SCORE"       >> "$GITHUB_OUTPUT"
-          echo "baseline=$BASELINE" >> "$GITHUB_OUTPUT"
-          echo "passed=$PASSED"     >> "$GITHUB_OUTPUT"
+          OUTPUT=$(just --quiet baseline-status "$BASELINE_ID")
+          SCORE=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["score"])' <<<"$OUTPUT")
+          BASELINE=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["baseline"])' <<<"$OUTPUT")
+          PASSED=$(python3 -c 'import json,sys; print("true" if json.load(sys.stdin)["passed"] else "false")' <<<"$OUTPUT")
+          IMPROVED=$(python3 -c 'import json,sys; print("true" if json.load(sys.stdin)["improved"] else "false")' <<<"$OUTPUT")
+          echo "score=$SCORE"        >> "$GITHUB_OUTPUT"
+          echo "baseline=$BASELINE"    >> "$GITHUB_OUTPUT"
+          echo "passed=$PASSED"      >> "$GITHUB_OUTPUT"
+          echo "improved=$IMPROVED"  >> "$GITHUB_OUTPUT"
 
       # ── 6a. Score >= baseline → label success + commit, push, PR ─────────
       - name: Label experiment success

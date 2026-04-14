@@ -1,9 +1,8 @@
 """Unified eval runner for the edge agent.
 
-Builds the right model (Ollama or GitHub Copilot) based on ``--provider`` and
-then runs the shared smoke-eval loop.  Provider is auto-detected when omitted:
-Copilot is used when ``GITHUB_COPILOT_API_TOKEN`` is present in the environment;
-Ollama is used otherwise.
+Builds the right model (Ollama or GitHub Copilot) and then runs the shared smoke-eval loop.
+Provider is auto-detected from the environment: Copilot is used when
+``GITHUB_COPILOT_API_TOKEN`` is present, and Ollama is used otherwise.
 
 Usage
 -----
@@ -12,14 +11,12 @@ Usage
     # Auto-detect provider and run with defaults
     python evals/runner.py
 
-    # Explicit provider
-    python evals/runner.py --provider ollama --model gemma4:e2b
-    python evals/runner.py --provider copilot --model gpt-4o-mini-2024-07-18
+    # Explicit model alias
+    python evals/runner.py --model edge_agent_default
+    python evals/runner.py --model edge_agent_fast
 
     # Extra options
-    python evals/runner.py --score-file /tmp/score.json
-    python evals/runner.py --update-baseline
-    python evals/runner.py --provider ollama --base-url http://localhost:11434/v1
+    python evals/runner.py --baseline-id edge_agent_default
 """
 
 from __future__ import annotations
@@ -37,29 +34,43 @@ from evals.smoke import smoke_dataset
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-_BASELINE_DIR = Path(__file__).parent
 _PERFORMANCE_MULTIPLIER = 100
 _REGRESSION_PENALTY = 2
 
 
 # ── Baseline helpers ──────────────────────────────────────────────────────────
 
+_BASELINE_ROOT = Path(__file__).parent.parent
 
-def baseline_file(model_name: str) -> Path:
-    """Return the path to the baseline file for *model_name*.
 
-    Baseline files are kept separate per model so that score changes caused by
-    a model upgrade are not conflated with agent-logic improvements.
+def _sanitize_baseline_id(baseline_id: str) -> str:
+    return baseline_id.replace("/", "_").replace(":", "_")
+
+
+def baseline_file(baseline_id: str) -> Path:
+    """Return the path to the baseline file for *baseline_id*.
+
+    Baseline files are stored one directory above the eval runner, as
+    ``../{baseline_id}.baseline.json``.
     """
-    safe_name = model_name.replace("/", "_").replace(":", "_")
-    return _BASELINE_DIR / f"{safe_name}.baseline.json"
+    safe_id = _sanitize_baseline_id(baseline_id)
+    return _BASELINE_ROOT / f"{safe_id}.baseline.json"
+
+
+def baseline_candidate_file(baseline_id: str) -> Path:
+    """Return the path to the baseline candidate file for *baseline_id*.
+
+    The candidate file is written after every run to
+    ``../{baseline_id}.baseline-candidate.json``.
+    """
+    safe_id = _sanitize_baseline_id(baseline_id)
+    return _BASELINE_ROOT / f"{safe_id}.baseline-candidate.json"
 
 
 def _read_baseline(path: Path) -> tuple[int, list[str], dict[str, Any]]:
     """Return (score, passing_cases, raw_data) from the given baseline file.
 
-    If the file does not exist yet (first run for a new model), returns
-    sensible defaults that allow any score to pass.
+    If the file does not exist yet, returns zero score and empty passing cases.
     """
     if not path.exists():
         return 0, [], {"score": 0, "passing_cases": []}
@@ -90,22 +101,23 @@ def case_pass_results(report: EvaluationReport) -> dict[str, bool]:
 def run_eval(
     model_config: ModelConfig,
     *,
-    score_file: str | Path | None = None,
-    update_baseline: bool = False,
+    baseline_id: str | None = None,
 ) -> bool:
     """Run the smoke dataset with *model_config*; print results; return True if CI passed.
 
     Args:
         model_config: Config object from the registry.
-        score_file: Optional path; when given, a JSON score report is written.
-        update_baseline: When ``True``, overwrites the baseline if score improved.
+        baseline_id: Optional identifier used to resolve the baseline file at
+            ``../{baseline_id}.baseline.json`` and write the candidate file to
+            ``../{baseline_id}.baseline-candidate.json``. Defaults to the model alias.
 
     Returns:
         ``True`` if the score meets or exceeds the baseline; ``False`` otherwise.
     """
     agent = build_edge_agent(edge_model_config=model_config)
-    baseline_key = model_config.alias
-    baseline_path = baseline_file(baseline_key)
+    baseline_id = baseline_id or model_config.alias
+    baseline_path = baseline_file(baseline_id)
+    candidate_path = baseline_candidate_file(baseline_id)
 
     async def _run(prompt: str) -> AgentOutput:
         result = await agent.run(prompt)
@@ -116,7 +128,7 @@ def run_eval(
 
     pass_results = case_pass_results(report)
     passing_now = [name for name, passed in pass_results.items() if passed]
-    baseline_score, baseline_passing, baseline_data = _read_baseline(baseline_path)
+    baseline_score, baseline_passing, _ = _read_baseline(baseline_path)
     regressions = [name for name in baseline_passing if not pass_results.get(name, False)]
 
     passing_case_durations = [
@@ -141,7 +153,7 @@ def run_eval(
         else 0
     )
 
-    print(f"\nModel: {baseline_key}", flush=True)
+    print(f"\nModel: {model_config.alias}", flush=True)
     print(f"Passing cases: {passing_now}", flush=True)
     print(f"Average passing-case time: {avg_passing_case_seconds:.2f}s", flush=True)
     print(f"Effective baseline pass count: {baseline_case_count}", flush=True)
@@ -154,32 +166,20 @@ def run_eval(
 
     ci_passed = score >= baseline_score
 
-    if update_baseline:
-        if score > baseline_score:
-            baseline_data["score"] = score
-            baseline_data["passing_cases"] = passing_now
-            baseline_data["avg_passing_case_seconds"] = avg_passing_case_seconds
-            baseline_path.write_text(json.dumps(baseline_data, indent=2) + "\n")
-            print(f"Baseline updated: {baseline_score} → {score}", flush=True)
-        elif score == baseline_score:
-            print(f"Baseline unchanged: {baseline_score} (score equal)", flush=True)
-        else:
-            print(f"Baseline NOT updated: score {score} < baseline {baseline_score}", flush=True)
+    result_data: dict[str, Any] = {
+        "score": score,
+        "passed": ci_passed,
+        "cases_total": len(smoke_dataset.cases),
+        "passing_cases": passing_now,
+        "regressions": regressions,
+        "avg_passing_case_seconds": avg_passing_case_seconds,
+        "effective_baseline_passing_count": baseline_case_count,
+        "regression_penalty": regression_penalty,
+        "model": model_config.alias,
+        "baseline_id": baseline_id,
+    }
 
-    if score_file:
-        result_data: dict[str, Any] = {
-            "score": score,
-            "baseline": baseline_score,
-            "passed": ci_passed,
-            "cases_total": len(smoke_dataset.cases),
-            "passing_cases": passing_now,
-            "regressions": regressions,
-            "avg_passing_case_seconds": avg_passing_case_seconds,
-            "effective_baseline_passing_count": baseline_case_count,
-            "regression_penalty": regression_penalty,
-            "model": baseline_key,
-        }
-        Path(score_file).write_text(json.dumps(result_data, indent=2))
+    candidate_path.write_text(json.dumps(result_data, indent=2) + "\n")
 
     return ci_passed
 
@@ -197,14 +197,12 @@ if __name__ == "__main__":
         help="Registry alias to run (default: edge_agent_default)",
     )
     _parser.add_argument(
-        "--score-file",
-        metavar="PATH",
-        help="Write JSON score report to this file (for CI use).",
-    )
-    _parser.add_argument(
-        "--update-baseline",
-        action="store_true",
-        help="Overwrite the model-specific baseline when the new score exceeds it.",
+        "--baseline-id",
+        metavar="ID",
+        help=(
+            "Baseline identifier used to read ../{id}.baseline.json and write "
+            "../{id}.baseline-candidate.json. Defaults to the model alias."
+        ),
     )
     _args = _parser.parse_args()
 
@@ -213,6 +211,5 @@ if __name__ == "__main__":
 
     run_eval(
         cfg,
-        score_file=_args.score_file,
-        update_baseline=_args.update_baseline,
+        baseline_id=_args.baseline_id,
     )

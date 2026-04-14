@@ -27,6 +27,22 @@ typecheck:
 eval:
   {{EVAL}}
 
+# Run the smoke eval suite for local development.
+eval-local:
+  {{EVAL}} --baseline-id edge_agent_debug
+
+# Run the smoke eval suite in CI mode.
+eval-ci baseline_id="auto_research":
+  {{EVAL}} --baseline-id {{baseline_id}}
+
+# Output candidate vs baseline status for the requested baseline ID.
+baseline-status baseline_id:
+  bash scripts/baseline_status.sh "{{baseline_id}}"
+
+# Promote a candidate baseline when its score is higher than the current baseline.
+promote-baseline baseline_id:
+  bash scripts/promote_baseline.sh "{{baseline_id}}"
+
 # Run the Copilot experiment runner locally with a prompt.
 execute-experiment prompt:
   PROMPT="{{prompt}}" bash scripts/run_experiment.sh

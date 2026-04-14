@@ -33,9 +33,9 @@ jobs:
       - uses: devcontainers/ci@v0.3
         with:
           runCmd: |
-            echo "── ruff ──────────────────────────────────────────"
-            uv run ruff check agents/ evals/ tests/
-            echo "── mypy ──────────────────────────────────────────"
-            uv run mypy agents/ evals/
-            echo "── pytest ────────────────────────────────────────"
-            uv run pytest tests/ -q
+            echo "── lint ──────────────────────────────────────────"
+            just lint
+            echo "── typecheck ─────────────────────────────────────"
+            just typecheck
+            echo "── test ──────────────────────────────────────────"
+            just test

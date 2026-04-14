@@ -74,20 +74,20 @@ with the `gpt-5-mini` model. It requires one secret set in
 
 ## Baseline score
 
-The minimum assertion pass-rate is stored per-model in `evals/<model>.baseline.json`.  
-It is updated automatically by the experiment workflow when a new score exceeds the current value,
-or you can update it manually.
+The minimum assertion pass-rate is stored per-baseline ID in `../{baseline_id}.baseline.json`.  
+The runner reads the current baseline from that file if present and writes a candidate result to
+`../{baseline_id}.baseline-candidate.json` for later promotion or review.
 
 Inside the DevContainer:
 
 ```bash
-uv run python evals/runner.py --update-baseline
+uv run python evals/runner.py --baseline-id edge_agent_default
 ```
 
 Outside the DevContainer:
 
 ```bash
-devcontainer exec --workspace-folder . -- uv run python evals/runner.py --update-baseline
+devcontainer exec --workspace-folder . -- uv run python evals/runner.py --baseline-id edge_agent_default
 ```
 
 ---
@@ -105,14 +105,14 @@ curl -s "${OLLAMA_BASE_URL:-http://ollama:11434}/api/pull" \
 uv run python agents/edge.py "What is the capital of France?"
 
 # Run smoke evals (auto-detects Ollama or Copilot provider)
-uv run python evals/runner.py
+just eval
 
 # Use a named model from the registry
-uv run python evals/runner.py --named-model edge_agent_default
-EDGENT_NAMED_MODEL=edge_agent_fast uv run python evals/runner.py --named-model edge_agent_fast
+just eval --model edge_agent_default
+EDGENT_NAMED_MODEL=edge_agent_fast just eval --model edge_agent_fast
 
 # Run tests  (uses TestModel – no Ollama needed)
-uv run pytest tests/ -q
+just test
 ```
 
 ### Starting the DevContainer from the CLI (no VS Code)
@@ -134,14 +134,14 @@ devcontainer up --workspace-folder .
 devcontainer exec --workspace-folder . -- uv pip install -e . --group dev
 
 # Run tests
-devcontainer exec --workspace-folder . -- uv run pytest tests/ -q
+devcontainer exec --workspace-folder . -- just test
 
 # Run smoke evals (auto-detects provider from GITHUB_COPILOT_API_TOKEN)
-devcontainer exec --workspace-folder . -- uv run python evals/runner.py
+devcontainer exec --workspace-folder . -- just eval
 
-# Force a specific provider
-devcontainer exec --workspace-folder . -- uv run python evals/runner.py --provider ollama --model gemma4:e2b
-devcontainer exec --workspace-folder . -- uv run python evals/runner.py --provider copilot
+devcontainer exec --workspace-folder . -- just eval --model edge_agent_default
+
+devcontainer exec --workspace-folder . -- just eval --model edge_agent_fast
 ```
 
 > **Note:** The `docker-compose.yml` sets `DEVCONTAINER=true` inside the
@@ -174,11 +174,8 @@ Inside the DevContainer:
 # Auto-detect provider
 uv run python evals/runner.py
 
-# Write a CI-compatible score file
-uv run python evals/runner.py --score-file /tmp/score.json
-
-# Update the baseline when the new score beats the current one
-uv run python evals/runner.py --update-baseline
+# Write a baseline candidate file for later promotion or review
+just eval --baseline-id edge_agent_default
 ```
 
 Outside the DevContainer:
@@ -188,13 +185,10 @@ Outside the DevContainer:
 devcontainer up --workspace-folder .
 
 # Auto-detect provider
-devcontainer exec --workspace-folder . -- uv run python evals/runner.py
+devcontainer exec --workspace-folder . -- just eval
 
-# Write a CI-compatible score file
-devcontainer exec --workspace-folder . -- uv run python evals/runner.py --score-file /tmp/score.json
-
-# Update the baseline when the new score beats the current one
-devcontainer exec --workspace-folder . -- uv run python evals/runner.py --update-baseline
+# Write a baseline candidate file for later promotion or review
+devcontainer exec --workspace-folder . -- just eval --baseline-id edge_agent_default
 ```
 
 The runner exercises the **same** smoke dataset and the **same** edge agent regardless
@@ -208,8 +202,8 @@ Requires Python 3.13.
 
 ```bash
 uv pip install -e . --group dev
-uv run pytest tests/ -q
-uv run ruff check agents/ evals/ tests/
+just test
+just lint
 ```
 
 ---
@@ -240,6 +234,9 @@ EDGENT_PRESET=fast uv run python evals/runner.py
 
 # Provide fine-grained overrides
 EDGENT_OVERRIDES='{"max_tokens":256,"think":false}' uv run python evals/runner.py
+
+# Use a specific baseline ID
+uv run python evals/runner.py --baseline-id edge_agent_default
 ```
 
 Behavior and safety:

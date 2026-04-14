@@ -97,4 +97,5 @@ Use `justfile` as the canonical source for project commands, not as a place for 
 ## 10. Keep `justfile` readable
 - Use comments, clear recipe names, and short recipe bodies.
 - Avoid embedding large scripts directly; move complex logic to dedicated shell/Python scripts if needed.
+- Remember that each recipe line is executed in a separate shell invocation, so variable assignments do not persist across multiple lines unless you wrap them in a single shell command or use a script.
 

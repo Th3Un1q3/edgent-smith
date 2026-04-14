@@ -1,0 +1,18 @@
+{
+  "score": 2,
+  "baseline": 0,
+  "passed": true,
+  "cases_total": 5,
+  "passing_cases": [
+    "arithmetic",
+    "factual_geography",
+    "extraction",
+    "summarization"
+  ],
+  "regressions": [],
+  "avg_passing_case_seconds": 181.03598940372467,
+  "effective_baseline_passing_count": 4,
+  "regression_penalty": 0,
+  "model": "edge_agent_default",
+  "baseline_id": "edge_agent_default"
+}

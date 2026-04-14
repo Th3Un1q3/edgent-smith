@@ -82,7 +82,7 @@ If a task spans multiple scopes, use the highest relevant scope.
 
 #### Functional checks
 
-- Run targeted tests first when they exist, then the full test suite if the change is behavioral or cross-cutting: `uv run pytest tests/ -q`.
+- Run targeted tests first when they exist, then the full test suite if the change is behavioral or cross-cutting: `just test`.
 - Run CLI or integration smoke checks only for the paths the change affects.
 - If agent or eval behavior changed, run the relevant eval flow and compare the result with the existing baseline before updating anything.
 
@@ -93,7 +93,7 @@ Examples:
 uv run python agents/edge.py "What is 2+2?"
 
 # Run the smoke eval runner when eval or provider behavior changed
-uv run python evals/runner.py --score-file /tmp/score.json
+uv run python evals/runner.py
 ```
 
 #### Non-functional checks
@@ -151,12 +151,12 @@ fi
 
 ### If you are inside the DevContainer
 
-Run commands directly using the project environment with `uv`:
+Run commands directly using the project environment with `just`:
 
 ```bash
-uv run python evals/runner.py
-uv run pytest tests/ -q
-uv run ruff check agents/ evals/ tests/
+just eval
+just test
+just lint
 ```
 
 ### If you are outside the DevContainer
@@ -169,12 +169,12 @@ npm install -g @devcontainers/cli
 devcontainer up --workspace-folder .
 ```
 
-Then prefix commands with `devcontainer exec --workspace-folder . --` and use `uv run` inside the container:
+Then prefix commands with `devcontainer exec --workspace-folder . --` and use `just` inside the container:
 
 ```bash
-devcontainer exec --workspace-folder . -- uv run python evals/runner.py
-devcontainer exec --workspace-folder . -- uv run pytest tests/ -q
-devcontainer exec --workspace-folder . -- uv run ruff check agents/ evals/ tests/
+devcontainer exec --workspace-folder . -- just eval
+devcontainer exec --workspace-folder . -- just test
+devcontainer exec --workspace-folder . -- just lint
 ```
 
 Never use `docker exec devcontainer-devcontainer-1 ...`. Use `devcontainer exec --workspace-folder .` instead.
@@ -198,9 +198,9 @@ If you are inside the DevContainer, run directly:
 
 ```bash
 uv run python evals/runner.py
-uv run python evals/runner.py --provider copilot
-uv run python evals/runner.py --provider ollama --model gemma4:e2b
-uv run python evals/runner.py --score-file /tmp/score.json --update-baseline
+uv run python evals/runner.py --model edge_agent_default
+uv run python evals/runner.py --model edge_agent_fast
+uv run python evals/runner.py --baseline-id edge_agent_default
 ```
 
 If you are outside the DevContainer, prefix each command with `devcontainer exec --workspace-folder . --`.

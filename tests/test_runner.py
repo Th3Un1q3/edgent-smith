@@ -35,6 +35,7 @@ class DummyDataset:
 @pytest.mark.anyio
 async def test_run_eval_scores_with_regression_penalty_and_time(tmp_path, monkeypatch) -> None:
     baseline_path = tmp_path / "edge_agent_default.baseline.json"
+    candidate_path = tmp_path / "edge_agent_default.baseline-candidate.json"
     baseline_path.write_text(
         json.dumps(
             {
@@ -50,7 +51,8 @@ async def test_run_eval_scores_with_regression_penalty_and_time(tmp_path, monkey
         )
     )
 
-    monkeypatch.setattr(runner, "baseline_file", lambda model_name: baseline_path)
+    monkeypatch.setattr(runner, "baseline_file", lambda baseline_id: baseline_path)
+    monkeypatch.setattr(runner, "baseline_candidate_file", lambda baseline_id: candidate_path)
     monkeypatch.setattr(runner, "build_edge_agent", lambda edge_model_config=None: DummyAgent())
 
     report = EvaluationReport(
@@ -120,17 +122,17 @@ async def test_run_eval_scores_with_regression_penalty_and_time(tmp_path, monkey
 
     result = runner.run_eval(
         ModelConfig(alias="edge_agent_default", model=TestModel(), model_settings=None),
-        score_file=tmp_path / "score.json",
-        update_baseline=False,
+        baseline_id="edge_agent_default",
     )
 
     assert result is True
 
-    score_data = json.loads((tmp_path / "score.json").read_text())
-    assert score_data["score"] == 40
-    assert score_data["avg_passing_case_seconds"] == 5.0
-    assert score_data["regressions"] == ["factual_geography"]
-    assert score_data["passed"] is True
+    candidate_data = json.loads(candidate_path.read_text())
+    assert candidate_data["score"] == 40
+    assert candidate_data["avg_passing_case_seconds"] == 5.0
+    assert candidate_data["regressions"] == ["factual_geography"]
+    assert candidate_data["passed"] is True
+    assert candidate_data["baseline_id"] == "edge_agent_default"
 
 
 @pytest.mark.anyio
@@ -139,7 +141,12 @@ async def test_run_eval_no_regression_penalty_without_prior_baseline(tmp_path, m
         runner, "_read_baseline", lambda path: (0, [], {"score": 0, "passing_cases": []})
     )
     monkeypatch.setattr(
-        runner, "baseline_file", lambda model_name: tmp_path / "edge_agent_default.baseline.json"
+        runner, "baseline_file", lambda baseline_id: tmp_path / "edge_agent_default.baseline.json"
+    )
+    monkeypatch.setattr(
+        runner,
+        "baseline_candidate_file",
+        lambda baseline_id: tmp_path / "edge_agent_default.baseline-candidate.json",
     )
     monkeypatch.setattr(runner, "build_edge_agent", lambda edge_model_config=None: DummyAgent())
 
@@ -182,121 +189,17 @@ async def test_run_eval_no_regression_penalty_without_prior_baseline(tmp_path, m
 
     result = runner.run_eval(
         ModelConfig(alias="edge_agent_default", model=TestModel(), model_settings=None),
-        score_file=tmp_path / "score.json",
-        update_baseline=False,
+        baseline_id="edge_agent_default",
     )
 
     assert result is True
 
-    score_data = json.loads((tmp_path / "score.json").read_text())
-    assert score_data["score"] == 20
-    assert score_data["avg_passing_case_seconds"] == 5.0
-    assert score_data["regressions"] == []
-    assert score_data["effective_baseline_passing_count"] == 1
-    assert score_data["regression_penalty"] == 0
-    assert score_data["passed"] is True
-
-
-@pytest.mark.anyio
-async def test_run_eval_updates_baseline_metadata_when_improved(tmp_path, monkeypatch) -> None:
-    baseline_path = tmp_path / "edge_agent_default.baseline.json"
-    baseline_path.write_text(
-        json.dumps(
-            {
-                "score": 30,
-                "passing_cases": [
-                    "arithmetic",
-                    "factual_geography",
-                    "extraction",
-                    "summarization",
-                ],
-                "avg_passing_case_seconds": 10,
-            }
-        )
+    candidate_data = json.loads(
+        (tmp_path / "edge_agent_default.baseline-candidate.json").read_text()
     )
-
-    monkeypatch.setattr(runner, "baseline_file", lambda model_name: baseline_path)
-    monkeypatch.setattr(runner, "build_edge_agent", lambda edge_model_config=None: DummyAgent())
-
-    report = EvaluationReport(
-        name="smoke",
-        cases=[
-            ReportCase(
-                name="arithmetic",
-                inputs="",
-                metadata=None,
-                expected_output=None,
-                output="ok",
-                metrics={},
-                attributes={},
-                scores={},
-                labels={},
-                assertions={"ok": DummyEvaluationResult(True)},
-                task_duration=5.0,
-                total_duration=5.0,
-            ),
-            ReportCase(
-                name="factual_geography",
-                inputs="",
-                metadata=None,
-                expected_output=None,
-                output="ok",
-                metrics={},
-                attributes={},
-                scores={},
-                labels={},
-                assertions={"ok": DummyEvaluationResult(True)},
-                task_duration=5.0,
-                total_duration=5.0,
-            ),
-            ReportCase(
-                name="extraction",
-                inputs="",
-                metadata=None,
-                expected_output=None,
-                output="ok",
-                metrics={},
-                attributes={},
-                scores={},
-                labels={},
-                assertions={"ok": DummyEvaluationResult(True)},
-                task_duration=5.0,
-                total_duration=5.0,
-            ),
-            ReportCase(
-                name="summarization",
-                inputs="",
-                metadata=None,
-                expected_output=None,
-                output="ok",
-                metrics={},
-                attributes={},
-                scores={},
-                labels={},
-                assertions={"ok": DummyEvaluationResult(True)},
-                task_duration=5.0,
-                total_duration=5.0,
-            ),
-        ],
-        failures=[],
-    )
-
-    monkeypatch.setattr(runner, "smoke_dataset", DummyDataset(report))
-
-    result = runner.run_eval(
-        ModelConfig(alias="edge_agent_default", model=TestModel(), model_settings=None),
-        score_file=None,
-        update_baseline=True,
-    )
-
-    assert result is True
-
-    updated = json.loads(baseline_path.read_text())
-    assert updated["score"] == 80
-    assert updated["avg_passing_case_seconds"] == 5.0
-    assert updated["passing_cases"] == [
-        "arithmetic",
-        "factual_geography",
-        "extraction",
-        "summarization",
-    ]
+    assert candidate_data["score"] == 20
+    assert candidate_data["avg_passing_case_seconds"] == 5.0
+    assert candidate_data["regressions"] == []
+    assert candidate_data["effective_baseline_passing_count"] == 1
+    assert candidate_data["regression_penalty"] == 0
+    assert candidate_data["passed"] is True
