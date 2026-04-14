@@ -53,17 +53,17 @@ copilot \
   --deny-tool='shell(git checkout)'
 
 # ── Validate changes (with one auto-fix attempt per tool) ────────────────────
-if ! TEST_OUT=$(python -m pytest tests/ -q 2>&1); then
+if ! TEST_OUT=$(uv run pytest tests/ -q 2>&1); then
   fix_errors "pytest" "$TEST_OUT"
   # Re-run; fail hard if still broken
-  python -m pytest tests/ -q
+  uv run pytest tests/ -q
 fi
 
-if ! LINT_OUT=$(python -m ruff check agents/ evals/ tests/ 2>&1); then
+if ! LINT_OUT=$(uv run python -m ruff check agents/ evals/ tests/ 2>&1); then
   fix_errors "ruff" "$LINT_OUT"
   # Re-run; fail hard if still broken
-  python -m ruff check agents/ evals/ tests/
+  uv run python -m ruff check agents/ evals/ tests/
 fi
 
 # ── Run evaluations; write score report; update baseline ──────────────────────
-python evals/runner.py --score-file eval_result.json --update-baseline
+uv run python evals/runner.py --score-file eval_result.json --update-baseline

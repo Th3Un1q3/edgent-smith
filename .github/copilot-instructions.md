@@ -81,7 +81,7 @@ If a task spans multiple scopes, use the highest relevant scope.
 
 #### Functional checks
 
-- Run targeted tests first when they exist, then the full test suite if the change is behavioral or cross-cutting: `pytest tests/ -q`.
+- Run targeted tests first when they exist, then the full test suite if the change is behavioral or cross-cutting: `uv run pytest tests/ -q`.
 - Run CLI or integration smoke checks only for the paths the change affects.
 - If agent or eval behavior changed, run the relevant eval flow and compare the result with the existing baseline before updating anything.
 
@@ -89,10 +89,10 @@ Examples:
 
 ```bash
 # Exercise the edge agent prompt path when agent behavior changed
-python agents/edge.py "What is 2+2?"
+uv run python agents/edge.py "What is 2+2?"
 
 # Run the smoke eval runner when eval or provider behavior changed
-python evals/runner.py --score-file /tmp/score.json
+uv run python evals/runner.py --score-file /tmp/score.json
 ```
 
 #### Non-functional checks
@@ -150,12 +150,12 @@ fi
 
 ### If you are inside the DevContainer
 
-Run commands directly:
+Run commands directly using the project environment with `uv`:
 
 ```bash
-python evals/runner.py
-pytest tests/ -q
-python -m ruff check agents/ evals/ tests/
+uv run python evals/runner.py
+uv run pytest tests/ -q
+uv run python -m ruff check agents/ evals/ tests/
 ```
 
 ### If you are outside the DevContainer
@@ -168,12 +168,12 @@ npm install -g @devcontainers/cli
 devcontainer up --workspace-folder .
 ```
 
-Then prefix Python commands with `devcontainer exec --workspace-folder . --`:
+Then prefix commands with `devcontainer exec --workspace-folder . --` and use `uv run` inside the container:
 
 ```bash
-devcontainer exec --workspace-folder . -- python evals/runner.py
-devcontainer exec --workspace-folder . -- pytest tests/ -q
-devcontainer exec --workspace-folder . -- python -m ruff check agents/ evals/ tests/
+devcontainer exec --workspace-folder . -- uv run python evals/runner.py
+devcontainer exec --workspace-folder . -- uv run pytest tests/ -q
+devcontainer exec --workspace-folder . -- uv run python -m ruff check agents/ evals/ tests/
 ```
 
 Never use `docker exec devcontainer-devcontainer-1 ...`. Use `devcontainer exec --workspace-folder .` instead.
@@ -196,10 +196,10 @@ The edge agent (`agents/edge.py`) is model-agnostic: it holds a plain string mod
 If you are inside the DevContainer, run directly:
 
 ```bash
-python evals/runner.py
-python evals/runner.py --provider copilot
-python evals/runner.py --provider ollama --model gemma4:e2b
-python evals/runner.py --score-file /tmp/score.json --update-baseline
+uv run python evals/runner.py
+uv run python evals/runner.py --provider copilot
+uv run python evals/runner.py --provider ollama --model gemma4:e2b
+uv run python evals/runner.py --score-file /tmp/score.json --update-baseline
 ```
 
 If you are outside the DevContainer, prefix each command with `devcontainer exec --workspace-folder . --`.

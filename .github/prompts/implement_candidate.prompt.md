@@ -22,11 +22,9 @@ Implement the experiment described in the GitHub issue assigned to you.
 
 4. **Validate**:
    ```
-   python -m pytest tests/ -q
-   python -m ruff check agents/ evals/ tests/
-   python -m mypy agents/ evals/
-   ```
-
+uv run pytest tests/ -q
+uv run python -m ruff check agents/ evals/ tests/
+uv run python -m mypy agents/ evals/
 5. **On success**: commit, push, open a PR, and post a ✅ comment on the issue.
 
 6. **On failure**: post a ❌ comment with details; do not merge.

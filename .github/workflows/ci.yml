@@ -34,8 +34,8 @@ jobs:
         with:
           runCmd: |
             echo "── ruff ──────────────────────────────────────────"
-            python -m ruff check agents/ evals/ tests/
+            uv run python -m ruff check agents/ evals/ tests/
             echo "── mypy ──────────────────────────────────────────"
-            python -m mypy agents/ evals/
+            uv run python -m mypy agents/ evals/
             echo "── pytest ────────────────────────────────────────"
-            python -m pytest tests/ -q
+            uv run pytest tests/ -q

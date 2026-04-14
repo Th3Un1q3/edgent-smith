@@ -81,13 +81,13 @@ or you can update it manually.
 Inside the DevContainer:
 
 ```bash
-python evals/runner.py --update-baseline
+uv run python evals/runner.py --update-baseline
 ```
 
 Outside the DevContainer:
 
 ```bash
-devcontainer exec --workspace-folder . -- python evals/runner.py --update-baseline
+devcontainer exec --workspace-folder . -- uv run python evals/runner.py --update-baseline
 ```
 
 ---
@@ -102,17 +102,17 @@ curl -s "${OLLAMA_BASE_URL:-http://ollama:11434}/api/pull" \
   -d '{"model":"gemma4:e2b"}' | grep -E '"status"|"error"'
 
 # Run the edge agent
-python agents/edge.py "What is the capital of France?"
+uv run python agents/edge.py "What is the capital of France?"
 
 # Run smoke evals (auto-detects Ollama or Copilot provider)
-python evals/runner.py
+uv run python evals/runner.py
 
 # Use a named model from the registry
-python evals/runner.py --named-model edge_agent_default
-EDGENT_NAMED_MODEL=edge_agent_fast python evals/runner.py --named-model edge_agent_fast
+uv run python evals/runner.py --named-model edge_agent_default
+EDGENT_NAMED_MODEL=edge_agent_fast uv run python evals/runner.py --named-model edge_agent_fast
 
 # Run tests  (uses TestModel – no Ollama needed)
-pytest tests/ -q
+uv run pytest tests/ -q
 ```
 
 ### Starting the DevContainer from the CLI (no VS Code)
@@ -131,17 +131,17 @@ npm install -g @devcontainers/cli
 devcontainer up --workspace-folder .
 
 # Install the package inside the running container
-devcontainer exec --workspace-folder . -- pip install -e '.[dev]'
+devcontainer exec --workspace-folder . -- uv pip install -e . --group dev
 
 # Run tests
-devcontainer exec --workspace-folder . -- pytest tests/ -q
+devcontainer exec --workspace-folder . -- uv run pytest tests/ -q
 
 # Run smoke evals (auto-detects provider from GITHUB_COPILOT_API_TOKEN)
-devcontainer exec --workspace-folder . -- python evals/runner.py
+devcontainer exec --workspace-folder . -- uv run python evals/runner.py
 
 # Force a specific provider
-devcontainer exec --workspace-folder . -- python evals/runner.py --provider ollama --model gemma4:e2b
-devcontainer exec --workspace-folder . -- python evals/runner.py --provider copilot
+devcontainer exec --workspace-folder . -- uv run python evals/runner.py --provider ollama --model gemma4:e2b
+devcontainer exec --workspace-folder . -- uv run python evals/runner.py --provider copilot
 ```
 
 > **Note:** The `docker-compose.yml` sets `DEVCONTAINER=true` inside the
@@ -172,13 +172,13 @@ Inside the DevContainer:
 
 ```bash
 # Auto-detect provider
-python evals/runner.py
+uv run python evals/runner.py
 
 # Write a CI-compatible score file
-python evals/runner.py --score-file /tmp/score.json
+uv run python evals/runner.py --score-file /tmp/score.json
 
 # Update the baseline when the new score beats the current one
-python evals/runner.py --update-baseline
+uv run python evals/runner.py --update-baseline
 ```
 
 Outside the DevContainer:
@@ -188,13 +188,13 @@ Outside the DevContainer:
 devcontainer up --workspace-folder .
 
 # Auto-detect provider
-devcontainer exec --workspace-folder . -- python evals/runner.py
+devcontainer exec --workspace-folder . -- uv run python evals/runner.py
 
 # Write a CI-compatible score file
-devcontainer exec --workspace-folder . -- python evals/runner.py --score-file /tmp/score.json
+devcontainer exec --workspace-folder . -- uv run python evals/runner.py --score-file /tmp/score.json
 
 # Update the baseline when the new score beats the current one
-devcontainer exec --workspace-folder . -- python evals/runner.py --update-baseline
+devcontainer exec --workspace-folder . -- uv run python evals/runner.py --update-baseline
 ```
 
 The runner exercises the **same** smoke dataset and the **same** edge agent regardless
@@ -207,9 +207,9 @@ of provider. The only difference is the model backend.
 Requires Python 3.13.
 
 ```bash
-pip install -e ".[dev]"
-pytest tests/ -q
-python -m ruff check agents/ evals/ tests/
+uv pip install -e . --group dev
+uv run pytest tests/ -q
+uv run python -m ruff check agents/ evals/ tests/
 ```
 
 ---
@@ -233,13 +233,13 @@ Usage examples:
 
 ```bash
 # Run the smoke evals using a named preset
-python evals/runner.py --preset reasoned
+uv run python evals/runner.py --preset reasoned
 
 # Or set via environment
-EDGENT_PRESET=fast python evals/runner.py
+EDGENT_PRESET=fast uv run python evals/runner.py
 
 # Provide fine-grained overrides
-EDGENT_OVERRIDES='{"max_tokens":256,"think":false}' python evals/runner.py
+EDGENT_OVERRIDES='{"max_tokens":256,"think":false}' uv run python evals/runner.py
 ```
 
 Behavior and safety:

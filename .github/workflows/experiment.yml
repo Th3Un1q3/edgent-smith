@@ -151,7 +151,7 @@ jobs:
             ISSUE_NUMBER
           runCmd: |
             set -euo pipefail
-            pip install -e ".[dev]" -q
+            uv pip install -e . --group dev
 
             # ── a. Build prompt from agent file + issue context ───────────────
             ISSUE_TITLE=$(gh issue view "$ISSUE_NUMBER" --json title -q .title)

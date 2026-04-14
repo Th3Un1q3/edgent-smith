@@ -21,7 +21,7 @@
 
 - [ ] Smoke eval 100% pass rate
 - [ ] Latency regression < 20% vs baseline
-- [ ] `pytest tests/ -q` passes
-- [ ] `ruff check agents/ evals/ tests/` passes
-- [ ] `mypy agents/ evals/` passes
+- [ ] `uv run pytest tests/ -q` passes
+- [ ] `uv run python -m ruff check agents/ evals/ tests/` passes
+- [ ] `uv run python -m mypy agents/ evals/` passes
 - [ ] CI is green
