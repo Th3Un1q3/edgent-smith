@@ -27,7 +27,8 @@ Before making any change, read:
 
 You may ONLY modify:
 
-- `agents/edge.py` — the `_SYSTEM` string or tool docstrings.
+- `agents/edge.py` — any part of the file, including the system prompt, agent architecture, model settings, tools, and implementation details.
+- `config.py` — any part of the file, including model factories and registry config.
 - `evals/smoke.py` — evaluation case `inputs` strings only (not evaluator logic).
 
 **Never touch:** CI workflows, devcontainer, `tests/`, `pyproject.toml`,

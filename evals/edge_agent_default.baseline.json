@@ -1,0 +1,10 @@
+{
+  "score": 2,
+  "passing_cases": [
+    "arithmetic",
+    "factual_geography",
+    "extraction",
+    "summarization"
+  ],
+  "avg_passing_case_seconds": 170.50660175085068
+}
