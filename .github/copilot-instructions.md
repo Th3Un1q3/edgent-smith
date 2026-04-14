@@ -113,13 +113,18 @@ devcontainer exec --workspace-folder . -- python -m ruff check agents/ evals/ te
 
 > **Troubleshooting: devcontainer build fails**
 > If `devcontainer up` or `devcontainer build` exits with an error mentioning a
-> **feature** (e.g. `node`, `github-cli`), the feature install script failed in
+> **feature** (e.g. `github-cli`), the feature install script failed in
 > this sandbox.  Remove the offending feature from
 > `.devcontainer/devcontainer.json`, rebuild, and open a follow-up issue so the
-> root cause can be addressed in `copilot-setup-steps.yml`.  The `node:1`
-> feature was removed for this reason — Node.js is not required for Python
-> test/eval workflows and its nvm-based installer exits with code 3 in the
-> sandbox network environment.
+> root cause can be addressed in `copilot-setup-steps.yml`.
+>
+> **Node.js** is installed via `nvm` in `postCreateCommand` (not as a build-time
+> feature) because the `node:1` devcontainer feature uses `nvm ls-remote` during
+> the Docker build phase, which fails when the TLS proxy CA cert is not yet
+> trusted.  At container runtime the proxy CA is accessible (via
+> `sudo chmod o+rx /etc/ssl/certs` in `postCreateCommand`), so `nvm install --lts`
+> succeeds and the full toolchain — Python 3.13, Node LTS, npm, gh, Copilot CLI
+> — is available inside the container.
 
 If Ollama is unreachable (no network access to registry.ollama.ai) set
 `GITHUB_COPILOT_API_TOKEN` in the host environment; the runner will

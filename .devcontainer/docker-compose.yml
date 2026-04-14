@@ -14,6 +14,8 @@ services:
       # system CA bundle so that httpx/openai can verify the proxy's cert.
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      NODE_EXTRA_CA_CERTS: /etc/ssl/certs/ca-certificates.crt
+      CURL_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       OLLAMA_BASE_URL: http://ollama:11434/v1
     depends_on:
       - ollama

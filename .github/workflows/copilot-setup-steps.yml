@@ -43,12 +43,13 @@ jobs:
       - name: Pre-build DevContainer image
         run: devcontainer build --workspace-folder .
 
-      # Smoke-test: verify the container starts and Python 3.13 is accessible.
-      # `postCreateCommand` runs `pip install -e '.[dev]'` with `|| echo` so it
-      # never blocks container startup (pip may be unreachable in air-gapped envs).
-      - name: Start DevContainer and verify Python 3.13
+      # Smoke-test: verify Python 3.13, Node LTS, gh CLI, and Copilot CLI.
+      - name: Start DevContainer and verify toolchain
         run: |
           devcontainer up --workspace-folder .
           devcontainer exec --workspace-folder . -- python --version
           devcontainer exec --workspace-folder . -- python -c "import sys; assert sys.version_info >= (3, 13), f'Expected Python 3.13+, got {sys.version}'"
+          devcontainer exec --workspace-folder . -- bash -c 'source /usr/local/share/nvm/nvm.sh && node --version && npm --version'
+          devcontainer exec --workspace-folder . -- gh --version
+          devcontainer exec --workspace-folder . -- bash -c 'source /usr/local/share/nvm/nvm.sh && copilot --version'
           echo "DevContainer verified successfully."
