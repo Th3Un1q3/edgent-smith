@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import importlib
-import os
 import sys
 
 import pytest
 from openai import OpenAIError
 from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.ollama import OllamaProvider
 
 
 def reload_config():
@@ -19,9 +17,21 @@ def reload_config():
     return config
 
 
-def test_build_copilot_model_returns_none_without_token(monkeypatch):
-    monkeypatch.delenv("GITHUB_COPILOT_API_TOKEN", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    """Ensure a clean environment for every test."""
+    for key in [
+        "GITHUB_TOKEN",
+        "GITHUB_COPILOT_API_TOKEN",
+        "GITHUB_MODEL_API_TOKEN",
+        "OPENAI_API_KEY",
+        "OLLAMA_MODEL_NAME",
+        "OLLAMA_BASE_URL",
+    ]:
+        monkeypatch.delenv(key, raising=False)
+
+
+def test_build_copilot_model_returns_none_without_token():
     cfg = reload_config()
     # Current implementation will attempt to construct AsyncOpenAI even when
     # the Copilot token is missing and thus raise an OpenAIError from the
@@ -46,25 +56,20 @@ def test_ollama_model_name_from_env(monkeypatch):
 
 
 def test_llm_judge_default_with_github_token(monkeypatch):
-    monkeypatch.setenv("GITHUB_TOKEN", "dummy-token")
-    monkeypatch.delenv("GITHUB_COPILOT_API_TOKEN", raising=False)
+    monkeypatch.setenv("GITHUB_MODEL_API_TOKEN", "dummy-token")
     cfg = reload_config()
     entry = cfg.resolve_model_config("llm_judge_default")
     assert isinstance(entry.model, OpenAIChatModel)
 
 
 def test_llm_judge_default_with_copilot_token(monkeypatch):
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setenv("GITHUB_COPILOT_API_TOKEN", "dummy-token")
     cfg = reload_config()
     entry = cfg.resolve_model_config("llm_judge_default")
     assert isinstance(entry.model, OpenAIChatModel)
 
 
-def test_llm_judge_default_without_tokens_raises(monkeypatch):
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-    monkeypatch.delenv("GITHUB_COPILOT_API_TOKEN", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+def test_llm_judge_default_without_tokens_raises():
     cfg = reload_config()
     # Depending on the implementation, resolving the judge may either raise
     # a ValueError (explicit) or propagate an OpenAIError from the client

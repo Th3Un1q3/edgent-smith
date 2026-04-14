@@ -29,11 +29,11 @@ import os
 from pathlib import Path
 from typing import Any
 
+from pydantic_evals.reporting import EvaluationReport
+
 from agents.edge import AgentOutput, build_edge_agent
 from config import ModelConfig, resolve_model_config
 from evals.smoke import smoke_dataset
-
-from pydantic_evals.reporting import EvaluationReport
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 

@@ -33,7 +33,6 @@ jobs:
       - uses: devcontainers/ci@v0.3
         with:
           runCmd: |
-            pip install -e ".[dev]" --quiet
             echo "── ruff ──────────────────────────────────────────"
             python -m ruff check agents/ evals/ tests/
             echo "── mypy ──────────────────────────────────────────"

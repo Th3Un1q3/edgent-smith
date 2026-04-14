@@ -99,6 +99,7 @@ python evals/runner.py --score-file /tmp/score.json
 
 - Run linters on changed paths first; run broader lint only when the change crosses module boundaries.
 - Prefer built-in generics and `X | None` annotations for Python 3.13.
+- **Reliable Testing**: Ensure unit tests are environment-agnostic. Use `pytest` fixtures (like `monkeypatch`) to isolate and explicitly set all relevant environment variables, preventing leaks from the host or CI environment.
 - Add unit tests for provider mapping logic only when provider mapping logic changed.
 - Verify safety caps only when output-limit behavior changed.
 - Check that secrets are not printed only when touching auth, logging, or provider parameter handling.

@@ -23,7 +23,6 @@ from pydantic_evals.evaluators import Evaluator, EvaluatorContext, IsInstance
 
 from agents.edge import AgentOutput
 
-
 # ── Custom evaluators ──────────────────────────────────────────────────────────
 
 

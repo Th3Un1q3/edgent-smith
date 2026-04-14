@@ -32,7 +32,7 @@ def build_ollama_model() -> OpenAIChatModel:
         profile=OpenAIModelProfile(
             default_structured_output_mode="native",
             supports_json_schema_output=True,
-        )
+        ),
     )
 
 

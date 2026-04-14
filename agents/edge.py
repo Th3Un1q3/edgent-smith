@@ -20,7 +20,6 @@ import ast
 from collections.abc import Callable
 from datetime import UTC, datetime
 import operator
-import os
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -53,7 +52,8 @@ def build_edge_agent(
     """Construct and return a configured `pydantic_ai.Agent`.
 
     Args:
-        edge_model_config: Optional model config to use for the agent. If not provided, the config will be resolved from environment variables.
+        edge_model_config: Optional model config to use for the agent. If not provided,
+            the config will be resolved from environment variables.
     """
     if edge_model_config is None:
         edge_model_config = resolve_model_config("edge_agent_default")
