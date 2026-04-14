@@ -1,0 +1,54 @@
+name: "Copilot Setup Steps"
+
+# Automatically run the setup steps when they or the devcontainer config change,
+# so failures are caught before they block an agent session.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+      - .devcontainer/**
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+      - .devcontainer/**
+
+jobs:
+  # Must be named exactly `copilot-setup-steps` to be picked up by Copilot.
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Ensure .env exists for DevContainer build
+        run: |
+          if [ ! -f .env ]; then
+            cp .env.example .env
+            echo ".env created from .env.example"
+          fi
+
+      # Pre-install the devcontainer CLI so the agent can use it immediately
+      # without a slow manual install step.
+      - name: Install devcontainer CLI
+        run: npm install -g @devcontainers/cli
+
+      # Pre-build the DevContainer image so `devcontainer up` is instant during
+      # the agent session (Docker layer cache is shared within the same runner).
+      - name: Pre-build DevContainer image
+        run: devcontainer build --workspace-folder .
+
+      # Smoke-test: verify the container starts and Python 3.13 is accessible.
+      # `postCreateCommand` runs `pip install -e '.[dev]'` with `|| echo` so it
+      # never blocks container startup (pip may be unreachable in air-gapped envs).
+      - name: Start DevContainer and verify Python 3.13
+        run: |
+          devcontainer up --workspace-folder .
+          devcontainer exec --workspace-folder . -- python --version
+          devcontainer exec --workspace-folder . -- python -c "import sys; assert sys.version_info >= (3, 13), f'Expected Python 3.13+, got {sys.version}'"
+          echo "DevContainer verified successfully."

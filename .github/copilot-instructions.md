@@ -87,13 +87,14 @@ python -m ruff check agents/ evals/ tests/
 Install the DevContainer CLI and start the container first:
 
 ```bash
-# Install the CLI (Node 18+) if not already installed — check first:
-command -v npm >/dev/null 2>&1 || { echo "npm not found — install Node.js 18+ first: https://nodejs.org"; exit 1; }
-npm install -g @devcontainers/cli
+# The devcontainer CLI is pre-installed via copilot-setup-steps.yml.
+# If it is somehow missing, install it (requires Node.js 18+ on the host):
+command -v devcontainer >/dev/null 2>&1 || npm install -g @devcontainers/cli
 
-# Start the DevContainer (Python 3.13 + Ollama sidecar)
+# Start the DevContainer (Python 3.13 + Ollama sidecar).
+# The image is pre-built by copilot-setup-steps.yml, so this is usually instant.
 # GITHUB_COPILOT_API_TOKEN and COPILOT_GITHUB_TOKEN are forwarded automatically
-# (see docker-compose.yml)
+# (see docker-compose.yml).
 devcontainer up --workspace-folder .
 ```
 
@@ -109,6 +110,16 @@ devcontainer exec --workspace-folder . -- python -m ruff check agents/ evals/ te
 > a hardcoded container name that may differ across environments.  Use
 > `devcontainer exec --workspace-folder .` instead; it resolves the correct
 > container automatically via the DevContainers spec.
+
+> **Troubleshooting: devcontainer build fails**
+> If `devcontainer up` or `devcontainer build` exits with an error mentioning a
+> **feature** (e.g. `node`, `github-cli`), the feature install script failed in
+> this sandbox.  Remove the offending feature from
+> `.devcontainer/devcontainer.json`, rebuild, and open a follow-up issue so the
+> root cause can be addressed in `copilot-setup-steps.yml`.  The `node:1`
+> feature was removed for this reason — Node.js is not required for Python
+> test/eval workflows and its nvm-based installer exits with code 3 in the
+> sandbox network environment.
 
 If Ollama is unreachable (no network access to registry.ollama.ai) set
 `GITHUB_COPILOT_API_TOKEN` in the host environment; the runner will

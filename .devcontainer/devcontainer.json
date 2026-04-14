@@ -5,10 +5,7 @@
   "workspaceFolder": "/workspace",
   "features": {
     "ghcr.io/devcontainers/features/git:1": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "22"
-    }
+    "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   "customizations": {
     "vscode": {
@@ -29,7 +26,7 @@
     }
   },
   "initializeCommand": "bash -lc \"if [ ! -f .env ]; then cp .env.example .env && echo 'Created .env from .env.example'; else echo '.env exists, skipping'; fi\"",
-  "postCreateCommand": "pip install -e '.[dev]' && npm install -g @github/copilot",
+  "postCreateCommand": "pip install -e '.[dev]' || echo 'WARNING: pip install failed; run pip install -e .[dev] inside the container before running tests.'",
   "remoteUser": "vscode",
   "forwardPorts": [
     8000,
