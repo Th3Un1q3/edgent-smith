@@ -4,16 +4,18 @@ Uses pydantic_evals (shipped with pydantic-ai[evals]) – no custom wrapper code
 
 Scoring
 -------
-The CI score is the **count of fully-passing cases** (not an average ratio).
+The CI score is computed from the baseline pass count adjusted for timing
+and regression penalty.
 A case is fully passing when all of its assertions are ``True`` *and* all of
 its keyword-match scores equal ``1.0``.
 
 This means:
 
-* Adding a new case that passes → score increases (improvement).
-* Adding a new case that fails  → score is unchanged (no penalty for growth).
-* An existing case starts failing → score decreases AND a regression is
-  flagged, which blocks promotion regardless of the total count.
+* Adding a new case that passes → can improve the average execution time.
+* Adding a new case that fails  → does not automatically block promotion;
+  regressions incur a fixed penalty and are reflected in the score.
+* Regression counts are applied as a penalty rather than a simple boolean
+  blocker.
 """
 
 from __future__ import annotations

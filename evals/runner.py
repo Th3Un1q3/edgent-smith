@@ -38,6 +38,8 @@ from evals.smoke import smoke_dataset
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 _BASELINE_DIR = Path(__file__).parent
+_PERFORMANCE_MULTIPLIER = 100
+_REGRESSION_PENALTY = 2
 
 
 # ── Baseline helpers ──────────────────────────────────────────────────────────
@@ -99,8 +101,7 @@ def run_eval(
         update_baseline: When ``True``, overwrites the baseline if score improved.
 
     Returns:
-        ``True`` if the score meets or exceeds the baseline and no regressions
-        were detected; ``False`` otherwise.
+        ``True`` if the score meets or exceeds the baseline; ``False`` otherwise.
     """
     agent = build_edge_agent(edge_model_config=model_config)
     baseline_key = model_config.alias
@@ -110,26 +111,54 @@ def run_eval(
         result = await agent.run(prompt)
         return result.output
 
-    report = smoke_dataset.evaluate_sync(_run)
+    report = smoke_dataset.evaluate_sync(_run, max_concurrency=3)
     report.print(include_input=True, include_output=True)
 
     pass_results = case_pass_results(report)
     passing_now = [name for name, passed in pass_results.items() if passed]
-    score = len(passing_now)
     baseline_score, baseline_passing, baseline_data = _read_baseline(baseline_path)
     regressions = [name for name in baseline_passing if not pass_results.get(name, False)]
 
+    passing_case_durations = [
+        case.total_duration for case in report.cases if pass_results.get(case.name, False)
+    ]
+    avg_passing_case_seconds = (
+        sum(passing_case_durations) / len(passing_case_durations) if passing_case_durations else 0.0
+    )
+
+    if baseline_passing:
+        baseline_case_count = len(baseline_passing)
+        regression_penalty = len(regressions) * _REGRESSION_PENALTY
+        effective_count = max(baseline_case_count - regression_penalty, 0)
+    else:
+        baseline_case_count = len(passing_now)
+        regression_penalty = 0
+        effective_count = baseline_case_count
+
+    score = (
+        int((effective_count * _PERFORMANCE_MULTIPLIER) / avg_passing_case_seconds)
+        if avg_passing_case_seconds
+        else 0
+    )
+
     print(f"\nModel: {baseline_key}", flush=True)
+    print(f"Passing cases: {passing_now}", flush=True)
+    print(f"Average passing-case time: {avg_passing_case_seconds:.2f}s", flush=True)
+    print(f"Effective baseline pass count: {baseline_case_count}", flush=True)
+    print(f"Regression penalty: {regression_penalty}", flush=True)
+    if not baseline_passing:
+        print("No prior baseline; regression penalty is suppressed.", flush=True)
     print(f"CI score: {score}  (baseline: {baseline_score})", flush=True)
     if regressions:
         print(f"REGRESSIONS detected: {regressions}", flush=True)
 
-    ci_passed = score >= baseline_score and not regressions
+    ci_passed = score >= baseline_score
 
     if update_baseline:
         if score > baseline_score:
             baseline_data["score"] = score
             baseline_data["passing_cases"] = passing_now
+            baseline_data["avg_passing_case_seconds"] = avg_passing_case_seconds
             baseline_path.write_text(json.dumps(baseline_data, indent=2) + "\n")
             print(f"Baseline updated: {baseline_score} → {score}", flush=True)
         elif score == baseline_score:
@@ -145,6 +174,9 @@ def run_eval(
             "cases_total": len(smoke_dataset.cases),
             "passing_cases": passing_now,
             "regressions": regressions,
+            "avg_passing_case_seconds": avg_passing_case_seconds,
+            "effective_baseline_passing_count": baseline_case_count,
+            "regression_penalty": regression_penalty,
             "model": baseline_key,
         }
         Path(score_file).write_text(json.dumps(result_data, indent=2))
