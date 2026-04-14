@@ -30,7 +30,7 @@ jobs:
           fi
 
       # Run everything inside the existing DevContainer – no separate Python setup.
-      - uses: devcontainers/ci@v0.3
+      - uses: devcontainers/ci@v0.3.1900000417
         with:
           runCmd: |
             pip install -e ".[dev]" --quiet

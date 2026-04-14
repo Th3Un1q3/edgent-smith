@@ -137,7 +137,7 @@ jobs:
       # permission. See the repository README for setup instructions.
       - name: Run Copilot agent, tests, and evaluations
         id: experiment
-        uses: devcontainers/ci@v0.3
+        uses: devcontainers/ci@v0.3.1900000417
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
