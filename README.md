@@ -209,7 +209,7 @@ Requires Python 3.13.
 ```bash
 uv pip install -e . --group dev
 uv run pytest tests/ -q
-uv run python -m ruff check agents/ evals/ tests/
+uv run ruff check agents/ evals/ tests/
 ```
 
 ---

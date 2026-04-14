@@ -74,6 +74,7 @@ If a task spans multiple scopes, use the highest relevant scope.
 
 - Run focused tests for the affected module when tests exist.
 - Run `ruff` on the changed paths.
+- Run `mypy` on the changed runtime files when the change affects Python code.
 - Add or update tests only if behavior changed and existing coverage is not sufficient.
 - Do not run evals, baselines, or broad smoke checks unless the change actually affects runtime behavior.
 
@@ -155,7 +156,7 @@ Run commands directly using the project environment with `uv`:
 ```bash
 uv run python evals/runner.py
 uv run pytest tests/ -q
-uv run python -m ruff check agents/ evals/ tests/
+uv run ruff check agents/ evals/ tests/
 ```
 
 ### If you are outside the DevContainer
@@ -173,7 +174,7 @@ Then prefix commands with `devcontainer exec --workspace-folder . --` and use `u
 ```bash
 devcontainer exec --workspace-folder . -- uv run python evals/runner.py
 devcontainer exec --workspace-folder . -- uv run pytest tests/ -q
-devcontainer exec --workspace-folder . -- uv run python -m ruff check agents/ evals/ tests/
+devcontainer exec --workspace-folder . -- uv run ruff check agents/ evals/ tests/
 ```
 
 Never use `docker exec devcontainer-devcontainer-1 ...`. Use `devcontainer exec --workspace-folder .` instead.

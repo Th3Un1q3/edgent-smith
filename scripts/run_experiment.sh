@@ -59,10 +59,10 @@ if ! TEST_OUT=$(uv run pytest tests/ -q 2>&1); then
   uv run pytest tests/ -q
 fi
 
-if ! LINT_OUT=$(uv run python -m ruff check agents/ evals/ tests/ 2>&1); then
+if ! LINT_OUT=$(uv run ruff check agents/ evals/ tests/ 2>&1); then
   fix_errors "ruff" "$LINT_OUT"
   # Re-run; fail hard if still broken
-  uv run python -m ruff check agents/ evals/ tests/
+  uv run ruff check agents/ evals/ tests/
 fi
 
 # ── Run evaluations; write score report; update baseline ──────────────────────
