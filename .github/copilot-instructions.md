@@ -1,6 +1,28 @@
+tool is common it is present.
+disposal (context7, documentation search).  Prefer patterns that allow future
 # Copilot Instructions – edgent-smith
 
 This repository implements a minimal, edge-optimised agentic system.
+
+## Default operating mode
+
+Prevent overcomplication by default.
+
+- Start with the smallest change that can satisfy the request.
+- Prefer an existing repo mechanism over a new one.
+- Prefer a targeted fix over a refactor.
+- Prefer a documented platform-native solution over a custom workaround.
+- Escalate only after the simpler path is proven unavailable or broken.
+- If an unrelated pre-existing issue appears, separate it from the requested work instead of redesigning the system around it.
+- If blocked, report the blocker, what you verified, and what user help is needed. Do not widen scope just to stay busy.
+
+Use this order of preference unless the user asks otherwise:
+
+1. Adjust existing configuration.
+2. Use an official feature, built-in option, or existing repo pattern.
+3. Make a small local code change.
+4. Introduce new files or abstractions.
+5. Redesign architecture.
 
 ## Three-agent architecture
 
@@ -10,59 +32,112 @@ This repository implements a minimal, edge-optimised agentic system.
 | Brainstorm Agent | `.github/agents/brainstorm.agent.md` | Copilot custom agent; generates ideas; creates `auto-research` issues |
 | Implementation Agent | `.github/agents/implement.agent.md` | Copilot custom agent; applies experiment changes to `agents/edge.py` |
 
-## Before making any change
+## Read only what you need
 
-**Read this entire file** to understand the architecture, design principles, and validation process.  It contains critical information about how the system is structured, how to run tests and evals, and how to ensure your changes are correct and safe.
+Do not treat every task as a full architecture review.
 
-### Validation checklist (mandatory for any change that affects functionality)
+- For docs, comments, prompt text, or instruction-only edits: this file is enough.
+- For localized code changes: read the relevant module and the validation section below.
+- For provider wiring, eval behavior, runtime setup, or DevContainer changes: also read the corresponding sections in this file before editing.
 
-This checklist applies to any change to the repository that affects code, functionality, evaluations, configuration, scripts, or runtime flags. Before marking a task done, complete these functional and non-functional validations.
+## Quick task sizing
 
-#### Functional checks (what to run)
+Match the amount of process to the size of the change.
 
-- **Run unit tests**: `pytest tests/ -q`. If you changed a specific module, run its tests directly (e.g. `pytest tests/test_config.py -q`).
-- **Run the full test suite**: `pytest tests/ -q` to detect regressions across the repo.
-- **Run CLI & integration smoke checks**: exercise the code paths a user or CI would run, for example:
+### Scope 0: trivial
+
+Examples: docs, comments, wording, prompt text, instruction files, typo fixes, formatting-only changes.
+
+- Edit directly.
+- No runtime validation is required unless the user asked for it.
+
+### Scope 1: localized
+
+Examples: a small config change, a single-file logic fix, a narrow test update, a small DevContainer tweak using an existing mechanism.
+
+- Run the smallest relevant validation first.
+- Prefer focused tests or a focused lint command.
+- Run broader validation only if the change affects behavior outside the local area.
+
+### Scope 2: behavioral or cross-cutting
+
+Examples: provider parameter mapping, agent behavior changes, eval logic changes, runtime changes affecting multiple paths, new tools, new workflows.
+
+- Run the full validation checklist below.
+- Update docs or audit artifacts only when the change type requires them.
+
+If a task spans multiple scopes, use the highest relevant scope.
+
+## Validation checklist
+
+### Scope 1 validation
+
+- Run focused tests for the affected module when tests exist.
+- Run `ruff` on the changed paths.
+- Add or update tests only if behavior changed and existing coverage is not sufficient.
+- Do not run evals, baselines, or broad smoke checks unless the change actually affects runtime behavior.
+
+### Scope 2 validation
+
+#### Functional checks
+
+- Run targeted tests first when they exist, then the full test suite if the change is behavioral or cross-cutting: `pytest tests/ -q`.
+- Run CLI or integration smoke checks only for the paths the change affects.
+- If agent or eval behavior changed, run the relevant eval flow and compare the result with the existing baseline before updating anything.
+
+Examples:
 
 ```bash
-# Exercise the edge agent prompt path (uses EDGENT_MODEL/DEVCONTAINER settings)
+# Exercise the edge agent prompt path when agent behavior changed
 python agents/edge.py "What is 2+2?"
 
-# Run the smoke eval runner (auto-detects provider); write a score file to inspect results
+# Run the smoke eval runner when eval or provider behavior changed
 python evals/runner.py --score-file /tmp/score.json
 ```
 
-#### Non-functional checks (static & regression)
+#### Non-functional checks
 
-- **Run linters & type checks**: `python -m ruff check agents/ evals/ tests/` and fix warnings; prefer built-in generics and `X | None` annotations for Python 3.13.
-- **Validate mapping & parameter mapping logic**: add unit tests for `map_to_provider_params()` for each provider/endpoint touched; ensure `think`, `max_tokens`, and token caps map correctly.
-- **Enforce safety caps**: verify `HARD_MAX_OUTPUT_TOKENS` (or equivalent) is applied — either via unit tests or a quick runtime check.
-- **Secrets handling & logging checks**: ensure no secrets are printed in logs. Grep recent log outputs or run a brief script to confirm tokens are masked.
+- Run linters on changed paths first; run broader lint only when the change crosses module boundaries.
+- Prefer built-in generics and `X | None` annotations for Python 3.13.
+- Add unit tests for provider mapping logic only when provider mapping logic changed.
+- Verify safety caps only when output-limit behavior changed.
+- Check that secrets are not printed only when touching auth, logging, or provider parameter handling.
 
-#### Integration & CI expectations
+#### Documentation and governance
 
-- **DevContainer execution**: run integration or smoke checks inside the DevContainer when appropriate (see DevContainer section). Do not assume host services match container networking.
-- **Mock external calls in tests**: provider clients (Ollama/Copilot) must be mocked for unit tests; CI should run mocked tests to avoid network dependency.
-- **Baseline/regression check for evals**: if changes affect the evals or agent behaviour, run `python evals/runner.py --score-file /tmp/score.json` and compare with the baseline in `evals/*.baseline.json`. Only update baseline files with `--update-baseline` when you have validated improvements and added tests.
+Update only what matches the change:
 
-#### Governance & documentation
+- Update `.env.example` for new or changed env vars.
+- Update `README.md` or `docs/` for user-visible behavior, setup, or workflow changes.
+- Add a masked audit line to `logs/model_params_audit.log` only when provider parameters or security-sensitive behavior changed.
+- Add or update tests whenever behavior changed in a way that is not already covered.
 
-- **Document changes**: update `.env.example`, `README.md`, and `docs/` with any new env vars, presets, or behavioural changes.
-- **Add audit/log entries**: when changing which params are passed to providers, write a small (masked) audit line to `logs/model_params_audit.log` and include it in the PR so reviewers can see the effective params used.
-- **Tests & coverage**: any behaviour change must be accompanied by unit tests demonstrating the expected behaviour and handling of edge cases.
+#### CI expectations
 
-#### Enforcement
+Add CI enforcement only when the current change introduces a new behavior that can realistically regress and is worth checking automatically. Do not expand scope into CI work for unrelated cleanup.
 
-Every time there is opportunity to automate checks, enforce them via CI. For example the change introduced new service in docker compose. Add step to check connectivity to that service in CI. If there is a new env var, add a check that it is set in CI. If there is a new eval, add a smoke check for it in CI. The goal is to catch any missed validation steps automatically and prevent regressions.
+## DevContainer and dependency changes
 
-## Execution environment — MANDATORY
+When the task involves installing or changing tools in the DevContainer, keep the solution narrow.
+
+1. Inspect the existing `.devcontainer` configuration first.
+2. Prefer an official Dev Container Feature over a custom Dockerfile, manual install script, or Compose redesign.
+3. Check the authoritative feature docs or catalog before changing the install method.
+4. Reuse the existing repo pattern when it already solves the problem.
+5. Use explicit, reproducible versions when the repo already pins versions or when a floating version would make rebuilds unstable.
+6. Treat unrelated container startup failures as separate issues. Confirm whether they predate your change before editing features, Dockerfiles, or Compose.
+7. After making the smallest change, rebuild or test that specific path before escalating.
+8. Only switch to a custom Dockerfile or broader redesign if no official feature or existing mechanism can satisfy the request, or if you verified that the simpler path fails for a documented reason.
+
+Example: if the user asks to install Copilot CLI in the DevContainer, first inspect the existing feature list and official Dev Container Features. If an official feature exists, add or adjust that feature and test it. Do not remove unrelated features or start authoring a custom Dockerfile unless the feature path is unavailable or proven broken.
+
+## Execution environment — mandatory for Python commands
 
 The sandbox host runs **Python 3.12**; this project requires **Python 3.13**.
 The sandbox has **no Ollama daemon**.
 
 **All Python commands must run inside the DevContainer.**
-The `docker-compose.yml` sets `DEVCONTAINER=true` inside the container, so you
-can always detect your environment reliably:
+The `docker-compose.yml` sets `DEVCONTAINER=true` inside the container, so you can always detect your environment reliably:
 
 ```bash
 if [ "${DEVCONTAINER:-}" = "true" ]; then
@@ -72,9 +147,9 @@ else
 fi
 ```
 
-### If you are INSIDE the DevContainer
+### If you are inside the DevContainer
 
-Run commands directly (no prefix needed):
+Run commands directly:
 
 ```bash
 python evals/runner.py
@@ -82,22 +157,17 @@ pytest tests/ -q
 python -m ruff check agents/ evals/ tests/
 ```
 
-### If you are OUTSIDE the DevContainer
+### If you are outside the DevContainer
 
 Install the DevContainer CLI and start the container first:
 
 ```bash
-# Install the CLI (Node 18+) if not already installed — check first:
 command -v npm >/dev/null 2>&1 || { echo "npm not found — install Node.js 18+ first: https://nodejs.org"; exit 1; }
 npm install -g @devcontainers/cli
-
-# Start the DevContainer (Python 3.13 + Ollama sidecar)
-# GITHUB_COPILOT_API_TOKEN and COPILOT_GITHUB_TOKEN are forwarded automatically
-# (see docker-compose.yml)
 devcontainer up --workspace-folder .
 ```
 
-Then prefix every command with `devcontainer exec --workspace-folder . --`:
+Then prefix Python commands with `devcontainer exec --workspace-folder . --`:
 
 ```bash
 devcontainer exec --workspace-folder . -- python evals/runner.py
@@ -105,147 +175,93 @@ devcontainer exec --workspace-folder . -- pytest tests/ -q
 devcontainer exec --workspace-folder . -- python -m ruff check agents/ evals/ tests/
 ```
 
-> **Never use `docker exec devcontainer-devcontainer-1 ...`** — that relies on
-> a hardcoded container name that may differ across environments.  Use
-> `devcontainer exec --workspace-folder .` instead; it resolves the correct
-> container automatically via the DevContainers spec.
+Never use `docker exec devcontainer-devcontainer-1 ...`. Use `devcontainer exec --workspace-folder .` instead.
 
-If Ollama is unreachable (no network access to registry.ollama.ai) set
-`GITHUB_COPILOT_API_TOKEN` in the host environment; the runner will
-auto-detect it and use the Copilot API instead.
-The Copilot API is reachable from inside the DevContainer because
-`docker-compose.yml` forwards `GITHUB_COPILOT_API_TOKEN` and sets `SSL_CERT_FILE` to the
-system CA bundle (which trusts the sandbox TLS proxy).
+If Ollama is unreachable, set `GITHUB_COPILOT_API_TOKEN` in the host environment; the runner will auto-detect it and use the Copilot API instead.
 
 ## Eval runner architecture
 
-`evals/runner.py` is the single entry point for all evals.  It contains the
-model factories for both providers, the shared eval loop, and a `__main__`
-that auto-detects the provider from the environment.
+`evals/runner.py` is the single entry point for all evals. It contains the model factories for both providers, the shared eval loop, and a `__main__` that auto-detects the provider from the environment.
 
 | File | Role |
 |------|------|
 | `evals/runner.py` | Model factories, `run_eval()`, unified `__main__` |
 | `evals/smoke.py` | Dataset, evaluators, and utilities |
 
-The edge agent (`agents/edge.py`) is **model-agnostic**: it holds a plain string
-model and never references a provider.  The runner selects and injects the model
-at call-time via `agent.run(prompt, model=model)`.
+The edge agent (`agents/edge.py`) is model-agnostic: it holds a plain string model and never references a provider. The runner selects and injects the model at call-time via `agent.run(prompt, model=model)`.
 
 ## Running evals
 
-If you are **inside the DevContainer**, run directly:
+If you are inside the DevContainer, run directly:
 
 ```bash
-# Auto-detect provider (copilot if GITHUB_COPILOT_API_TOKEN is set, else ollama)
 python evals/runner.py
-
-# Force a specific provider
 python evals/runner.py --provider copilot
 python evals/runner.py --provider ollama --model gemma4:e2b
-
-# Write a score file and update the baseline
 python evals/runner.py --score-file /tmp/score.json --update-baseline
 ```
 
-If you are **outside the DevContainer**, prefix each command with
-`devcontainer exec --workspace-folder . --`:
-
-```bash
-devcontainer up --workspace-folder .
-
-devcontainer exec --workspace-folder . -- python evals/runner.py
-devcontainer exec --workspace-folder . -- python evals/runner.py --provider copilot
-devcontainer exec --workspace-folder . -- python evals/runner.py --provider ollama --model gemma4:e2b
-devcontainer exec --workspace-folder . -- python evals/runner.py --score-file /tmp/score.json --update-baseline
-```
+If you are outside the DevContainer, prefix each command with `devcontainer exec --workspace-folder . --`.
 
 ## Scripts must be version-controlled
 
-**Never write scripts to `/tmp` or any other ephemeral location.**
+Do not leave repo scripts in `/tmp` or other ephemeral locations.
 
-Any script you create for running evaluations, experiments, or diagnostics
-**must be committed to the repository** in an appropriate location:
+Any script you create for evaluations, experiments, or diagnostics should live in the repository:
 
 | Purpose | Location |
 |---------|----------|
 | Eval runner variant | `evals/<name>.py` |
 | One-off experiment helper | `experiments/<name>.py` |
-| Build / CI helper | `scripts/<name>.sh` |
+| Build or CI helper | `scripts/<name>.sh` |
 
-## Never assume software is installed
+## Tool and dependency assumptions
 
-Before using any CLI tool, binary, or external service in a script or workflow,
-verify it is available in the target environment. Do not assume that because a
-tool is common it is present.
+When adding a CLI, binary, or external service to repo scripts, workflows, or the DevContainer, verify that it is available in the target environment. Do not add availability guards to ad-hoc terminal exploration unless the task needs them.
 
-- **Check availability explicitly.** Use `command -v <tool>` in shell scripts
-  and branch on the result. Emit a clear warning or error if the tool is absent.
-- **Prefer environment-provided services over host-installed binaries.**
-  For example, use the Ollama HTTP API (`OLLAMA_BASE_URL`) rather than
-  the `ollama` CLI; use `curl` (universally available in the devcontainer) rather
-  than language-specific HTTP clients when reaching a sidecar.
-- **Document the requirement.** If a script genuinely requires a tool, state so
-  at the top of the file and fail fast with a descriptive message rather than
-  producing a silent or confusing error later.
-- **Test the absent-tool path.** When writing the availability guard, verify the
-  fallback (warning or skip) behaves correctly, not just the happy path.
+- Use `command -v <tool>` in shell scripts when tool presence is a real requirement.
+- Prefer environment-provided services over host-installed binaries when both are available.
+- If a script genuinely requires a tool, fail fast with a clear message.
+- Test the absent-tool path only when you introduced such a guard.
 
 ## Design principles
 
-When integrating with an external provider or library, identify the constructs
-that are both available and recommended by that library using the tools at your
-disposal (context7, documentation search).  Prefer patterns that allow future
-extensibility without requiring changes to the core agent.
+When integrating with an external provider or library, identify the constructs that are both available and recommended by that library using the tools at your disposal.
 
-When adding a new capability that already has a parallel implementation (e.g. a
-second runner), extract the shared logic first so each new variant only has to
-supply what is genuinely different.
+- Prefer the smallest working integration.
+- Prefer an existing pattern in this repo over inventing a new abstraction.
+- Extract shared logic when duplication is real and current, not speculative.
+- Do not broaden a task into a general architecture cleanup unless the user asked for that.
 
-## Using any tool, action, CLI, or API
+## Using tools, actions, CLIs, and APIs
 
-**Before writing or editing any usage of a tool, action, CLI flag, or API —
-regardless of how well you think you know it — always look it up first.**
-Familiarity is not a substitute for verification; most mistakes happen precisely
-because the agent assumed it already knew the correct behaviour.
+Look up authoritative sources when behavior is unfamiliar, version-sensitive, newly introduced, or surprising. Do not research routine usage that already exists in the repo unless there is evidence it is wrong.
 
-Follow this process every time, without exception:
+Use this order:
 
-1. **Find authoritative sources.** In order of preference:
-   - Official documentation (linked from the repo, README, or action metadata)
-   - `--help` / `man` output for CLI tools
-   - Context7 (`context7-resolve-library-id` → `context7-query-docs`)
-   - GitHub source / release notes for the specific version in use
-2. **Derive the correct usage from what the sources say** — not from memory or
-   analogy.  Quote or cite the relevant passage so the reasoning is traceable.
-3. **Apply** the result consistently across every place the same pattern
-   appears.  Do not fix one call site while leaving others broken.
-4. **Validate** — run the relevant tests, linter, or CI job to confirm the
-   result works before marking the task done.
+1. Official documentation linked from the repo or tool metadata.
+2. `--help` or `man` output for CLI tools.
+3. Context7 documentation.
+4. GitHub source or release notes for version-specific behavior.
 
-> **Example — `devcontainers/ci` env-passing.**
-> The [action docs](https://github.com/devcontainers/ci/blob/main/docs/github-action.md#environment-variables)
-> state that step-level `env:` is not forwarded into the container shell; only
-> variables listed under `with.env` are available inside `runCmd`.  Applying
-> that rule uniformly means: bind every `${{ }}` expression to a runner-level
-> env var, list it in `with.env`, and reference it as a plain shell variable
-> inside `runCmd` — with no inline `${{ }}` expressions anywhere in the shell
-> body.
+Apply what you learned to the change you are making. Do not turn a local fix into a repo-wide sweep unless the same bug is clearly present elsewhere and the scope still matches the user request.
+
+Example: for `devcontainers/ci` env-passing, the docs state that step-level `env:` is not forwarded into the container shell and only variables listed under `with.env` are available inside `runCmd`. Follow that documented behavior exactly rather than inferring from general GitHub Actions patterns.
 
 ## Verify that your work actually runs
 
-Do not mark a task complete until you have:
+Scale verification to the task.
 
-1. Detected your environment (`echo ${DEVCONTAINER:-outside}`) and run the
-   relevant command inside the DevContainer — directly if already inside, or
-   via `devcontainer exec --workspace-folder . --` if outside.
-2. Confirmed the output makes sense (score, test results, lint output).
-3. Committed **all** files you created or modified — including runner scripts.
+- Scope 0: no runtime verification required.
+- Scope 1: run the smallest relevant command inside the DevContainer when Python is involved.
+- Scope 2: run the full relevant validation flow and confirm the output makes sense.
+
+Keep all created or modified artifacts inside the repository unless the task explicitly requires external output.
 
 ## Mutation boundaries
 
 - **Allowed during experiments**: `agents/edge.py` (system prompt, tool descriptions), `evals/smoke.py` (cases only).
-- **Never change**: CI workflows, devcontainer, `tests/`, this file.
+- **Never change unless the user explicitly asks**: CI workflows, DevContainer config, `tests/`, this file.
 
 ## Agent definitions
 
@@ -258,7 +274,7 @@ General prompts live in `.github/prompts/*.prompt.md`.
 
 ## Python runtime
 
-Target Python 3.13. The codebase uses `from __future__ import annotations` for forward-reference compatibility; keep this import in all files.
+Target Python 3.13. The codebase uses `from __future__ import annotations` for forward-reference compatibility; keep this import in all Python files.
 
 ## Dependencies
 
