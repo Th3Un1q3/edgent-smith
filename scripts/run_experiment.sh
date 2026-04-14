@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Usage: MODEL=<model> PROMPT=<prompt> bash scripts/run_experiment.sh
+# Usage: PROMPT=<prompt> [MODEL=<model>] bash scripts/run_experiment.sh
 #
 # Inputs (environment variables):
-#   MODEL   — Copilot model name to pass to the CLI (e.g. gpt-4o-mini)
+#   MODEL   — Optional; Copilot model name to pass to the CLI (default: gpt-5-mini)
 #   PROMPT  — Full prompt string to send to the Copilot CLI
 set -euo pipefail
 
-: "${MODEL:?MODEL environment variable is required}"
+# Default MODEL to gpt-5-mini when not provided
+MODEL="${MODEL:-gpt-5-mini}"
 : "${PROMPT:?PROMPT environment variable is required}"
 
 # ── Helper: call Copilot to fix errors ───────────────────────────────────────
