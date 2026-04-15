@@ -33,14 +33,14 @@ ${errors}" \
 }
 
 # ── Pull Ollama model via the devcontainer sidecar ───────────────────────────
-if [[ -n "${EDGENT_MODEL_NAME:-}" ]]; then
-  OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://ollama:11434}"
-  echo "Pulling '${EDGENT_MODEL_NAME}' from ${OLLAMA_BASE_URL} ..."
-  curl --fail --silent --show-error \
-    "${OLLAMA_BASE_URL}/api/pull" \
-    -d "{\"model\":\"${EDGENT_MODEL_NAME}\"}" \
-    | grep -E '"status"|"error"' || true
-fi
+
+OLLAMA_MODEL_NAME="gemma4:e2b"
+OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://ollama:11434}"
+echo "Pulling '${OLLAMA_MODEL_NAME}' from ${OLLAMA_BASE_URL} ..."
+curl --fail --silent --show-error \
+  "${OLLAMA_BASE_URL}/api/pull" \
+  -d "{\"model\":\"${OLLAMA_MODEL_NAME}\"}" \
+  | grep -E '"status"|"error"' || true
 
 # ── Invoke Copilot CLI ────────────────────────────────────────────────────────
 copilot \
