@@ -138,8 +138,9 @@ Example: if the user asks to install Copilot CLI in the DevContainer, first insp
 The sandbox host runs **Python 3.12**; this project requires **Python 3.13**.
 The sandbox has **no Ollama daemon**.
 
-**All Python commands must run inside the DevContainer.**
-The `docker-compose.yml` sets `DEVCONTAINER=true` inside the container, so you can always detect your environment reliably:
+All work in this repository should be executed inside the DevContainer. The supported command interface is the repo's `just` task runner. Use host-shell commands only when the DevContainer cannot be started or accessed for a technical reason.
+
+The `docker-compose.yml` sets `DEVCONTAINER=true` inside the container, so you can detect the environment reliably:
 
 ```bash
 if [ "${DEVCONTAINER:-}" = "true" ]; then
@@ -151,7 +152,7 @@ fi
 
 ### If you are inside the DevContainer
 
-Run commands directly using the project environment with `just`:
+Run commands directly using the project environment with `just`.
 
 ```bash
 just eval
@@ -161,7 +162,7 @@ just lint
 
 ### If you are outside the DevContainer
 
-Install the DevContainer CLI and start the container first:
+If you must work from the host because the DevContainer cannot start, install the DevContainer CLI and start the container first:
 
 ```bash
 command -v npm >/dev/null 2>&1 || { echo "npm not found — install Node.js 18+ first: https://nodejs.org"; exit 1; }
@@ -169,7 +170,7 @@ npm install -g @devcontainers/cli
 devcontainer up --workspace-folder .
 ```
 
-Then prefix commands with `devcontainer exec --workspace-folder . --` and use `just` inside the container:
+Then run repo tasks through `devcontainer exec --workspace-folder . -- just ...` so the actual work still executes inside the container:
 
 ```bash
 devcontainer exec --workspace-folder . -- just eval

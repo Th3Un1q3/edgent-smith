@@ -44,7 +44,7 @@ promote-baseline baseline_id:
   bash scripts/promote_baseline.sh "{{baseline_id}}"
 
 # Run the Copilot experiment runner locally with a prompt.
-execute-experiment prompt:
+run-experiment prompt:
   PROMPT="{{prompt}}" bash scripts/run_experiment.sh
 
 # Transform vscode mcp config to copilot cli mcp config.

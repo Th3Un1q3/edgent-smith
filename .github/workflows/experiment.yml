@@ -9,8 +9,8 @@ name: Auto-Research
 #      via postCreateCommand) with the implement agent instructions + issue
 #      context. Copilot edits files directly using its native tools. Then
 #      validate (tests + lint) and run the pydantic_evals smoke suite.
-#   4. Compare the candidate score to the baseline via baseline-id detection
-#      using `just baseline-status` and any per-model *.baseline.json files.
+#   4. Compare the candidate score to the baseline via the candidate
+#      baseline JSON file and `just promote-baseline`.
 #      ✅ score >= baseline → label 'experiment-success', commit, push, PR.
 #      ❌ score <  baseline → label 'experiment-failure', comment with details.
 #      ⏱  job timeout        → label 'experiment-failure', comment "timed out".
@@ -133,6 +133,19 @@ jobs:
           BRANCH="auto-research/${ISSUE_NUMBER}-${SLUG}"
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
+      - name: Read current baseline score
+        id: current_baseline
+        env:
+          BASELINE_ID: ${{ env.BASELINE_ID }}
+        run: |
+          baseline_path="${BASELINE_ID}.baseline.json"
+          if [ -f "${baseline_path}" ]; then
+            baseline_score=$(python3 -c 'import json,sys; print(int(json.load(open(sys.argv[1]))["score"]))' "${baseline_path}")
+          else
+            baseline_score=0
+          fi
+          echo "baseline_score=${baseline_score}" >> "$GITHUB_OUTPUT"
+
       # ── 4. Implement + validate + evaluate inside DevContainer ────────────
       # Copilot CLI is pre-installed in the devcontainer (postCreateCommand).
       # COPILOT_GITHUB_TOKEN must be a fine-grained PAT with "Copilot Requests"
@@ -179,30 +192,55 @@ jobs:
             ${ISSUE_BODY}
             </issue_body_${SENTINEL}>"
 
-            # ── b. Invoke Copilot CLI (installed via postCreateCommand) ───────
-            # Uses the programmatic interface (--prompt) with --allow-all-tools
-            # so Copilot can read and write files without interactive prompts.
-            # git push, commit, and checkout are denied — the workflow handles
-            # those itself.
-            MODEL=gpt-5-mini PROMPT="$PROMPT" bash scripts/run_experiment.sh
+            BASELINE=$(cat "${BASELINE_ID}.baseline.json" 2>/dev/null || echo '{"score": 0}')
+            echo "baseline_score=$(echo "$BASELINE" | python3 -c 'import json,sys; print(int(json.load(sys.stdin)["score"]))')" >> "$GITHUB_OUTPUT"
 
-      # ── 5. Read results ────────────────────────────────────────────────────
-      - name: Read baseline status
-        id: results
+            # ── b. Invoke AI powered change and collect baseline candidate ───────────────
+            just run-experiment "${PROMPT}"
+
+            CANDIDATE=$(cat "${BASELINE_ID}.baseline-candidate.json" 2>/dev/null || echo '{"score": 0}')
+            echo "candidate_score=$(echo "$CANDIDATE" | python3 -c 'import json,sys; print(int(json.load(sys.stdin)["score"]))')" >> "$GITHUB_OUTPUT"
+
+      
+
+      - name: Promote Candidate
+        id: promotion
+        uses: devcontainers/ci@v0.3
+        env:
+          BASELINE_ID: ${{ env.BASELINE_ID }}
+        with:
+          env: |
+            BASELINE_ID
+          # Exits with code 0 on success (candidate promoted) and 1 on failure (candidate not promoted), which is used to determine the appropriate labeling and comments in subsequent steps.
+          runCmd: |
+            set -euo pipefail
+            just promote-baseline "${BASELINE_ID}"
+
+      - name: Report promotion failure
+        if: steps.experiment.outcome == 'success' && steps.promotion.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          SCORE: ${{ steps.experiment.outputs.candidate_score }}
+          BASELINE: ${{ steps.experiment.outputs.baseline_score }}
         run: |
-          OUTPUT=$(just --quiet baseline-status "$BASELINE_ID")
-          SCORE=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["score"])' <<<"$OUTPUT")
-          BASELINE=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["baseline"])' <<<"$OUTPUT")
-          PASSED=$(python3 -c 'import json,sys; print("true" if json.load(sys.stdin)["passed"] else "false")' <<<"$OUTPUT")
-          IMPROVED=$(python3 -c 'import json,sys; print("true" if json.load(sys.stdin)["improved"] else "false")' <<<"$OUTPUT")
-          echo "score=$SCORE"        >> "$GITHUB_OUTPUT"
-          echo "baseline=$BASELINE"    >> "$GITHUB_OUTPUT"
-          echo "passed=$PASSED"      >> "$GITHUB_OUTPUT"
-          echo "improved=$IMPROVED"  >> "$GITHUB_OUTPUT"
+          gh label create "experiment-failure" --color d93f0b --description "Experiment did not pass" --force
+          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-failure"
+
+          gh issue comment "$ISSUE_NUMBER" --body "❌ **Experiment did not pass.**
+
+          | Metric   | Value |
+          |----------|-------|
+          | Reason   | Baseline promotion failed — candidate score was not greater than the current baseline |
+          | Score    | \\`${SCORE}\\` |
+          | Baseline | \\`${BASELINE}\\` |
+          | Run      | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
+
+          The baseline candidate was generated successfully, but it did not improve on the existing baseline."
 
       # ── 6a. Score >= baseline → label success + commit, push, PR ─────────
       - name: Label experiment success
-        if: steps.results.outputs.passed == 'true'
+        if: steps.promotion.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -212,7 +250,7 @@ jobs:
 
       - name: Commit, push, and open PR
         id: pr
-        if: steps.results.outputs.passed == 'true'
+        if: steps.promotion.outcome == 'success'
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -223,17 +261,17 @@ jobs:
           body: |
             Closes #${{ github.event.issue.number }}
 
-            **Eval score:** `${{ steps.results.outputs.score }}`  **Baseline:** `${{ steps.results.outputs.baseline }}`
+            **Eval score:** `${{ steps.experiment.outputs.candidate_score }}`  **Baseline:** `${{ steps.experiment.outputs.baseline_score }}`
 
             Implemented by the [auto-research workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
 
       - name: Comment success on issue
-        if: steps.results.outputs.passed == 'true'
+        if: steps.promotion.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          SCORE: ${{ steps.results.outputs.score }}
-          BASELINE: ${{ steps.results.outputs.baseline }}
+          SCORE: ${{ steps.experiment.outputs.candidate_score }}
+          BASELINE: ${{ steps.experiment.outputs.baseline_score }}
           PR_URL: ${{ steps.pr.outputs.pull-request-url }}
         run: |
           gh issue comment "$ISSUE_NUMBER" --body "✅ **Experiment passed baseline.**
@@ -247,34 +285,13 @@ jobs:
           The changes have been committed and a pull request has been opened for review."
 
       # ── 6b. Score < baseline → label failure + comment details ────────────
-      - name: Report below-baseline result
-        if: steps.results.outputs.passed == 'false'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          SCORE: ${{ steps.results.outputs.score }}
-          BASELINE: ${{ steps.results.outputs.baseline }}
-        run: |
-          gh label create "experiment-failure" --color d93f0b --description "Experiment did not pass" --force
-          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-failure"
-
-          gh issue comment "$ISSUE_NUMBER" --body "❌ **Experiment did not reach baseline.**
-
-          | Metric   | Value |
-          |----------|-------|
-          | Reason   | Below-baseline performance |
-          | Score    | \`${SCORE}\` |
-          | Baseline | \`${BASELINE}\` |
-          | Run      | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
-
-          Please review the hypothesis and consider refining the approach before re-labelling."
-
       # ── 6c. Unexpected error → label failure + comment details ────────────
       - name: Report unexpected failure
-        if: failure()
+        if: failure() && steps.promotion.outcome != 'failure'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+          EXPERIMENT_OUTCOME: ${{ steps.experiment.outcome }}
         run: |
           gh label create "experiment-failure" --color d93f0b --description "Experiment did not pass" --force
           gh issue edit "$ISSUE_NUMBER" --add-label "experiment-failure"
@@ -284,6 +301,7 @@ jobs:
           | Metric | Value |
           |--------|-------|
           | Reason | Workflow step error |
+          | Experiment Outcome | ${{ env.EXPERIMENT_OUTCOME }} |
           | Run    | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
 
           Check the workflow logs for details. Please fix the issue before re-labelling."

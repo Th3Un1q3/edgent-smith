@@ -31,4 +31,5 @@ if [ "${candidate_score}" -gt "${baseline_score}" ]; then
   echo "Baseline promoted: ${baseline_score} → ${candidate_score}"
 else
   echo "Baseline not promoted: candidate score ${candidate_score} ≤ baseline score ${baseline_score}"
+  exit 1
 fi
