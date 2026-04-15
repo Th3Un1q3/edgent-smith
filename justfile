@@ -23,6 +23,10 @@ lint:
 typecheck:
   {{MYPY}} agents/ evals/
 
+# Attempt automatic lint and type fixes, then fall back to Copilot CLI for remaining issues.
+fix:
+  bash scripts/fix_code.sh
+
 # Run the smoke eval runner with the default model.
 eval:
   {{EVAL}}
