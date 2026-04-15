@@ -23,9 +23,9 @@ lint:
 typecheck:
   {{MYPY}} agents/ evals/
 
-# Attempt automatic lint and type fixes, then fall back to Copilot CLI for remaining issues.
-fix:
-  bash scripts/fix_code.sh
+# Attempt automatic lint, type, and test fixes, then fall back to Copilot CLI for remaining issues.
+fix args = "":
+  bash scripts/fix_code.sh {{args}}
 
 # Run the smoke eval runner with the default model.
 eval:
@@ -48,9 +48,12 @@ promote-baseline baseline_id:
   bash scripts/promote_baseline.sh "{{baseline_id}}"
 
 # Run the Copilot experiment runner locally with a prompt.
-run-experiment prompt:
+# Run the Copilot experiment runner locally with a prompt.
+# Accept optional `followup_limit` parameter which sets the `FOLLOWUP_LIMIT` env var
+# passed to `scripts/run_experiment.sh`.
+run-experiment prompt followup_limit="" dry_run="":
   bash scripts/pull_ollama_model.sh
-  PROMPT="{{prompt}}" bash scripts/run_experiment.sh
+  PROMPT="{{prompt}}" FOLLOWUP_LIMIT="{{followup_limit}}" DRY_RUN="{{dry_run}}" bash scripts/run_experiment.sh
   
 # Transform vscode mcp config to copilot cli mcp config.
 dev-sync-mcp:

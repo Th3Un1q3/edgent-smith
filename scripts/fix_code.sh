@@ -5,6 +5,20 @@
 set -euo pipefail
 
 MODEL="${MODEL:-gpt-5-mini}"
+CONTINUE_FLAG=""
+
+for arg in "$@"; do
+  case "$arg" in
+    --continue)
+      CONTINUE_FLAG="--continue"
+      ;;
+    *)
+      echo "error: unsupported argument '$arg'" >&2
+      echo "Usage: bash scripts/fix_code.sh [--continue]" >&2
+      exit 1
+      ;;
+  esac
+done
 
 if ! command -v copilot >/dev/null 2>&1; then
   echo "error: Copilot CLI is required for fallback fixes. Install @github/copilot in the DevContainer." >&2
@@ -33,9 +47,10 @@ fallback_fix() {
 
   echo "Copilot: fixing remaining ${kind} errors..."
   copilot \
+    ${CONTINUE_FLAG:+$CONTINUE_FLAG} \
     --autopilot \
     --model "$MODEL" \
-    --prompt "The following ${kind} errors remain after automatic fixes. Fix them without changing the intent of the code. Do not modify files under or /.github/. You can only fix type or lint errors in test files, not test logic errors. ${kind^} errors:\n\n$
+    --prompt "The following ${kind} errors remain after automatic fixes. Fix them without changing the intent of the code. Do not modify files under tests/ or .github/.
 
 ${errors}" \
     --allow-all-tools \

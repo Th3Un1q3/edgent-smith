@@ -78,6 +78,19 @@ Use `justfile` as the canonical source for project commands, not as a place for 
   ```
 - Parameter values can be exported to the environment if the underlying command expects them.
 
+ - Example: make experiment follow-up attempts configurable by exposing a `followup_limit` parameter
+   and exporting it to the environment for the called script. Add a `dry_run` parameter to skip heavy
+   evaluation and generate a static candidate instead for fast testing:
+
+   ```just
+   run-experiment prompt followup_limit="" dry_run="":
+     bash scripts/pull_ollama_model.sh
+     PROMPT="{{prompt}}" FOLLOWUP_LIMIT="{{followup_limit}}" DRY_RUN="{{dry_run}}" bash scripts/run_experiment.sh
+   ```
+
+   Invoke with a positional limit: `just run-experiment "My prompt" 3`, enable dry-run via:
+   `just run-experiment "My prompt" 3 true` or `DRY_RUN=1 just run-experiment "My prompt"`.
+
 ## 6. Document intent and requirements
 - Add comments explaining why a recipe exists, which shell settings are chosen, and what env files are loaded.
 - Document required tools or environment variables for project contributors.

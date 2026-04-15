@@ -33,12 +33,8 @@ Do not modify CI workflows, devcontainer config, `tests/`, `pyproject.toml`, `*.
 
 ## Validation workflow
 
-Use local execution to verify your change.
-Use validation command via shell tool:
-
-- `just edge-agent "<prompt>"`
-
-This command is the required validation path for changes in this repo. Do not bypass it with direct Python invocations or alternative shell commands unless the prompt explicitly requires a different tool.
+Verify your change with the following shell command:
+`just edge-agent "<prompt>"`
 
 Compare before and after results when validating to confirm the change behaves as expected.
 
