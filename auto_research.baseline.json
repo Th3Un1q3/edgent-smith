@@ -1,0 +1,12 @@
+{
+  "score": 0,
+  "passed": true,
+  "cases_total": 5,
+  "passing_cases": [],
+  "regressions": [],
+  "avg_passing_case_seconds": 0.0,
+  "effective_baseline_passing_count": 0,
+  "regression_penalty": 0,
+  "model": "edge_agent_default",
+  "baseline_id": "auto_research"
+}
