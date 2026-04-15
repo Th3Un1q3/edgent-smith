@@ -103,10 +103,15 @@ PY
 
     # Build a concise follow-up prompt that asks the agent to inspect the
     # baseline files rather than embedding a large diff in the CLI args.
-    followup_prompt=$'The prior experiment candidate failed to improve the baseline score. Please revise the change using the same task, focusing on improving the generated baseline candidate.\n\n'
-    followup_prompt+="Please inspect the baseline and candidate files for scoring details and differences:\n"
-    followup_prompt+="Baseline: $(cat "${baseline_path}")\n"
-    followup_prompt+="Candidate: $(cat "${candidate_path}")\n\n"
+    followup_prompt="$(cat <<EOF
+  The prior experiment candidate failed to improve the baseline score. Please revise the change using the same task, focusing on improving the generated baseline candidate.
+
+  Please inspect the baseline and candidate files for scoring details and differences:
+  Baseline: $(cat "${baseline_path}")
+  Candidate: $(cat "${candidate_path}")
+
+  EOF
+  )"
 
     # Build copilot args and invoke; keep --continue to resume sessions when available.
     copilot_args=( --agent implement --autopilot --continue --model "${MODEL}" )
