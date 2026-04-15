@@ -79,6 +79,8 @@ Prefer the repository's `just` task runner inside the container.
 
 If your workflow needs to run a specific Python script, do it from the repo root with `uv run` or `python` inside the container.
 
+> Tip: If this repository uses a local environment file, copy `.env.example` to `.env` before your first DevContainer run. Some repo commands and workflows depend on `.env` being present.
+
 ## When to use `devcontainer exec`
 
 Use `devcontainer exec --workspace-folder . -- <command>` only for local debugging when the container is already running. In GitHub Actions, prefer `devcontainers/ci`.

@@ -168,6 +168,9 @@ jobs:
             BASELINE_ID
           runCmd: |
             set -euo pipefail
+            if [[ ! -f .env && -f .env.example ]]; then
+              cp .env.example .env
+            fi
             uv pip install -e . --group dev
 
             # ── a. Build prompt from agent file + issue context ───────────────
