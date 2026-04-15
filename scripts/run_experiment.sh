@@ -10,16 +10,33 @@ set -euo pipefail
 MODEL="${MODEL:-gpt-5-mini}"
 : "${PROMPT:?PROMPT environment variable is required}"
 
-# ── Invoke Copilot CLI ────────────────────────────────────────────────────────
-copilot \
-  --agent implement \
-  --autopilot \
-  --model "$MODEL" \
-  --prompt "$PROMPT" \
-  --allow-all-tools \
-  --deny-tool='shell(git push)' \
-  --deny-tool='shell(git commit)' \
-  --deny-tool='shell(git checkout)'
+# Helper: truthy check for DRY_RUN and similar flags
+is_truthy() {
+  v="${1:-}"
+  # lowercase (bashism) then match common falsy values
+  v="${v,,}"
+  case "${v}" in
+    ""|"0"|"false"|"no") return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# ── Invoke Copilot CLI (skipped in DRY_RUN) ─────────────────────────────────
+# If `DRY_RUN` is set (truthy), skip invoking the Copilot CLI so dry-run
+# tests and CI-local runs do not depend on the Copilot CLI being installed.
+if is_truthy "${DRY_RUN:-}"; then
+  echo "DRY_RUN=${DRY_RUN:-}; skipping Copilot invocation"
+else
+  copilot \
+    --agent implement \
+    --autopilot \
+    --model "$MODEL" \
+    --prompt "$PROMPT" \
+    --allow-all-tools \
+    --deny-tool='shell(git push)' \
+    --deny-tool='shell(git commit)' \
+    --deny-tool='shell(git checkout)'
+fi
 
 just fix --continue
 
@@ -31,17 +48,6 @@ baseline_id="${BASELINE_ID:-auto_research}"
 baseline_path="${baseline_id}.baseline.json"
 candidate_path="${baseline_id}.baseline-candidate.json"
 base_prompt="${PROMPT}"
-
-# Helper: truthy check for DRY_RUN and similar flags
-is_truthy() {
-  v="${1:-}"
-  # lowercase (bashism) then match common falsy values
-  v="${v,,}"
-  case "${v}" in
-    ""|"0"|"false"|"no") return 1 ;;
-    *) return 0 ;;
-  esac
-}
 
 # Create a dry-run candidate file based on the current baseline (helper).
 create_dry_candidate() {
@@ -104,14 +110,14 @@ PY
     # Build a concise follow-up prompt that asks the agent to inspect the
     # baseline files rather than embedding a large diff in the CLI args.
     followup_prompt="$(cat <<EOF
-  The prior experiment candidate failed to improve the baseline score. Please revise the change using the same task, focusing on improving the generated baseline candidate.
+The prior experiment candidate failed to improve the baseline score. Please revise the change using the same task, focusing on improving the generated baseline candidate.
 
-  Please inspect the baseline and candidate files for scoring details and differences:
-  Baseline: $(cat "${baseline_path}")
-  Candidate: $(cat "${candidate_path}")
+Please inspect the baseline and candidate files for scoring details and differences:
+Baseline: $(cat "${baseline_path}")
+Candidate: $(cat "${candidate_path}")
 
-  EOF
-  )"
+EOF
+ )"
 
     # Build copilot args and invoke; keep --continue to resume sessions when available.
     copilot_args=( --agent implement --autopilot --continue --model "${MODEL}" )

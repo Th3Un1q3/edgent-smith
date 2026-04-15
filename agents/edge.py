@@ -77,6 +77,10 @@ def build_edge_agent(
 
 
 async def run_edge_agent(prompt: str | None = None) -> None:
+    """Run the edge agent with a given prompt and print results with metadata.
+
+    Use for convenient CLI invocation or as a reference for programmatic use.
+    """
     prompt = prompt or os.environ.get("PROMPT", "")
     if not prompt:
         raise SystemExit("PROMPT environment variable is required")
@@ -101,11 +105,7 @@ async def run_edge_agent(prompt: str | None = None) -> None:
     print(f"Timing: {elapsed:.3f}s")
     print("Tools used:", ", ".join(dict.fromkeys(used_tools)) or "none")
     output_obj = getattr(result, "output", result)
-    output = getattr(output_obj, "answer", output_obj)
-    confidence = getattr(output_obj, "confidence", None)
-    print("Output:", output)
-    if confidence is not None:
-        print("Confidence:", confidence)
+    print("Agent output:", output_obj.json() if isinstance(output_obj, BaseModel) else output_obj)
 
 
 # ── Inline tools ───────────────────────────────────────────────────────────────
