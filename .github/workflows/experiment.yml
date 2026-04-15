@@ -104,8 +104,16 @@ jobs:
       # ── 1. Checkout ────────────────────────────────────────────────────────
       - uses: actions/checkout@v4
         with:
+          ref: auto_research
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge main into auto_research
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git merge --no-ff origin/main --no-edit
 
       # ── 2. Mark issue as in-progress ──────────────────────────────────────
       - name: Mark issue in_progress
@@ -115,23 +123,6 @@ jobs:
         run: |
           gh label create "in_progress" --color e4e669 --description "Experiment is currently running" --force
           gh issue edit "$ISSUE_NUMBER" --add-label "in_progress"
-
-      # ── 3. Compute experiment branch name ─────────────────────────────────
-      # Branch creation and push are handled later by peter-evans/create-pull-request,
-      # which safely creates or updates the remote branch without fast-forward issues.
-      - name: Compute experiment branch name
-        id: branch
-        env:
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-        run: |
-          SLUG=$(echo "$ISSUE_TITLE" \
-            | tr '[:upper:]' '[:lower:]' \
-            | tr -cs 'a-z0-9' '-' \
-            | sed 's/-*$//' \
-            | cut -c1-40)
-          BRANCH="auto-research/${ISSUE_NUMBER}-${SLUG}"
-          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Read current baseline score
         id: current_baseline
@@ -253,22 +244,16 @@ jobs:
           gh label create "experiment-success" --color 0e8a16 --description "Experiment passed baseline" --force
           gh issue edit "$ISSUE_NUMBER" --add-label "experiment-success"
 
-      - name: Commit, push, and open PR
-        id: pr
+      - name: Commit and push changes
         if: steps.promotion.outcome == 'success'
-        uses: peter-evans/create-pull-request@v8
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ steps.branch.outputs.name }}
-          base: ${{ github.event.repository.default_branch }}
-          commit-message: "experiment: issue #${{ github.event.issue.number }} — ${{ github.event.issue.title }}"
-          title: "experiment: ${{ github.event.issue.title }}"
-          body: |
-            Closes #${{ github.event.issue.number }}
-
-            **Eval score:** `${{ steps.experiment.outputs.candidate_score }}`  **Baseline:** `${{ steps.experiment.outputs.baseline_score }}`
-
-            Implemented by the [auto-research workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --quiet || git commit -m "experiment: issue #${{ github.event.issue.number }} — ${{ github.event.issue.title }}"
+          git push origin HEAD
 
       - name: Comment success on issue
         if: steps.promotion.outcome == 'success'
@@ -277,7 +262,6 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           SCORE: ${{ steps.experiment.outputs.candidate_score }}
           BASELINE: ${{ steps.experiment.outputs.baseline_score }}
-          PR_URL: ${{ steps.pr.outputs.pull-request-url }}
         run: |
           gh issue comment "$ISSUE_NUMBER" --body "✅ **Experiment passed baseline.**
 
@@ -285,9 +269,9 @@ jobs:
           |----------|-------|
           | Score    | \`${SCORE}\` |
           | Baseline | \`${BASELINE}\` |
-          | PR       | ${PR_URL} |
+          | Branch   | \`auto_research\` |
 
-          The changes have been committed and a pull request has been opened for review."
+          The changes have been committed and pushed to the existing auto_research branch."
 
       # ── 6b. Score < baseline → label failure + comment details ────────────
       # ── 6c. Unexpected error → label failure + comment details ────────────
