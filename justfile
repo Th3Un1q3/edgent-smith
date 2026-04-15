@@ -41,7 +41,7 @@ eval-ci baseline_id="auto_research":
 
 # Output candidate vs baseline status for the requested baseline ID.
 baseline-status baseline_id:
-  bash scripts/baseline_status.sh "{{baseline_id}}"
+  @bash scripts/baseline_status.sh "{{baseline_id}}"
 
 # Promote a candidate baseline when its score is higher than the current baseline.
 promote-baseline baseline_id:

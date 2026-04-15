@@ -70,6 +70,38 @@ Use `justfile` as the canonical source for project commands, not as a place for 
 - Comments start with `#` and appear in `just --list` output.
 - Invoke recipes with `just <recipe>` or `just <recipe> arg`.
 
+## Quiet recipes and suppressing command echo
+
+- By default, `just` prints each command it will run to standard error. When a script captures
+  `just`'s output (for example, to parse JSON), those echoed commands can corrupt the capture.
+- Preferred ways to suppress command echoing:
+  - Prefix individual recipe lines with `@` to avoid echoing that line:
+    ```just
+    my-task:
+      @echo "This line is not printed before execution"
+      ls -la
+    ```
+  - Make an entire recipe quiet by prefixing the recipe name with `@`:
+    ```just
+    @my-quiet-task:
+      echo "Only lines beginning with @ are echoed"
+      @echo "This echo will be shown"
+    ```
+  - Use `set quiet` to make all recipes quiet by default and `[no-quiet]` to opt out for specific recipes.
+  - Shebang-style recipes (those beginning with `#!`) are quiet by default.
+- Do not depend on a non-standard or environment-specific `--quiet`/`-q` flag; changing the justfile is the
+  reliable approach.
+- For CI or scripts that capture structured output (JSON), prefer either:
+  - calling the underlying script directly (for example, `bash scripts/baseline_status.sh`) or
+  - making the `just` recipe quiet (example below).
+- Example (make `baseline-status` quiet):
+  ```just
+  baseline-status baseline_id:
+    @bash scripts/baseline_status.sh "{{baseline_id}}"
+  ```
+- Defensive parsing: always validate the captured output (for example, with `jq`), and fail fast on
+  parse errors to avoid silent misbehavior.
+
 ## 6. Parameterize recipes cleanly
 - Define recipe parameters for configurable behavior:
   ```just
