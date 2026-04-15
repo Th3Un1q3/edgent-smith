@@ -35,10 +35,10 @@ ${errors}" \
 # ── Pull Ollama model via the devcontainer sidecar ───────────────────────────
 
 OLLAMA_MODEL_NAME="gemma4:e2b"
-OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://ollama:11434}"
-echo "Pulling '${OLLAMA_MODEL_NAME}' from ${OLLAMA_BASE_URL} ..."
+OLLAMA_PULL_URL="http://ollama:11434/api/pull"
+echo "Pulling '${OLLAMA_MODEL_NAME}' from ${OLLAMA_PULL_URL} ..."
 curl --fail --silent --show-error \
-  "${OLLAMA_BASE_URL}/api/pull" \
+  "${OLLAMA_PULL_URL}" \
   -d "{\"model\":\"${OLLAMA_MODEL_NAME}\"}" \
   | grep -E '"status"|"error"' || true
 
