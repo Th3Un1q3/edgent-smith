@@ -45,8 +45,9 @@ promote-baseline baseline_id:
 
 # Run the Copilot experiment runner locally with a prompt.
 run-experiment prompt:
+  bash scripts/pull_ollama_model.sh
   PROMPT="{{prompt}}" bash scripts/run_experiment.sh
-
+  
 # Transform vscode mcp config to copilot cli mcp config.
 dev-sync-mcp:
   scripts/transform_mcp_json.sh
@@ -54,6 +55,22 @@ dev-sync-mcp:
 # Fix formatting and lint issues where supported.
 format:
   {{RUFF}} check --fix agents/ evals/ tests/
+
+# Run the edge agent with timing, tools used, and output.
+edge-agent prompt:
+  #!/usr/bin/env bash
+  set -euxo pipefail
+  bash scripts/pull_ollama_model.sh
+  echo "Ollama status impacts performance of the agent."
+  just ollama-status
+  echo "Executing agent, this might take a few minutes. Please wait."
+  PROMPT="{{prompt}}" {{UV}} run python agents/edge.py
+
+# Print the current Ollama status.
+ollama-status:
+  #!/usr/bin/env bash
+  set -euxo pipefail
+  {{UV}} run python scripts/ollama_status.py
 
 # Clean local caches created by tools.
 clean:

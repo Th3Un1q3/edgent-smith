@@ -17,6 +17,9 @@ from __future__ import annotations
 # isort: skip_file
 
 import ast
+import asyncio
+import os
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 import operator
@@ -71,6 +74,38 @@ def build_edge_agent(
     agent.tool_plain(calculator)
     agent.tool_plain(web_search_stub)
     return agent
+
+
+async def run_edge_agent(prompt: str | None = None) -> None:
+    prompt = prompt or os.environ.get("PROMPT", "")
+    if not prompt:
+        raise SystemExit("PROMPT environment variable is required")
+
+    agent = build_edge_agent()
+
+    TIMEOUT_SECONDS = 500
+    start = time.monotonic()
+    try:
+        result = await asyncio.wait_for(agent.run(prompt), timeout=TIMEOUT_SECONDS)
+    except TimeoutError as exc:
+        raise SystemExit(f"Edge agent request timed out after {TIMEOUT_SECONDS} seconds") from exc
+    elapsed = time.monotonic() - start
+
+    used_tools: list[str] = []
+    for message in result.all_messages():
+        for part in getattr(message, "parts", []):
+            tool_name = getattr(part, "tool_name", None)
+            if tool_name:
+                used_tools.append(tool_name)
+
+    print(f"Timing: {elapsed:.3f}s")
+    print("Tools used:", ", ".join(dict.fromkeys(used_tools)) or "none")
+    output_obj = getattr(result, "output", result)
+    output = getattr(output_obj, "answer", output_obj)
+    confidence = getattr(output_obj, "confidence", None)
+    print("Output:", output)
+    if confidence is not None:
+        print("Confidence:", confidence)
 
 
 # ── Inline tools ───────────────────────────────────────────────────────────────
@@ -158,3 +193,7 @@ def web_search_stub(query: str) -> str:
         "no external search backend is configured in this deployment. "
         "Answer from context only."
     )
+
+
+if __name__ == "__main__":
+    asyncio.run(run_edge_agent())

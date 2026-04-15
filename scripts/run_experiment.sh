@@ -32,19 +32,10 @@ ${errors}" \
     --deny-tool='shell(git checkout)'
 }
 
-# ── Pull Ollama model via the devcontainer sidecar ───────────────────────────
-
-OLLAMA_MODEL_NAME="gemma4:e2b"
-OLLAMA_PULL_URL="http://ollama:11434/api/pull"
-echo "Pulling '${OLLAMA_MODEL_NAME}' from ${OLLAMA_PULL_URL} ..."
-curl --fail --silent --show-error \
-  "${OLLAMA_PULL_URL}" \
-  -d "{\"model\":\"${OLLAMA_MODEL_NAME}\"}" \
-  | grep -E '"status"|"error"' || true
-
 # ── Invoke Copilot CLI ────────────────────────────────────────────────────────
 copilot \
   --agent implement \
+  --autopilot \
   --model "$MODEL" \
   --prompt "$PROMPT" \
   --allow-all-tools \
@@ -64,6 +55,9 @@ if ! LINT_OUT=$(just lint 2>&1); then
   # Re-run; fail hard if still broken
   just lint
 fi
+
+# -- Check ollama status.
+just ollama-status
 
 # ── Run evaluations; generate baseline candidate ───────────────────────────
 just eval-ci "${BASELINE_ID:-auto_research}"
