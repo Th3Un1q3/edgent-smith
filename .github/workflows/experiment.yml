@@ -59,6 +59,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.event.sender.login }}
           REPO: ${{ github.repository }}
+          MAX_RUNS: 10
         run: |
           # 1. Verify the labeler has write-or-higher access to this repository.
           #    External contributors cannot add labels, but an explicit API
@@ -74,14 +75,13 @@ jobs:
           fi
           echo "Labeler ${ACTOR} has permission: ${PERM} ✓"
 
-          # 2. Rate limit: at most 3 experiment workflow runs may be created
+          # 2. Rate limit: at most ${MAX_RUNS} experiment workflow runs may be created
           #    within any rolling 1-hour window to cap workflow abuse and
           #    Actions-minutes usage. Count queued runs as well as active and
           #    completed runs so repeated re-labelling cannot bypass the limit
           #    by building an unbounded backlog behind the concurrency group.
-          MAX_RUNS=3
           WINDOW_START=$(date -u -d '1 hour ago' '+%Y-%m-%dT%H:%M:%SZ')
-          # per_page=100 is sufficient: MAX_RUNS is 3, and even at one run per
+          # per_page=100 is sufficient: MAX_RUNS is ${MAX_RUNS}, and even at one run per
           # minute the 1-hour window produces at most 60 results.
           if ! RECENT=$(gh api "repos/${REPO}/actions/workflows/experiment.yml/runs?per_page=100" \
             --jq "[.workflow_runs[] \
