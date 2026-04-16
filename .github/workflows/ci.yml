@@ -12,14 +12,30 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
+  prebuild-devcontainer:
+    name: Prebuild DevContainer Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pre-build and push devcontainer image
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ghcr.io/th3un1q3/edgent-smith
+          cacheFrom: ghcr.io/th3un1q3/edgent-smith
+          push: always
+
   ci:
     name: Lint · Type-check · Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +52,7 @@ jobs:
       # Run everything inside the existing DevContainer – no separate Python setup.
       - uses: devcontainers/ci@v0.3
         with:
+          cacheFrom: ghcr.io/th3un1q3/edgent-smith
           runCmd: |
             echo "── lint ──────────────────────────────────────────"
             just lint

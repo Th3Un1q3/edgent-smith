@@ -47,6 +47,7 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+      packages: write
 
     env:
       BASELINE_ID: auto_research
@@ -157,6 +158,7 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           BASELINE_ID: ${{ env.BASELINE_ID }}
         with:
+          cacheFrom: ghcr.io/th3un1q3/edgent-smith
           env: |
             COPILOT_GITHUB_TOKEN
             GH_TOKEN
@@ -204,6 +206,7 @@ jobs:
         env:
           BASELINE_ID: ${{ env.BASELINE_ID }}
         with:
+          cacheFrom: ghcr.io/th3un1q3/edgent-smith
           env: |
             BASELINE_ID
           # Exits with code 0 on success (candidate promoted) and 1 on failure (candidate not promoted), which is used to determine the appropriate labeling and comments in subsequent steps.
