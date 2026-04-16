@@ -22,6 +22,14 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Ensure .env exists
+        run: |
+          if [ ! -f .env ]; then
+            cp .env.example .env
+            echo ".env created from .env.example"
+          else
+            echo ".env already exists, skipping"
+          fi
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
