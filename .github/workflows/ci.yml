@@ -17,6 +17,7 @@ permissions:
 jobs:
   prebuild-devcontainer:
     name: Prebuild DevContainer Image
+    timeout-minutes: 8
     runs-on: ubuntu-latest
     permissions:
       contents: read
