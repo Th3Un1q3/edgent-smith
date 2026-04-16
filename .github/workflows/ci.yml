@@ -2,7 +2,7 @@ name: CI
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 on:
   push:
@@ -44,6 +44,7 @@ jobs:
     name: Lint · Type-check · Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    depends-on: prebuild-devcontainer
 
     steps:
       - uses: actions/checkout@v4
