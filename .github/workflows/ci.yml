@@ -44,7 +44,7 @@ jobs:
     name: Lint · Type-check · Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    depends-on: prebuild-devcontainer
+    needs: prebuild-devcontainer
 
     steps:
       - uses: actions/checkout@v4
