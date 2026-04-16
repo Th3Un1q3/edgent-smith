@@ -23,8 +23,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Ensure .env exists
@@ -49,7 +48,7 @@ jobs:
     needs: prebuild-devcontainer
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Ensure .env exists
         run: |

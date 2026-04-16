@@ -103,7 +103,7 @@ jobs:
           echo "Rate limit OK: ${RECENT}/${MAX_RUNS} runs in the last hour ✓"
 
       # ── 1. Checkout ────────────────────────────────────────────────────────
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: auto_research
           fetch-depth: 0
