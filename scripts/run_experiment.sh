@@ -38,10 +38,14 @@ else
     --deny-tool='shell(git checkout)'
 fi
 
-just fix --continue
+if is_truthy "${DRY_RUN:-}"; then
+  echo "DRY_RUN=${DRY_RUN:-}; skipping repo-fix and ollama-status"
+else
+  just fix --continue
 
-# -- Check ollama status.
-just ollama-status
+  # -- Check ollama status.
+  just ollama-status
+fi
 
 # ── Run evaluations; generate baseline candidate ───────────────────────────
 baseline_id="${BASELINE_ID:-auto_research}"
@@ -124,13 +128,21 @@ EOF
     copilot_args+=( --prompt "${followup_prompt}" --allow-all-tools \
       --deny-tool='shell(git push)' --deny-tool='shell(git commit)' --deny-tool='shell(git checkout)')
 
-    copilot "${copilot_args[@]}"
+    if is_truthy "${DRY_RUN:-}"; then
+      echo "DRY_RUN=${DRY_RUN:-}; skipping copilot follow-up invocation"
+    else
+      copilot "${copilot_args[@]}"
+    fi
 
 
-    just fix --continue
+    if is_truthy "${DRY_RUN:-}"; then
+      echo "DRY_RUN=${DRY_RUN:-}; skipping repo-fix and ollama-status (follow-up)"
+    else
+      just fix --continue
 
-    # -- Check ollama status.
-    just ollama-status
+      # -- Check ollama status.
+      just ollama-status
+    fi
 
     if is_truthy "${DRY_RUN:-}"; then
       create_dry_candidate
