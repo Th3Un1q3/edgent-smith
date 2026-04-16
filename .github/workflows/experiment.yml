@@ -191,7 +191,7 @@ jobs:
 
             # ── b. Invoke AI powered change and collect baseline candidate ───────────────
             # Run up to 2 followups to get better results.
-            just run-experiment "${PROMPT}" 2
+            just run-experiment "${PROMPT}" --followup-limit 1 --agent implement --baseline-id "${BASELINE_ID}"
 
             CANDIDATE=$(cat "${BASELINE_ID}.baseline-candidate.json" 2>/dev/null || echo '{"score": 0}')
             echo "candidate_score=$(echo "$CANDIDATE" | python3 -c 'import json,sys; print(int(json.load(sys.stdin)["score"]))')" >> "$GITHUB_OUTPUT"
