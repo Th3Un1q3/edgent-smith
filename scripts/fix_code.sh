@@ -26,19 +26,19 @@ if ! command -v copilot >/dev/null 2>&1; then
 fi
 
 run_ruff_fix() {
-  uv run ruff check --fix agents/ evals/ tests/
+  just format || true
 }
 
 run_ruff_check() {
-  uv run ruff check agents/ evals/ tests/
+  just lint
 }
 
 run_mypy() {
-  uv run mypy --install-types --non-interactive agents/ evals/
+  just typecheck
 }
 
 run_tests() {
-  uv run pytest tests/ -q
+  just test
 }
 
 fallback_fix() {
@@ -49,14 +49,19 @@ fallback_fix() {
   copilot \
     ${CONTINUE_FLAG:+$CONTINUE_FLAG} \
     --autopilot \
+    --agent agent \
     --model "$MODEL" \
-    --prompt "The following ${kind} errors remain after automatic fixes. Fix them without changing the intent of the code. Do not modify files under tests/ or .github/.
+    --prompt "The following 'just ${kind}' errors remain after automatic fixes. Fix them without changing the intent of the code. Do not modify files under tests/ or .github/.
+
+To check correctness, run corresponding shell commands('just test', 'just lint', or 'just typecheck') and ensure the errors are resolved.
 
 ${errors}" \
     --allow-all-tools \
     --deny-tool='shell(git push)' \
     --deny-tool='shell(git commit)' \
     --deny-tool='shell(git checkout)'
+
+  CONTINUE_FLAG="--continue"
 }
 
 # Attempt automatic fixes first.
@@ -71,7 +76,7 @@ fi
 
 if ! run_mypy >/tmp/mypy_remaining.out 2>&1; then
   MYPY_ERRORS="$(cat /tmp/mypy_remaining.out)"
-  fallback_fix "type" "$MYPY_ERRORS"
+  fallback_fix "typecheck" "$MYPY_ERRORS"
   run_mypy
 fi
 

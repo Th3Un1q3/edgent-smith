@@ -29,14 +29,22 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
 from config import ModelConfig, resolve_model_config
+from enum import StrEnum
+
+
+class ConfidenceEnum(StrEnum):
+    high = "high"
+    medium = "medium"
+    low = "low"
+    abstain = "abstain"
 
 
 class AgentOutput(BaseModel):
     """Structured output returned by the edge agent."""
 
     answer: str = Field(description="The agent's direct response")
-    confidence: str = Field(
-        default="medium",
+    confidence: ConfidenceEnum = Field(
+        default=ConfidenceEnum.abstain,
         description="Self-reported confidence: high | medium | low | abstain",
     )
 
@@ -45,7 +53,6 @@ class AgentOutput(BaseModel):
 _SYSTEM = """\
 You are a precise, efficient assistant designed for edge deployment on constrained hardware.
 - Use tools only when necessary and cite any external sources used.
-- If uncertain or the task is outside your knowledge, say so (confidence: abstain).
 """
 
 
@@ -104,8 +111,10 @@ async def run_edge_agent(prompt: str | None = None) -> None:
 
     print(f"Timing: {elapsed:.3f}s")
     print("Tools used:", ", ".join(dict.fromkeys(used_tools)) or "none")
-    output_obj = getattr(result, "output", result)
-    print("Agent output:", output_obj.json() if isinstance(output_obj, BaseModel) else output_obj)
+    print(
+        "Agent output:",
+        result.output.model_dump_json() if isinstance(result.output, BaseModel) else result.output,
+    )
 
 
 # ── Inline tools ───────────────────────────────────────────────────────────────
