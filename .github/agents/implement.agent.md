@@ -19,8 +19,9 @@ Use your file-editing tools directly. Do not add unrelated files or generate lar
 Before changing code, read:
 
 - `agents/edge.py` — the primary implementation file.
-- `evals/smoke.py` — the evaluation cases to avoid regressions.
-- `config.py` — model configuration and factory behavior.
+- `config.py` — model connection configuration and factory behavior.
+- `experiments/{issue_id}.md` — the issue body to understand the experiment.
+- `evals/smoke.py` — sample evaluation cases(optional).
 
 ## Mutation surface
 
