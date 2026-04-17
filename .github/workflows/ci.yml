@@ -34,6 +34,14 @@ jobs:
           else
             echo ".env already exists, skipping"
           fi
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Pre-build and push devcontainer image
         uses: devcontainers/ci@v0.3
         with:
