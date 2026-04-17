@@ -17,6 +17,9 @@ from __future__ import annotations
 # isort: skip_file
 
 import ast
+import asyncio
+import os
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 import operator
@@ -26,14 +29,22 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
 from config import ModelConfig, resolve_model_config
+from enum import StrEnum
+
+
+class ConfidenceEnum(StrEnum):
+    high = "high"
+    medium = "medium"
+    low = "low"
+    abstain = "abstain"
 
 
 class AgentOutput(BaseModel):
     """Structured output returned by the edge agent."""
 
     answer: str = Field(description="The agent's direct response")
-    confidence: str = Field(
-        default="medium",
+    confidence: ConfidenceEnum = Field(
+        default=ConfidenceEnum.abstain,
         description="Self-reported confidence: high | medium | low | abstain",
     )
 
@@ -42,7 +53,6 @@ class AgentOutput(BaseModel):
 _SYSTEM = """\
 You are a precise, efficient assistant designed for edge deployment on constrained hardware.
 - Use tools only when necessary and cite any external sources used.
-- If uncertain or the task is outside your knowledge, say so (confidence: abstain).
 """
 
 
@@ -71,6 +81,40 @@ def build_edge_agent(
     agent.tool_plain(calculator)
     agent.tool_plain(web_search_stub)
     return agent
+
+
+async def run_edge_agent(prompt: str | None = None) -> None:
+    """Run the edge agent with a given prompt and print results with metadata.
+
+    Use for convenient CLI invocation or as a reference for programmatic use.
+    """
+    prompt = prompt or os.environ.get("PROMPT", "")
+    if not prompt:
+        raise SystemExit("PROMPT environment variable is required")
+
+    agent = build_edge_agent()
+
+    TIMEOUT_SECONDS = 500
+    start = time.monotonic()
+    try:
+        result = await asyncio.wait_for(agent.run(prompt), timeout=TIMEOUT_SECONDS)
+    except TimeoutError as exc:
+        raise SystemExit(f"Edge agent request timed out after {TIMEOUT_SECONDS} seconds") from exc
+    elapsed = time.monotonic() - start
+
+    used_tools: list[str] = []
+    for message in result.all_messages():
+        for part in getattr(message, "parts", []):
+            tool_name = getattr(part, "tool_name", None)
+            if tool_name:
+                used_tools.append(tool_name)
+
+    print(f"Timing: {elapsed:.3f}s")
+    print("Tools used:", ", ".join(dict.fromkeys(used_tools)) or "none")
+    print(
+        "Agent output:",
+        result.output.model_dump_json() if isinstance(result.output, BaseModel) else result.output,
+    )
 
 
 # ── Inline tools ───────────────────────────────────────────────────────────────
@@ -158,3 +202,7 @@ def web_search_stub(query: str) -> str:
         "no external search backend is configured in this deployment. "
         "Answer from context only."
     )
+
+
+if __name__ == "__main__":
+    asyncio.run(run_edge_agent())

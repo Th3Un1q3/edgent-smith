@@ -23,29 +23,39 @@ lint:
 typecheck:
   {{MYPY}} agents/ evals/
 
+# Attempt automatic lint, type, and test fixes, then fall back to Copilot CLI for remaining issues.
+fix *ARGS:
+  bash scripts/fix_code.sh {{ARGS}}
+
 # Run the smoke eval runner with the default model.
-eval:
-  {{EVAL}}
+eval baseline_id="edge_agent_default":
+  {{EVAL}} --baseline-id {{baseline_id}}
 
 # Run the smoke eval suite for local development.
-eval-local:
-  {{EVAL}} --baseline-id edge_agent_debug
+eval-local: (eval "edge_agent_debug")
 
 # Run the smoke eval suite in CI mode.
-eval-ci baseline_id="auto_research":
-  {{EVAL}} --baseline-id {{baseline_id}}
+eval-ci: (eval "auto_research")
 
 # Output candidate vs baseline status for the requested baseline ID.
 baseline-status baseline_id:
-  bash scripts/baseline_status.sh "{{baseline_id}}"
+  @bash scripts/baseline_status.sh "{{baseline_id}}"
 
 # Promote a candidate baseline when its score is higher than the current baseline.
 promote-baseline baseline_id:
   bash scripts/promote_baseline.sh "{{baseline_id}}"
 
+
+# Pull the model before running the experiment.
+pull-ollama-model:
+  bash scripts/pull_ollama_model.sh
+
 # Run the Copilot experiment runner locally with a prompt.
-run-experiment prompt:
-  PROMPT="{{prompt}}" bash scripts/run_experiment.sh
+# The prompt is required; additional flags are forwarded to experiment.py.
+run-experiment prompt *ARGS: pull-ollama-model
+  python scripts/experiment.py run \
+    --prompt '{{prompt}}' \
+    {{ ARGS }}
 
 # Transform vscode mcp config to copilot cli mcp config.
 dev-sync-mcp:
@@ -54,6 +64,20 @@ dev-sync-mcp:
 # Fix formatting and lint issues where supported.
 format:
   {{RUFF}} check --fix agents/ evals/ tests/
+
+# Run the edge agent with timing, tools used, and output.
+edge-agent prompt: pull-ollama-model ollama-status
+  #!/usr/bin/env bash
+  set -euxo pipefail
+  echo "Ollama status impacts performance of the agent."
+  echo "Executing agent, this might take a few minutes. Please wait."
+  PROMPT="{{prompt}}" {{UV}} run python agents/edge.py
+
+# Print the current Ollama status.
+ollama-status:
+  #!/usr/bin/env bash
+  set -euxo pipefail
+  {{UV}} run python scripts/ollama_status.py
 
 # Clean local caches created by tools.
 clean:

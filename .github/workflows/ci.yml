@@ -1,5 +1,9 @@
 name: CI
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -8,17 +12,51 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
+  prebuild-devcontainer:
+    name: Prebuild DevContainer Image
+    timeout-minutes: 8
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Ensure .env exists
+        run: |
+          if [ ! -f .env ]; then
+            cp .env.example .env
+            echo ".env created from .env.example"
+          else
+            echo ".env already exists, skipping"
+          fi
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pre-build and push devcontainer image
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ghcr.io/th3un1q3/edgent-smith
+          cacheFrom: ghcr.io/th3un1q3/edgent-smith
+          push: always
+
   ci:
     name: Lint · Type-check · Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read
+    needs: prebuild-devcontainer
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Ensure .env exists
         run: |
@@ -32,6 +70,7 @@ jobs:
       # Run everything inside the existing DevContainer – no separate Python setup.
       - uses: devcontainers/ci@v0.3
         with:
+          cacheFrom: ghcr.io/th3un1q3/edgent-smith
           runCmd: |
             echo "── lint ──────────────────────────────────────────"
             just lint
