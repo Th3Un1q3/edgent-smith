@@ -50,6 +50,13 @@ promote-baseline baseline_id:
 pull-ollama-model:
   bash scripts/pull_ollama_model.sh
 
+# Submit experiment design specification
+experiment-submit-spec title description:
+  mkdir -p experiments
+  DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '%s\n' '---' "title: \"{{title}}\"" "date: ${DATE}" '---' '' "{{description}}" > experiments/candidate.md
+  echo "Wrote experiments/candidate.md"
+
 # Run the Copilot experiment runner locally with a prompt.
 # The prompt is required; additional flags are forwarded to experiment.py.
 run-experiment prompt *ARGS: pull-ollama-model
