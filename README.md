@@ -81,13 +81,13 @@ The runner reads the current baseline from that file if present and writes a can
 Inside the DevContainer:
 
 ```bash
-uv run python evals/runner.py --baseline-id edge_agent_default
+just eval "edge_agent_default"
 ```
 
 Outside the DevContainer:
 
 ```bash
-devcontainer exec --workspace-folder . -- uv run python evals/runner.py --baseline-id edge_agent_default
+devcontainer exec --workspace-folder . -- just eval "edge_agent_default"
 ```
 
 ---
@@ -102,14 +102,14 @@ curl -s "${OLLAMA_BASE_URL:-http://ollama:11434}/api/pull" \
   -d '{"model":"gemma4:e2b"}' | grep -E '"status"|"error"'
 
 # Run the edge agent
-uv run python agents/edge.py "What is the capital of France?"
+just edge-agent "What is the capital of France?"
 
 # Run smoke evals (auto-detects Ollama or Copilot provider)
 just eval
 
 # Use a named model from the registry
-just eval --model edge_agent_default
-EDGENT_NAMED_MODEL=edge_agent_fast just eval --model edge_agent_fast
+just eval "edge_agent_default"
+EDGENT_NAMED_MODEL=edge_agent_fast just eval "edge_agent_fast"
 
 # Run tests  (uses TestModel – no Ollama needed)
 just test
@@ -139,9 +139,9 @@ devcontainer exec --workspace-folder . -- just test
 # Run smoke evals (auto-detects provider from GITHUB_COPILOT_API_TOKEN)
 devcontainer exec --workspace-folder . -- just eval
 
-devcontainer exec --workspace-folder . -- just eval --model edge_agent_default
+devcontainer exec --workspace-folder . -- just eval "edge_agent_default"
 
-devcontainer exec --workspace-folder . -- just eval --model edge_agent_fast
+devcontainer exec --workspace-folder . -- just eval "edge_agent_fast"
 ```
 
 > **Note:** The `docker-compose.yml` sets `DEVCONTAINER=true` inside the
@@ -172,10 +172,10 @@ Inside the DevContainer:
 
 ```bash
 # Auto-detect provider
-uv run python evals/runner.py
+just eval
 
 # Write a baseline candidate file for later promotion or review
-just eval --baseline-id edge_agent_default
+just eval "edge_agent_default"
 ```
 
 Outside the DevContainer:
@@ -226,17 +226,17 @@ This repository now centralises model configuration in `config.py` and supports 
 Usage examples:
 
 ```bash
-# Run the smoke evals using a named preset
-uv run python evals/runner.py --preset reasoned
+# Run the smoke evals using a named preset (via env var)
+EDGENT_PRESET=reasoned just eval
 
 # Or set via environment
-EDGENT_PRESET=fast uv run python evals/runner.py
+EDGENT_PRESET=fast just eval
 
 # Provide fine-grained overrides
-EDGENT_OVERRIDES='{"max_tokens":256,"think":false}' uv run python evals/runner.py
+EDGENT_OVERRIDES='{"max_tokens":256,"think":false}' just eval
 
 # Use a specific baseline ID
-uv run python evals/runner.py --baseline-id edge_agent_default
+just eval "edge_agent_default"
 ```
 
 Behavior and safety:

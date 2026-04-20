@@ -8,15 +8,15 @@ Usage
 -----
 ::
 
-    # Auto-detect provider and run with defaults
-    python evals/runner.py
+    # Auto-detect provider and run with defaults (use the `just` tasks)
+    just eval
 
-    # Explicit model alias
-    python evals/runner.py --model edge_agent_default
-    python evals/runner.py --model edge_agent_fast
+    # Run with a specific baseline ID
+    just eval "edge_agent_default"
 
-    # Extra options
-    python evals/runner.py --baseline-id edge_agent_default
+    # CI / local variants
+    just eval-ci
+    just eval-local
 """
 
 from __future__ import annotations

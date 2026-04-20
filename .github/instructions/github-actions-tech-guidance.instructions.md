@@ -77,7 +77,7 @@ Prefer the repository's `just` task runner inside the container.
 - `just lint`
 - `just eval`
 
-If your workflow needs to run a specific Python script, do it from the repo root with `uv run` or `python` inside the container.
+If your workflow needs to run a specific Python script, prefer repository `just` recipes; otherwise run `python` from the repo root inside the container.
 
 > Tip: If this repository uses a local environment file, create `.env` from `.env.example` before entering `devcontainers/ci`, not inside `runCmd`. The mounted workspace needs the file available when the container starts.
 

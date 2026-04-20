@@ -5,24 +5,21 @@ disposal (context7, documentation search).  Prefer patterns that allow future
 This repository implements a minimal, edge-optimised agentic system.
 
 ## Default operating mode
+Make the minimal change that satisfies the request.
 
-Prevent overcomplication by default.
+- Do not redesign architecture unless absolutely required.
+- Prefer existing repo mechanisms and documented features over new solutions.
+- Prefer small, local fixes over refactors.
+- Escalate only when simpler options are proven unavailable.
 
-- Start with the smallest change that can satisfy the request.
-- Prefer an existing repo mechanism over a new one.
-- Prefer a targeted fix over a refactor.
-- Prefer a documented platform-native solution over a custom workaround.
-- Escalate only after the simpler path is proven unavailable or broken.
-- If an unrelated pre-existing issue appears, separate it from the requested work instead of redesigning the system around it.
-- If blocked, report the blocker, what you verified, and what user help is needed. Do not widen scope just to stay busy.
+Preference order (strict):
+1. Adjust existing configuration
+2. Use existing feature or repo pattern
+3. Make a small local code change
+4. Add files or abstractions
+5. Redesign architecture
 
-Use this order of preference unless the user asks otherwise:
-
-1. Adjust existing configuration.
-2. Use an official feature, built-in option, or existing repo pattern.
-3. Make a small local code change.
-4. Introduce new files or abstractions.
-5. Redesign architecture.
+If blocked: report the blocker, what you verified, and the exact action requested from the user.
 
 ## Three-agent architecture
 
@@ -33,12 +30,11 @@ Use this order of preference unless the user asks otherwise:
 | Implementation Agent | `.github/agents/implement.agent.md` | Copilot custom agent; applies experiment changes to `agents/edge.py` |
 
 ## Read only what you need
+Only read the parts necessary for the task.
 
-Do not treat every task as a full architecture review.
-
-- For docs, comments, prompt text, or instruction-only edits: this file is enough.
-- For localized code changes: read the relevant module and the validation section below.
-- For provider wiring, eval behavior, runtime setup, or DevContainer changes: also read the corresponding sections in this file before editing.
+- Docs, comments, prompt text, or instruction-only edits: this file is sufficient.
+- Localized code changes: read the target module and the Validation checklist.
+- Provider wiring, eval behavior, runtime setup, or DevContainer changes: read the corresponding sections before editing.
 
 ## Quick task sizing
 
@@ -48,23 +44,22 @@ Match the amount of process to the size of the change.
 
 Examples: docs, comments, wording, prompt text, instruction files, typo fixes, formatting-only changes.
 
-- Edit directly.
-- No runtime validation is required unless the user asked for it.
+- DO: Edit directly.
+- DO NOT: run runtime validation unless explicitly requested.
 
 ### Scope 1: localized
 
 Examples: a small config change, a single-file logic fix, a narrow test update, a small DevContainer tweak using an existing mechanism.
 
-- Run the smallest relevant validation first.
-- Prefer focused tests or a focused lint command.
-- Run broader validation only if the change affects behavior outside the local area.
+- DO: Run the smallest relevant validation first (focused tests or a focused lint).
+- DO NOT: run broader validation unless the change affects behavior outside the local area.
 
 ### Scope 2: behavioral or cross-cutting
 
 Examples: provider parameter mapping, agent behavior changes, eval logic changes, runtime changes affecting multiple paths, new tools, new workflows.
 
-- Run the full validation checklist below.
-- Update docs or audit artifacts only when the change type requires them.
+- DO: Run the full validation checklist below.
+- DO NOT: skip docs, audits, or required validations for cross-cutting changes.
 
 If a task spans multiple scopes, use the highest relevant scope.
 
@@ -72,11 +67,13 @@ If a task spans multiple scopes, use the highest relevant scope.
 
 ### Scope 1 validation
 
-- Run focused tests for the affected module when tests exist.
-- Run `ruff` on the changed paths.
-- Run `mypy` on the changed runtime files when the change affects Python code.
-- Add or update tests only if behavior changed and existing coverage is not sufficient.
-- Do not run evals, baselines, or broad smoke checks unless the change actually affects runtime behavior.
+- DO: Run the smallest relevant validations first:
+  - Unit tests: `just test`
+  - Lint: `just lint`
+  - Type checks: `just typecheck`
+  - Formatting fixes (if needed): `just format`
+- DO NOT: run broad evals or CI suites (`just eval`, `just eval-ci`) unless the change affects runtime behavior.
+- Add or update tests only if behavior changed and existing coverage is insufficient.
 
 ### Scope 2 validation
 
@@ -86,14 +83,23 @@ If a task spans multiple scopes, use the highest relevant scope.
 - Run CLI or integration smoke checks only for the paths the change affects.
 - If agent or eval behavior changed, run the relevant eval flow and compare the result with the existing baseline before updating anything.
 
+- DO: For full validation run the following as appropriate:
+  - `just test` (unit test suite)
+  - `just lint` (static lint checks)
+  - `just typecheck` (static types)
+  - `just format` (format/auto-fix where supported)
+  - `just fix` (attempt automatic fixes via scripts)
+  - Eval runs: `just eval` (baseline), `just eval-local` (local debug), `just eval-ci` (CI smoke suite)
+  - Compare candidate vs baseline: `just baseline-status "<id>"`
+
 Examples:
 
 ```bash
 # Exercise the edge agent prompt path when agent behavior changed
-uv run python agents/edge.py "What is 2+2?"
+just edge-agent "What is 2+2?"
 
 # Run the smoke eval runner when eval or provider behavior changed
-uv run python evals/runner.py
+just eval "edge_agent_default"
 ```
 
 #### Non-functional checks
@@ -118,6 +124,16 @@ Update only what matches the change:
 
 Add CI enforcement only when the current change introduces a new behavior that can realistically regress and is worth checking automatically. Do not expand scope into CI work for unrelated cleanup.
 
+## Verify that your work actually runs
+
+Scale verification to the task.
+
+- Scope 0: no runtime verification required.
+- Scope 1: run the smallest relevant command inside the DevContainer when Python is involved.
+- Scope 2: run the full relevant validation flow and confirm the output makes sense.
+
+Keep all created or modified artifacts inside the repository unless the task explicitly requires external output.
+
 ## DevContainer and dependency changes
 
 When the task involves installing or changing tools in the DevContainer, keep the solution narrow.
@@ -132,6 +148,15 @@ When the task involves installing or changing tools in the DevContainer, keep th
 8. Only switch to a custom Dockerfile or broader redesign if no official feature or existing mechanism can satisfy the request, or if you verified that the simpler path fails for a documented reason.
 
 Example: if the user asks to install Copilot CLI in the DevContainer, first inspect the existing feature list and official Dev Container Features. If an official feature exists, add or adjust that feature and test it. Do not remove unrelated features or start authoring a custom Dockerfile unless the feature path is unavailable or proven broken.
+
+## Tool and dependency assumptions
+
+When adding a CLI, binary, or external service to repo scripts, workflows, or the DevContainer, verify that it is available in the target environment. Do not add availability guards to ad-hoc terminal exploration unless the task needs them.
+
+- Use `command -v <tool>` in shell scripts when tool presence is a real requirement.
+- Prefer environment-provided services over host-installed binaries when both are available.
+- If a script genuinely requires a tool, fail fast with a clear message.
+- Test the absent-tool path only when you introduced such a guard.
 
 ## Execution environment — mandatory for Python commands
 
@@ -198,10 +223,9 @@ The edge agent (`agents/edge.py`) is model-agnostic: it holds a plain string mod
 If you are inside the DevContainer, run directly:
 
 ```bash
-uv run python evals/runner.py
-uv run python evals/runner.py --model edge_agent_default
-uv run python evals/runner.py --model edge_agent_fast
-uv run python evals/runner.py --baseline-id edge_agent_default
+just eval "edge_agent_default"
+just eval-ci
+just eval-local
 ```
 
 If you are outside the DevContainer, prefix each command with `devcontainer exec --workspace-folder . --`.
@@ -232,39 +256,25 @@ When adding a CLI, binary, or external service to repo scripts, workflows, or th
 When integrating with an external provider or library, identify the constructs that are both available and recommended by that library using the tools at your disposal.
 
 - Prefer the smallest working integration.
+- Minimal change first.
 - Prefer an existing pattern in this repo over inventing a new abstraction.
 - Extract shared logic when duplication is real and current, not speculative.
 - Do not broaden a task into a general architecture cleanup unless the user asked for that.
 
 ## Using tools, actions, CLIs, and APIs
 
-Look up authoritative sources when behavior is unfamiliar, version-sensitive, newly introduced, or surprising. Do not research routine usage that already exists in the repo unless there is evidence it is wrong.
+Without checking the docs you make repeated mistakes, miss important features, and create brittle solutions. Always check the authoritative documentation for any tool, library, or API you use, even if you have used it before.
 
 Use this order:
 
 1. Official documentation linked from the repo or tool metadata.
 2. `--help` or `man` output for CLI tools.
-3. Context7 documentation.
+3. Context7 documentation on libraries.
 4. GitHub source or release notes for version-specific behavior.
 
 Apply what you learned to the change you are making. Do not turn a local fix into a repo-wide sweep unless the same bug is clearly present elsewhere and the scope still matches the user request.
 
 Example: for `devcontainers/ci` env-passing, the docs state that step-level `env:` is not forwarded into the container shell and only variables listed under `with.env` are available inside `runCmd`. Follow that documented behavior exactly rather than inferring from general GitHub Actions patterns.
-
-## Verify that your work actually runs
-
-Scale verification to the task.
-
-- Scope 0: no runtime verification required.
-- Scope 1: run the smallest relevant command inside the DevContainer when Python is involved.
-- Scope 2: run the full relevant validation flow and confirm the output makes sense.
-
-Keep all created or modified artifacts inside the repository unless the task explicitly requires external output.
-
-## Mutation boundaries
-
-- **Allowed during experiments**: `agents/edge.py` (system prompt, tool descriptions), `evals/smoke.py` (cases only).
-- **Never change unless the user explicitly asks**: CI workflows, DevContainer config, `tests/`, this file.
 
 ## Agent definitions
 
@@ -278,7 +288,3 @@ General prompts live in `.github/prompts/*.prompt.md`.
 ## Python runtime
 
 Target Python 3.13. The codebase uses `from __future__ import annotations` for forward-reference compatibility; keep this import in all Python files.
-
-## Dependencies
-
-Use only `pydantic-ai[evals]` and `httpx`. Do not add new dependencies without approval.
