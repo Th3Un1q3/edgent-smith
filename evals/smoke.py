@@ -21,6 +21,7 @@ This means:
 from __future__ import annotations
 
 import re
+
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import Evaluator, EvaluatorContext, IsInstance
 

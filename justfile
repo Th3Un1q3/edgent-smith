@@ -10,6 +10,7 @@ PYTEST := "${UV} run pytest tests/ -q"
 RUFF := "${UV} run ruff"
 MYPY := "${UV} run mypy"
 EVAL := "${UV} run python evals/runner.py"
+CHECK_PATHS := "."
 
 # Run the unit test suite.
 test:
@@ -17,11 +18,11 @@ test:
 
 # Run static lint checks.
 lint:
-  {{RUFF}} check agents/ evals/ tests/
+  {{RUFF}} check {{CHECK_PATHS}}
 
 # Run static type checking for runtime code.
 typecheck:
-  {{MYPY}} agents/ evals/
+  {{MYPY}} {{CHECK_PATHS}}
 
 # Attempt automatic lint, type, and test fixes, then fall back to Copilot CLI for remaining issues.
 fix *ARGS:
@@ -76,7 +77,7 @@ dev-sync-mcp:
 
 # Fix formatting and lint issues where supported.
 format:
-  {{RUFF}} check --fix agents/ evals/ tests/
+  {{RUFF}} check --fix {{CHECK_PATHS}}
 
 # Run the edge agent with timing, tools used, and output.
 edge-agent prompt: pull-ollama-model ollama-status

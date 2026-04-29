@@ -49,7 +49,6 @@ fallback_fix() {
   copilot \
     ${CONTINUE_FLAG:+$CONTINUE_FLAG} \
     --autopilot \
-    --agent agent \
     --model "$MODEL" \
     --prompt "The following 'just ${kind}' errors remain after automatic fixes. Fix them without changing the intent of the code. Do not modify files under tests/ or .github/.
 

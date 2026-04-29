@@ -198,7 +198,7 @@ of provider. The only difference is the model backend.
 
 ## Local install (without DevContainer)
 
-Requires Python 3.13.
+Requires Python 3.13. If `uv` is installed, prefer `uv run python ...` for Python execution instead of manually activating the virtual environment.
 
 ```bash
 uv pip install -e . --group dev

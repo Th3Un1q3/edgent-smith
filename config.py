@@ -1,15 +1,16 @@
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
-from pydantic_ai.settings import ModelSettings
-from pydantic_ai.models import Model
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.ollama import OllamaProvider
+
 import httpx
 from openai import AsyncOpenAI
-from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.models import Model
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.profiles.openai import OpenAIModelProfile
+from pydantic_ai.providers.ollama import OllamaProvider
+from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.settings import ModelSettings
 
 
 @dataclass
@@ -133,7 +134,8 @@ def _llm_judge_factory() -> Model | str:
     if copilot is not None:
         return copilot
     raise ValueError(
-        "llm_judge_default requires a valid GitHub token for inference API or Copilot API. Please set GITHUB_MODEL_API_TOKEN or GITHUB_COPILOT_API_TOKEN in the environment.",
+        "llm_judge_default requires a valid GitHub token for inference API or Copilot API. "
+        "Please set GITHUB_MODEL_API_TOKEN or GITHUB_COPILOT_API_TOKEN in the environment.",
     )
 
 

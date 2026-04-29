@@ -7,9 +7,8 @@ from __future__ import annotations
 
 from pydantic_evals import Case, Dataset
 
-from evals.smoke import KeywordsPresent
 from agents.edge import AgentOutput
-
+from evals.smoke import KeywordsPresent
 
 extended_dataset: Dataset[str, AgentOutput] = Dataset(
     name="extended",

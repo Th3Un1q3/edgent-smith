@@ -21,17 +21,20 @@ Usage
 
 from __future__ import annotations
 
+import importlib
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
-import importlib
 
 from pydantic_evals.reporting import EvaluationReport
 
 from agents.edge import AgentOutput, build_edge_agent
 from config import ModelConfig, resolve_model_config
 from evals.smoke import smoke_dataset
+
+logger = logging.getLogger(__name__)
 
 
 def load_dataset(set_spec: str) -> Any:
@@ -60,7 +63,7 @@ def load_dataset(set_spec: str) -> Any:
             mod = importlib.import_module(module_path)
             return getattr(mod, obj_name)
         except Exception:
-            pass
+            logger.debug("Failed to import dotted path '%s'", set_spec, exc_info=True)
 
     # fallback: evals.<name> module with common attribute names
     try:
@@ -69,9 +72,9 @@ def load_dataset(set_spec: str) -> Any:
         if hasattr(mod, attr_name):
             return getattr(mod, attr_name)
         if hasattr(mod, "dataset"):
-            return getattr(mod, "dataset")
+            return mod.dataset
     except Exception:
-        pass
+        logger.debug("Failed to import evals.%s", set_spec, exc_info=True)
 
     raise ImportError(f"Could not resolve dataset spec '{set_spec}'")
 
@@ -167,15 +170,13 @@ def run_eval(
     agent = build_edge_agent(edge_model_config=model_config)
 
     # Support either a single `dataset` (backwards-compat) or multiple `datasets`.
+    dataset_ids_list: list[str | None]
     if datasets is None:
-        if isinstance(dataset, list):
-            datasets_list = dataset
-        else:
-            datasets_list = [dataset or smoke_dataset]
-        dataset_ids_list = dataset_ids or [dataset_id]
+        datasets_list = dataset if isinstance(dataset, list) else [dataset or smoke_dataset]
+        dataset_ids_list = [dataset_id] if dataset_ids is None else list(dataset_ids)
     else:
         datasets_list = datasets
-        dataset_ids_list = dataset_ids or [None] * len(datasets_list)
+        dataset_ids_list = [None] * len(datasets_list) if dataset_ids is None else list(dataset_ids)
 
     baseline_id = baseline_id or model_config.alias
     baseline_path = baseline_file(baseline_id)
@@ -234,7 +235,7 @@ def run_eval(
 
     dataset_display = "+".join(
         [
-            dataset_ids_list[i] or getattr(datasets_list[i], "name", str(i))
+            str(dataset_ids_list[i] or getattr(datasets_list[i], "name", str(i)))
             for i in range(len(datasets_list))
         ]
     )
@@ -306,7 +307,7 @@ if __name__ == "__main__":
     cfg = resolve_model_config(_args.model)
     print(f"Using model alias: {cfg.alias}", flush=True)
 
-    all_available_datasets = ["smoke", "extended"]
+    all_available_datasets = ["smoke", "extended", "long_inputs"]
 
     # Resolve dataset set specifications (repeatable --set flag or env var)
     # Priority: CLI --set (repeatable) -> EDGENT_EVAL_SETS env var -> default 'smoke'

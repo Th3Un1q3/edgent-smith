@@ -401,7 +401,7 @@ venv:
   [ -d .venv ] || uv venv
 
 run: venv
-  ./.venv/bin/python3 main.py
+  uv run python main.py
 ```
 
 ### Variables
