@@ -27,15 +27,21 @@ typecheck:
 fix *ARGS:
   bash scripts/fix_code.sh {{ARGS}}
 
-# Run the smoke eval runner with the default model.
-eval baseline_id="edge_agent_default":
-  {{EVAL}} --baseline-id {{baseline_id}}
+# Run the eval runner with the default model.
+# Arguments after the baseline ID are forwarded directly to the underlying
+# Python script (for example: `--set smoke`, `--set extended`, `--baseline-id`, `--model`).
+eval baseline_id="edge_agent_default" *ARGS:
+  {{EVAL}} --baseline-id {{baseline_id}} {{ARGS}}
 
-# Run the smoke eval suite for local development.
-eval-local: (eval "edge_agent_debug")
+# For local development: run only the fast 'smoke' dataset.
+# Example: `just eval-local` -> `python evals/runner.py --baseline-id edge_agent_debug --set smoke`
+eval-local:
+  {{EVAL}} --baseline-id edge_agent_debug --set smoke
 
-# Run the smoke eval suite in CI mode.
-eval-ci: (eval "auto_research")
+# For CI: run all available datasets to detect regressions across sets.
+# We explicitly pass the known sets to ensure CI stability.
+eval-ci:
+  {{EVAL}} --baseline-id auto_research --set smoke --set extended
 
 # Output candidate vs baseline status for the requested baseline ID.
 baseline-status baseline_id:

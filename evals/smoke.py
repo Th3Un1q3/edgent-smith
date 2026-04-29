@@ -20,6 +20,7 @@ This means:
 
 from __future__ import annotations
 
+import re
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import Evaluator, EvaluatorContext, IsInstance
 
@@ -29,26 +30,36 @@ from agents.edge import AgentOutput
 
 
 class KeywordsPresent(Evaluator[str, AgentOutput]):
-    """Pass if all expected keywords appear in the answer (case-insensitive)."""
+    """Pass if all expected keywords appear in the answer (case-insensitive).
+
+    Matching uses word-boundary-aware regular expressions to avoid partial
+    substring matches (for example, matching `3` won't match `13`).
+    """
 
     def __init__(self, *keywords: str) -> None:
-        self.keywords = [k.lower() for k in keywords]
+        self.keywords = list(keywords)
 
     def evaluate(self, ctx: EvaluatorContext[str, AgentOutput]) -> float:
         if not isinstance(ctx.output, AgentOutput):
             return 0.0
-        answer = ctx.output.answer.lower()
-        hits = sum(1 for kw in self.keywords if kw in answer)
-        return hits / len(self.keywords) if self.keywords else 1.0
+        answer = ctx.output.answer
+        if not self.keywords:
+            return 1.0
+        hits = 0
+        for kw in self.keywords:
+            pattern = r"\b" + re.escape(kw) + r"\b"
+            if re.search(pattern, answer, flags=re.IGNORECASE):
+                hits += 1
+        return hits / len(self.keywords)
 
 
 class Abstains(Evaluator[str, AgentOutput]):
-    """Pass if the agent sets confidence to 'abstain'."""
+    """Score 1.0 if the agent sets confidence to 'abstain', else 0.0."""
 
-    def evaluate(self, ctx: EvaluatorContext[str, AgentOutput]) -> bool:
+    def evaluate(self, ctx: EvaluatorContext[str, AgentOutput]) -> float:
         if not isinstance(ctx.output, AgentOutput):
-            return False
-        return ctx.output.confidence == "abstain"
+            return 0.0
+        return 1.0 if ctx.output.confidence == "abstain" else 0.0
 
 
 # ── Smoke dataset ──────────────────────────────────────────────────────────────
@@ -58,8 +69,8 @@ smoke_dataset: Dataset[str, AgentOutput] = Dataset(
     cases=[
         Case(
             name="arithmetic",
-            inputs="What is 2 + 2? Answer with just the number.",
-            evaluators=(IsInstance(type_name="AgentOutput"), KeywordsPresent("4")),
+            inputs="What is 512 + 1024? Answer with just the number.",
+            evaluators=(IsInstance(type_name="AgentOutput"), KeywordsPresent("1536")),
         ),
         Case(
             name="factual_geography",
