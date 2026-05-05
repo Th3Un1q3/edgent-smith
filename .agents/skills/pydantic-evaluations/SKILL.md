@@ -8,7 +8,7 @@ license: MIT
 compatibility: Universal
 metadata:
   version: "3.0.0"
-  author: GitHub Copilot
+  author: Th3Un1q3
 ---
 
 # Pydantic Evaluations
