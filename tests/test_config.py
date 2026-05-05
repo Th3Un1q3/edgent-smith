@@ -6,6 +6,8 @@ import sys
 import pytest
 from openai import OpenAIError
 from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.ollama import OllamaProvider
+from pydantic_ai.providers.openai import OpenAIProvider
 
 
 def reload_config():
@@ -25,6 +27,8 @@ def clean_env(monkeypatch):
         "GITHUB_COPILOT_API_TOKEN",
         "GITHUB_MODEL_API_TOKEN",
         "OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "OPENROUTER_BASE_URL",
         "OLLAMA_MODEL_NAME",
         "OLLAMA_BASE_URL",
     ]:
@@ -53,6 +57,28 @@ def test_ollama_model_name_from_env(monkeypatch):
     entry = cfg.resolve_model_config("edge_agent_default")
     assert hasattr(entry.model, "model_name")
     assert entry.model.model_name == "my-test-model"
+
+
+def test_build_openrouter_model_uses_default_base_url(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "dummy-token")
+    cfg = reload_config()
+    model = cfg.build_openrouter_model()
+    assert isinstance(model, OpenAIChatModel)
+    assert model.model_name == "google/gemma-4-26b-a4b-it:free"
+    assert isinstance(model.provider, OpenAIProvider)
+    assert str(model.provider.client.base_url) == "https://openrouter.ai/api/v1/"
+
+
+def test_edge_agent_local_openrouter_alias_uses_openrouter_and_preserves_output_cap(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "dummy-token")
+    cfg = reload_config()
+    local_entry = cfg.resolve_model_config("edge_agent_local_openrouter")
+    default_entry = cfg.resolve_model_config("edge_agent_default")
+    assert isinstance(local_entry.model, OpenAIChatModel)
+    assert isinstance(local_entry.model.provider, OpenAIProvider)
+    assert local_entry.model.model_name == "google/gemma-4-26b-a4b-it:free"
+    assert local_entry.model_settings == default_entry.model_settings
+    assert isinstance(default_entry.model.provider, OllamaProvider)
 
 
 def test_llm_judge_default_with_github_token(monkeypatch):

@@ -13,6 +13,10 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 
 
+_OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+_OPENROUTER_LOCAL_MODEL = "google/gemma-4-26b-a4b-it:free"
+
+
 @dataclass
 class ModelConfig:
     alias: str
@@ -121,6 +125,18 @@ def build_github_model() -> OpenAIChatModel | None:
     )
 
 
+def build_openrouter_model() -> OpenAIChatModel:
+    return OpenAIChatModel(
+        model_name=_OPENROUTER_LOCAL_MODEL,
+        provider=OpenAIProvider(
+            openai_client=AsyncOpenAI(
+                base_url=_OPENROUTER_BASE_URL,
+                api_key=os.getenv("OPENROUTER_API_KEY"),
+            )
+        ),
+    )
+
+
 def _llm_judge_factory() -> Model | str:
     """Factory for the `llm_judge_default` registry entry.
 
@@ -142,12 +158,14 @@ def _llm_judge_factory() -> Model | str:
 MODEL_FACTORIES: dict[str, Callable[[], Model | str]] = {
     "edge_agent_default": build_ollama_model,
     "edge_agent_fast": build_ollama_model,
+    "edge_agent_local_openrouter": build_openrouter_model,
     "llm_judge_default": _llm_judge_factory,
 }
 
 MODEL_SETTINGS: dict[str, ModelSettings] = {
     "edge_agent_default": ModelSettings(thinking=False, max_tokens=4048),
     "edge_agent_fast": ModelSettings(thinking=False, max_tokens=4048),
+    "edge_agent_local_openrouter": ModelSettings(thinking=False, max_tokens=4048),
     "llm_judge_default": ModelSettings(thinking=True),
 }
 

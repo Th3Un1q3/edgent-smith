@@ -164,6 +164,12 @@ environments. The unified runner auto-detects the right provider:
 - **Copilot** is used when `GITHUB_COPILOT_API_TOKEN` is set in the environment.
 - **Ollama** is used otherwise.
 
+For the local eval lane only, `just eval-local` uses the OpenRouter-backed
+`edge_agent_local_openrouter` model and writes results under the
+`local_openrouter` baseline lane. That path requires `OPENROUTER_API_KEY`.
+Generic eval behavior, including `just eval` and `edge_agent_default`, is
+otherwise unchanged.
+
 `docker-compose.yml` already forwards `GITHUB_COPILOT_API_TOKEN` and `COPILOT_GITHUB_TOKEN`, and sets
 `SSL_CERT_FILE` to the system CA bundle, so the Copilot API is reachable from
 inside the DevContainer with no extra configuration.

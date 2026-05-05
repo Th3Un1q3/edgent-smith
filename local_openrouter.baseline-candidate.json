@@ -1,0 +1,18 @@
+{
+  "score": 203,
+  "passed": true,
+  "cases_total": 5,
+  "passing_cases": [
+    "arithmetic",
+    "factual_geography",
+    "extraction",
+    "summarization"
+  ],
+  "regressions": [],
+  "avg_passing_case_seconds": 1.966466248035431,
+  "effective_baseline_passing_count": 4,
+  "regression_penalty": 0,
+  "model": "edge_agent_local_openrouter",
+  "datasets": "smoke",
+  "baseline_id": "local_openrouter"
+}

@@ -3,6 +3,7 @@
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 set dotenv-load
+set dotenv-override
 set export
 
 UV := "uv"
@@ -35,9 +36,9 @@ eval baseline_id="edge_agent_default" *ARGS:
   {{EVAL}} --baseline-id {{baseline_id}} {{ARGS}}
 
 # For local development: run only the fast 'smoke' dataset.
-# Example: `just eval-local` -> `python evals/runner.py --baseline-id edge_agent_debug --set smoke`
+# Example: `just eval-local` -> `python evals/runner.py --baseline-id local_openrouter --set smoke --model edge_agent_local_openrouter`
 eval-local:
-  {{EVAL}} --baseline-id edge_agent_debug --set smoke
+  {{EVAL}} --baseline-id local_openrouter --set smoke --model edge_agent_local_openrouter
 
 # For CI: run all available datasets to detect regressions across sets.
 # We explicitly pass the known sets to ensure CI stability.
