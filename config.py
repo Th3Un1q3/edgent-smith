@@ -146,7 +146,7 @@ MODEL_FACTORIES: dict[str, Callable[[], Model | str]] = {
 }
 
 MODEL_SETTINGS: dict[str, ModelSettings] = {
-    "edge_agent_default": ModelSettings(thinking="high", max_tokens=4048),
+    "edge_agent_default": ModelSettings(thinking=False, max_tokens=4048),
     "edge_agent_fast": ModelSettings(thinking=False, max_tokens=4048),
     "llm_judge_default": ModelSettings(thinking=True),
 }
