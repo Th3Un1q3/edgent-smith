@@ -1,4 +1,5 @@
 {
     "chat.agent.maxRequests": 100,
-    "github.copilot.chat.agentDebugLog.fileLogging.enabled": true
+    "github.copilot.chat.agentDebugLog.fileLogging.enabled": true,
+    "chat.requestQueuing.defaultAction": "queue"
 }
