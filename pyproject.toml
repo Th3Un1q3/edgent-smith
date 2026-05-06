@@ -38,6 +38,7 @@ ignore = ["S603", "S607"]  # subprocess with list is fine
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]  # assert is idiomatic in pytest tests
+"**/tests/**" = ["S101"]  # ignore asserts in nested tests directories
 
 [tool.mypy]
 python_version = "3.13"
