@@ -92,15 +92,39 @@ async def run_edge_agent(prompt: str | None = None) -> None:
     if not prompt:
         raise SystemExit("PROMPT environment variable is required")
 
-    agent = build_edge_agent()
+    # Dry-run local loop: when DRY_RUN_LOCAL_LOOP is set, simulate agent run
+    # without contacting models.
+    result: Any = None
+    if os.getenv("DRY_RUN_LOCAL_LOOP"):
+        start = time.monotonic()
+        # Simulated result matching AgentOutput structure
+        class _Sim:
+            def __init__(self, output: AgentOutput) -> None:
+                self.output: AgentOutput = output
 
-    TIMEOUT_SECONDS = 500
-    start = time.monotonic()
-    try:
-        result = await asyncio.wait_for(agent.run(prompt), timeout=TIMEOUT_SECONDS)
-    except TimeoutError as exc:
-        raise SystemExit(f"Edge agent request timed out after {TIMEOUT_SECONDS} seconds") from exc
-    elapsed = time.monotonic() - start
+            def all_messages(self) -> list[Any]:
+                return []
+
+        simulated_output = AgentOutput(
+            answer="dry-run local loop OK",
+            confidence=ConfidenceEnum.high,
+        )
+        result = _Sim(simulated_output)
+        elapsed = time.monotonic() - start
+    else:
+        agent = build_edge_agent()
+
+        TIMEOUT_SECONDS = 500
+        start = time.monotonic()
+        try:
+            result = await asyncio.wait_for(agent.run(prompt), timeout=TIMEOUT_SECONDS)
+        except TimeoutError as exc:
+            msg = (
+                f"Edge agent request timed out after {TIMEOUT_SECONDS} "
+                "seconds"
+            )
+            raise SystemExit(msg) from exc
+        elapsed = time.monotonic() - start
 
     used_tools: list[str] = []
     for message in result.all_messages():

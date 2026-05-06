@@ -9,5 +9,6 @@
             "--norc",
             "--noprofile"
         ]
-    }
+    },
+    "terminal.integrated.shellIntegration.enabled": true
 }

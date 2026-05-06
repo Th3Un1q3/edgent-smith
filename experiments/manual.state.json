@@ -10,6 +10,80 @@
       "baseline_score": 8,
       "candidate_score": 7,
       "score_delta": -1
+    },
+    {
+      "attempt": 2,
+      "baseline_bootstrapped": false,
+      "baseline_id": "auto_research",
+      "session_name": "experiment-issue-manual-attempt-2",
+      "status": "failed",
+      "workflow_run_id": "manual",
+      "baseline_score": 8,
+      "candidate_score": 7,
+      "score_delta": -1
+    },
+    {
+      "attempt": 3,
+      "baseline_bootstrapped": true,
+      "baseline_id": "local_openrouter",
+      "session_name": "experiment-issue-manual-attempt-3",
+      "status": "failed",
+      "workflow_run_id": "manual",
+      "baseline_score": 192,
+      "candidate_score": 44,
+      "score_delta": -148
+    },
+    {
+      "attempt": 4,
+      "baseline_bootstrapped": false,
+      "baseline_id": "local_openrouter",
+      "session_name": "experiment-issue-manual-attempt-4",
+      "status": "failed",
+      "workflow_run_id": "manual",
+      "baseline_score": 192,
+      "candidate_score": 103,
+      "score_delta": -89
+    },
+    {
+      "attempt": 5,
+      "baseline_bootstrapped": false,
+      "baseline_id": "local_openrouter",
+      "session_name": "experiment-issue-manual-attempt-5",
+      "status": "failed",
+      "workflow_run_id": "manual",
+      "baseline_score": 192,
+      "candidate_score": 152,
+      "score_delta": -40
+    },
+    {
+      "attempt": 6,
+      "baseline_bootstrapped": false,
+      "baseline_id": "local_openrouter",
+      "session_name": "experiment-issue-manual-attempt-6",
+      "status": "failed",
+      "workflow_run_id": "manual",
+      "baseline_score": 192,
+      "candidate_score": 115,
+      "score_delta": -77
+    },
+    {
+      "attempt": 7,
+      "baseline_bootstrapped": false,
+      "baseline_id": "local_openrouter",
+      "session_name": "experiment-issue-manual-attempt-7",
+      "status": "failed",
+      "workflow_run_id": "manual",
+      "baseline_score": 192,
+      "candidate_score": 88,
+      "score_delta": -104
+    },
+    {
+      "attempt": 8,
+      "baseline_bootstrapped": false,
+      "baseline_id": "local_openrouter",
+      "session_name": "experiment-issue-manual-attempt-8",
+      "status": "running",
+      "workflow_run_id": "manual"
     }
   ],
   "issue_number": null

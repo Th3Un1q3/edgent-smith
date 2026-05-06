@@ -1,7 +1,7 @@
 {
-  "score": 88,
-  "passed": false,
-  "cases_total": 9,
+  "score": 192,
+  "passed": true,
+  "cases_total": 6,
   "passing_cases": [
     "smoke::arithmetic",
     "smoke::factual_geography",
@@ -11,10 +11,15 @@
     "extended::numbers"
   ],
   "regressions": [],
-  "avg_passing_case_seconds": 6.755179206530253,
+  "avg_passing_case_seconds": 3.1212690671284995,
   "effective_baseline_passing_count": 6,
   "regression_penalty": 0,
   "model": "edge_agent_local_openrouter",
   "datasets": "smoke+extended+long_inputs",
-  "baseline_id": "local_openrouter"
+  "baseline_id": "local_openrouter",
+  "_provenance": {
+    "git_sha": "61844b9b181d",
+    "eval_set_version": "e7897549",
+    "source_experiment_id": null
+  }
 }

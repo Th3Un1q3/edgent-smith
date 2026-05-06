@@ -102,6 +102,35 @@ Additional flags are forwarded to `scripts/experiment.py`, for example:
 just run-experiment "Dry-run probe" --dry --baseline-id auto_research --issue-number 123
 ```
 
+For the local foreground loop, prefer:
+
+```bash
+just run-experiment-loop \
+  --hooks local \
+  --engineer-model gpt-5-mini \
+  --eval-model edge_agent_local_openrouter \
+  --baseline-id local_openrouter
+```
+
+`--model-alias` and `--model` remain compatibility aliases for the engineer model option.
+
+`just experiment-loop` remains a compatibility alias for the same command.
+
+`--hooks <set>` resolves hook scripts under `hooks/<set>/`. With `--hooks local`, the loop uses the two example local hooks when present:
+
+- `experiment_generated.sh` initializes `experiments/local_idea_draft.yaml` with a placeholder local idea when no draft/title/body inputs exist yet.
+- `experiment_complete.sh` appends a per-iteration result summary to `experiments/local_loop_history.log` after each iteration.
+
+Loop stop behavior is intentionally foreground and minimal:
+
+- `--max-experiments` and `--max-minutes` are soft stops. The loop finishes the current iteration, then exits.
+- Manual interruption remains immediate because the loop runs in the foreground.
+
+Baseline handling remains strict:
+
+- Promotion is strict-improvement-only.
+- `just baseline-status <baseline-id>` is diagnostic only and does not promote anything.
+
 Inside the DevContainer:
 
 ```bash

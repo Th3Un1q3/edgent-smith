@@ -43,7 +43,7 @@ eval-local:
 # For CI: run all available datasets to detect regressions across sets.
 # We explicitly pass the known sets to ensure CI stability.
 eval-ci:
-  {{EVAL}} --baseline-id auto_research --set smoke --set extended
+  {{EVAL}} --baseline-id auto_research
 
 # Output candidate vs baseline status for the requested baseline ID.
 baseline-status baseline_id:
@@ -80,6 +80,12 @@ run-experiment prompt *ARGS:
     --prompt '{{prompt}}' \
     --local \
     {{ ARGS }}
+
+# Run the local foreground experiment loop.
+# Arguments are forwarded directly to the local-loop command in experiment.py.
+alias experiment-loop := run-experiment-loop
+run-experiment-loop *ARGS:
+  {{UV}} run python scripts/experiment.py local-loop {{ARGS}}
 
 # Transform vscode mcp config to copilot cli mcp config.
 dev-sync-mcp:

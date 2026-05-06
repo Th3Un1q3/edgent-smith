@@ -1,0 +1,5 @@
+2026-05-06T14:23:59Z	iteration=1	baseline=local_openrouter	status=failed	improved=false	baseline_score=192	candidate_score=44	candidate=/workspace/experiments/candidate.md
+2026-05-06T14:26:55Z	iteration=2	baseline=local_openrouter	status=failed	improved=false	baseline_score=192	candidate_score=103	candidate=/workspace/experiments/candidate.md
+2026-05-06T14:31:07Z	iteration=3	baseline=local_openrouter	status=failed	improved=false	baseline_score=192	candidate_score=152	candidate=/workspace/experiments/candidate.md
+2026-05-06T14:32:25Z	iteration=4	baseline=local_openrouter	status=failed	improved=false	baseline_score=192	candidate_score=115	candidate=/workspace/experiments/candidate.md
+2026-05-06T14:33:53Z	iteration=5	baseline=local_openrouter	status=failed	improved=false	baseline_score=192	candidate_score=88	candidate=/workspace/experiments/candidate.md

@@ -157,7 +157,7 @@ When adding a CLI, binary, or external service to repo scripts, workflows, or th
 - Prefer environment-provided services over host-installed binaries when both are available.
 - If a script genuinely requires a tool, fail fast with a clear message.
 - Test the absent-tool path only when you introduced such a guard.
-- Prefer `uv run python` for repository Python execution when `uv` is installed, instead of manually sourcing a virtual environment.
+- Prefer `uv run python` for all repository Python execution when `uv` is installed. Do not hardcode a virtualenv interpreter path like `/workspace/.venv/bin/python`; use `uv run python` so the active repo environment is resolved consistently instead of relying on brittle manual venv workarounds. Instead of `. .venv/bin/activate && python -m pytest tests/test_experiment.py -q`, use `uv run pytest tests/test_experiment.py -q` for test execution.
 
 ## Execution environment — mandatory for Python commands
 
