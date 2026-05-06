@@ -13,6 +13,7 @@ authors = [{ name = "edgent-smith contributors" }]
 dependencies = [
     "pydantic-ai[evals]>=0.0.14",
     "httpx>=0.27",
+    "click>=8.1,<10",
 ]
 
 [project.optional-dependencies]
@@ -25,7 +26,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["agents", "evals"]
+packages = ["agents", "evals", "cli"]
 
 [tool.ruff]
 line-length = 100
