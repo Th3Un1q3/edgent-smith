@@ -51,7 +51,7 @@ baseline-status baseline_id:
 
 # Promote a candidate baseline when its score is higher than the current baseline.
 promote-baseline baseline_id:
-  bash scripts/promote_baseline.sh "{{baseline_id}}"
+  {{UV}} run python scripts/experiment.py promote-baseline --baseline-id "{{baseline_id}}"
 
 
 # Pull the model before running the experiment.
@@ -64,12 +64,21 @@ experiment-submit-spec title description:
   DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf '%s\n' '---' "title: \"{{title}}\"" "date: ${DATE}" '---' '' "{{description}}" > experiments/candidate.md
   echo "Wrote experiments/candidate.md"
+  git add experiments/candidate.md
+  git diff --cached --quiet || git commit -m "experiment: add spec — {{title}}"
 
 # Run the Copilot experiment runner locally with a prompt.
 # The prompt is required; additional flags are forwarded to experiment.py.
-run-experiment prompt *ARGS: pull-ollama-model
-  python scripts/experiment.py run \
+#
+# Local behaviour vs CI:
+#   - No git push (the workflow owns all git operations).
+#   - No GitHub issue labels or comments (workflow-only side effects).
+#   - State is written to experiments/manual.state.json.
+#   - Pass --local to signal local-only mode (no-op today, available for hooks).
+run-experiment prompt *ARGS:
+  {{UV}} run python scripts/experiment.py run \
     --prompt '{{prompt}}' \
+    --local \
     {{ ARGS }}
 
 # Transform vscode mcp config to copilot cli mcp config.

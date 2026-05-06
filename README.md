@@ -19,7 +19,7 @@ tests/
 .devcontainer/                 # Python 3.13 + Ollama sidecar
 .github/
   agents/
-    brainstorm.agent.md        # Copilot custom agent – generates experiment issues
+    edge-architect.agent.md    # Copilot custom agent – designs experiments and replenishes queue
     implement.agent.md         # Copilot custom agent – implements experiments
   prompts/                     # *.prompt.md – general agent prompts
   workflows/
@@ -32,22 +32,22 @@ tests/
 ## Three-agent workflow
 
 ```
-Copilot Brainstorm Agent  (.github/agents/brainstorm.agent.md)
-  └─ generates ideas → creates GitHub issues labelled "auto-research"
+Copilot Edge Architect Agent  (.github/agents/edge-architect.agent.md)
+  └─ designs experiments → creates GitHub issues labelled "auto-research"
         │
         ▼  (issues.labeled trigger)
   experiment.yml workflow  ← runs inside DevContainer
         │
-        ├─ invokes GitHub Copilot CLI (@github/copilot, model: gpt-5-mini)
+        ├─ invokes GitHub Copilot CLI (@github/copilot, model: gpt-5)
         │   with .github/agents/implement.agent.md as instructions
         │   Copilot edits agents/edge.py directly with its file tools
         │
         ├─ runs pydantic_evals smoke suite → score
         │
-        ├─ score >= baseline
-        │   └─ commit + push + open PR + comment ✅ on issue
+        ├─ candidate improves baseline and promotion succeeds
+        │   └─ promote baseline + commit + push + comment ✅ on issue
         │
-        └─ score < baseline
+        └─ candidate does not improve baseline or later workflow side effects fail
             └─ comment ❌ on issue with details
 ```
 
@@ -63,7 +63,7 @@ Copilot Brainstorm Agent  (.github/agents/brainstorm.agent.md)
 ### Required repository secret
 
 The auto-research workflow uses the real **GitHub Copilot CLI** (`@github/copilot`)
-with the `gpt-5-mini` model. It requires one secret set in
+with the `gpt-5` model. It requires one secret set in
 **Settings → Secrets and variables → Actions**:
 
 | Secret | How to create |
@@ -77,6 +77,30 @@ with the `gpt-5-mini` model. It requires one secret set in
 The minimum assertion pass-rate is stored per-baseline ID in `../{baseline_id}.baseline.json`.  
 The runner reads the current baseline from that file if present and writes a candidate result to
 `../{baseline_id}.baseline-candidate.json` for later promotion or review.
+
+For the reusable experiment workflow, baseline handling is split intentionally:
+
+- If the requested baseline file does not exist yet, `scripts/experiment.py` bootstraps it before the first Copilot edit by running the eval lane once and promoting that candidate into the baseline file.
+- After a normal experiment run produces a better candidate, the GitHub workflow owns the promotion step, labels/comments on the issue, and the final commit/push on `auto_research`.
+
+The experiment runner also keeps durable per-issue state in `experiments/<issue_number>.state.json`.
+That state tracks attempt history, the deterministic Copilot session name, whether bootstrap happened,
+and minimal workflow handoff data. Workflow-owned side effects are persisted separately in the same file
+as `promotion_applied`, `commit_pushed`, `status_comment_id`, and `replenishment_issue_number`.
+When the auto-research queue becomes empty after terminalization, the workflow may also draft and create
+exactly one replacement `auto-research` issue through the edge-architect agent.
+
+For local or manual runs, the public entrypoint is:
+
+```bash
+just run-experiment "Please read experiments/123.md for the full issue body. Perform described experiment end to end."
+```
+
+Additional flags are forwarded to `scripts/experiment.py`, for example:
+
+```bash
+just run-experiment "Dry-run probe" --dry --baseline-id auto_research --issue-number 123
+```
 
 Inside the DevContainer:
 

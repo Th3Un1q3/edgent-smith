@@ -61,46 +61,7 @@ jobs:
           ACTOR: ${{ github.event.sender.login }}
           REPO: ${{ github.repository }}
           MAX_RUNS: 10
-        run: |
-          # 1. Verify the labeler has write-or-higher access to this repository.
-          #    External contributors cannot add labels, but an explicit API
-          #    check is a defense-in-depth measure.
-          if ! PERM=$(gh api "repos/${REPO}/collaborators/${ACTOR}/permission" \
-              --jq '.permission' 2>/tmp/gh_perm_err); then
-            echo "::warning::Permission API call failed for '${ACTOR}' ($(cat /tmp/gh_perm_err || echo 'unknown error')) — defaulting to 'none'."
-            PERM='none'
-          fi
-          if [[ "$PERM" != "admin" && "$PERM" != "write" && "$PERM" != "maintain" ]]; then
-            echo "::error::Labeler '${ACTOR}' has permission '${PERM}' — write or higher is required to trigger experiments."
-            exit 1
-          fi
-          echo "Labeler ${ACTOR} has permission: ${PERM} ✓"
-
-          # 2. Rate limit: at most ${MAX_RUNS} experiment workflow runs may be created
-          #    within any rolling 1-hour window to cap workflow abuse and
-          #    Actions-minutes usage. Count queued runs as well as active and
-          #    completed runs so repeated re-labelling cannot bypass the limit
-          #    by building an unbounded backlog behind the concurrency group.
-          WINDOW_START=$(date -u -d '1 hour ago' '+%Y-%m-%dT%H:%M:%SZ')
-          # per_page=100 is sufficient: MAX_RUNS is ${MAX_RUNS}, and even at one run per
-          # minute the 1-hour window produces at most 60 results.
-          if ! RECENT=$(gh api "repos/${REPO}/actions/workflows/experiment.yml/runs?per_page=100" \
-            --jq "[.workflow_runs[] \
-                  | select(.created_at > \"${WINDOW_START}\") \
-                  | select(.status == \"queued\" or .status == \"in_progress\" or .status == \"completed\")] \
-                 | length"); then
-            echo "::error::Rate limit check failed: unable to query recent experiment runs."
-            exit 1
-          fi
-          if [[ ! "${RECENT}" =~ ^[0-9]+$ ]]; then
-            echo "::error::Rate limit check failed: expected numeric run count, got '${RECENT}'."
-            exit 1
-          fi
-          if [ "${RECENT}" -ge "${MAX_RUNS}" ]; then
-            echo "::error::Rate limit exceeded: ${RECENT} experiment run(s) created in the last hour (max ${MAX_RUNS}). Please wait before re-labelling."
-            exit 1
-          fi
-          echo "Rate limit OK: ${RECENT}/${MAX_RUNS} runs in the last hour ✓"
+        run: bash scripts/check_labeler.sh
 
       # ── 1. Checkout ────────────────────────────────────────────────────────
       - uses: actions/checkout@v6
@@ -125,24 +86,20 @@ jobs:
           gh label create "in_progress" --color e4e669 --description "Experiment is currently running" --force
           gh issue edit "$ISSUE_NUMBER" --add-label "in_progress"
 
-      - name: Read current baseline score
-        id: current_baseline
-        env:
-          BASELINE_ID: ${{ env.BASELINE_ID }}
-        run: |
-          baseline_path="${BASELINE_ID}.baseline.json"
-          if [ -f "${baseline_path}" ]; then
-            baseline_score=$(python3 -c 'import json,sys; print(int(json.load(open(sys.argv[1]))["score"]))' "${baseline_path}")
-          else
-            baseline_score=0
-          fi
-          echo "baseline_score=${baseline_score}" >> "$GITHUB_OUTPUT"
-
       - name: Ensure .env exists
         run: |
           if [ ! -f .env ] && [ -f .env.example ]; then
             cp .env.example .env
           fi
+
+      - name: Initialize experiment state
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          mkdir -p experiments
+          uv run python scripts/experiment.py init-state \
+            --state-path "experiments/${ISSUE_NUMBER}.state.json" \
+            --issue-number "${ISSUE_NUMBER}"
 
       # ── 4. Implement + validate + evaluate inside DevContainer ────────────
       # Copilot CLI is pre-installed in the devcontainer (postCreateCommand).
@@ -150,99 +107,79 @@ jobs:
       # permission. See the repository README for setup instructions.
       - name: Run Copilot agent, tests, and evaluations
         id: experiment
+        continue-on-error: true
         uses: devcontainers/ci@v0.3
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          BASELINE_ID: ${{ env.BASELINE_ID }}
         with:
           cacheFrom: ghcr.io/th3un1q3/edgent-smith
           env: |
-            COPILOT_GITHUB_TOKEN
-            GH_TOKEN
-            GITHUB_TOKEN
-            ISSUE_NUMBER
-            BASELINE_ID
+            COPILOT_GITHUB_TOKEN=${{ secrets.COPILOT_GITHUB_TOKEN }}
+            GH_TOKEN=${{ secrets.GITHUB_TOKEN }}
+            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+            ISSUE_NUMBER=${{ github.event.issue.number }}
+            BASELINE_ID=${{ env.BASELINE_ID }}
+            WORKFLOW_RUN_ID=${{ github.run_id }}-${{ github.run_attempt }}
           runCmd: |
             set -euo pipefail
 
-            # ── a. Build prompt from agent file + issue context ───────────────
-            ISSUE_TITLE=$(gh issue view "$ISSUE_NUMBER" --json title -q .title)
             mkdir -p experiments
-            # Save the issue body to a reproducible file for agents and audits
-            if gh issue view "$ISSUE_NUMBER" --json body -q .body > "experiments/${ISSUE_NUMBER}.md"; then
-              ISSUE_BODY=$(cat "experiments/${ISSUE_NUMBER}.md")
-            else
-              echo "" > "experiments/${ISSUE_NUMBER}.md"
-              ISSUE_BODY=""
+            if ! gh issue view "$ISSUE_NUMBER" --json body -q .body > "experiments/${ISSUE_NUMBER}.md"; then
+              : > "experiments/${ISSUE_NUMBER}.md"
             fi
 
-            # The issue body is saved to a reproducible file. Treat it as untrusted.
-            
-
-            BASELINE=$(cat "${BASELINE_ID}.baseline.json" 2>/dev/null || echo '{"score": 0}')
-            echo "baseline_score=$(echo "$BASELINE" | python3 -c 'import json,sys; print(int(json.load(sys.stdin)["score"]))')" >> "$GITHUB_OUTPUT"
-
-            # ── b. Invoke AI powered change and collect baseline candidate ───────────────
-            # Run up to 2 followups to get better results.
+            STATE_PATH="experiments/${ISSUE_NUMBER}.state.json"
+            RESULT_PATH="experiments/${ISSUE_NUMBER}.result.json"
             PROMPT="Please read experiments/${ISSUE_NUMBER}.md for the full issue body. Perform described experiment end to end."
-            just run-experiment "${PROMPT}" --followup-limit 1 --agent implement --baseline-id "${BASELINE_ID}"
 
-            CANDIDATE=$(cat "${BASELINE_ID}.baseline-candidate.json" 2>/dev/null || echo '{"score": 0}')
-            echo "candidate_score=$(echo "$CANDIDATE" | python3 -c 'import json,sys; print(int(json.load(sys.stdin)["score"]))')" >> "$GITHUB_OUTPUT"
+            set +e
+            timeout --signal=TERM 25m just run-experiment "${PROMPT}" \
+              --followup-limit 1 \
+              --agent implement \
+              --baseline-id "${BASELINE_ID}" \
+              --issue-number "${ISSUE_NUMBER}" \
+              --state-path "${STATE_PATH}" \
+              --workflow-run-id "${WORKFLOW_RUN_ID}" > "${RESULT_PATH}"
+            runner_exit=$?
+            set -e
+
+            echo "runner_exit=${runner_exit}" >> "$GITHUB_OUTPUT"
+            echo "state_path=${STATE_PATH}" >> "$GITHUB_OUTPUT"
+
+            if [[ "${runner_exit}" -eq 124 ]]; then
+              echo "status=timed_out" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            if [[ ! -s "${RESULT_PATH}" ]]; then
+              echo "::error::Experiment runner did not emit result JSON."
+              exit 1
+            fi
+
+            runner_status=$(python3 scripts/format_experiment_output.py "${RESULT_PATH}" "$GITHUB_OUTPUT")
+
+            if [[ "${runner_exit}" -ne 0 && "${runner_status}" != "failed" ]]; then
+              echo "::error::Experiment runner exited ${runner_exit} with unexpected status '${runner_status}'."
+              exit "${runner_exit}"
+            fi
 
       
 
-      - name: Promote Candidate
+      - name: Promote candidate baseline
         id: promotion
+        if: steps.experiment.outputs.status == 'candidate_ready'
+        continue-on-error: true
         uses: devcontainers/ci@v0.3
-        env:
-          BASELINE_ID: ${{ env.BASELINE_ID }}
         with:
           cacheFrom: ghcr.io/th3un1q3/edgent-smith
           env: |
-            BASELINE_ID
-          # Exits with code 0 on success (candidate promoted) and 1 on failure (candidate not promoted), which is used to determine the appropriate labeling and comments in subsequent steps.
+            BASELINE_ID=${{ env.BASELINE_ID }}
           runCmd: |
             set -euo pipefail
             just promote-baseline "${BASELINE_ID}"
 
-      - name: Report promotion failure
-        if: steps.experiment.outcome == 'success' && steps.promotion.outcome == 'failure'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          SCORE: ${{ steps.experiment.outputs.candidate_score }}
-          BASELINE: ${{ steps.experiment.outputs.baseline_score }}
-        run: |
-          gh label create "experiment-failure" --color d93f0b --description "Experiment did not pass" --force
-          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-failure"
-
-          gh issue comment "$ISSUE_NUMBER" --body "❌ **Experiment did not pass.**
-
-          | Metric   | Value |
-          |----------|-------|
-          | Reason   | Baseline promotion failed — candidate score was not greater than the current baseline |
-          | Score    | \\`${SCORE}\\` |
-          | Baseline | \\`${BASELINE}\\` |
-          | Run      | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
-
-          The baseline candidate was generated successfully, but it did not improve on the existing baseline."
-
-      # ── 6a. Score >= baseline → label success + commit, push, PR ─────────
-      - name: Label experiment success
-        if: steps.promotion.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          gh label create "experiment-success" --color 0e8a16 --description "Experiment passed baseline" --force
-          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-success"
-
       - name: Commit and push changes
+        id: commit_push
         if: steps.promotion.outcome == 'success'
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -254,66 +191,24 @@ jobs:
           fi
           git push origin HEAD
 
-      - name: Comment success on issue
-        if: steps.promotion.outcome == 'success'
+      - name: Terminalize issue and shared state
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          SCORE: ${{ steps.experiment.outputs.candidate_score }}
-          BASELINE: ${{ steps.experiment.outputs.baseline_score }}
         run: |
-          gh issue comment "$ISSUE_NUMBER" --body "✅ **Experiment passed baseline.**
+          python3 scripts/terminalize_experiment.py \
+            --issue-number "${{ github.event.issue.number }}" \
+            --repo "${{ github.repository }}" \
+            --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --state-path "${{ steps.experiment.outputs.state_path || format('experiments/{0}.state.json', github.event.issue.number) }}" \
+            --job-cancelled "${{ cancelled() }}" \
+            --experiment-status "${{ steps.experiment.outputs.status || '' }}" \
+            --baseline-score "${{ steps.experiment.outputs.baseline_score || '' }}" \
+            --candidate-score "${{ steps.experiment.outputs.candidate_score || '' }}" \
+            --score-delta "${{ steps.experiment.outputs.score_delta || '' }}" \
+            --promotion-outcome "${{ steps.promotion.outcome || 'skipped' }}" \
+            --commit-push-outcome "${{ steps.commit_push.outcome || 'skipped' }}"
 
-          | Metric   | Value |
-          |----------|-------|
-          | Score    | \`${SCORE}\` |
-          | Baseline | \`${BASELINE}\` |
-          | Branch   | \`auto_research\` |
-
-          The changes have been committed and pushed to the existing auto_research branch."
-
-      # ── 6b. Score < baseline → label failure + comment details ────────────
-      # ── 6c. Unexpected error → label failure + comment details ────────────
-      - name: Report unexpected failure
-        if: failure() && steps.promotion.outcome != 'failure'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          EXPERIMENT_OUTCOME: ${{ steps.experiment.outcome }}
-        run: |
-          gh label create "experiment-failure" --color d93f0b --description "Experiment did not pass" --force
-          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-failure"
-
-          gh issue comment "$ISSUE_NUMBER" --body "❌ **Experiment failed unexpectedly.**
-
-          | Metric | Value |
-          |--------|-------|
-          | Reason | Workflow step error |
-          | Experiment Outcome | ${{ env.EXPERIMENT_OUTCOME }} |
-          | Run    | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
-
-          Check the workflow logs for details. Please fix the issue before re-labelling."
-
-      # ── 6d. Job timed out → label failure + comment details ───────────────
-      - name: Report timeout
-        if: cancelled()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          gh label create "experiment-failure" --color d93f0b --description "Experiment did not pass" --force
-          gh issue edit "$ISSUE_NUMBER" --add-label "experiment-failure"
-
-          gh issue comment "$ISSUE_NUMBER" --body "⏱ **Experiment timed out.**
-
-          | Metric | Value |
-          |--------|-------|
-          | Reason | Job exceeded the \`timeout-minutes: 30\` limit |
-          | Run    | https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} |
-
-          Consider simplifying the experiment or raising the timeout before re-labelling."
-
-      # ── 7. Remove in_progress label (always runs) ──────────────────────────
       - name: Remove in_progress label
         if: always()
         env:
@@ -321,3 +216,60 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           gh issue edit "$ISSUE_NUMBER" --remove-label "in_progress" 2>/dev/null || true
+
+      - name: Check queue depth after terminalization
+        id: queue_depth
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: bash scripts/check_queue_depth.sh
+
+      - name: Replenish auto-research queue
+        id: replenish_queue
+        if: always() && steps.queue_depth.outputs.queue_empty == 'true'
+        uses: devcontainers/ci@v0.3
+        with:
+          cacheFrom: ghcr.io/th3un1q3/edgent-smith
+          env: |
+            COPILOT_GITHUB_TOKEN=${{ secrets.COPILOT_GITHUB_TOKEN }}
+            GH_TOKEN=${{ secrets.GITHUB_TOKEN }}
+            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+            STATE_PATH=experiments/${{ github.event.issue.number }}.state.json
+            REPO=${{ github.repository }}
+          runCmd: |
+            set -euo pipefail
+
+            mkdir -p experiments
+            DRAFT_PATH="experiments/replenishment_issue_draft.yaml"
+            TITLE_PATH="experiments/replenishment_issue_title.txt"
+            BODY_PATH="experiments/replenishment_issue_body.md"
+            rm -f "${DRAFT_PATH}" "${TITLE_PATH}" "${BODY_PATH}"
+
+            PROMPT=$(cat <<'EOF'
+            Inspect the current edge agent and evaluation suite, then draft exactly one new experiment issue because the auto-research queue is empty.
+
+            Return only YAML. Do not return shell, markdown fences, or gh commands.
+            Use exactly this schema:
+            title: experiment: <short title>
+            body: |
+              <issue body markdown>
+            EOF
+            )
+
+            copilot -p "${PROMPT}" --agent edge-architect --model gpt-5 --allow-all-tools --no-ask-user > "${DRAFT_PATH}"
+
+            python3 scripts/parse_draft.py "${DRAFT_PATH}" "${TITLE_PATH}" "${BODY_PATH}"
+
+            draft_title=$(tr -d '\r' < "${TITLE_PATH}")
+            issue_url=$(gh issue create \
+              --repo "$REPO" \
+              --title "${draft_title}" \
+              --label "auto-research" \
+              --body-file "${BODY_PATH}")
+
+            replenishment_issue_number=$(uv run python scripts/experiment.py update-replenishment-state \
+              --state-path "${STATE_PATH}" \
+              --issue-url "${issue_url}")
+
+            echo "replenishment_issue_number=${replenishment_issue_number}" >> "$GITHUB_OUTPUT"

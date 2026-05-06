@@ -43,6 +43,20 @@ Publish the spec with the shell command:
 
 just experiment-submit-spec "<title>" "<markdown body>"
 
+## Queue replenishment mode
+
+When invoked for queue replenishment (i.e. the auto-research queue is empty and the workflow needs a new issue), return **only** a raw YAML document — no markdown fences, no shell commands, no `gh` commands, no prose before or after. Emit exactly one issue draft matching this schema:
+
+```
+title: experiment: <short title>
+body: |
+  <issue body markdown>
+```
+
+- `title` must start with `experiment:`.
+- `body` must use a literal block scalar (indented 2 spaces).
+- The agent's normal broad scope applies: architecture, prompting, libraries, model configurations, tooling, or any other variable that could improve the system.
+
 ## Example Experiment Specification
 
 Proper experiment has no overcomplications, is easy to understand, and has a clear hypothesis and validation plan.

@@ -1,5 +1,13 @@
 {
     "chat.agent.maxRequests": 100,
     "github.copilot.chat.agentDebugLog.fileLogging.enabled": true,
-    "chat.requestQueuing.defaultAction": "queue"
+    "chat.requestQueuing.defaultAction": "queue",
+    "terminal.integrated.defaultProfile.linux": "bash",
+    "chat.tools.terminal.terminalProfile.linux": {
+        "path": "/bin/bash",
+        "args": [
+            "--norc",
+            "--noprofile"
+        ]
+    }
 }

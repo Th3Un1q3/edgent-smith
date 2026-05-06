@@ -1,0 +1,361 @@
+plan_id: 20260505-reusable-experiment-workflow
+objective: Make the reusable experiment workflow failure-safe with explicit baseline bootstrap, minimal durable state, workflow-owned GitHub side effects, narrow queue replenishment, and focused orchestration tests.
+created_at: 2026-05-05T18:55:00Z
+created_by: GitHub Copilot GPT-5.4
+status: pending
+research_confidence: medium
+plan_metrics:
+  wave_1_task_count: 1
+  total_dependencies: 5
+  risk_score: medium
+tldr: |
+  Keep a single Python runner and a single workflow YAML. Add one per-issue
+  state sidecar with attempt history, explicit bootstrap and rerun recovery,
+  GPT-5 non-interactive Copilot invocation, workflow-owned terminal side
+  effects, and one narrow queue-empty replenishment branch using the existing
+  brainstorm agent. Do not add a registry or runner-side git rollback.
+open_questions: []
+gaps:
+  - description: No prior research_findings YAML or PRD file exists for this plan; the revision is grounded in the current workflow, runner, justfile, README, brainstorm agent, and existing tests.
+    refinement_requests: []
+pre_mortem:
+  overall_risk_level: medium
+  critical_failure_modes:
+    - scenario: A stale in-flight attempt is resumed incorrectly, causing duplicate promotion or masking a prior crash.
+      likelihood: medium
+      impact: critical
+      mitigation: Persist workflow_run_id and session_name per attempt, mark older nonterminal attempts as crashed on rerun, and always append a fresh attempt.
+    - scenario: Promotion succeeds but a later workflow side effect fails, leaving the run in an ambiguous terminal state.
+      likelihood: medium
+      impact: high
+      mitigation: Persist workflow side-effect flags separately and distinguish promotion_failed from post_candidate_failed.
+    - scenario: Queue-empty replenishment creates duplicate issues.
+      likelihood: low
+      impact: medium
+      mitigation: Reuse the existing global concurrency group, check queue depth only after terminalization, and create at most one new issue.
+  assumptions:
+    - The existing brainstorm agent remains the approved architect path for generating new experiment issues.
+    - Baseline bootstrap can execute before any Copilot mutation in the same workflow run.
+    - The baseline and candidate artifact formats must remain unchanged.
+    - A per-issue state sidecar is sufficient because the workflow already serializes runs through a single concurrency group.
+implementation_specification:
+  code_structure: Keep the current single runner script and single workflow file. Add one per-issue state sidecar in experiments/, one stdout JSON result contract from the runner, and no global registry or git rollback path.
+  affected_areas:
+    - scripts/experiment.py
+    - justfile
+    - .github/workflows/experiment.yml
+    - scripts/validate_workflow_security.py
+    - tests/test_experiment.py
+    - tests/test_runner.py
+    - README.md
+  component_details:
+    - component: Experiment runner
+      responsibility: Own experiment selection, spec loading, baseline bootstrap, Copilot invocation, retries, score delta computation, and machine-readable result emission.
+      interfaces:
+        - just run-experiment "<prompt>" [flags]
+        - python scripts/experiment.py run --prompt "<prompt>" --baseline-id <id> --issue-number <n> --state-path <path> --workflow-run-id <id>
+        - stdout JSON result object consumed by the workflow
+      dependencies:
+        - component: GitHub Copilot CLI
+          relationship: Non-interactive prompt execution with explicit model and resume semantics.
+        - component: Eval runner
+          relationship: Produces standard baseline and candidate artifacts without changing scoring contracts.
+      integration_points:
+        - Per-issue state file in experiments/
+        - just run-experiment public entrypoint
+    - component: Workflow orchestrator
+      responsibility: Own event wiring, permissions, concurrency, labels/comments, promotion, final commit/push, timeout/cancellation terminalization, and queue-empty replenishment.
+      interfaces:
+        - issues.labeled trigger for auto-research
+        - Shared state file updates for workflow-owned side effects
+      dependencies:
+        - component: Experiment runner
+          relationship: Consumes runner JSON result and shared state.
+        - component: Brainstorm agent
+          relationship: Generates one replacement issue only when the queue is empty.
+      integration_points:
+        - GitHub labels and issue comments
+        - just promote-baseline
+        - gh issue create for replenishment
+    - component: Orchestration test harness
+      responsibility: Verify bootstrap ordering, rerun recovery, CLI argument construction, and terminal-state mapping without introducing integration-heavy infrastructure.
+      interfaces:
+        - pytest unit tests with monkeypatch and tmp_path
+      dependencies:
+        - component: Experiment runner
+          relationship: Validates state transitions and CLI assembly.
+        - component: Workflow validator
+          relationship: Validates thin workflow wiring and security-sensitive invariants.
+      integration_points:
+        - tests/test_experiment.py
+        - tests/test_runner.py
+contracts:
+  - from_task: REW-1
+    to_task: REW-2
+    interface: Runner state and result contract
+    format: JSON state file at experiments/<issue_number>.state.json plus one final stdout JSON object containing status, issue_number, baseline_id, attempt, state_path, baseline_score, candidate_score, score_delta, baseline_bootstrapped, and candidate_path.
+  - from_task: REW-2
+    to_task: REW-3
+    interface: Workflow terminal-state mapping
+    format: Candidate-ready attempts may be advanced only to promotion_failed, post_candidate_failed, succeeded, timed_out, or cancelled, with workflow side-effect flags persisted alongside the shared state.
+  - from_task: REW-1
+    to_task: REW-3
+    interface: Copilot CLI invocation contract
+    format: First prompt uses copilot -p with --agent implement --model gpt-5 --allow-all-tools --no-ask-user --output-format json and a deterministic session name; follow-ups use --resume "<session_name>" instead of blind --continue.
+tasks:
+  - id: REW-1
+    title: Make the experiment runner failure-safe and baseline-aware
+    description: Add a per-issue state sidecar with attempt history, explicit missing-baseline bootstrap before the first Copilot edit, deterministic rerun recovery for stale attempts, GPT-5 non-interactive Copilot invocation with named-session resume, score delta emission, and remove unconditional Ollama pre-pull from the public just entrypoint.
+    wave: 1
+    agent: gem-implementer
+    prototype: false
+    covers:
+      - Failure-safe experiment orchestration
+      - Baseline bootstrap semantics
+      - Copilot CLI contract
+      - just entrypoint decoupling
+    priority: high
+    status: pending
+    flags:
+      flaky: false
+      retries_used: 0
+    dependencies: []
+    conflicts_with: []
+    context_files:
+      - path: scripts/experiment.py
+        description: Current stateless runner, retry loop, and Copilot invocation logic.
+      - path: justfile
+        description: Public run-experiment entrypoint currently coupled to pull-ollama-model.
+    diagnosis:
+      root_cause: The current runner keeps no durable orchestration state beyond baseline artifacts, treats missing baseline as score 0 instead of a bootstrap path, uses blind continuation semantics, and couples experiment execution to an unconditional Ollama pull.
+      fix_recommendations: Add one per-issue state file with attempt ownership, bootstrap baseline before edits, emit a final JSON result, use explicit GPT-5 non-interactive Copilot commands with named-session resume, and decouple the just entrypoint from Ollama-only setup.
+      injected_at: 2026-05-05T18:55:00Z
+    planning_pass: 3
+    planning_history:
+      - pass: 3
+        reason: Final revision restored explicit recovery, bootstrap, and CLI semantics while keeping the runner single-file and rollback-free.
+        timestamp: 2026-05-05T18:55:00Z
+    estimated_effort: medium
+    estimated_files: 2
+    estimated_lines: 240
+    focus_area: Orchestration state machine
+    verification:
+      - uv run pytest tests/test_experiment.py -q -k "bootstrap or rerun or cli"
+      - just run-experiment "dry-run probe" --dry --baseline-id auto_research
+    acceptance_criteria:
+      - When the baseline artifact is missing, the runner bootstraps it before any Copilot edit and preserves the existing baseline file format.
+      - The runner records attempt status and workflow_run_id in a per-issue state file and claims stale nonterminal attempts as crashed on rerun.
+      - The runner invokes Copilot with non-interactive GPT-5 parameters and resumes retries by explicit session name rather than blind continue semantics.
+      - The runner emits one final machine-readable JSON result with status, baseline_score, candidate_score, score_delta, attempt, and state_path.
+      - just run-experiment no longer unconditionally depends on pull-ollama-model.
+    failure_modes:
+      - scenario: A fresh rerun accidentally mutates an active attempt instead of creating a new one.
+        likelihood: medium
+        impact: high
+        mitigation: Compare workflow_run_id before claiming a stale attempt and append a new attempt entry for every rerun.
+      - scenario: Baseline bootstrap runs after Copilot edits have already changed the workspace.
+        likelihood: low
+        impact: critical
+        mitigation: Gate Copilot invocation on a completed bootstrap check and persist baseline_bootstrapped in attempt state.
+    tech_stack:
+      - Python 3.13
+      - GitHub Copilot CLI
+      - just
+    test_coverage: Add focused unit tests for bootstrap ordering, rerun recovery, CLI construction, and result emission.
+    research_sources:
+      - local:scripts/experiment.py
+      - local:justfile
+      - local:README.md
+      - local:tests/test_runner.py
+    requires_review: false
+    review_depth: null
+    review_security_sensitive: false
+  - id: REW-2
+    title: Keep the workflow thin while restoring workflow-owned terminal states and queue replenishment
+    description: Update the workflow to initialize and consume the shared state contract, preserve existing event wiring, permissions, concurrency, and security gates, advance candidate-ready attempts into workflow-owned terminal states, record minimal issue-linked side effects, and create exactly one new brainstorm-generated auto-research issue when the queue is empty.
+    wave: 2
+    agent: gem-devops
+    prototype: false
+    covers:
+      - Workflow-owned GitHub side effects
+      - Failure-safe terminalization
+      - Queue-empty replenishment
+    priority: high
+    status: pending
+    flags:
+      flaky: false
+      retries_used: 0
+    dependencies:
+      - REW-1
+    conflicts_with: []
+    context_files:
+      - path: .github/workflows/experiment.yml
+        description: Current workflow wiring, security gate, labels, comments, promotion, and commit/push flow.
+      - path: scripts/validate_workflow_security.py
+        description: Existing validator already coupled to workflow structure and should be kept aligned.
+      - path: .github/agents/brainstorm.agent.md
+        description: Existing architect path for creating new auto-research issues.
+    diagnosis:
+      root_cause: The current workflow relies on step outcomes instead of a durable contract, does not record partial side effects, does not distinguish promotion failure from later side-effect failure, and lacks queue-empty replenishment.
+      fix_recommendations: Keep all GitHub actions in YAML, consume the runner's machine-readable result, persist minimal workflow side-effect flags in shared state, and add a single queue-empty branch that reuses the brainstorm agent.
+      injected_at: 2026-05-05T18:55:00Z
+    planning_pass: 3
+    planning_history:
+      - pass: 3
+        reason: Final revision kept workflow YAML thin but explicit about ownership of GitHub side effects and queue replenishment.
+        timestamp: 2026-05-05T18:55:00Z
+    estimated_effort: medium
+    estimated_files: 3
+    estimated_lines: 260
+    focus_area: GitHub workflow orchestration
+    verification:
+      - python scripts/validate_workflow_security.py
+    acceptance_criteria:
+      - The workflow still owns event wiring, permissions, concurrency, labels/comments, promotion, final commit/push, and security gates.
+      - The workflow consumes runner result data and shared state to set promotion_failed, post_candidate_failed, succeeded, timed_out, and cancelled without any runner-side git rollback.
+      - The shared state includes minimal issue linkage and workflow-owned side-effect fields: issue.number, optional status_comment_id, promotion_applied, commit_pushed, and replenishment_issue_number.
+      - After terminalization, the workflow checks queue depth and creates at most one new auto-research issue through the existing brainstorm agent only when the queue is empty.
+    failure_modes:
+      - scenario: Promotion succeeds but a later push or comment step fails, leaving an ambiguous terminal state.
+        likelihood: medium
+        impact: high
+        mitigation: Persist promotion_applied before later side effects and mark post_candidate_failed if any later required step fails.
+      - scenario: Queue depth is miscounted and duplicate replenishment issues are created.
+        likelihood: low
+        impact: medium
+        mitigation: Reuse global workflow concurrency, count open auto-research and in_progress issues after terminalization, and create at most one new issue.
+    tech_stack:
+      - GitHub Actions
+      - devcontainers/ci
+      - gh CLI
+      - GitHub Copilot CLI
+    test_coverage: Extend the workflow validator and targeted orchestration tests to cover terminal-state mapping and the zero-queue replenishment branch.
+    research_sources:
+      - local:.github/workflows/experiment.yml
+      - local:scripts/validate_workflow_security.py
+      - local:.github/agents/brainstorm.agent.md
+    environment: development
+    requires_approval: false
+    devops_security_sensitive: true
+  - id: REW-3
+    title: Add focused orchestration tests for the shared contract
+    description: Add small pytest coverage for baseline bootstrap ordering, stale-attempt rerun recovery, GPT-5 CLI argument construction, and terminal-state mapping so the runner/workflow contract stays narrow and enforced.
+    wave: 3
+    agent: gem-implementer
+    prototype: false
+    covers:
+      - Bootstrap behavior
+      - Rerun recovery
+      - CLI semantics
+      - Terminal-state mapping
+    priority: high
+    status: pending
+    flags:
+      flaky: false
+      retries_used: 0
+    dependencies:
+      - REW-1
+      - REW-2
+    conflicts_with: []
+    context_files:
+      - path: tests/test_experiment.py
+        description: New focused orchestration test file for experiment runner behavior.
+      - path: tests/test_runner.py
+        description: Existing eval runner tests that can host small contract extensions.
+      - path: scripts/experiment.py
+        description: Source under test for state transitions and CLI argument assembly.
+    diagnosis:
+      root_cause: Existing tests cover eval scoring but not the experiment runner's orchestration contract or the workflow's terminal-state mapping.
+      fix_recommendations: Add narrow tmp_path and monkeypatch-driven tests that assert serialized state fields and exact Copilot argv rather than broader integration scaffolding.
+      injected_at: 2026-05-05T18:55:00Z
+    planning_pass: 3
+    planning_history:
+      - pass: 3
+        reason: Final revision added the explicitly requested focused orchestration tests and kept them unit-scoped.
+        timestamp: 2026-05-05T18:55:00Z
+    estimated_effort: medium
+    estimated_files: 2
+    estimated_lines: 220
+    focus_area: Contract coverage
+    verification:
+      - uv run pytest tests/test_experiment.py -q
+      - uv run pytest tests/test_runner.py -q
+    acceptance_criteria:
+      - Tests verify that baseline bootstrap occurs before any Copilot edit when the baseline artifact is missing.
+      - Tests verify that rerun recovery marks a stale nonterminal attempt as crashed and appends a fresh attempt.
+      - Tests verify non-interactive GPT-5 Copilot argv, including deterministic session naming and explicit resume on follow-ups.
+      - Tests verify terminal mapping for promotion_failed, post_candidate_failed, timed_out, cancelled, and one-shot queue replenishment gating.
+    failure_modes:
+      - scenario: Tests overmock subprocess behavior and miss contract drift in serialized state or argv shape.
+        likelihood: medium
+        impact: medium
+        mitigation: Assert exact JSON fields and exact command argv rather than only coarse success/failure booleans.
+    tech_stack:
+      - Python 3.13
+      - pytest
+      - monkeypatch
+    test_coverage: New tests in tests/test_experiment.py with minimal extensions to existing runner coverage.
+    research_sources:
+      - local:tests/test_runner.py
+      - local:scripts/experiment.py
+      - local:.github/workflows/experiment.yml
+      - local:scripts/validate_workflow_security.py
+    requires_review: false
+    review_depth: null
+    review_security_sensitive: false
+  - id: REW-4
+    title: Document the reusable experiment workflow contract
+    description: Update developer-facing documentation to describe the runner/workflow ownership split, state file, baseline bootstrap and rerun recovery semantics, GPT-5 experiment path, and the removal of unconditional Ollama pull from just run-experiment.
+    wave: 4
+    agent: gem-documentation-writer
+    prototype: false
+    covers:
+      - Developer workflow docs
+    priority: low
+    status: pending
+    flags:
+      flaky: false
+      retries_used: 0
+    dependencies:
+      - REW-2
+      - REW-3
+    conflicts_with: []
+    context_files:
+      - path: README.md
+        description: Primary developer-facing workflow documentation.
+      - path: .github/workflows/experiment.yml
+        description: Source of truth for workflow-owned side effects and queue replenishment behavior.
+      - path: scripts/experiment.py
+        description: Source of truth for runner-owned responsibilities and CLI contract.
+    diagnosis:
+      root_cause: The current docs describe the older gpt-5-mini experiment path and do not explain baseline bootstrap, rerun recovery, or the workflow-owned terminal-state split.
+      fix_recommendations: Keep the update narrow and developer-focused, only documenting the changed contract and public entrypoints.
+      injected_at: 2026-05-05T18:55:00Z
+    planning_pass: 3
+    planning_history:
+      - pass: 3
+        reason: Final revision keeps docs minimal but aligned with the new reusable workflow contract.
+        timestamp: 2026-05-05T18:55:00Z
+    estimated_effort: small
+    estimated_files: 1
+    estimated_lines: 40
+    focus_area: Developer guidance
+    verification:
+      - rg -n "gpt-5|run-experiment|baseline bootstrap|rerun|queue" README.md
+    acceptance_criteria:
+      - The docs explain the runner/workflow ownership split.
+      - The docs describe missing-baseline bootstrap and rerun recovery semantics.
+      - The docs show GPT-5 as the default experiment-path model and note that just run-experiment no longer pulls Ollama unconditionally.
+      - The docs mention queue replenishment through the brainstorm agent only when the queue is empty.
+    failure_modes:
+      - scenario: Documentation implies the workflow runner now owns GitHub side effects.
+        likelihood: low
+        impact: medium
+        mitigation: State the ownership split explicitly and keep side-effect descriptions under the workflow section.
+    task_type: update
+    audience: developers
+    coverage_matrix:
+      - Runner-owned responsibilities
+      - Workflow-owned side effects
+      - Terminal states and rerun recovery
+      - Queue-empty replenishment

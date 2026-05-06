@@ -26,7 +26,7 @@ If blocked: report the blocker, what you verified, and the exact action requeste
 | Agent | File | Role |
 |---|---|---|
 | Edge Agent | `agents/edge.py` | pydantic-ai agent; inline tools; executes core logic and orchestrates workflow |
-| Brainstorm Agent | `.github/agents/brainstorm.agent.md` | Copilot custom agent; generates ideas; creates `auto-research` issues |
+| Edge Architect Agent | `.github/agents/edge-architect.agent.md` | Copilot custom agent; designs experiments and replenishes the auto-research queue |
 | Implementation Agent | `.github/agents/implement.agent.md` | Copilot custom agent; applies experiment changes to `agents/edge.py` |
 
 ## Read only what you need

@@ -1,0 +1,16 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "baseline_bootstrapped": false,
+      "baseline_id": "auto_research",
+      "session_name": "experiment-issue-manual-attempt-1",
+      "status": "failed",
+      "workflow_run_id": "manual",
+      "baseline_score": 8,
+      "candidate_score": 7,
+      "score_delta": -1
+    }
+  ],
+  "issue_number": null
+}
