@@ -127,6 +127,46 @@ def test_session_persistence() -> None:
         assert "--resume=remote-id-123" in args2
 
 
+def test_session_service_supports_initial_continue_without_session_id() -> None:
+    service = CopilotSessionService()
+
+    first_jsonl = json.dumps({"type": "result", "sessionId": "remote-id-123"})
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(stdout=first_jsonl, stderr="", returncode=0)
+
+        service.send_message("first", output_format="json", continue_session=True)
+
+        args = mock_run.call_args[0][0]
+        assert "--continue" in args
+        assert not any(arg.startswith("--resume") for arg in args)
+        assert service.session_id == "remote-id-123"
+
+
+def test_session_service_reuses_persisted_session_after_initial_continue() -> None:
+    service = CopilotSessionService()
+
+    first_jsonl = json.dumps({"type": "result", "sessionId": "remote-id-123"})
+    second_jsonl = json.dumps({"type": "result", "sessionId": "remote-id-123"})
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            MagicMock(stdout=first_jsonl, stderr="", returncode=0),
+            MagicMock(stdout=second_jsonl, stderr="", returncode=0),
+        ]
+
+        service.send_message("first", output_format="json", continue_session=True)
+        service.send_message("second", output_format="json", continue_session=True)
+
+        args1 = mock_run.call_args_list[0][0][0]
+        assert "--continue" in args1
+        assert not any(arg.startswith("--resume") for arg in args1)
+
+        args2 = mock_run.call_args_list[1][0][0]
+        assert "--resume=remote-id-123" in args2
+        assert "--continue" not in args2
+
+
 def test_session_toolset_config() -> None:
     """Test that toolset flags are correctly added to the command."""
     toolset = Toolset(allow_all=True, denied_tools=["git push"])

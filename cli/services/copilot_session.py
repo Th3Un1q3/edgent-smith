@@ -86,6 +86,7 @@ class CopilotSessionService:
         silent: bool = True,
         output_format: str = "text",
         agent: str | None = None,
+        continue_session: bool = False,
     ) -> SessionResult:
         """
         Sends a message to Copilot CLI in non-interactive mode.
@@ -117,6 +118,8 @@ class CopilotSessionService:
 
         if self.session_id:
             cmd.append(f"--resume={self.session_id}")
+        elif continue_session:
+            cmd.append("--continue")
 
         if silent:
             cmd.append("--silent")

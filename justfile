@@ -25,9 +25,9 @@ lint:
 typecheck:
   {{MYPY}} {{CHECK_PATHS}}
 
-# Attempt automatic lint, type, and test fixes, then fall back to Copilot CLI for remaining issues.
+# Run the Python autofix workflow using the hooks defined in autofix.toml.
 fix *ARGS:
-  bash scripts/fix_code.sh {{ARGS}}
+  {{UV}} run python -m cli autoresearch fix {{ARGS}}
 
 # Run the eval runner with the default model.
 # Arguments after the baseline ID are forwarded directly to the underlying

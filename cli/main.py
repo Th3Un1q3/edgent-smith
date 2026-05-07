@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import click
 
+from cli.commands.fix import run_fix
 from cli.commands.init import run_init
 from cli.commands.validate import run_validate
 
@@ -36,6 +37,32 @@ def init(name: str) -> None:
 def validate() -> None:
     """Validate the agentic CLI environment and session persistence."""
     run_validate()
+
+
+@autoresearch.command()
+@click.option(
+    "--autofix-config",
+    default="autofix.toml",
+    show_default=True,
+    help="Path to the TOML workflow config that defines autofix hooks.",
+)
+@click.option(
+    "--continue",
+    "continue_session",
+    is_flag=True,
+    help="Resume the first Copilot fallback turn from the prior CLI session when available.",
+)
+@click.option(
+    "--parallel",
+    is_flag=True,
+    help=(
+        "Run the first validation pass for all autofix hooks concurrently before "
+        "one batched remediation turn."
+    ),
+)
+def fix(autofix_config: str, continue_session: bool, parallel: bool) -> None:
+    """Run the config-driven staged autofix workflow."""
+    run_fix(autofix_config, continue_session=continue_session, parallel=parallel)
 
 
 def main() -> None:

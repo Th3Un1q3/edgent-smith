@@ -166,7 +166,41 @@ EDGENT_NAMED_MODEL=edge_agent_fast just eval "edge_agent_fast"
 
 # Run tests  (uses TestModel – no Ollama needed)
 just test
+
+# Run the autofix workflow
+just fix
 ```
+
+## Autofix workflow
+
+`just fix` now routes directly to the Python CLI implementation:
+
+```bash
+uv run python -m cli autoresearch fix
+```
+
+Pass `--continue` to reuse the prior Copilot session for the first remediation turn:
+
+```bash
+just fix --continue
+```
+
+Pass `--parallel` to run the first pass for all configured hooks concurrently, batch every first-pass failure into a single Copilot remediation turn, then rerun only the hooks that initially failed:
+
+```bash
+just fix --parallel
+```
+
+Without `--parallel`, the CLI runs the hooks defined in `autofix.toml` in file order. With `--parallel`, the first pass starts every configured hook concurrently, then any first-pass failures are collated and retried in config order. The shipped config includes the default `just format`, `just lint`, `just typecheck`, `just test`, and workflow-security checks, and you can add or reorder hooks by editing the file:
+
+```toml
+[[hooks]]
+name = "tests"
+command = "just test"
+remediation_prompt = "Tests failed with this error: ${hook_stdout}. Find the most non breaking way to fix the test. To re-run test use just test"
+```
+
+Each hook needs a `name`, a shell `command`, and a `remediation_prompt`. The prompt supports placeholders including `${hook_name}`, `${hook_command}`, `${hook_stdout}`, `${hook_stderr}`, and `${hook_output}`.
 
 ### Starting the DevContainer from the CLI (no VS Code)
 
