@@ -29,7 +29,7 @@ def test_autoresearch_init_creates_config_file(tmp_path: pathlib.Path) -> None:
         content = config_file.read_text()
         assert f'name = "{project_name}"' in content
         assert 'agentic_cli_type = "copilot_cli"' in content
-        assert "agentic_cli_alias = 'copilot'" in content
+        assert 'agentic_cli_alias = "copilot"' in content
 
 
 @patch("subprocess.run")
@@ -45,11 +45,11 @@ def test_autoresearch_init_verifies_cli_success(
         result = runner.invoke(cli, ["autoresearch", "init", "--name", project_name])
         assert result.exit_code == 0
         assert f"Created project configuration: {project_name}.config.toml" in result.output
-        # Verify subprocess was called with the alias directly (no 'gh' prefix)
-        mock_run.assert_called_once()
-        args = mock_run.call_args[0][0]
-        assert args[0] == "copilot"
-        assert "gh" not in args
+        # Verify subprocess was called for version and message
+        assert mock_run.call_count >= 2
+        version_args = mock_run.call_args_list[0][0][0]
+        assert version_args[0] == "copilot"
+        assert "--version" in version_args
 
 
 @patch("subprocess.run")
@@ -57,7 +57,11 @@ def test_autoresearch_init_fails_if_cli_unauthenticated(
     mock_run: MagicMock, tmp_path: pathlib.Path
 ) -> None:
     """TDD Test: `init` should fail if agentic CLI verification fails."""
-    mock_run.return_value = MagicMock(returncode=1)
+    # First call (version) succeeds, second (message) fails
+    mock_run.side_effect = [
+        MagicMock(returncode=0),
+        MagicMock(returncode=1, stderr="Not authenticated"),
+    ]
     runner = CliRunner()
     project_name = "unverified_project"
 

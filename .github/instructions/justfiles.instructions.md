@@ -70,6 +70,20 @@ Use `justfile` as the canonical source for project commands, not as a place for 
 - Comments start with `#` and appear in `just --list` output.
 - Invoke recipes with `just <recipe>` or `just <recipe> arg`.
 
+## Parameterize recipes with meaningful defaults
+
+- Provide default values for parameters to make recipes easy to run without arguments.
+- Use variadic parameters (`*ARGS`) to allow users to pass additional flags or overrides to the underlying command.
+- This pattern allows a command to have "meaningful defaults with the option to pass some overrides."
+
+Example (the `test` recipe):
+```just
+# Run the unit test suite with default path, or override with custom args.
+# Usage: `just test` (runs all tests) or `just test tests/test_edge_agent.py`
+test *ARGS="tests/":
+  {{PYTEST}} {{ARGS}}
+```
+
 ## Quiet recipes and suppressing command echo
 
 - By default, `just` prints each command it will run to standard error. When a script captures

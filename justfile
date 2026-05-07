@@ -7,15 +7,15 @@ set dotenv-override
 set export
 
 UV := "uv"
-PYTEST := "${UV} run pytest tests/ -q"
+PYTEST := "${UV} run pytest"
 RUFF := "${UV} run ruff"
 MYPY := "${UV} run mypy"
 EVAL := "${UV} run python evals/runner.py"
 CHECK_PATHS := "."
 
 # Run the unit test suite.
-test:
-  {{PYTEST}}
+test *ARGS="tests/ -q":
+  {{PYTEST}} {{ARGS}}
 
 # Run static lint checks.
 lint:

@@ -80,6 +80,7 @@ If a task spans multiple scopes, use the highest relevant scope.
 #### Functional checks
 
 - Run targeted tests first when they exist, then the full test suite if the change is behavioral or cross-cutting: `just test`.
+- You can pass arguments directly to the test runner via `just test [ARGS]`. For example, to run a specific test file with verbose output and all-failure summary: `just test tests/test_cli_init.py -v -ra`.
 - Run CLI or integration smoke checks only for the paths the change affects.
 - If agent or eval behavior changed, run the relevant eval flow and compare the result with the existing baseline before updating anything.
 

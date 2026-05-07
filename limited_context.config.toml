@@ -1,0 +1,3 @@
+name = "limited_context"
+agentic_cli_type = "copilot_cli"
+agentic_cli_alias = 'copilot'
