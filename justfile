@@ -95,6 +95,11 @@ dev-sync-mcp:
 format:
   {{RUFF}} check --fix {{CHECK_PATHS}}
 
+# Proxy commands to the CLI.
+# Usage: just autoresearch <command>
+autoresearch +ARGS:
+  {{UV}} run python -m cli autoresearch {{ARGS}}
+
 # Run the edge agent with timing, tools used, and output.
 edge-agent prompt: pull-ollama-model ollama-status
   #!/usr/bin/env bash

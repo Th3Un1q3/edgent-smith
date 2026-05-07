@@ -7,6 +7,12 @@
       "skillPath": "skills/building-pydantic-ai-agents/SKILL.md",
       "computedHash": "f30a3037bbb153cccc88d996ea8e74865cbdd788c416139d2b080ae78732354a"
     },
+    "python-testing-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "skillPath": "plugins/python-development/skills/python-testing-patterns/SKILL.md",
+      "computedHash": "69915bb276b6aec61fe5b283a933f96584f66d14b616ce2060d95757629c6866"
+    },
     "test-driven-development": {
       "source": "obra/superpowers",
       "sourceType": "github",
