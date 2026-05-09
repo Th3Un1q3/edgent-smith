@@ -100,13 +100,12 @@ format:
 autoresearch +ARGS:
   {{UV}} run python -m cli autoresearch {{ARGS}}
 
-# Run the edge agent with timing, tools used, and output.
-edge-agent prompt: pull-ollama-model ollama-status
+# Run the edge agent with timing, tools used, output, and local OTLP trace metadata.
+edge-agent prompt:
   #!/usr/bin/env bash
   set -euxo pipefail
-  echo "Ollama status impacts performance of the agent."
-  echo "Executing agent, this might take a few minutes. Please wait."
-  PROMPT="{{prompt}}" {{UV}} run python agents/edge.py
+  echo "Executing edge agent with local OpenRouter model and OTLP tracing."
+  PROMPT="{{prompt}}" EDGENT_MODEL_ALIAS=edge_agent_local_openrouter {{UV}} run python agents/edge.py
 
 # Print the current Ollama status.
 ollama-status:

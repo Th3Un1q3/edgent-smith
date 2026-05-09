@@ -13,7 +13,8 @@ from pydantic_ai.models.test import TestModel
 # test collection by providing a harmless default token for Copilot.
 os.environ.setdefault("GITHUB_COPILOT_API_TOKEN", "test-token")
 
-from agents.edge import AgentOutput, build_edge_agent
+from agents import edge as edge_module
+from agents.edge import AgentOutput, ConfidenceEnum, build_edge_agent
 from config import ModelConfig
 
 # Prevent accidental real model requests in CI
@@ -87,3 +88,146 @@ async def test_web_search_stub_returns_message() -> None:
     result = web_search_stub("latest news")
     assert "web_search_stub" in result
     assert "latest news" in result
+
+
+async def test_run_edge_agent_bootstraps_official_logfire_tracing_before_agent_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI runs must bootstrap Logfire's official Pydantic AI tracing hooks."""
+
+    calls: list[tuple[str, object]] = []
+
+    class _FakePart:
+        tool_name = "calculator"
+
+    class _FakeMessage:
+        parts = [_FakePart()]
+
+    class _FakeResult:
+        output = AgentOutput(answer="4", confidence=ConfidenceEnum.high)
+
+        def all_messages(self) -> list[object]:
+            return [_FakeMessage()]
+
+    class _FakeAgent:
+        async def run(self, prompt: str) -> _FakeResult:
+            calls.append(("agent_run", prompt))
+            assert prompt == "What is 2 + 2?"
+            return _FakeResult()
+
+    class _FakeTracing:
+        def bootstrap_local_tracing(self) -> None:
+            calls.append(("bootstrap_local_tracing", None))
+
+        def flush_tracing(self) -> None:
+            calls.append(("flush_tracing", None))
+
+        def print_trace_context(self) -> None:
+            calls.append(("print_trace_context", None))
+
+        def fetch_trace_details(self, invocation_started_at_us: int) -> str:
+            calls.append(("fetch_trace_details", invocation_started_at_us > 0))
+            return '{\n  "traceID": "test",\n  "spans": []\n}'
+
+    monkeypatch.setenv("PROMPT", "What is 2 + 2?")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://jaeger:4318")
+    monkeypatch.delenv("DRY_RUN_LOCAL_LOOP", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", raising=False)
+    monkeypatch.setattr(edge_module, "build_edge_agent", lambda: _FakeAgent())
+    monkeypatch.setattr(edge_module, "edge_tracing", _FakeTracing())
+
+    await edge_module.run_edge_agent()
+
+    assert calls == [
+        ("bootstrap_local_tracing", None),
+        ("agent_run", "What is 2 + 2?"),
+        ("flush_tracing", None),
+        ("print_trace_context", None),
+        ("fetch_trace_details", True),
+    ]
+
+
+async def test_run_edge_agent_prints_inline_trace_details(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI runs must include inline trace details in addition to trace URLs."""
+
+    seen_started_at: list[int] = []
+
+    class _FakeResult:
+        output = AgentOutput(answer="done", confidence=ConfidenceEnum.medium)
+
+        def all_messages(self) -> list[object]:
+            return []
+
+    class _FakeAgent:
+        async def run(self, prompt: str) -> _FakeResult:
+            assert prompt == "Summarize the trace"
+            return _FakeResult()
+
+    class _FakeTracing:
+        def bootstrap_local_tracing(self) -> None:
+            pass
+
+        def flush_tracing(self) -> None:
+            pass
+
+        def print_trace_context(self) -> None:
+            print("Trace query:", "http://jaeger:16686/api/traces?service=edge-agent")
+
+        def fetch_trace_details(self, invocation_started_at_us: int) -> str:
+            seen_started_at.append(invocation_started_at_us)
+            return '{\n  "traceID": "abc123",\n  "spans": []\n}'
+
+    monkeypatch.setenv("PROMPT", "Summarize the trace")
+    monkeypatch.delenv("DRY_RUN_LOCAL_LOOP", raising=False)
+    monkeypatch.setattr(edge_module, "build_edge_agent", lambda: _FakeAgent())
+    monkeypatch.setattr(edge_module, "edge_tracing", _FakeTracing())
+
+    await edge_module.run_edge_agent()
+
+    captured = capsys.readouterr().out
+    assert len(seen_started_at) == 1
+    assert seen_started_at[0] > 0
+    expected_trace = 'Trace details:\n{\n  "traceID": "abc123",\n  "spans": []\n}'
+    assert "Trace query:" in captured
+    assert expected_trace in captured
+
+
+async def test_run_edge_agent_prints_trace_details_when_agent_run_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI runs must still print trace context when the model call fails."""
+
+    class _FakeAgent:
+        async def run(self, prompt: str) -> object:
+            assert prompt == "What is 2+2?"
+            raise RuntimeError("model provider failed")
+
+    class _FakeTracing:
+        def bootstrap_local_tracing(self) -> None:
+            pass
+
+        def flush_tracing(self) -> None:
+            pass
+
+        def print_trace_context(self) -> None:
+            print("Trace query:", "http://jaeger:16686/api/traces?service=edge-agent")
+
+        def fetch_trace_details(self, invocation_started_at_us: int) -> str:
+            assert invocation_started_at_us > 0
+            return '{\n  "traceID": "abc123",\n  "spans": []\n}'
+
+    monkeypatch.setenv("PROMPT", "What is 2+2?")
+    monkeypatch.delenv("DRY_RUN_LOCAL_LOOP", raising=False)
+    monkeypatch.setattr(edge_module, "build_edge_agent", lambda: _FakeAgent())
+    monkeypatch.setattr(edge_module, "edge_tracing", _FakeTracing())
+
+    with pytest.raises(RuntimeError, match="model provider failed"):
+        await edge_module.run_edge_agent()
+
+    captured = capsys.readouterr().out
+    assert "Trace query:" in captured
+    assert 'Trace details:\n{\n  "traceID": "abc123",\n  "spans": []\n}' in captured

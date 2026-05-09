@@ -16,8 +16,13 @@ services:
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       OLLAMA_BASE_URL: http://ollama:11434/v1
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      JAEGER_QUERY_URL: http://jaeger:16686
+      JAEGER_UI_URL: http://localhost:16686
     depends_on:
       - ollama
+      - jaeger
     networks:
       - edgent-dev
 
@@ -27,6 +32,15 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - edgent-dev
+
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.17.0
+    ports:
+      - "16686:16686"
+      - "4318:4318"
     restart: unless-stopped
     networks:
       - edgent-dev

@@ -171,6 +171,8 @@ just test
 just fix
 ```
 
+`just edge-agent` now runs the existing `edge_agent_local_openrouter` alias and prints local Jaeger trace lookup details alongside the agent response. Open `http://localhost:16686` to inspect the full span tree after a run.
+
 ## Autofix workflow
 
 `just fix` now routes directly to the Python CLI implementation:
@@ -260,6 +262,8 @@ otherwise unchanged.
 `docker-compose.yml` already forwards `GITHUB_COPILOT_API_TOKEN` and `COPILOT_GITHUB_TOKEN`, and sets
 `SSL_CERT_FILE` to the system CA bundle, so the Copilot API is reachable from
 inside the DevContainer with no extra configuration.
+
+For interactive validation, `just edge-agent` also bootstraps Pydantic AI's official Logfire instrumentation in local-only mode with `logfire.configure(send_to_logfire=False)` and exports OTLP traces to the Jaeger sidecar at `http://jaeger:4318`.
 
 Inside the DevContainer:
 

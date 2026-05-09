@@ -39,7 +39,9 @@
   "remoteUser": "vscode",
   "forwardPorts": [
     8000,
-    11434
+    11434,
+    16686,
+    4318
   ],
   "portsAttributes": {
     "8000": {
@@ -47,6 +49,12 @@
     },
     "11434": {
       "label": "Ollama"
+    },
+    "16686": {
+      "label": "Jaeger UI"
+    },
+    "4318": {
+      "label": "Jaeger OTLP HTTP"
     }
   }
 }

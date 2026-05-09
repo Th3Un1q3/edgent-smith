@@ -37,7 +37,9 @@ Do not modify CI workflows, devcontainer config, `tests/`, `pyproject.toml`, `*.
 Verify your change with the following shell command:
 `just edge-agent "<prompt>"`
 
-Compare before and after results when validating to confirm the change behaves as expected.
+Use the command output as validation context, not just the final answer. Inspect the printed trace metadata and follow the local Jaeger query/UI details when you need the full execution trace, including tool calls, model spans, and token usage.
+
+Compare before and after results and trace behavior when validating to confirm the change behaves as expected.
 
 Iterate until the result is stable and you are confident in the change. Limit validation runs to a few cycles.
 

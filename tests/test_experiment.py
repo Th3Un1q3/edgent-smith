@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -1127,6 +1128,18 @@ def test_run_experiment_loop_recipe_uses_local_loop_owner() -> None:
     assert "run-experiment-loop *ARGS:" in justfile
     assert "alias experiment-loop := run-experiment-loop" in justfile
     assert "scripts/experiment.py local-loop" in justfile
+
+
+def test_edge_agent_recipe_uses_local_openrouter_without_ollama_bootstrap() -> None:
+    justfile = (REPO_ROOT / "justfile").read_text()
+    match = re.search(r"^edge-agent prompt:.*?(?=^\S|\Z)", justfile, re.MULTILINE | re.DOTALL)
+
+    assert match is not None
+    recipe = match.group(0)
+
+    assert "edge_agent_local_openrouter" in recipe
+    assert "pull-ollama-model" not in recipe
+    assert "ollama-status" not in recipe
 
 
 @pytest.mark.parametrize(

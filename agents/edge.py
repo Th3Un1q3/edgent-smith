@@ -28,6 +28,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
+from agents import edge_tracing
 from config import ModelConfig, resolve_model_config
 from enum import StrEnum
 
@@ -66,7 +67,9 @@ def build_edge_agent(
             the config will be resolved from environment variables.
     """
     if edge_model_config is None:
-        edge_model_config = resolve_model_config("edge_agent_default")
+        edge_model_config = resolve_model_config(
+            os.getenv("EDGENT_MODEL_ALIAS", "edge_agent_default")
+        )
 
     agent = Agent(
         edge_model_config.model,
@@ -97,6 +100,7 @@ async def run_edge_agent(prompt: str | None = None) -> None:
     result: Any = None
     if os.getenv("DRY_RUN_LOCAL_LOOP"):
         start = time.monotonic()
+
         # Simulated result matching AgentOutput structure
         class _Sim:
             def __init__(self, output: AgentOutput) -> None:
@@ -112,19 +116,25 @@ async def run_edge_agent(prompt: str | None = None) -> None:
         result = _Sim(simulated_output)
         elapsed = time.monotonic() - start
     else:
+        edge_tracing.bootstrap_local_tracing()
         agent = build_edge_agent()
 
         TIMEOUT_SECONDS = 500
+        invocation_started_at_us = int(time.time() * 1_000_000)
         start = time.monotonic()
         try:
             result = await asyncio.wait_for(agent.run(prompt), timeout=TIMEOUT_SECONDS)
         except TimeoutError as exc:
-            msg = (
-                f"Edge agent request timed out after {TIMEOUT_SECONDS} "
-                "seconds"
-            )
+            msg = f"Edge agent request timed out after {TIMEOUT_SECONDS} seconds"
             raise SystemExit(msg) from exc
-        elapsed = time.monotonic() - start
+        finally:
+            elapsed = time.monotonic() - start
+            edge_tracing.flush_tracing()
+            edge_tracing.print_trace_context()
+            print("Trace details:")
+            print(
+                edge_tracing.fetch_trace_details(invocation_started_at_us=invocation_started_at_us)
+            )
 
     used_tools: list[str] = []
     for message in result.all_messages():

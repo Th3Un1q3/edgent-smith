@@ -1,0 +1,297 @@
++ echo 'Executing edge agent with local OpenRouter model and OTLP tracing.'
+Executing edge agent with local OpenRouter model and OTLP tracing.
++ PROMPT='What is 2+2?'
++ EDGENT_MODEL_ALIAS=edge_agent_local_openrouter
++ uv run python agents/edge.py
+11:14:51.577 agent run
+11:14:51.582   chat google/gemma-4-26b-a4b-it:free
+11:15:12.598   running tool: calculator
+11:15:12.601   chat google/gemma-4-26b-a4b-it:free
+Trace collector: http://jaeger:4318/v1/traces
+Trace service: edge-agent
+Trace query: http://jaeger:16686/api/traces?service=edge-agent
+Trace UI: http://localhost:16686
+Trace details:
+{
+  "traceID": "019e0c7282397b40db9c969e6cbe87b2",
+  "spans": [
+    {
+      "traceID": "019e0c7282397b40db9c969e6cbe87b2",
+      "spanID": "e88d92f548104ec8",
+      "operationName": "chat google/gemma-4-26b-a4b-it:free",
+      "references": [
+        {
+          "refType": "CHILD_OF",
+          "traceID": "019e0c7282397b40db9c969e6cbe87b2",
+          "spanID": "464cafd8057bcddd"
+        }
+      ],
+      "startTime": 1778325291582806,
+      "duration": 21013701,
+      "tags": [
+        {
+          "key": "otel.scope.name",
+          "type": "string",
+          "value": "pydantic-ai"
+        },
+        {
+          "key": "otel.scope.version",
+          "type": "string",
+          "value": "1.81.0"
+        },
+        {
+          "key": "gen_ai.agent.call.id",
+          "type": "string",
+          "value": "019e0c72-8239-76ae-ad86-cd423985a2ec"
+        },
+        {
+          "key": "gen_ai.agent.name",
+          "type": "string",
+          "value": "agent"
+        },
+        {
+          "key": "gen_ai.input.messages",
+          "type": "string",
+          "value": "[{\"role\": \"system\", \"parts\": [{\"type\": \"text\", \"content\": \"You are a precise, efficient assistant designed for edge deployment on constrained hardware.\\n- Use tools only when necessary and cite any external sources used.\\n\"}]}, {\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"What is 2+2?\"}]}]"
+        },
+        {
+          "key": "gen_ai.operation.name",
+          "type": "string",
+          "value": "chat"
+        },
+        {
+          "key": "gen_ai.output.messages",
+          "type": "string",
+          "value": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"tool_call\", \"id\": \"tool_calculator_HGGx6EMXwpjPCXhqaefd\", \"name\": \"calculator\", \"arguments\": \"{\\\"expression\\\":\\\"2+2\\\"}\"}], \"finish_reason\": \"tool_call\"}]"
+        },
+        {
+          "key": "gen_ai.provider.name",
+          "type": "string",
+          "value": "openai"
+        },
+        {
+          "key": "gen_ai.request.max_tokens",
+          "type": "int64",
+          "value": 4048
+        },
+        {
+          "key": "gen_ai.request.model",
+          "type": "string",
+          "value": "google/gemma-4-26b-a4b-it:free"
+        },
+        {
+          "key": "gen_ai.response.finish_reasons",
+          "type": "string",
+          "value": "[\"tool_call\"]"
+        },
+        {
+          "key": "gen_ai.response.id",
+          "type": "string",
+          "value": "gen-1778325293-ocI83C1KUNLZsvQ9AsOO"
+        },
+        {
+          "key": "gen_ai.response.model",
+          "type": "string",
+          "value": "google/gemma-4-26b-a4b-it-20260403:free"
+        },
+        {
+          "key": "gen_ai.system",
+          "type": "string",
+          "value": "openai"
+        },
+        {
+          "key": "gen_ai.tool.definitions",
+          "type": "string",
+          "value": "[{\"type\": \"function\", \"name\": \"current_datetime\", \"description\": \"Return the current UTC date and time as an ISO 8601 string.\", \"parameters\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}}, {\"type\": \"function\", \"name\": \"calculator\", \"description\": \"Evaluate a simple arithmetic expression.\\n\\nSupports: +, -, *, /, // (floor-div), % (mod), ** (power), (, ), digits, decimals.\\nReturns an error message if the expression is invalid, unsafe, or too large.\", \"parameters\": {\"additionalProperties\": false, \"properties\": {\"expression\": {\"type\": \"string\"}}, \"required\": [\"expression\"], \"type\": \"object\"}}, {\"type\": \"function\", \"name\": \"web_search_stub\", \"description\": \"Stub web-search tool for offline/edge environments.\\n\\nReplace the body with a real search backend when one is available.\", \"parameters\": {\"additionalProperties\": false, \"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"], \"type\": \"object\"}}, {\"type\": \"function\", \"name\": \"final_result\", \"description\": \"Structured output returned by the edge agent.\", \"parameters\": {\"properties\": {\"answer\": {\"description\": \"The agent's direct response\", \"type\": \"string\"}, \"confidence\": {\"default\": \"abstain\", \"description\": \"Self-reported confidence: high | medium | low | abstain\", \"anyOf\": [{\"$ref\": \"#/$defs/ConfidenceEnum\"}]}}, \"required\": [\"answer\"], \"type\": \"object\", \"additionalProperties\": false, \"$defs\": {\"ConfidenceEnum\": {\"enum\": [\"high\", \"medium\", \"low\", \"abstain\"], \"type\": \"string\"}}}}]"
+        },
+        {
+          "key": "gen_ai.usage.details.is_byok",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "key": "gen_ai.usage.input_tokens",
+          "type": "int64",
+          "value": 299
+        },
+        {
+          "key": "gen_ai.usage.output_tokens",
+          "type": "int64",
+          "value": 16
+        },
+        {
+          "key": "logfire.json_schema",
+          "type": "string",
+          "value": "{\"type\": \"object\", \"properties\": {\"gen_ai.input.messages\": {\"type\": \"array\"}, \"gen_ai.output.messages\": {\"type\": \"array\"}, \"model_request_parameters\": {\"type\": \"object\"}}}"
+        },
+        {
+          "key": "logfire.msg",
+          "type": "string",
+          "value": "chat google/gemma-4-26b-a4b-it:free"
+        },
+        {
+          "key": "logfire.span_type",
+          "type": "string",
+          "value": "span"
+        },
+        {
+          "key": "model_request_parameters",
+          "type": "string",
+          "value": "{\"function_tools\": [{\"name\": \"current_datetime\", \"parameters_json_schema\": {\"additionalProperties\": false, \"properties\": {}, \"type\": \"object\"}, \"description\": \"Return the current UTC date and time as an ISO 8601 string.\", \"outer_typed_dict_key\": null, \"strict\": false, \"sequential\": false, \"kind\": \"function\", \"metadata\": null, \"timeout\": null, \"defer_loading\": false, \"prefer_builtin\": null, \"return_schema\": null, \"include_return_schema\": null, \"function_signature\": {\"name\": \"current_datetime\", \"description\": null, \"params\": {}, \"return_type\": {\"name\": \"str\", \"kind\": \"simple\"}, \"referenced_types\": [], \"is_async\": false, \"kind\": \"function\"}}, {\"name\": \"calculator\", \"parameters_json_schema\": {\"additionalProperties\": false, \"properties\": {\"expression\": {\"type\": \"string\"}}, \"required\": [\"expression\"], \"type\": \"object\"}, \"description\": \"Evaluate a simple arithmetic expression.\\n\\nSupports: +, -, *, /, // (floor-div), % (mod), ** (power), (, ), digits, decimals.\\nReturns an error message if the expression is invalid, unsafe, or too large.\", \"outer_typed_dict_key\": null, \"strict\": true, \"sequential\": false, \"kind\": \"function\", \"metadata\": null, \"timeout\": null, \"defer_loading\": false, \"prefer_builtin\": null, \"return_schema\": null, \"include_return_schema\": null, \"function_signature\": {\"name\": \"calculator\", \"description\": null, \"params\": {\"expression\": {\"name\": \"expression\", \"type\": {\"name\": \"str\", \"kind\": \"simple\"}, \"default\": null, \"kind\": \"param\"}}, \"return_type\": {\"name\": \"str\", \"kind\": \"simple\"}, \"referenced_types\": [], \"is_async\": false, \"kind\": \"function\"}}, {\"name\": \"web_search_stub\", \"parameters_json_schema\": {\"additionalProperties\": false, \"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"], \"type\": \"object\"}, \"description\": \"Stub web-search tool for offline/edge environments.\\n\\nReplace the body with a real search backend when one is available.\", \"outer_typed_dict_key\": null, \"strict\": true, \"sequential\": false, \"kind\": \"function\", \"metadata\": null, \"timeout\": null, \"defer_loading\": false, \"prefer_builtin\": null, \"return_schema\": null, \"include_return_schema\": null, \"function_signature\": {\"name\": \"web_search_stub\", \"description\": null, \"params\": {\"query\": {\"name\": \"query\", \"type\": {\"name\": \"str\", \"kind\": \"simple\"}, \"default\": null, \"kind\": \"param\"}}, \"return_type\": {\"name\": \"str\", \"kind\": \"simple\"}, \"referenced_types\": [], \"is_async\": false, \"kind\": \"function\"}}], \"builtin_tools\": [], \"output_mode\": \"tool\", \"output_object\": null, \"output_tools\": [{\"name\": \"final_result\", \"parameters_json_schema\": {\"properties\": {\"answer\": {\"description\": \"The agent's direct response\", \"type\": \"string\"}, \"confidence\": {\"default\": \"abstain\", \"description\": \"Self-reported confidence: high | medium | low | abstain\", \"anyOf\": [{\"$ref\": \"#/$defs/ConfidenceEnum\"}]}}, \"required\": [\"answer\"], \"type\": \"object\", \"additionalProperties\": false, \"$defs\": {\"ConfidenceEnum\": {\"enum\": [\"high\", \"medium\", \"low\", \"abstain\"], \"type\": \"string\"}}}, \"description\": \"Structured output returned by the edge agent.\", \"outer_typed_dict_key\": null, \"strict\": false, \"sequential\": false, \"kind\": \"output\", \"metadata\": null, \"timeout\": null, \"defer_loading\": false, \"prefer_builtin\": null, \"return_schema\": null, \"include_return_schema\": null, \"function_signature\": null}], \"prompted_output_template\": null, \"allow_text_output\": false, \"allow_image_output\": false, \"instruction_parts\": null, \"thinking\": null}"
+        },
+        {
+          "key": "server.address",
+          "type": "string",
+          "value": "openrouter.ai"
+        },
+        {
+          "key": "span.kind",
+          "type": "string",
+          "value": "client"
+        }
+      ],
+      "logs": [],
+      "processID": "p1",
+      "warnings": [
+        "parent span ID=464cafd8057bcddd is not in the trace; skipping clock skew adjustment"
+      ]
+    },
+    {
+      "traceID": "019e0c7282397b40db9c969e6cbe87b2",
+      "spanID": "a560e8873b5a1b4c",
+      "operationName": "running tool",
+      "references": [
+        {
+          "refType": "CHILD_OF",
+          "traceID": "019e0c7282397b40db9c969e6cbe87b2",
+          "spanID": "464cafd8057bcddd"
+        }
+      ],
+      "startTime": 1778325312598389,
+      "duration": 1271,
+      "tags": [
+        {
+          "key": "otel.scope.name",
+          "type": "string",
+          "value": "pydantic-ai"
+        },
+        {
+          "key": "otel.scope.version",
+          "type": "string",
+          "value": "1.81.0"
+        },
+        {
+          "key": "gen_ai.agent.call.id",
+          "type": "string",
+          "value": "019e0c72-8239-76ae-ad86-cd423985a2ec"
+        },
+        {
+          "key": "gen_ai.agent.name",
+          "type": "string",
+          "value": "agent"
+        },
+        {
+          "key": "gen_ai.tool.call.id",
+          "type": "string",
+          "value": "tool_calculator_HGGx6EMXwpjPCXhqaefd"
+        },
+        {
+          "key": "gen_ai.tool.name",
+          "type": "string",
+          "value": "calculator"
+        },
+        {
+          "key": "logfire.json_schema",
+          "type": "string",
+          "value": "{\"type\": \"object\", \"properties\": {\"tool_arguments\": {\"type\": \"object\"}, \"tool_response\": {\"type\": \"object\"}, \"gen_ai.tool.name\": {}, \"gen_ai.tool.call.id\": {}}}"
+        },
+        {
+          "key": "logfire.msg",
+          "type": "string",
+          "value": "running tool: calculator"
+        },
+        {
+          "key": "logfire.span_type",
+          "type": "string",
+          "value": "span"
+        },
+        {
+          "key": "tool_arguments",
+          "type": "string",
+          "value": "{\"expression\":\"2+2\"}"
+        },
+        {
+          "key": "tool_response",
+          "type": "string",
+          "value": "4"
+        },
+        {
+          "key": "span.kind",
+          "type": "string",
+          "value": "internal"
+        }
+      ],
+      "logs": [],
+      "processID": "p1",
+      "warnings": [
+        "parent span ID=464cafd8057bcddd is not in the trace; skipping clock skew adjustment"
+      ]
+    }
+  ],
+  "processes": {
+    "p1": {
+      "serviceName": "edge-agent",
+      "tags": [
+        {
+          "key": "process.pid",
+          "type": "int64",
+          "value": 24511
+        },
+        {
+          "key": "process.runtime.description",
+          "type": "string",
+          "value": "3.14.4 (main, Apr 14 2026, 11:51:39) [GCC 13.3.0]"
+        },
+        {
+          "key": "process.runtime.name",
+          "type": "string",
+          "value": "cpython"
+        },
+        {
+          "key": "process.runtime.version",
+          "type": "string",
+          "value": "3.14.4"
+        },
+        {
+          "key": "service.instance.id",
+          "type": "string",
+          "value": "073629b0aaa249d9bb6e8b559f1159b3"
+        },
+        {
+          "key": "service.version",
+          "type": "string",
+          "value": "b6828bfb6e4f286af42bcc7f12dfdc63761b41d5"
+        },
+        {
+          "key": "telemetry.sdk.language",
+          "type": "string",
+          "value": "python"
+        },
+        {
+          "key": "telemetry.sdk.name",
+          "type": "string",
+          "value": "opentelemetry"
+        },
+        {
+          "key": "telemetry.sdk.version",
+          "type": "string",
+          "value": "1.39.1"
+        }
+      ]
+    }
+  },
+  "warnings": null
+}
+Timing: 32.128s
+Tools used: calculator, final_result
+Agent output: {"answer":"2 + 2 = 4","confidence":"high"}
