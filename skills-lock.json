@@ -7,6 +7,12 @@
       "skillPath": "skills/building-pydantic-ai-agents/SKILL.md",
       "computedHash": "f30a3037bbb153cccc88d996ea8e74865cbdd788c416139d2b080ae78732354a"
     },
+    "devcontainers-best-practices": {
+      "source": "afonsograca/devcontainers-best-practices",
+      "sourceType": "github",
+      "skillPath": "skills/devcontainers-best-practices/SKILL.md",
+      "computedHash": "b8eae6747b3038e162b6b2b46955c42836502f7e0700fdc13e49e44bae6ad024"
+    },
     "python-testing-patterns": {
       "source": "wshobson/agents",
       "sourceType": "github",
