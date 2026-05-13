@@ -4,6 +4,7 @@ This test uses a small fake runner that returns deterministic `AgentOutput`
 objects matching the expected answers so the custom evaluators can be
 exercised in CI without calling a real model.
 """
+
 from __future__ import annotations
 
 from pydantic_ai import models

@@ -3,6 +3,7 @@
 This mirrors the style of `evals/smoke.py` but provides a small, independent
 set of cases so the runner can demonstrate merging multiple datasets.
 """
+
 from __future__ import annotations
 
 from pydantic_evals import Case, Dataset

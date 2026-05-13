@@ -50,7 +50,7 @@ jobs:
           push: always
 
   ci:
-    name: Lint · Type-check · Tests
+    name: Format · Lint · Type-check · Tests · Workflow Security
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: prebuild-devcontainer
@@ -72,9 +72,13 @@ jobs:
         with:
           cacheFrom: ghcr.io/th3un1q3/edgent-smith
           runCmd: |
+            echo "── format-check ─────────────────────────────────"
+            just format-check
             echo "── lint ──────────────────────────────────────────"
             just lint
             echo "── typecheck ─────────────────────────────────────"
             just typecheck
             echo "── test ──────────────────────────────────────────"
             just test
+            echo "── workflow-security ─────────────────────────────"
+            just workflow-security

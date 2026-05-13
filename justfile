@@ -85,7 +85,12 @@ dev-sync-mcp:
 
 # Fix formatting and lint issues where supported.
 format:
+  {{RUFF}} format {{CHECK_PATHS}}
   {{RUFF}} check --fix {{CHECK_PATHS}}
+
+# Validate formatting without modifying files
+format-check:
+  {{RUFF}} format --check {{CHECK_PATHS}}
 
 # Click-backed public CLI surface: `init`, `validate`, `design`, `fix`, and `experiment`.
 # `validate` accepts `--config PATH`; otherwise it auto-discovers the first `*.config.toml` file.

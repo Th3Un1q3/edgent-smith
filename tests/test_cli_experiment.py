@@ -49,7 +49,7 @@ def test_just_autoreseach_recipe_alias_routes_to_python_cli() -> None:
 
     assert result.returncode == 0
     rendered = "\n".join(part for part in [result.stdout, result.stderr] if part)
-    assert "uv run python -m cli autoresearch \"$@\"" in rendered
+    assert 'uv run python -m cli autoresearch "$@"' in rendered
 
 
 def test_just_autoresearch_create_forwards_multiline_description_without_reparsing(
