@@ -70,6 +70,75 @@ with the `gpt-5` model. It requires one secret set in
 |--------|---------------|
 | `COPILOT_GITHUB_TOKEN` | Create a fine-grained PAT at [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new). Under **Permissions → Account permissions** add **Copilot Requests (read)**. |
 
+## Command map
+
+Current public `just` entrypoints are split between the Click-backed `autoresearch` CLI and separate script-backed experiment runners.
+
+| Surface | Backing implementation | Current commands |
+|--------|-------------------------|------------------|
+| `just autoresearch ...` | `uv run python -m cli autoresearch` | `init --name NAME`, `validate [--config PATH]`, `design [BRIEF] [--config PATH]`, `fix [--config PATH] [--autofix-config PATH] [--continue] [--parallel]`, `experiment create|start|finish|list|show ...` |
+| `just run-experiment ...` | `uv run python scripts/experiment.py run` | Local script-backed experiment execution with a required prompt and forwarded flags |
+| `just run-experiment-loop ...` | `uv run python scripts/experiment.py local-loop` | Local foreground experiment loop with forwarded flags |
+| `just promote-baseline ...` | `uv run python scripts/experiment.py promote-baseline` | Baseline promotion for an existing candidate result |
+
+- `just autoresearch init --name NAME` verifies the `copilot` CLI alias and authentication before it writes `NAME.config.toml`. If the GitHub Copilot CLI is missing, the command points to `npm install -g @github/copilot`.
+- `just autoresearch validate --config PATH` validates a specific project config. When `--config` is omitted, `validate` auto-discovers the lexicographically first `*.config.toml` file in the current directory.
+- `just autoresearch experiment ...` manages local experiment registry CRUD only. Use `just run-experiment ...`, `just run-experiment-loop ...`, and `just promote-baseline ...` for script-backed experiment execution.
+
+---
+
+## CLI Structure
+
+The Click-backed CLI is organized into three layers: command routing, command logic, and shared services.
+
+```
+cli/
+  main.py                       # Command registration and routing (Click groups/commands only)
+  commands/
+    __init__.py
+    design.py                   # run_design() - experiment design
+    experiment.py               # run_experiment_*() - registry CRUD
+    fix.py                       # run_fix() - autofix workflow
+    init.py                      # run_init() - config initialization
+    validate.py                  # run_validate() - config validation
+    command_context.py           # CommandContext, build_command_context() – shared setup
+  services/
+    __init__.py
+    copilot_session.py           # CopilotSessionService – Copilot CLI session management
+    project_config.py            # ProjectConfig, load_project_config() – config loading
+```
+
+**Placement rules:**
+
+| Element | Location | Pattern |
+|---------|----------|---------|
+| New command logic | `commands/{name}.py` | Export `run_{name}()` function; import in `main.py` |
+| Click decorators | `main.py` only | Never in command modules |
+| Shared setup logic | `command_context.py` | Use `build_command_context()` to initialize services |
+| Shared service/utility | `services/{name}.py` | Reusable across 2+ commands; stateless preferred |
+| Tests | `tests/test_cli_{name}.py` or `tests/test_{name}.py` | Mirror file structure: command tests are prefixed `test_cli_` |
+
+**Anti-patterns to avoid:**
+
+- Click decorators in command modules (breaks modularity; use `main.py`)
+- Business logic in `main.py` (reduces testability; use command modules)
+- Duplicated service code across commands (extract to `services/`)
+- Tight coupling between command modules (use shared context when needed)
+- Direct config loading in commands (use `build_command_context()`)
+
+---
+
+## State ownership and compatibility
+
+The local experiment registry and the script runner state files are separate on purpose.
+
+- `experiments/registry.state.json` is owned by the Click-backed local experiment registry commands in `cli/commands/experiment.py`. It stores the registry records used by `just autoresearch experiment ...`, and `just autoresearch design` reads that registry context when it builds a new experiment prompt.
+- `experiments/<issue>.state.json` and `experiments/manual.state.json` are owned by `scripts/experiment.py`. They store script-runner attempt state for issue-backed runs and local/manual runs, including the handoff fields the workflow uses after a candidate is produced.
+- `scripts/fix_code.sh` remains a supported compatibility wrapper for the autofix workflow and forwards to the same Click-backed `autoresearch fix` implementation.
+- `just experiment-loop` remains a supported compatibility alias for `just run-experiment-loop`.
+
+This README documents the current ownership boundary and the compatibility surfaces that are supported today.
+
 ---
 
 ## Baseline score
@@ -114,7 +183,7 @@ just run-experiment-loop \
 
 `--model-alias` and `--model` remain compatibility aliases for the engineer model option.
 
-`just experiment-loop` remains a compatibility alias for the same command.
+`just experiment-loop` remains a supported compatibility alias for the same command.
 
 `--hooks <set>` resolves hook scripts under `hooks/<set>/`. With `--hooks local`, the loop uses the two example local hooks when present:
 
@@ -180,6 +249,8 @@ just fix
 ```bash
 uv run python -m cli autoresearch fix
 ```
+
+`scripts/fix_code.sh` remains a supported compatibility wrapper for callers that still invoke the shell entrypoint.
 
 Pass `--continue` to reuse the prior Copilot session for the first remediation turn:
 

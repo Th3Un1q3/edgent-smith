@@ -5,6 +5,16 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
+__all__ = [
+    "CopilotSessionService",
+    "PERMISSIVE_TOOLSET",
+    "RESTRICTED_TOOLSET",
+    "SessionResult",
+    "ToolCall",
+    "Toolset",
+    "allow_all_deny_git_toolset",
+]
+
 
 @dataclass
 class Toolset:
@@ -14,14 +24,20 @@ class Toolset:
     denied_tools: list[str] = field(default_factory=list)
     allowed_tools: list[str] = field(default_factory=list)
 
-    def to_flags(self) -> list[str]:
+    def to_flags(self, inline_assignment: bool = False) -> list[str]:
         flags = []
         if self.allow_all:
             flags.append("--allow-all-tools")
         for tool in self.denied_tools:
-            flags.extend(["--deny-tool", tool])
+            if inline_assignment:
+                flags.append(f"--deny-tool={tool}")
+            else:
+                flags.extend(["--deny-tool", tool])
         for tool in self.allowed_tools:
-            flags.extend(["--allow-tool", tool])
+            if inline_assignment:
+                flags.append(f"--allow-tool={tool}")
+            else:
+                flags.extend(["--allow-tool", tool])
         return flags
 
 
@@ -29,11 +45,16 @@ class Toolset:
 # For now, we'll start very restricted.
 RESTRICTED_TOOLSET = Toolset(allow_all=False)
 
+
+def allow_all_deny_git_toolset() -> Toolset:
+    return Toolset(
+        allow_all=True,
+        denied_tools=["shell(git push)", "shell(git commit)", "shell(git checkout)"],
+    )
+
+
 # Permissive toolset as seen in fix_code.sh
-PERMISSIVE_TOOLSET = Toolset(
-    allow_all=True,
-    denied_tools=["shell(git push)", "shell(git commit)", "shell(git checkout)"],
-)
+PERMISSIVE_TOOLSET = allow_all_deny_git_toolset()
 
 
 @dataclass

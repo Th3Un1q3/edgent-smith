@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+from cli.services import copilot_session as copilot_session_module
 from cli.services.copilot_session import (
     PERMISSIVE_TOOLSET,
     CopilotSessionService,
@@ -200,6 +201,18 @@ def test_session_change_toolset() -> None:
         args2 = mock_run.call_args[0][0]
         assert "--allow-all-tools" in args2
         assert "shell(git push)" in args2
+
+
+def test_allow_all_deny_git_toolset_returns_expected_flags() -> None:
+    assert copilot_session_module.allow_all_deny_git_toolset().to_flags() == [
+        "--allow-all-tools",
+        "--deny-tool",
+        "shell(git push)",
+        "--deny-tool",
+        "shell(git commit)",
+        "--deny-tool",
+        "shell(git checkout)",
+    ]
 
 
 def test_session_service_failure() -> None:

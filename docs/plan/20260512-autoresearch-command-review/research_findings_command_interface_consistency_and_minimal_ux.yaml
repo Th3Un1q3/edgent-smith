@@ -1,0 +1,488 @@
+plan_id: 20260512-autoresearch-command-review
+objective: Review Click command interface consistency and minimal UX for autoresearch init, validate, design, fix, and experiment subcommands.
+focus_area: command_interface_consistency_and_minimal_ux
+created_at: 2026-05-12T00:00:00Z
+created_by: GitHub Copilot GPT-5.4
+status: completed
+tldr: |
+  - The public Click surface is centralized in cli/main.py, with each command delegating to a run_* implementation in cli/commands/.
+  - The experiment registry subcommands are the most internally consistent slice: subcommands are narrow, state-driven, and emit JSON.
+  - The config-and-session commands are less consistent: design and fix expose --config, validate supports explicit config internally but does not expose it, and init is the only interactive command.
+  - Required input modeling varies across commands: init uses a required option, design uses an optional argument, experiment create uses required options, and experiment start/show/finish use positional IDs.
+  - Shared helpers exist for config loading and Copilot session execution, but alias/model/session setup still repeats across commands.
+  - User-facing docs are concentrated on fix; init, validate, design, and experiment are lightly documented or undocumented outside code and tests.
+research_metadata:
+  methodology: semantic_search/grep_search plus targeted file reads and Context7 Click documentation lookup
+  scope: Public autoresearch Click command tree, command implementations, tests, shared CLI helpers, just wrappers, and README references
+  confidence: high
+  coverage: 91
+  decision_blockers: 0
+  research_blockers: 0
+files_analyzed:
+  - file: cli/main.py
+    path: /workspace/cli/main.py
+    purpose: Defines the public Click group, subcommands, options, arguments, and help strings.
+    key_elements:
+      - element: cli
+        type: function
+        location: cli/main.py:18
+        description: Root Click group for the CLI.
+        language: python
+      - element: autoresearch
+        type: function
+        location: cli/main.py:31
+        description: Group that owns init, validate, design, fix, and experiment subcommands.
+        language: python
+      - element: experiment
+        type: function
+        location: cli/main.py:104
+        description: Nested group for local experiment registry operations.
+        language: python
+    lines: 199
+  - file: cli/commands/init.py
+    path: /workspace/cli/commands/init.py
+    purpose: Implements project initialization, CLI presence verification, authentication probing, and config file creation.
+    key_elements:
+      - element: run_init
+        type: function
+        location: cli/commands/init.py:18
+        description: Creates the project config after interactive verification of CLI availability and authentication.
+        language: python
+    lines: 71
+  - file: cli/commands/validate.py
+    path: /workspace/cli/commands/validate.py
+    purpose: Implements two-turn session persistence validation against the configured Copilot CLI.
+    key_elements:
+      - element: run_validate
+        type: function
+        location: cli/commands/validate.py:11
+        description: Loads project config, sends two messages, and reports whether the agent remembered a generated secret.
+        language: python
+    lines: 47
+  - file: cli/commands/design.py
+    path: /workspace/cli/commands/design.py
+    purpose: Implements experiment design submission through Copilot and verifies that a registry entry was created.
+    key_elements:
+      - element: run_design
+        type: function
+        location: cli/commands/design.py:13
+        description: Builds a design prompt, submits it to Copilot, and retries once if the registry count does not increase.
+        language: python
+      - element: _build_design_prompt
+        type: function
+        location: cli/commands/design.py:46
+        description: Encodes the user-facing experiment-create contract into the agent prompt.
+        language: python
+    lines: 104
+  - file: cli/commands/fix.py
+    path: /workspace/cli/commands/fix.py
+    purpose: Implements config-driven autofix execution, optional batched remediation, and hook config parsing.
+    key_elements:
+      - element: run_fix
+        type: function
+        location: cli/commands/fix.py:30
+        description: Runs configured hooks sequentially or in parallel and invokes Copilot remediation on failures.
+        language: python
+      - element: _load_hook_specs
+        type: function
+        location: cli/commands/fix.py:74
+        description: Parses autofix.toml into validated HookSpec instances.
+        language: python
+      - element: _run_hooks_in_parallel
+        type: function
+        location: cli/commands/fix.py:155
+        description: Executes the first pass concurrently, batches failures, and retries failed hooks once.
+        language: python
+    lines: 257
+  - file: cli/commands/experiment.py
+    path: /workspace/cli/commands/experiment.py
+    purpose: Implements the local experiment registry CRUD/state-transition commands and JSON output.
+    key_elements:
+      - element: run_experiment_create
+        type: function
+        location: cli/commands/experiment.py:39
+        description: Creates a pending experiment and auto-generates its ID.
+        language: python
+      - element: run_experiment_start
+        type: function
+        location: cli/commands/experiment.py:58
+        description: Starts a run for an existing experiment with baseline metadata.
+        language: python
+      - element: run_experiment_finish
+        type: function
+        location: cli/commands/experiment.py:116
+        description: Finishes the active run and computes deltas/outcome for completed runs.
+        language: python
+      - element: run_experiment_list
+        type: function
+        location: cli/commands/experiment.py:156
+        description: Filters and sorts registry entries.
+        language: python
+      - element: run_experiment_show
+        type: function
+        location: cli/commands/experiment.py:188
+        description: Emits the full JSON payload for one experiment.
+        language: python
+    lines: 307
+  - file: cli/project_config.py
+    path: /workspace/cli/project_config.py
+    purpose: Shared project config discovery and TOML parsing for CLI commands.
+    key_elements:
+      - element: load_project_config
+        type: function
+        location: cli/project_config.py:44
+        description: Resolves explicit or auto-discovered .config.toml files and returns a typed ProjectConfig.
+        language: python
+      - element: DEFAULT_AGENTIC_CLI_ALIAS
+        type: variable
+        location: cli/project_config.py:11
+        description: Default CLI alias used when no config is available.
+        language: python
+    lines: 81
+  - file: cli/services/copilot_session.py
+    path: /workspace/cli/services/copilot_session.py
+    purpose: Shared subprocess wrapper for invoking GitHub Copilot CLI sessions.
+    key_elements:
+      - element: CopilotSessionService
+        type: class
+        location: cli/services/copilot_session.py:63
+        description: Encapsulates model, agent, toolset, session reuse, and JSONL parsing.
+        language: python
+      - element: send_message
+        type: function
+        location: cli/services/copilot_session.py:83
+        description: Builds Copilot CLI commands and converts their output into SessionResult.
+        language: python
+    lines: 161
+  - file: justfile
+    path: /workspace/justfile
+    purpose: Defines the public just wrappers for fix and generic autoresearch command dispatch.
+    key_elements:
+      - element: fix
+        type: pattern
+        location: justfile:24
+        description: Thin wrapper around python -m cli autoresearch fix.
+        language: just
+      - element: autoresearch
+        type: pattern
+        location: justfile:81
+        description: Generic passthrough wrapper for the autoresearch Click group.
+        language: just
+    lines: 93
+  - file: scripts/fix_code.sh
+    path: /workspace/scripts/fix_code.sh
+    purpose: Legacy shell wrapper retained for compatibility around the fix CLI.
+    key_elements:
+      - element: fix_code wrapper
+        type: pattern
+        location: scripts/fix_code.sh:1
+        description: Re-execs the Python CLI fix command without owning workflow logic.
+        language: bash
+    lines: 10
+  - file: README.md
+    path: /workspace/README.md
+    purpose: Primary user-facing documentation for repo workflows and current CLI coverage.
+    key_elements:
+      - element: Autofix workflow docs
+        type: pattern
+        location: README.md:177
+        description: Documents the fix command and its flags in detail.
+        language: markdown
+    lines: 346
+  - file: tests/test_cli_init.py
+    path: /workspace/tests/test_cli_init.py
+    purpose: Captures init command expectations, including failure handling and interactive assumptions.
+    key_elements:
+      - element: init tests
+        type: pattern
+        location: tests/test_cli_init.py:1
+        description: Verifies config creation, validation failures, and overwrite protection.
+        language: python
+    lines: 88
+  - file: tests/test_cli_validate.py
+    path: /workspace/tests/test_cli_validate.py
+    purpose: Captures validate command success and missing-config behavior.
+    key_elements:
+      - element: validate tests
+        type: pattern
+        location: tests/test_cli_validate.py:1
+        description: Verifies two-turn session reuse and missing-config error behavior.
+        language: python
+    lines: 66
+  - file: tests/test_cli_design.py
+    path: /workspace/tests/test_cli_design.py
+    purpose: Captures design prompt contents, retry behavior, and registry-side effects.
+    key_elements:
+      - element: design tests
+        type: pattern
+        location: tests/test_cli_design.py:1
+        description: Verifies prompt assembly, explicit config use, and retry when no experiment is created.
+        language: python
+    lines: 300
+  - file: tests/test_cli_fix.py
+    path: /workspace/tests/test_cli_fix.py
+    purpose: Captures fix flag semantics, hook parsing, sequential/parallel behavior, and wrapper compatibility.
+    key_elements:
+      - element: fix tests
+        type: pattern
+        location: tests/test_cli_fix.py:1
+        description: Verifies sequential and parallel execution, config parsing, wrapper behavior, and fallback session handling.
+        language: python
+    lines: 660
+  - file: tests/test_cli_experiment.py
+    path: /workspace/tests/test_cli_experiment.py
+    purpose: Captures experiment lifecycle behavior, filters, and some public help expectations.
+    key_elements:
+      - element: experiment tests
+        type: pattern
+        location: tests/test_cli_experiment.py:1
+        description: Verifies lifecycle transitions, filter/sort behavior, and rejection of removed manual ID input.
+        language: python
+    lines: 470
+patterns_found:
+  - category: structure
+    pattern: Thin Click layer with run_* delegation
+    description: Public command definitions live in cli/main.py and delegate immediately to implementation helpers in cli/commands/.
+    examples:
+      - file: cli/main.py
+        location: cli/main.py:39
+        snippet: "def init(name: str) -> None: run_init(name)"
+      - file: cli/main.py
+        location: cli/main.py:57
+        snippet: "def design(...): run_design(brief, config_path=config_path)"
+    prevalence: common
+  - category: architecture
+    pattern: Shared config discovery and session orchestration helpers
+    description: Commands reuse load_project_config for .config.toml resolution and CopilotSessionService for subprocess execution.
+    examples:
+      - file: cli/project_config.py
+        location: cli/project_config.py:44
+        snippet: "def load_project_config(config_path: str | Path | None = None, *, required: bool)"
+      - file: cli/services/copilot_session.py
+        location: cli/services/copilot_session.py:83
+        snippet: "def send_message(... continue_session: bool = False)"
+    prevalence: common
+  - category: naming
+    pattern: Mixed use of required options and positional arguments for primary inputs
+    description: Some primary inputs are required flags, some are positional arguments, and the choice is not uniform across peer commands.
+    examples:
+      - file: cli/main.py
+        location: cli/main.py:38
+        snippet: "@click.option('--name', required=True, ...)"
+      - file: cli/main.py
+        location: cli/main.py:51
+        snippet: "@click.argument('brief', required=False)"
+      - file: cli/main.py
+        location: cli/main.py:110
+        snippet: "@click.option('--title', required=True, ...)"
+      - file: cli/main.py
+        location: cli/main.py:118
+        snippet: "@click.argument('experiment_id')"
+    prevalence: common
+  - category: error_handling
+    pattern: ClickException for hard failures, echo for warnings and no-op outcomes
+    description: Invalid states generally raise ClickException, but some commands report user-visible warnings or no-op states while still exiting successfully.
+    examples:
+      - file: cli/commands/experiment.py
+        location: cli/commands/experiment.py:124
+        snippet: "raise click.ClickException(f\"Experiment '{experiment_id}' does not have a running run.\")"
+      - file: cli/commands/validate.py
+        location: cli/commands/validate.py:47
+        snippet: "click.echo('Validation warning: Agent did not clearly repeat the secret.')"
+      - file: cli/commands/fix.py
+        location: cli/commands/fix.py:41
+        snippet: "No autofix hooks are configured ..."
+    prevalence: common
+  - category: documentation
+    pattern: Public interface details are encoded partly in prompts, tests, and README rather than only in command help
+    description: The experiment create invocation is duplicated in the design prompt, the fix interface is documented in README, and tests assert prompt strings directly.
+    examples:
+      - file: cli/commands/design.py
+        location: cli/commands/design.py:62
+        snippet: "Create exactly one new experiment with `just autoresearch experiment create --title ... --description ...`."
+      - file: README.md
+        location: README.md:181
+        snippet: "uv run python -m cli autoresearch fix"
+      - file: tests/test_cli_design.py
+        location: tests/test_cli_design.py:58
+        snippet: "assert 'just autoresearch experiment create --title' in prompt"
+    prevalence: occasional
+related_architecture:
+  components_relevant_to_domain:
+    - component: Click command tree
+      responsibility: Exposes the public autoresearch command surface and binds help text, arguments, and options.
+      location: /workspace/cli/main.py
+      relationship_to_domain: Owns interface consistency and minimal UX decisions.
+    - component: Project config loader
+      responsibility: Resolves and parses project .config.toml files.
+      location: /workspace/cli/project_config.py
+      relationship_to_domain: Shapes config-discovery behavior and explicit-path support.
+    - component: Copilot session service
+      responsibility: Converts command intent into Copilot CLI subprocess invocations.
+      location: /workspace/cli/services/copilot_session.py
+      relationship_to_domain: Shapes session reuse, model defaults, toolset behavior, and command output/error semantics.
+    - component: Experiment registry commands
+      responsibility: Persist and query local experiment state as JSON.
+      location: /workspace/cli/commands/experiment.py
+      relationship_to_domain: Most self-contained and machine-readable command slice.
+    - component: just wrappers and legacy shell wrapper
+      responsibility: Provide alternative entrypoints into the same Click command surface.
+      location: /workspace/justfile and /workspace/scripts/fix_code.sh
+      relationship_to_domain: Duplicate and advertise CLI contract outside Click itself.
+  interfaces_used_by_domain:
+    - interface: Click command decorators
+      location: /workspace/cli/main.py
+      usage_pattern: Attach group, argument, option, type, default, and help metadata to each public command.
+    - interface: ProjectConfig
+      location: /workspace/cli/project_config.py
+      usage_pattern: Pass resolved CLI alias and project metadata into validate, design, and fix flows.
+    - interface: SessionResult
+      location: /workspace/cli/services/copilot_session.py
+      usage_pattern: Interpret success/failure, stdout, stderr, and persisted session IDs from Copilot CLI runs.
+  data_flow_involving_domain: The just wrapper or python -m cli entrypoint reaches cli/main.py, Click binds user input to a subcommand, the subcommand delegates to a run_* function, that function may resolve project config, may create a CopilotSessionService, and either emits structured JSON (experiment) or human-oriented status text (init/validate/design/fix).
+  key_relationships_to_domain:
+    - from: cli/main.py
+      to: cli/commands/*.py
+      relationship: calls
+    - from: cli/commands/design.py
+      to: cli/commands/experiment.py
+      relationship: calls
+    - from: cli/commands/design.py
+      to: cli/project_config.py
+      relationship: imports
+    - from: cli/commands/fix.py
+      to: cli/project_config.py
+      relationship: imports
+    - from: cli/commands/validate.py
+      to: cli/project_config.py
+      relationship: imports
+    - from: cli/commands/init.py
+      to: cli/services/copilot_session.py
+      relationship: imports
+    - from: cli/commands/design.py
+      to: cli/services/copilot_session.py
+      relationship: imports
+    - from: cli/commands/fix.py
+      to: cli/services/copilot_session.py
+      relationship: imports
+related_technology_stack:
+  languages_used_in_domain:
+    - Python
+    - Bash
+    - Markdown
+    - Just
+  frameworks_used_in_domain:
+    - name: Click
+      usage_in_domain: Command declaration, parsing, help text, prompting, and error handling for the public CLI.
+  libraries_used_in_domain:
+    - name: click.testing.CliRunner
+      purpose_in_domain: Interface-level tests for commands and output.
+    - name: tomllib
+      purpose_in_domain: Parse project and autofix TOML files.
+    - name: subprocess
+      purpose_in_domain: Invoke GitHub Copilot CLI and workflow hook commands.
+  external_apis_used_in_domain:
+    - name: GitHub Copilot CLI
+      integration_point: CopilotSessionService and init verification use the configured alias to run the external CLI.
+related_conventions:
+  naming_patterns_in_domain: Public command implementations use run_<command> helpers; registry helpers use _prefixed internal functions; project config uses DEFAULT_* constants.
+  structure_of_domain: Command metadata is centralized in cli/main.py, while behavioral logic lives under cli/commands and shared abstractions live under cli/project_config.py and cli/services.
+  error_handling_in_domain: Invalid user or state inputs generally raise ClickException; successful flows echo human-readable output, and experiment commands echo pretty-printed JSON.
+  testing_in_domain: Each command family has a dedicated CliRunner-based test module; behavior coverage is deeper than help-text coverage.
+  documentation_in_domain: README currently documents fix in detail; other public command families rely mainly on code docstrings and tests for discoverability.
+related_dependencies:
+  internal:
+    - component: cli/project_config.py
+      relationship_to_domain: Provides config discovery and default CLI alias values for multiple commands.
+      direction: outbound
+    - component: cli/services/copilot_session.py
+      relationship_to_domain: Provides session execution, model selection, toolset flags, and resume/continue behavior.
+      direction: outbound
+    - component: cli/commands/experiment.py
+      relationship_to_domain: Supplies registry count/context to design and owns the nested experiment interface.
+      direction: bidirectional
+    - component: justfile
+      relationship_to_domain: Exposes public wrapper commands for fix and generic autoresearch dispatch.
+      direction: inbound
+    - component: scripts/fix_code.sh
+      relationship_to_domain: Compatibility wrapper around the same fix CLI.
+      direction: inbound
+  external:
+    - name: GitHub Copilot CLI
+      purpose_for_domain: Runs the agent-backed design, validate, init verification, and fix remediation flows.
+    - name: Click
+      purpose_for_domain: Provides the CLI framework semantics referenced by this review.
+domain_security_considerations:
+  sensitive_areas:
+    - area: Autofix permissive tool usage
+      location: /workspace/cli/commands/fix.py and /workspace/cli/services/copilot_session.py
+      concern: Fix remediation uses the permissive Copilot toolset, so interface-level defaults directly affect how much authority an autofix run receives.
+    - area: Project config auto-discovery
+      location: /workspace/cli/project_config.py
+      concern: Commands that auto-discover the first sorted *.config.toml may act on a different project config than the user expects in multi-config directories.
+    - area: Hook command execution
+      location: /workspace/cli/commands/fix.py
+      concern: Autofix hook commands are shell-split strings taken from TOML and executed as subprocesses.
+  authentication_patterns_in_domain: init probes authentication by sending a simple Copilot message after verifying the CLI binary is present; validate, design, and fix assume the configured alias is already authenticated.
+  authorization_patterns_in_domain: There is no repo-local authorization layer; authority boundaries are inherited from the configured Copilot CLI and the selected toolset.
+  data_validation_in_domain: Click enforces simple types and enumerations at the boundary, while TOML and JSON file loaders perform additional structural validation.
+testing_patterns:
+  framework: pytest with click.testing.CliRunner
+  coverage_areas:
+    - init success and failure behavior
+    - validate session persistence flow
+    - design prompt contents and retry logic
+    - fix sequential/parallel behavior and config parsing
+    - experiment lifecycle, filters, and sorting
+  test_organization: One test module per command family plus a separate Copilot session service module.
+  mock_patterns:
+    - subprocess.run patched for CLI/session simulation
+    - CopilotSessionService.send_message patched for high-level command tests
+    - CliRunner.isolated_filesystem used for per-test file state
+open_questions:
+  - question: Is validate intentionally meant to support explicit config paths only at the implementation layer, or is the missing --config option in the Click command accidental?
+    context: run_validate accepts config_path, but cli/main.py exposes no validate option equivalent to design and fix.
+    type: research
+    affects:
+      - cli/main.py
+      - cli/commands/validate.py
+  - question: Is the zero-exit warning path in validate considered a successful validation, or is it intended only as informational output for humans?
+    context: The command name implies pass/fail validation, but the unmatched-secret branch only echoes a warning.
+    type: research
+    affects:
+      - cli/commands/validate.py
+      - tests/test_cli_validate.py
+  - question: Is init intended primarily for interactive first-run use, or should it remain automatable like the rest of the autoresearch command surface?
+    context: init alone uses click.confirm and click.prompt loops when the alias is missing.
+    type: research
+    affects:
+      - cli/main.py
+      - cli/commands/init.py
+  - question: Is experiment create intentionally optimized for machine callers rather than humans?
+    context: The required title and description are both modeled as options and the same syntax is embedded in design prompts.
+    type: research
+    affects:
+      - cli/main.py
+      - cli/commands/design.py
+      - tests/test_cli_design.py
+gaps:
+  - area: Subcommand help coverage
+    description: Tests cover root autoresearch help, but the reviewed sources do not include dedicated help-output assertions for init, validate, design, fix, or experiment subcommands.
+    impact: research_blocker
+    affects:
+      - tests/test_cli_init.py
+      - tests/test_cli_validate.py
+      - tests/test_cli_design.py
+      - tests/test_cli_fix.py
+      - tests/test_cli_experiment.py
+  - area: Public user documentation coverage
+    description: README documents fix and its flags, but the reviewed docs do not provide equivalent usage guidance for init, validate, design, or experiment.
+    impact: research_blocker
+    affects:
+      - README.md
+  - area: Documented config-selection policy
+    description: The reviewed docs do not explain auto-discovery ordering or multi-config behavior for commands that load *.config.toml files.
+    impact: research_blocker
+    affects:
+      - cli/project_config.py
+      - README.md

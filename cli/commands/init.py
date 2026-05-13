@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 
 import click
 
 from cli.services.copilot_session import CopilotSessionService
+from cli.services.project_config import (
+    DEFAULT_AGENTIC_CLI_ALIAS,
+    DEFAULT_AGENTIC_CLI_TYPE,
+    project_config_filename,
+    render_project_config,
+)
 
 
 def run_init(name: str) -> None:
@@ -16,20 +23,17 @@ def run_init(name: str) -> None:
     if not re.match(r"^[a-zA-Z0-9_-]+$", name):
         raise click.ClickException("Project name contains invalid characters.")
 
-    filename = f"{name}.config.toml"
+    filename = project_config_filename(name)
 
     if os.path.exists(filename):
         raise click.ClickException(f"Configuration file {filename} already exists.")
 
     # Configuration values
-    cli_type = "copilot_cli"
-    cli_alias = "copilot"
+    cli_type = DEFAULT_AGENTIC_CLI_TYPE
+    cli_alias = DEFAULT_AGENTIC_CLI_ALIAS
 
     # Verification of agentic CLI
     click.echo(f"Verifying agentic CLI ({cli_alias}) installation...")
-
-    # Check if CLI is even reachable
-    import subprocess
 
     while True:
         try:
@@ -37,7 +41,7 @@ def run_init(name: str) -> None:
             break
         except (subprocess.CalledProcessError, FileNotFoundError):
             install_cmd = (
-                "npm install -g @github/copilot-cli"
+                "npm install -g @github/copilot"
                 if cli_alias == "copilot"
                 else f"Check installation for {cli_alias}"
             )
@@ -63,7 +67,5 @@ def run_init(name: str) -> None:
         )
 
     with open(filename, "w") as f:
-        f.write(f'name = "{name}"\n')
-        f.write(f'agentic_cli_type = "{cli_type}"\n')
-        f.write(f'agentic_cli_alias = "{cli_alias}"\n')
+        f.write(render_project_config(name, cli_type=cli_type, cli_alias=cli_alias))
     click.echo(f"Created project configuration: {filename}")

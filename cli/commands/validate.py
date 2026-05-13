@@ -1,36 +1,48 @@
 from __future__ import annotations
 
-import os
-import secrets
-import tomllib
+from secrets import choice
 
 import click
 
-from cli.services.copilot_session import CopilotSessionService
+from cli.commands.command_context import build_command_context
+
+MISSING_CONFIG_MESSAGE = (
+    "No .config.toml file found in the current directory. "
+    "Pass --config PATH or add a *.config.toml file; when omitted, validate "
+    "auto-discovers the lexicographically first *.config.toml file in the current directory."
+)
 
 
-def run_validate() -> None:
+def run_validate(config_path: str | None = None) -> None:
     """Logic for the autoresearch validate command."""
-    # Find config file
-    config_files = [f for f in os.listdir(".") if f.endswith(".config.toml")]
-    if not config_files:
-        raise click.ClickException("No .config.toml file found in the current directory.")
+    try:
+        context = build_command_context(
+            config_path=config_path,
+            required=True,
+            model="gpt-5-mini",
+        )
+    except click.ClickException as exc:
+        if (
+            config_path is None
+            and str(exc) == "No .config.toml file found in the current directory."
+        ):
+            raise click.ClickException(MISSING_CONFIG_MESSAGE) from exc
+        raise
 
-    config_path = config_files[0]
-    click.echo(f"Found configuration: {config_path}")
+    project_config = context.project_config
+    if project_config is None:
+        raise click.ClickException(MISSING_CONFIG_MESSAGE)
 
-    with open(config_path, "rb") as f:
-        config = tomllib.load(f)
+    click.echo(f"Found configuration: {project_config.path}")
+    click.echo(
+        f"Validating project '{project_config.name}' using agentic CLI: "
+        f"{project_config.agentic_cli_alias}"
+    )
 
-    name = config.get("name", "unknown")
-    cli_alias = config.get("agentic_cli_alias", "copilot")
-
-    click.echo(f"Validating project '{name}' using agentic CLI: {cli_alias}")
-
-    service = CopilotSessionService(alias=cli_alias, model="gpt-5-mini")
+    service = context.service
 
     # Generate a random secret for testing (e.g., using uuid4 or a random string)
-    secret = "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(16))
+    secret = "".join(choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(16))
 
     # Message 1
     click.echo("Sending first message...")

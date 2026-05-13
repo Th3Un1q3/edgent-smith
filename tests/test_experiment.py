@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from cli.services import copilot_session as copilot_session_module
 from scripts import experiment
 from scripts.validate_workflow_security import (
     EDGE_ARCHITECT_AGENT_PATH,
@@ -362,6 +363,24 @@ def test_build_copilot_command_uses_named_sessions_and_resume() -> None:
     assert "experiment-issue-9-attempt-2" in followup
     assert "--name" not in followup
     assert "--continue" not in followup
+
+
+def test_build_copilot_command_uses_shared_allow_all_deny_git_policy() -> None:
+    args = experiment.build_copilot_command(
+        agent="implement",
+        model="gpt-5-mini",
+        prompt="Probe",
+        session_name="experiment-issue-9-attempt-2",
+        resume_session=False,
+    )
+
+    policy_flags = [
+        arg for arg in args if arg == "--allow-all-tools" or arg.startswith("--deny-tool=")
+    ]
+
+    assert policy_flags == copilot_session_module.allow_all_deny_git_toolset().to_flags(
+        inline_assignment=True
+    )
 
 
 def test_main_emits_machine_readable_json_result(

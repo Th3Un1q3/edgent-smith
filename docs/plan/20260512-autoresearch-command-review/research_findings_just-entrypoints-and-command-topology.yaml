@@ -1,0 +1,393 @@
+plan_id: 20260512-autoresearch-command-review
+objective: Inspect the complete surface behind `just autoresearch *` and closely related shortcuts, especially `just fix`, and map routing, duplication, naming drift, and doc/test accuracy.
+focus_area: just-entrypoints-and-command-topology
+created_at: 2026-05-12T00:00:00Z
+created_by: GitHub Copilot GPT-5.4
+status: completed
+tldr: |
+  - `just autoresearch +ARGS` is a thin proxy to the Click `autoresearch` group in `cli/main.py`.
+  - `just fix` is a dedicated shortcut to the `autoresearch fix` subcommand, while `scripts/fix_code.sh` remains a compatibility wrapper for the same path.
+  - Experiment-related public commands are split between Click registry CRUD commands and a separate argparse runner in `scripts/experiment.py`.
+  - README documents `just fix` and `run-experiment*` well, but does not document the full root `autoresearch` command surface.
+  - No `AGENTS.md` or `docs/PRD.yaml` file was present in the workspace.
+research_metadata:
+  methodology: semantic_search and grep-style text search, targeted file reads, official Click and just documentation lookup
+  scope: justfile entrypoints, root Click CLI topology, adjacent script wrappers, README, targeted tests, existing review note
+  confidence: high
+  coverage: 91
+  decision_blockers: 1
+  research_blockers: 1
+files_analyzed:
+  - file: justfile
+    path: /workspace/justfile
+    purpose: Public just entrypoints and aliases
+    key_elements:
+      - element: fix
+        type: function
+        location: /workspace/justfile:29
+        description: Proxies directly to `python -m cli autoresearch fix`
+        language: just
+      - element: run-experiment-loop
+        type: function
+        location: /workspace/justfile:78
+        description: Proxies directly to `scripts/experiment.py local-loop`
+        language: just
+      - element: experiment-loop alias
+        type: pattern
+        location: /workspace/justfile:77
+        description: Compatibility alias for `run-experiment-loop`
+        language: just
+      - element: autoresearch
+        type: function
+        location: /workspace/justfile:91
+        description: Variadic proxy to the Click `autoresearch` group
+        language: just
+    lines: 107
+  - file: cli/main.py
+    path: /workspace/cli/main.py
+    purpose: Root Click CLI tree and subcommand registration
+    key_elements:
+      - element: cli
+        type: function
+        location: /workspace/cli/main.py:16
+        description: Root Click group
+        language: python
+      - element: hello
+        type: function
+        location: /workspace/cli/main.py:22
+        description: Top-level greeting command unrelated to autoresearch workflows
+        language: python
+      - element: autoresearch
+        type: function
+        location: /workspace/cli/main.py:28
+        description: Nested Click group for user-facing autoresearch commands
+        language: python
+      - element: experiment
+        type: function
+        location: /workspace/cli/main.py:103
+        description: Nested Click group for registry CRUD commands
+        language: python
+    lines: 194
+  - file: cli/commands/fix.py
+    path: /workspace/cli/commands/fix.py
+    purpose: Autofix workflow implementation behind `autoresearch fix`
+    key_elements:
+      - element: run_fix
+        type: function
+        location: /workspace/cli/commands/fix.py:30
+        description: Loads hook config, resolves CLI alias, and runs remediation loop
+        language: python
+      - element: _run_hooks_in_parallel
+        type: function
+        location: /workspace/cli/commands/fix.py:141
+        description: Parallel first-pass execution and batched remediation
+        language: python
+    lines: 258
+  - file: cli/commands/design.py
+    path: /workspace/cli/commands/design.py
+    purpose: Design flow that instructs the agent to invoke experiment creation commands
+    key_elements:
+      - element: run_design
+        type: function
+        location: /workspace/cli/commands/design.py:13
+        description: Sends experiment design prompt through Copilot CLI session service
+        language: python
+      - element: _build_design_prompt
+        type: function
+        location: /workspace/cli/commands/design.py:43
+        description: Embeds `just autoresearch experiment create` usage into the prompt contract
+        language: python
+    lines: 111
+  - file: cli/commands/experiment.py
+    path: /workspace/cli/commands/experiment.py
+    purpose: Registry CRUD implementation behind Click `autoresearch experiment`
+    key_elements:
+      - element: run_experiment_create
+        type: function
+        location: /workspace/cli/commands/experiment.py:39
+        description: Creates experiment records in the local registry
+        language: python
+      - element: run_experiment_list
+        type: function
+        location: /workspace/cli/commands/experiment.py:137
+        description: Lists experiments with filtering and sorting
+        language: python
+    lines: 257
+  - file: scripts/experiment.py
+    path: /workspace/scripts/experiment.py
+    purpose: Separate argparse command tree for experiment execution and local-loop orchestration
+    key_elements:
+      - element: parse_args
+        type: function
+        location: /workspace/scripts/experiment.py:838
+        description: Defines runner-facing subcommands and compatibility aliases
+        language: python
+      - element: main
+        type: function
+        location: /workspace/scripts/experiment.py:932
+        description: Dispatches argparse commands to experiment runner flows
+        language: python
+    lines: 1007
+  - file: scripts/fix_code.sh
+    path: /workspace/scripts/fix_code.sh
+    purpose: Compatibility wrapper for legacy callers of the fix flow
+    key_elements:
+      - element: fix_code wrapper
+        type: pattern
+        location: /workspace/scripts/fix_code.sh:1
+        description: Shell wrapper that executes the same Python CLI path as `just fix`
+        language: bash
+    lines: 10
+  - file: README.md
+    path: /workspace/README.md
+    purpose: User-facing documentation for just entrypoints
+    key_elements:
+      - element: run-experiment docs
+        type: pattern
+        location: /workspace/README.md:96
+        description: Documents experiment runner script entrypoints and aliases
+        language: markdown
+      - element: autofix docs
+        type: pattern
+        location: /workspace/README.md:176
+        description: Documents `just fix` routing and options
+        language: markdown
+    lines: 366
+  - file: tests/test_cli_fix.py
+    path: /workspace/tests/test_cli_fix.py
+    purpose: Verifies just-to-CLI fix routing and compatibility wrapper behavior
+    key_elements:
+      - element: test_just_fix_recipe_routes_to_python_cli
+        type: function
+        location: /workspace/tests/test_cli_fix.py:89
+        description: Confirms just recipe targets the Python CLI directly
+        language: python
+      - element: test_fix_code_script_is_a_thin_cli_wrapper
+        type: function
+        location: /workspace/tests/test_cli_fix.py:102
+        description: Confirms the legacy shell wrapper still proxies to the same command
+        language: python
+    lines: 654
+  - file: tests/test_cli_experiment.py
+    path: /workspace/tests/test_cli_experiment.py
+    purpose: Verifies Click experiment registry commands and just autoresearch proxy
+    key_elements:
+      - element: test_just_autoreseach_recipe_alias_routes_to_python_cli
+        type: function
+        location: /workspace/tests/test_cli_experiment.py:36
+        description: Confirms just recipe proxies to Click experiment list command
+        language: python
+      - element: test_autoresearch_help_exposes_experiment_and_design_command
+        type: function
+        location: /workspace/tests/test_cli_experiment.py:319
+        description: Checks partial subcommand exposure in autoresearch help
+        language: python
+    lines: 801
+  - file: tests/test_experiment.py
+    path: /workspace/tests/test_experiment.py
+    purpose: Verifies just recipes for the external experiment runner
+    key_elements:
+      - element: test_run_experiment_loop_recipe_uses_local_loop_owner
+        type: function
+        location: /workspace/tests/test_experiment.py:1125
+        description: Confirms `run-experiment-loop` and its alias still target `scripts/experiment.py`
+        language: python
+    lines: 1249
+  - file: docs/refactor.md
+    path: /workspace/docs/refactor.md
+    purpose: In-progress review note for the same command surface
+    key_elements:
+      - element: Auto-Research Command Review Log
+        type: pattern
+        location: /workspace/docs/refactor.md:1
+        description: Existing note with empty findings sections
+        language: markdown
+    lines: 15
+patterns_found:
+  - category: structure
+    pattern: justfile recipes are thin proxies into Python entrypoints
+    description: Public recipes generally forward arguments to either `python -m cli autoresearch ...` or `scripts/experiment.py ...`
+    examples:
+      - file: /workspace/justfile
+        location: /workspace/justfile:29
+        snippet: "fix *ARGS: -> uv run python -m cli autoresearch fix {{ARGS}}"
+      - file: /workspace/justfile
+        location: /workspace/justfile:78
+        snippet: "run-experiment-loop *ARGS: -> uv run python scripts/experiment.py local-loop {{ARGS}}"
+    prevalence: common
+  - category: architecture
+    pattern: command ownership is split by workflow rather than by a single root CLI
+    description: Registry CRUD lives under Click, while execution/orchestration flows live under argparse script entrypoints
+    examples:
+      - file: /workspace/cli/main.py
+        location: /workspace/cli/main.py:103
+        snippet: "@autoresearch.group() def experiment()"
+      - file: /workspace/scripts/experiment.py
+        location: /workspace/scripts/experiment.py:839
+        snippet: "subparsers = parser.add_subparsers(dest=\"command\", required=True)"
+    prevalence: common
+  - category: naming
+    pattern: compatibility aliases are exposed at multiple layers
+    description: just aliases, shell wrapper scripts, and argparse option aliases preserve older surfaces
+    examples:
+      - file: /workspace/justfile
+        location: /workspace/justfile:77
+        snippet: "alias experiment-loop := run-experiment-loop"
+      - file: /workspace/scripts/experiment.py
+        location: /workspace/scripts/experiment.py:845
+        snippet: "--engineer-model, --model, --model-alias"
+      - file: /workspace/scripts/fix_code.sh
+        location: /workspace/scripts/fix_code.sh:1
+        snippet: "Compatibility wrapper for legacy callers."
+    prevalence: common
+  - category: testing
+    pattern: just routing is tested via `just --dry-run` or literal justfile inspection
+    description: Tests verify rendered command strings rather than invoking the full command path end to end
+    examples:
+      - file: /workspace/tests/test_cli_fix.py
+        location: /workspace/tests/test_cli_fix.py:89
+        snippet: "subprocess.run([\"just\", \"--dry-run\", \"fix\", \"--continue\"])"
+      - file: /workspace/tests/test_experiment.py
+        location: /workspace/tests/test_experiment.py:1125
+        snippet: "justfile = (REPO_ROOT / \"justfile\").read_text()"
+    prevalence: common
+  - category: documentation
+    pattern: README emphasizes selected shortcuts rather than the full root CLI topology
+    description: README documents `just fix` and external experiment runner entrypoints, but omits the broader Click autoresearch command tree
+    examples:
+      - file: /workspace/README.md
+        location: /workspace/README.md:96
+        snippet: "For local or manual runs, the public entrypoint is: just run-experiment ..."
+      - file: /workspace/README.md
+        location: /workspace/README.md:176
+        snippet: "## Autofix workflow"
+    prevalence: occasional
+related_architecture:
+  components_relevant_to_domain:
+    - component: justfile
+      responsibility: Exposes public command entrypoints and aliases
+      location: /workspace/justfile
+      relationship_to_domain: First routing layer for just-based workflows
+    - component: cli.main
+      responsibility: Registers root Click groups and command callbacks
+      location: /workspace/cli/main.py
+      relationship_to_domain: Owns the `just autoresearch *` surface
+    - component: cli.commands.*
+      responsibility: Implements individual Click-backed command behaviors
+      location: /workspace/cli/commands
+      relationship_to_domain: Second routing layer under Click callbacks
+    - component: scripts/experiment.py
+      responsibility: Owns experiment execution/orchestration subcommands outside the root Click CLI
+      location: /workspace/scripts/experiment.py
+      relationship_to_domain: Adjacent public surface exposed via separate just recipes
+    - component: cli.services.copilot_session
+      responsibility: Shared adapter for Copilot CLI subprocess calls
+      location: /workspace/cli/services/copilot_session.py
+      relationship_to_domain: Common support module used by init, validate, design, and fix
+  interfaces_used_by_domain:
+    - interface: Click group and command decorators
+      location: /workspace/cli/main.py
+      usage_pattern: Root CLI and nested groups for `autoresearch` and `experiment`
+    - interface: argparse subparsers
+      location: /workspace/scripts/experiment.py
+      usage_pattern: Separate runner CLI for execution-oriented experiment commands
+    - interface: just recipe parameters and aliases
+      location: /workspace/justfile
+      usage_pattern: Thin wrappers and compatibility aliases around Python entrypoints
+  data_flow_involving_domain: just recipe -> Python entrypoint (`python -m cli` or `scripts/experiment.py`) -> command module -> shared service or persistence layer
+  key_relationships_to_domain:
+    - from: /workspace/justfile
+      to: /workspace/cli/main.py
+      relationship: calls
+    - from: /workspace/justfile
+      to: /workspace/scripts/experiment.py
+      relationship: calls
+    - from: /workspace/cli/main.py
+      to: /workspace/cli/commands/fix.py
+      relationship: calls
+    - from: /workspace/cli/main.py
+      to: /workspace/cli/commands/design.py
+      relationship: calls
+    - from: /workspace/cli/main.py
+      to: /workspace/cli/commands/experiment.py
+      relationship: calls
+    - from: /workspace/cli/commands/design.py
+      to: /workspace/cli/commands/experiment.py
+      relationship: calls
+related_technology_stack:
+  languages_used_in_domain: [python, just, bash, markdown]
+  frameworks_used_in_domain:
+    - name: Click
+      usage_in_domain: Root CLI definition and nested command groups
+    - name: argparse
+      usage_in_domain: External experiment runner command tree
+  libraries_used_in_domain:
+    - name: subprocess
+      purpose_in_domain: Invokes Copilot CLI and shell commands
+    - name: tomllib
+      purpose_in_domain: Loads project and autofix configuration
+  external_apis_used_in_domain:
+    - name: GitHub Copilot CLI
+      integration_point: cli/services/copilot_session.py and cli/commands/init.py
+related_conventions:
+  naming_patterns_in_domain: Public just recipes use kebab-case; Click subcommands use function names converted to kebab-case; helper implementations use `run_*` names; external experiment script keeps kebab-case argparse subcommands and multiple compatibility flag aliases.
+  structure_of_domain: Entry routing is shallow in justfile, deeper in Click for autoresearch, and separate in argparse for experiment runner flows.
+  error_handling_in_domain: Click-backed paths primarily raise `click.ClickException`; argparse script returns process status codes and prints JSON or stderr messages.
+  testing_in_domain: Routing tests prefer dry-run just rendering, isolated Click runner invocations, and direct justfile string assertions.
+  documentation_in_domain: README documents selected just shortcuts; docs/refactor.md is an incomplete review note for the same surface.
+related_dependencies:
+  internal:
+    - component: /workspace/cli/project_config.py
+      relationship_to_domain: Supplies config discovery and default CLI alias resolution
+      direction: outbound
+    - component: /workspace/cli/services/copilot_session.py
+      relationship_to_domain: Executes Copilot CLI subprocess sessions for several commands
+      direction: outbound
+    - component: /workspace/experiments/registry.state.json
+      relationship_to_domain: Persistence store for Click experiment registry commands
+      direction: outbound
+  external:
+    - name: just
+      purpose_for_domain: User-facing task runner and alias layer
+    - name: GitHub Copilot CLI
+      purpose_for_domain: Underlying agentic CLI used by init, validate, design, and fix
+    - name: uv
+      purpose_for_domain: Python command execution wrapper in just recipes and shell wrappers
+domain_security_considerations:
+  sensitive_areas:
+    - area: permissive tool execution in autofix and design flows
+      location: /workspace/cli/commands/fix.py and /workspace/cli/commands/design.py
+      concern: Copilot session service is invoked with permissive tool settings for remediation/design actions
+    - area: shell command execution from autofix hook config
+      location: /workspace/cli/commands/fix.py
+      concern: Hook commands are loaded from TOML and executed via subprocess after shell-like splitting
+  authentication_patterns_in_domain: Project config and init/validate flows rely on a configured Copilot CLI alias and session-resume behavior.
+  authorization_patterns_in_domain: No in-repo authorization layer is present; command exposure is local CLI-only.
+  data_validation_in_domain: Click validates user inputs for several command options; fix and project config loaders perform explicit TOML shape validation.
+testing_patterns:
+  framework: pytest with Click CliRunner
+  coverage_areas: [just dry-run routing, Click command behavior, compatibility aliases, registry persistence]
+  test_organization: Separate test modules per command area plus a broader experiment test module for script-owned recipes
+  mock_patterns: [patch subprocess.run, CliRunner isolated_filesystem, literal justfile content assertions]
+open_questions:
+  - question: Is the split between Click-owned experiment registry commands and argparse-owned experiment runner commands an intentional long-term public contract?
+    context: Both are user-facing and closely related by name, but they live under separate entrypoints and topologies.
+    type: decision_blocker
+    affects: [/workspace/justfile, /workspace/cli/main.py, /workspace/scripts/experiment.py, /workspace/README.md]
+  - question: Should the top-level `hello` command remain part of the shipped root CLI surface?
+    context: It appears in the root Click CLI but is unrelated to autoresearch workflows and is not documented in README.
+    type: research
+    affects: [/workspace/cli/main.py]
+gaps:
+  - area: Product and agent guidance files
+    description: No `AGENTS.md` or `docs/PRD.yaml` file was present in the workspace for this research pass.
+    impact: research_blocker
+    affects: [/workspace]
+  - area: Root CLI documentation
+    description: README does not enumerate the `just autoresearch` / `python -m cli autoresearch` command tree or describe `init`, `validate`, `design`, or experiment registry CRUD commands.
+    impact: decision_blocker
+    affects: [/workspace/README.md, /workspace/cli/main.py]
+  - area: Existing review note
+    description: `docs/refactor.md` declares this review scope but contains placeholder sections with no completed findings.
+    impact: nice_to_know
+    affects: [/workspace/docs/refactor.md]

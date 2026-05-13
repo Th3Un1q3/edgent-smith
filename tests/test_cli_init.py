@@ -73,6 +73,24 @@ def test_autoresearch_init_fails_if_cli_unauthenticated(
         assert not pathlib.Path(f"{project_name}.config.toml").exists()
 
 
+@patch("subprocess.run")
+def test_autoresearch_init_reports_current_copilot_install_command_when_binary_is_missing(
+    mock_run: MagicMock, tmp_path: pathlib.Path
+) -> None:
+    """TDD Test: `init` should print current Copilot install guidance when the binary is missing."""
+    mock_run.side_effect = FileNotFoundError()
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(cli, ["autoresearch", "init", "--name", "missing-cli"], input="n\n")
+
+    assert result.exit_code != 0
+    assert "To install the GitHub Copilot CLI, run:" in result.output
+    assert "npm install -g @github/copilot" in result.output
+    assert "@github/copilot-cli" not in result.output
+    assert "Error: Missing required tool: copilot" in result.output
+
+
 def test_autoresearch_init_rejects_empty_name() -> None:
     """TDD Test: `init --name ""` should fail."""
     runner = CliRunner()

@@ -49,7 +49,7 @@ eval-ci:
 baseline-status baseline_id:
   @bash scripts/baseline_status.sh "{{baseline_id}}"
 
-# Promote a candidate baseline when its score is higher than the current baseline.
+# Script-backed experiment runner entrypoint: promote a candidate baseline when its score is higher than the current baseline.
 promote-baseline baseline_id:
   {{UV}} run python scripts/experiment.py promote-baseline --baseline-id "{{baseline_id}}"
 
@@ -58,16 +58,8 @@ promote-baseline baseline_id:
 pull-ollama-model:
   bash scripts/pull_ollama_model.sh
 
-# Submit experiment design specification
-experiment-submit-spec title description:
-  mkdir -p experiments
-  DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  printf '%s\n' '---' "title: \"{{title}}\"" "date: ${DATE}" '---' '' "{{description}}" > experiments/candidate.md
-  echo "Wrote experiments/candidate.md"
-  git add experiments/candidate.md
-  git diff --cached --quiet || git commit -m "experiment: add spec — {{title}}"
-
-# Run the Copilot experiment runner locally with a prompt.
+# Script-backed experiment runner entrypoint: run experiment execution locally with a prompt.
+# This is separate from the `autoresearch experiment` local experiment registry CRUD surface.
 # The prompt is required; additional flags are forwarded to experiment.py.
 #
 # Local behaviour vs CI:
@@ -81,7 +73,7 @@ run-experiment prompt *ARGS:
     --local \
     {{ ARGS }}
 
-# Run the local foreground experiment loop.
+# Script-backed experiment runner entrypoint: run the local foreground experiment loop.
 # Arguments are forwarded directly to the local-loop command in experiment.py.
 alias experiment-loop := run-experiment-loop
 run-experiment-loop *ARGS:
@@ -95,10 +87,15 @@ dev-sync-mcp:
 format:
   {{RUFF}} check --fix {{CHECK_PATHS}}
 
-# Proxy commands to the CLI.
-# Usage: just autoresearch <command>
+# Click-backed public CLI surface: `init`, `validate`, `design`, `fix`, and `experiment`.
+# `validate` accepts `--config PATH`; otherwise it auto-discovers the first `*.config.toml` file.
+# `experiment` is the local experiment registry CRUD surface only; execution stays on the script-backed recipes above.
+# Usage: just autoresearch <subcommand> [args]
+[positional-arguments]
 autoresearch +ARGS:
-  {{UV}} run python -m cli autoresearch {{ARGS}}
+  #!/usr/bin/env bash
+  set -euo pipefail
+  {{UV}} run python -m cli autoresearch "$@"
 
 # Run the edge agent with timing, tools used, output, and local OTLP trace metadata.
 edge-agent prompt:

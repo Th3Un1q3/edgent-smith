@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from cli.services.copilot_session import allow_all_deny_git_toolset
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HOOKS_ROOT = REPO_ROOT / "hooks"
 GENERATED_HOOK_NAME = "experiment_generated.sh"
@@ -473,14 +475,11 @@ def build_copilot_command(
         agent,
         "--model",
         model,
-        "--allow-all-tools",
         "--no-ask-user",
         "--output-format",
         "json",
-        "--deny-tool=shell(git push)",
-        "--deny-tool=shell(git commit)",
-        "--deny-tool=shell(git checkout)",
     ]
+    args.extend(allow_all_deny_git_toolset().to_flags(inline_assignment=True))
     if resume_session:
         args.extend(["--resume", session_name])
     else:

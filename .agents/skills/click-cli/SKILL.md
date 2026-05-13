@@ -22,6 +22,12 @@ Invoke this skill when:
 - You want example tests using `click.testing.CliRunner` and filesystem isolation.
 - You need best-practices, anti-patterns, or migration guidance for `click` versions.
 
+## Testing Reminders
+
+- Normalize Click help whitespace in assertions so tests stay stable across wrapping and formatting differences.
+- When help output changes, assert the help output directly instead of relying only on broad suite execution.
+- Treat positional argument shape as part of the public CLI contract and cover it explicitly in tests when commands add, remove, or reorder positional arguments.
+
 ## When Not to Use This Skill
 
 Do not use this skill for:

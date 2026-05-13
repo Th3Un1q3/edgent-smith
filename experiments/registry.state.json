@@ -1,0 +1,24 @@
+{
+  "experiments": [
+    {
+      "id": "test_id",
+      "title": "test",
+      "description": "content",
+      "status": "pending",
+      "created_at": "2026-05-12T13:16:15.731299Z",
+      "updated_at": "2026-05-12T13:16:15.731299Z",
+      "current_run_id": null,
+      "runs": []
+    },
+    {
+      "id": "heuristic-tool-selector-keyword-based-top-3",
+      "title": "heuristic tool selector (keyword-based top-3)",
+      "description": "# experiment: heuristic tool selector (keyword-based top-3)\n\n## Hypothesis\n\nAdding a deterministic, lightweight keyword-based tool selector that restricts the agent to the top-3 most relevant tools per task will (1) increase reliably passing cases by reducing tool confusion/noise and (2) reduce average passing-case time by avoiding unnecessary tool invocations. This targets both levers: increase passing cases and reduce mean passing-case time.\n\n## Motivation\n\nThe repo's ideas emphasize a small harness and tool-selection as high-impact, low-cost changes. A full ML-based selector is heavy; a simple keyword-overlap heuristic is cheap to implement (<50 LOC), deterministic, and likely to avoid worst-case tool misuses that harm correctness and latency.\n\n## Type\n\nPrompting / tooling experiment (agent prompt + lightweight helper)\n\n## Mutation surface\n\n- agents/edge.py (single-file change)\n\n## Implementation Instructions\n\n1. Add a small helper near prompt-build logic in agents/edge.py (<= ~40 LOC):\n   - def select_tools_by_keywords(prompt: str, tools: list[dict], k: int = 3) -> list[dict]:\n       - Tokenize prompt and each tool's name/short description (split on non-word chars, lowercased).\n       - Score each tool by keyword overlap count (intersection size).\n       - Tie-break deterministically by tool name.\n       - Return top-k tools (or all tools if all scores are zero).\n2. Integrate the helper into the prompt construction path:\n   - Before serializing available tools into the agent prompt, call select_tools_by_keywords(user_prompt, tools, k=3).\n   - Only include the returned tools' descriptions in the prompt (keep the same format as existing tool docs so downstream parsing is unchanged).\n3. Add a small config constant near the top of agents/edge.py: TOOL_SELECTOR_K = 3 to make tuning easy.\n4. Keep behaviour non-destructive: when debug mode or an env var (EDGE_AGENT_TOOL_SELECTOR=off) is set, fall back to including all tools.\n\nNotes on implementation style:\n- Keep changes minimal and local to agents/edge.py (no new deps).\n- Use plain Python sets and sorted() for deterministic ties.\n- Add unit-friendly separation: keep select_tools_by_keywords as a pure function so tests can call it.\n\n## Validation(code, prompts, tasks)\n\n- Run the agent smoke prompts before/after the change:\n  - just edge-agent \"What is the age the 3rd president of the US when he took office?\"\n  - just edge-agent \"Summarize the last 24 hours system logs and flag anomalies\"\n- Run the evals runner for the edge agent baseline set and compare metrics:\n  - just eval \"edge_agent_default\"  (compare passing_cases and avg_passing_case_seconds against baseline)\n- Inspect traces/logs to confirm:\n  - Only up to 3 tools are included in the prompt per task.\n  - Tool invocation counts decrease or stay same; correctness does not regress.\n\nSuccess criteria:\n- No regressions in passing cases (ideally +1 or more)\n- Average passing-case seconds reduced by >=5% on passing cases\n\n## Anticipated missteps and fallbacks\n\n- Selector returns zero overlap for many tasks, causing fallback to all tools \u2014 acceptable; if it happens often, change k to 5 or augment scoring with simple tf-idf weights.\n- Selector omits a crucial but low-overlap tool (e.g., diagnostics tool invoked by generic prompts). Fallback: expose EDGE_AGENT_TOOL_SELECTOR_K env var and allow per-task overrides in the prompt metadata.\n- If deterministic ties cause pathological ordering, add a short priority map for essential tools (configurable list) to ensure critical tools are retained.\n\n## Sources\n\n- /workspace/docs/ideas.md \u2014 suggested Harness + Model Routing and tool-selection follow-up\n- LangChain agent architecture posts (conceptual guidance on tool selectors)\n\n## Notes\n\n- Mutation is intentionally small (<=50 LOC) and dependency-free to fit repo constraints.\n- This experiment targets both reliability and latency; if successful, follow-ups can explore lightweight ML-based selectors or usage-based caching.\n\"",
+      "status": "pending",
+      "created_at": "2026-05-13T12:44:52.972423Z",
+      "updated_at": "2026-05-13T12:44:52.972423Z",
+      "current_run_id": null,
+      "runs": []
+    }
+  ]
+}

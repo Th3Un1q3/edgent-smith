@@ -1,15 +1,84 @@
 from __future__ import annotations
 
 import json
+import pathlib
 import re
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
 from cli.main import cli
 
+if TYPE_CHECKING:
+    from cli.services.copilot_session import CopilotSessionService
 
-def test_validate_success(tmp_path: any) -> None:
+
+def test_validate_uses_auto_discovery_by_default_and_accepts_explicit_config_override(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        with open("aaa.config.toml", "w") as f:
+            f.write('name = "auto-project"\n')
+            f.write('agentic_cli_alias = "auto-discovered"\n')
+
+        with open("explicit.config.toml", "w") as f:
+            f.write('name = "explicit-project"\n')
+            f.write('agentic_cli_alias = "explicit-alias"\n')
+
+        aliases_seen: list[str] = []
+        models_seen: list[str] = []
+        allow_all_seen: list[bool] = []
+        agents_seen: list[str | None] = []
+        state: dict[str, str | None] = {"secret": None}
+
+        def fake_send_message(
+            service: CopilotSessionService,
+            prompt: str,
+            **kwargs: object,
+        ) -> MagicMock:
+            if 'My pet is called "' in prompt:
+                aliases_seen.append(service.alias)
+                models_seen.append(service.model)
+                allow_all_seen.append(service.toolset.allow_all)
+                agents_seen.append(service.agent)
+                match = re.search(r'My pet is called "([^"]+)"', prompt)
+                assert match is not None
+                state["secret"] = match.group(1)
+                return MagicMock(is_success=True, stdout="stored", stderr="")
+
+            if "what's the name of my pet?" in prompt:
+                secret = state["secret"] or "unknown"
+                return MagicMock(
+                    is_success=True,
+                    stdout=f"Your pet is called {secret}",
+                    stderr="",
+                )
+
+            raise AssertionError(f"Unexpected prompt: {prompt}")
+
+        with patch(
+            "cli.services.copilot_session.CopilotSessionService.send_message",
+            autospec=True,
+            side_effect=fake_send_message,
+        ):
+            fallback_result = runner.invoke(cli, ["autoresearch", "validate"])
+            explicit_result = runner.invoke(
+                cli,
+                ["autoresearch", "validate", "--config", "explicit.config.toml"],
+            )
+
+    assert fallback_result.exit_code == 0
+    assert explicit_result.exit_code == 0
+    assert aliases_seen == ["auto-discovered", "explicit-alias"]
+    assert models_seen == ["gpt-5-mini", "gpt-5-mini"]
+    assert allow_all_seen == [False, False]
+    assert agents_seen == [None, None]
+
+
+def test_validate_success(tmp_path: pathlib.Path) -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem(temp_dir=tmp_path):
@@ -19,9 +88,9 @@ def test_validate_success(tmp_path: any) -> None:
             f.write('agentic_cli_alias = "copilot"\n')
 
         # Shared state for the mock
-        state = {"secret": None}
+        state: dict[str, str | None] = {"secret": None}
 
-        def mock_side_effect(cmd, **kwargs):
+        def mock_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
             prompt = ""
             for i, arg in enumerate(cmd):
                 if arg == "--prompt" or arg == "-p":
@@ -71,9 +140,10 @@ def test_validate_success(tmp_path: any) -> None:
             assert "--resume=s1" in args2
 
 
-def test_validate_no_config(tmp_path: any) -> None:
+def test_validate_no_config(tmp_path: pathlib.Path) -> None:
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(cli, ["autoresearch", "validate"])
         assert result.exit_code != 0
         assert "No .config.toml file found" in result.output
+        assert "Pass --config PATH" in result.output

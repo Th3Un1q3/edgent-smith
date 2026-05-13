@@ -11,6 +11,8 @@ import click
 
 from cli.services.copilot_session import PERMISSIVE_TOOLSET, CopilotSessionService
 
+from .command_context import build_command_context
+
 
 @dataclass(frozen=True)
 class HookSpec:
@@ -26,18 +28,30 @@ class HookFailure:
     stderr: str
 
 
-def run_fix(autofix_config: str, continue_session: bool = False, parallel: bool = False) -> None:
+def run_fix(
+    autofix_config: str,
+    config_path: str | None = None,
+    continue_session: bool = False,
+    parallel: bool = False,
+) -> None:
     """Run the autofix workflow defined in the TOML config file."""
-    config_path = Path(autofix_config)
-    hooks = _load_hook_specs(config_path)
+    autofix_config_path = Path(autofix_config)
+    hooks = _load_hook_specs(autofix_config_path)
     if not hooks:
         click.echo(
-            f"No autofix hooks are configured in {config_path}.\n"
-            f"Add one or more [[hooks]] entries to {config_path} or pass --autofix-config <path>."
+            f"No autofix hooks are configured in {autofix_config_path}.\n"
+            "Add one or more [[hooks]] entries to "
+            f"{autofix_config_path} or pass --autofix-config <path>."
         )
         return
 
-    service = CopilotSessionService(alias="copilot", model="gpt-5-mini", toolset=PERMISSIVE_TOOLSET)
+    context = build_command_context(
+        config_path=config_path,
+        required=False,
+        model="gpt-5-mini",
+        toolset=PERMISSIVE_TOOLSET,
+    )
+    service = context.service
     resume_first_fallback = continue_session
 
     if parallel:
@@ -45,8 +59,16 @@ def run_fix(autofix_config: str, continue_session: bool = False, parallel: bool 
         click.echo("All autofix stages completed successfully.")
         return
 
-    for hook in hooks:
-        used_fallback = _run_hook(hook, service, continue_session=resume_first_fallback)
+    total_hooks = len(hooks)
+    for index, hook in enumerate(hooks, start=1):
+        click.echo(f"[{index}/{total_hooks}] Running {hook.name}...")
+        used_fallback = _run_hook(
+            hook,
+            service,
+            continue_session=resume_first_fallback,
+            position=index,
+            total=total_hooks,
+        )
         if used_fallback:
             resume_first_fallback = False
 
@@ -110,11 +132,15 @@ def _run_hook(
     service: CopilotSessionService,
     *,
     continue_session: bool,
+    position: int,
+    total: int,
 ) -> bool:
     result = _run_command(hook.command)
     if result.returncode == 0:
+        click.echo(f"[{position}/{total}] {hook.name} passed.")
         return False
 
+    click.echo(f"[{position}/{total}] {hook.name} failed. Requesting remediation...")
     prompt = _build_remediation_prompt(hook, result.stdout, result.stderr)
     remediation_result = service.send_message(
         prompt,
@@ -125,6 +151,7 @@ def _run_hook(
         detail = remediation_result.stderr.strip() or "Copilot remediation failed."
         raise click.ClickException(f"Autofix remediation failed for '{hook.name}': {detail}")
 
+    click.echo(f"[{position}/{total}] Retrying {hook.name}...")
     retry_result = _run_command(hook.command)
     if retry_result.returncode != 0:
         raise click.ClickException(
@@ -132,6 +159,7 @@ def _run_hook(
             f"{_format_output(retry_result.stdout, retry_result.stderr)}"
         )
 
+    click.echo(f"[{position}/{total}] {hook.name} passed after remediation.")
     return True
 
 
@@ -141,10 +169,13 @@ def _run_hooks_in_parallel(
     *,
     continue_session: bool,
 ) -> None:
+    click.echo(f"Running first pass for {len(hooks)} autofix hooks in parallel...")
     first_pass_failures = _run_hooks_first_pass(hooks)
     if not first_pass_failures:
         return
 
+    suffix = "s" if len(first_pass_failures) != 1 else ""
+    click.echo(f"Running remediation for {len(first_pass_failures)} failed hook{suffix}...")
     prompt = _build_batch_remediation_prompt(first_pass_failures)
     remediation_result = service.send_message(
         prompt,
@@ -165,28 +196,36 @@ def _run_hooks_first_pass(hooks: list[HookSpec]) -> list[HookFailure]:
         future_to_index = {
             executor.submit(_run_command, hook.command): index for index, hook in enumerate(hooks)
         }
-        ordered_results: list[subprocess.CompletedProcess[str] | None] = [None] * len(hooks)
+        ordered_failures: list[HookFailure | None] = [None] * len(hooks)
+        total_hooks = len(hooks)
 
         for future in as_completed(future_to_index):
             index = future_to_index[future]
-            ordered_results[index] = future.result()
+            hook = hooks[index]
+            result = future.result()
+            position = index + 1
 
-    failures: list[HookFailure] = []
-    for hook, result in zip(hooks, ordered_results, strict=True):
-        if result is None:
-            raise click.ClickException(
-                f"Autofix hook '{hook.name}' did not produce a first-pass result."
-            )
-        if result.returncode != 0:
-            failures.append(HookFailure(hook=hook, stdout=result.stdout, stderr=result.stderr))
-    return failures
+            if result.returncode != 0:
+                click.echo(f"[first pass {position}/{total_hooks}] {hook.name} failed.")
+                ordered_failures[index] = HookFailure(
+                    hook=hook,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                )
+                continue
+            click.echo(f"[first pass {position}/{total_hooks}] {hook.name} passed.")
+
+    return [failure for failure in ordered_failures if failure is not None]
 
 
 def _rerun_failed_hooks(failures: list[HookFailure]) -> list[HookFailure]:
     remaining_failures: list[HookFailure] = []
-    for failure in failures:
+    total_failures = len(failures)
+    for index, failure in enumerate(failures, start=1):
+        click.echo(f"[retry {index}/{total_failures}] Retrying {failure.hook.name}...")
         retry_result = _run_command(failure.hook.command)
         if retry_result.returncode != 0:
+            click.echo(f"[retry {index}/{total_failures}] {failure.hook.name} still failed.")
             remaining_failures.append(
                 HookFailure(
                     hook=failure.hook,
@@ -194,6 +233,10 @@ def _rerun_failed_hooks(failures: list[HookFailure]) -> list[HookFailure]:
                     stderr=retry_result.stderr,
                 )
             )
+            continue
+        click.echo(
+            f"[retry {index}/{total_failures}] {failure.hook.name} passed after remediation."
+        )
     return remaining_failures
 
 

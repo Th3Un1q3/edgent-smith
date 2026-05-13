@@ -8,11 +8,17 @@ import textwrap
 import threading
 import tomllib
 from collections import Counter
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
+from cli.commands.fix import run_fix
 from cli.main import cli
+from cli.services.copilot_session import PERMISSIVE_TOOLSET
+
+if TYPE_CHECKING:
+    from cli.services.copilot_session import CopilotSessionService
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -79,6 +85,10 @@ def _write_autofix_config(config_path: pathlib.Path, hooks: list[dict[str, str]]
             ]
         )
     config_path.write_text("\n".join(lines))
+
+
+def _write_project_config(config_path: pathlib.Path, *, alias: str = "copilot") -> None:
+    config_path.write_text(f'name = "test-project"\nagentic_cli_alias = "{alias}"\n')
 
 
 def test_just_fix_recipe_routes_to_python_cli() -> None:
@@ -152,6 +162,18 @@ def test_fix_runs_default_hooks_from_autofix_config_in_order_without_copilot(
             result = runner.invoke(cli, ["autoresearch", "fix"])
 
     assert result.exit_code == 0
+    assert result.output.index("[1/4] Running format...") < result.output.index(
+        "[2/4] Running lint..."
+    )
+    assert result.output.index("[2/4] Running lint...") < result.output.index(
+        "[3/4] Running typecheck..."
+    )
+    assert result.output.index("[3/4] Running typecheck...") < result.output.index(
+        "[4/4] Running test..."
+    )
+    assert result.output.index("[4/4] Running test...") < result.output.index(
+        "All autofix stages completed successfully."
+    )
     assert "All autofix stages completed successfully." in result.output
     assert [call.args[0] for call in mock_run.call_args_list] == [
         ["just", "format"],
@@ -160,6 +182,116 @@ def test_fix_runs_default_hooks_from_autofix_config_in_order_without_copilot(
         ["just", "test"],
     ]
     mock_send.assert_not_called()
+
+
+def test_fix_uses_project_config_alias_by_default_while_loading_hooks_from_autofix_config(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_project_config(pathlib.Path("test.config.toml"), alias="gh-copilot")
+        _write_autofix_config(
+            pathlib.Path("custom-autofix.toml"),
+            [
+                {
+                    "name": "validate",
+                    "command": "just validate",
+                    "remediation_prompt": "Validation failed. Retry just validate.",
+                }
+            ],
+        )
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _completed_process(["just", "validate"], returncode=1, stderr="hook failed"),
+                _completed_process(["just", "validate"]),
+            ]
+
+            def fake_send_message(
+                session: CopilotSessionService,
+                prompt: str,
+                **kwargs: object,
+            ) -> MagicMock:
+                assert session.alias == "gh-copilot"
+                assert "just validate" in prompt
+                return MagicMock(is_success=True, stdout="fixed", stderr="")
+
+            with patch(
+                "cli.services.copilot_session.CopilotSessionService.send_message",
+                autospec=True,
+                side_effect=fake_send_message,
+            ) as mock_send:
+                result = runner.invoke(
+                    cli,
+                    ["autoresearch", "fix", "--autofix-config", "custom-autofix.toml"],
+                )
+
+    assert result.exit_code == 0
+    assert [call.args[0] for call in mock_run.call_args_list] == [
+        ["just", "validate"],
+        ["just", "validate"],
+    ]
+    assert mock_send.call_count == 1
+
+
+def test_fix_uses_explicit_project_config_when_config_flag_is_provided(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_project_config(pathlib.Path("aaa.config.toml"), alias="auto-discovered")
+        _write_project_config(pathlib.Path("explicit.config.toml"), alias="explicit-alias")
+        _write_autofix_config(
+            pathlib.Path("custom-autofix.toml"),
+            [
+                {
+                    "name": "validate",
+                    "command": "just validate",
+                    "remediation_prompt": "Validation failed. Retry just validate.",
+                }
+            ],
+        )
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _completed_process(["just", "validate"], returncode=1, stderr="hook failed"),
+                _completed_process(["just", "validate"]),
+            ]
+
+            def fake_send_message(
+                session: CopilotSessionService,
+                prompt: str,
+                **kwargs: object,
+            ) -> MagicMock:
+                assert session.alias == "explicit-alias"
+                assert "just validate" in prompt
+                return MagicMock(is_success=True, stdout="fixed", stderr="")
+
+            with patch(
+                "cli.services.copilot_session.CopilotSessionService.send_message",
+                autospec=True,
+                side_effect=fake_send_message,
+            ) as mock_send:
+                result = runner.invoke(
+                    cli,
+                    [
+                        "autoresearch",
+                        "fix",
+                        "--config",
+                        "explicit.config.toml",
+                        "--autofix-config",
+                        "custom-autofix.toml",
+                    ],
+                )
+
+    assert result.exit_code == 0
+    assert [call.args[0] for call in mock_run.call_args_list] == [
+        ["just", "validate"],
+        ["just", "validate"],
+    ]
+    assert mock_send.call_count == 1
 
 
 def test_fix_uses_copilot_fallback_for_failed_stage_and_continues(
@@ -192,6 +324,13 @@ def test_fix_uses_copilot_fallback_for_failed_stage_and_continues(
         result = runner.invoke(cli, ["autoresearch", "fix"])
 
     assert result.exit_code == 0
+    assert "[2/4] lint failed. Requesting remediation..." in result.output
+    assert result.output.index(
+        "[2/4] lint failed. Requesting remediation..."
+    ) < result.output.index("[2/4] Retrying lint...")
+    assert result.output.index("[2/4] Retrying lint...") < result.output.index(
+        "[2/4] lint passed after remediation."
+    )
     assert [call.args[0] for call in mock_run.call_args_list] == [
         ["just", "format"],
         ["just", "lint"],
@@ -270,6 +409,23 @@ def test_fix_parallel_batches_first_pass_failures_into_single_remediation(
             result = runner.invoke(cli, ["autoresearch", "fix", "--parallel"])
 
     assert result.exit_code == 0
+    assert "Running first pass for 4 autofix hooks in parallel..." in result.output
+    assert "[first pass 1/4] format passed." in result.output
+    assert "[first pass 2/4] lint failed." in result.output
+    assert "[first pass 3/4] typecheck failed." in result.output
+    assert "[first pass 4/4] test passed." in result.output
+    assert result.output.index("[first pass 3/4] typecheck failed.") < result.output.index(
+        "[first pass 2/4] lint failed."
+    )
+    assert result.output.index("[first pass 2/4] lint failed.") < result.output.index(
+        "Running remediation for 2 failed hooks..."
+    )
+    assert result.output.index("Running remediation for 2 failed hooks...") < result.output.index(
+        "[retry 1/2] Retrying lint..."
+    )
+    assert result.output.index("[retry 1/2] Retrying lint...") < result.output.index(
+        "[retry 2/2] Retrying typecheck..."
+    )
     assert mock_run_command.call_count == 6
     assert attempts == Counter(
         {
@@ -292,6 +448,94 @@ def test_fix_parallel_batches_first_pass_failures_into_single_remediation(
     assert DEFAULT_QUALITY_HOOKS[2]["remediation_prompt"] in prompt
     assert "Hook name: format" not in prompt
     assert "Hook name: test" not in prompt
+
+
+def test_fix_parallel_emits_first_pass_progress_as_hooks_finish(tmp_path: pathlib.Path) -> None:
+    slow_hook_ready = threading.Event()
+    release_slow_hook = threading.Event()
+    fast_hook_progress_seen = threading.Event()
+    captured_messages: list[str] = []
+    attempts: Counter[str] = Counter()
+    thread_error: list[BaseException] = []
+
+    hooks = [
+        {
+            "name": "lint",
+            "command": "just lint",
+            "remediation_prompt": "Lint failed. Retry just lint.",
+        },
+        {
+            "name": "typecheck",
+            "command": "just typecheck",
+            "remediation_prompt": "Typecheck failed. Retry just typecheck.",
+        },
+    ]
+
+    _write_autofix_config(tmp_path / "autofix.toml", hooks)
+
+    def fake_run_command(command: str) -> subprocess.CompletedProcess[str]:
+        attempts[command] += 1
+        if attempts[command] > 1:
+            return _completed_process(shlex.split(command))
+        if command == "just lint":
+            slow_hook_ready.set()
+            release_slow_hook.wait(timeout=1)
+            return _completed_process(["just", "lint"], returncode=1, stdout="lint stdout")
+        if command == "just typecheck":
+            return _completed_process(
+                ["just", "typecheck"],
+                returncode=1,
+                stdout="type stdout",
+            )
+        raise AssertionError(f"unexpected command: {command}")
+
+    def fake_echo(message: object | None = None, **_: object) -> None:
+        rendered = "" if message is None else str(message)
+        captured_messages.append(rendered)
+        if rendered == "[first pass 2/2] typecheck failed.":
+            fast_hook_progress_seen.set()
+
+    with (
+        patch("cli.commands.fix._run_command", side_effect=fake_run_command),
+        patch(
+            "cli.commands.fix.build_command_context",
+            return_value=MagicMock(
+                service=MagicMock(
+                    send_message=MagicMock(
+                        return_value=MagicMock(is_success=True, stdout="fixed", stderr="")
+                    )
+                )
+            ),
+        ),
+        patch("cli.commands.fix.click.echo", side_effect=fake_echo),
+    ):
+
+        def run_fix_worker() -> None:
+            try:
+                run_fix(
+                    str(tmp_path / "autofix.toml"),
+                    config_path=None,
+                    continue_session=False,
+                    parallel=True,
+                )
+            except BaseException as exc:  # pragma: no cover - assertion-backed safety net
+                thread_error.append(exc)
+
+        worker = threading.Thread(
+            target=run_fix_worker,
+        )
+        worker.start()
+
+        assert slow_hook_ready.wait(timeout=1)
+        assert fast_hook_progress_seen.wait(timeout=0.2)
+
+        release_slow_hook.set()
+        worker.join(timeout=1)
+
+    assert not worker.is_alive()
+    assert thread_error == []
+    assert captured_messages[0] == "Running first pass for 2 autofix hooks in parallel..."
+    assert "[first pass 2/2] typecheck failed." in captured_messages
 
 
 def test_fix_parallel_skips_copilot_when_first_pass_succeeds(tmp_path: pathlib.Path) -> None:
@@ -364,7 +608,10 @@ def test_fix_continue_reuses_same_service_across_fallback_turns(
     with (
         runner.isolated_filesystem(temp_dir=tmp_path),
         patch("subprocess.run") as mock_run,
-        patch("cli.commands.fix.CopilotSessionService", return_value=fake_service) as mock_service,
+        patch(
+            "cli.commands.fix.build_command_context",
+            return_value=MagicMock(service=fake_service),
+        ) as mock_build_command_context,
     ):
         _write_autofix_config(pathlib.Path("autofix.toml"), DEFAULT_QUALITY_HOOKS)
         mock_run.side_effect = [
@@ -379,7 +626,12 @@ def test_fix_continue_reuses_same_service_across_fallback_turns(
         result = runner.invoke(cli, ["autoresearch", "fix", "--continue"])
 
     assert result.exit_code == 0
-    assert mock_service.call_count == 1
+    mock_build_command_context.assert_called_once_with(
+        config_path=None,
+        required=False,
+        model="gpt-5-mini",
+        toolset=PERMISSIVE_TOOLSET,
+    )
     assert fake_service.send_message.call_count == 2
     assert fake_service.send_message.call_args_list[0].kwargs["continue_session"] is True
     assert fake_service.send_message.call_args_list[1].kwargs["continue_session"] is False
