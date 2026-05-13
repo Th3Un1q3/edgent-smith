@@ -25,6 +25,10 @@ lint:
 typecheck:
   {{MYPY}} {{CHECK_PATHS}}
 
+# Run the CI check sequence with aggregated failure reporting.
+ci:
+  @bash scripts/ci.sh
+
 # Run the Python autofix workflow using the hooks defined in autofix.toml.
 fix *ARGS:
   {{UV}} run python -m cli autoresearch fix {{ARGS}}
