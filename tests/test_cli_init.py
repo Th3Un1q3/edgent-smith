@@ -8,11 +8,21 @@ from click.testing import CliRunner
 from cli.main import cli
 
 
-def test_autoresearch_init_creates_config_file(tmp_path: pathlib.Path) -> None:
+@patch("cli.commands.init.CopilotSessionService")
+@patch("cli.commands.init.subprocess.run")
+def test_autoresearch_init_creates_config_file(
+    mock_run: MagicMock,
+    mock_copilot_session_service: MagicMock,
+    tmp_path: pathlib.Path,
+) -> None:
     """
     TDD Test: `just autoresearch init --name <name>` should create a <name>.config.toml file
     in the current directory with the correct content.
     """
+    mock_run.return_value = MagicMock(returncode=0)
+    mock_service = MagicMock()
+    mock_service.send_message.return_value = MagicMock(is_success=True, stderr="")
+    mock_copilot_session_service.return_value = mock_service
     runner = CliRunner()
     project_name = "test_project"
     config_filename = f"{project_name}.config.toml"

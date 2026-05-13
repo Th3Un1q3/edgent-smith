@@ -6,7 +6,6 @@ import shlex
 import subprocess
 import textwrap
 import threading
-import tomllib
 from collections import Counter
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
