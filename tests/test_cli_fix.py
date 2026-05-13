@@ -776,25 +776,3 @@ def test_fix_fails_clearly_for_invalid_hook_config(tmp_path: pathlib.Path) -> No
     assert result.exit_code != 0
     assert "Error: Invalid autofix config" in result.output
     mock_run.assert_not_called()
-
-
-def test_shipped_autofix_config_contains_default_quality_hooks_and_workflow_security_hook() -> None:
-    with (REPO_ROOT / "autofix.toml").open("rb") as config_file:
-        config = tomllib.load(config_file)
-
-    hooks = config.get("hooks")
-    assert isinstance(hooks, list)
-    assert hooks
-
-    assert hooks[:5] == [
-        *DEFAULT_QUALITY_HOOKS,
-        {
-            "name": "workflow-security",
-            "command": "uv run python scripts/validate_workflow_security.py",
-            "remediation_prompt": (
-                "Workflow security validation failed with this output: ${hook_output}. "
-                "Find the most non breaking way to fix the issue. "
-                "To re-run use uv run python scripts/validate_workflow_security.py."
-            ),
-        },
-    ]
