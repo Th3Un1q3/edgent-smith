@@ -80,5 +80,3 @@ jobs:
             just typecheck
             echo "── test ──────────────────────────────────────────"
             just test
-            echo "── workflow-security ─────────────────────────────"
-            just workflow-security

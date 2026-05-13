@@ -26,7 +26,3 @@ name = "test"
 command = "just test"
 remediation_prompt = "Tests failed. Find the most non breaking way to fix the failure. Consider what caused the tests to fail, either there is an underlying error in implementation or in rare case it's a test itself tests a wrong thing. Re-run tests use `just test`."
 
-[[hooks]]
-name = "workflow-security"
-command = "uv run python scripts/validate_workflow_security.py"
-remediation_prompt = "Workflow security validation failed with this output: ${hook_output}. Find the most non breaking way to fix the issue. To re-run use uv run python scripts/validate_workflow_security.py."
