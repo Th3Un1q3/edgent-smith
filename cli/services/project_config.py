@@ -9,6 +9,7 @@ import click
 PROJECT_CONFIG_SUFFIX = ".config.toml"
 DEFAULT_AGENTIC_CLI_TYPE = "copilot_cli"
 DEFAULT_AGENTIC_CLI_ALIAS = "copilot"
+DEFAULT_BASELINE_EVAL_MODEL = "edge_agent_default"
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,8 @@ class ProjectConfig:
     name: str
     agentic_cli_type: str
     agentic_cli_alias: str
+    baseline_id: str
+    baseline_eval_model: str
 
 
 def project_config_filename(name: str) -> str:
@@ -28,13 +31,20 @@ def render_project_config(
     *,
     cli_type: str = DEFAULT_AGENTIC_CLI_TYPE,
     cli_alias: str = DEFAULT_AGENTIC_CLI_ALIAS,
+    baseline_id: str | None = None,
+    baseline_eval_model: str = DEFAULT_BASELINE_EVAL_MODEL,
 ) -> str:
+    resolved_baseline_id = baseline_id or name
     return (
         "\n".join(
             [
                 f'name = "{name}"',
                 f'agentic_cli_type = "{cli_type}"',
                 f'agentic_cli_alias = "{cli_alias}"',
+                "",
+                "[baseline]",
+                f'id = "{resolved_baseline_id}"',
+                f'eval_model = "{baseline_eval_model}"',
             ]
         )
         + "\n"
@@ -59,9 +69,15 @@ def load_project_config(
     if not isinstance(raw_config, dict):
         raise click.ClickException("Invalid project config: expected a TOML table.")
 
+    baseline_config = raw_config.get("baseline")
+    if not isinstance(baseline_config, dict):
+        baseline_config = {}
+
+    resolved_name = _string_value(raw_config.get("name"), fallback="unknown")
+
     return ProjectConfig(
         path=resolved_path,
-        name=_string_value(raw_config.get("name"), fallback="unknown"),
+        name=resolved_name,
         agentic_cli_type=_string_value(
             raw_config.get("agentic_cli_type"),
             fallback=DEFAULT_AGENTIC_CLI_TYPE,
@@ -69,6 +85,14 @@ def load_project_config(
         agentic_cli_alias=_string_value(
             raw_config.get("agentic_cli_alias"),
             fallback=DEFAULT_AGENTIC_CLI_ALIAS,
+        ),
+        baseline_id=_string_value(
+            baseline_config.get("id"),
+            fallback=resolved_name,
+        ),
+        baseline_eval_model=_string_value(
+            baseline_config.get("eval_model"),
+            fallback=DEFAULT_BASELINE_EVAL_MODEL,
         ),
     )
 

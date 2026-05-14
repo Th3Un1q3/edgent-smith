@@ -3,9 +3,12 @@ from __future__ import annotations
 import pathlib
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
+from pydantic import ValidationError
 
 from cli.main import cli
+from cli.services.project_config import load_project_config
 
 
 @patch("cli.commands.init.CopilotSessionService")
@@ -40,6 +43,95 @@ def test_autoresearch_init_creates_config_file(
         assert f'name = "{project_name}"' in content
         assert 'agentic_cli_type = "copilot_cli"' in content
         assert 'agentic_cli_alias = "copilot"' in content
+
+
+@patch("cli.commands.init.CopilotSessionService")
+@patch("cli.commands.init.subprocess.run")
+def test_autoresearch_init_writes_default_baseline_section(
+    mock_run: MagicMock,
+    mock_copilot_session_service: MagicMock,
+    tmp_path: pathlib.Path,
+) -> None:
+    mock_run.return_value = MagicMock(returncode=0)
+    mock_service = MagicMock()
+    mock_service.send_message.return_value = MagicMock(is_success=True, stderr="")
+    mock_copilot_session_service.return_value = mock_service
+    runner = CliRunner()
+    project_name = "baseline_project"
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(cli, ["autoresearch", "init", "--name", project_name])
+
+        assert result.exit_code == 0
+        project_config = load_project_config(f"{project_name}.config.toml", required=True)
+        assert project_config is not None
+        assert project_config.baseline_id == project_name
+        assert project_config.baseline_eval_model == "edge_agent_default"
+
+
+@patch("cli.commands.init.CopilotSessionService")
+@patch("cli.commands.init.subprocess.run")
+def test_autoresearch_init_accepts_explicit_baseline_settings(
+    mock_run: MagicMock,
+    mock_copilot_session_service: MagicMock,
+    tmp_path: pathlib.Path,
+) -> None:
+    mock_run.return_value = MagicMock(returncode=0)
+    mock_service = MagicMock()
+    mock_service.send_message.return_value = MagicMock(is_success=True, stderr="")
+    mock_copilot_session_service.return_value = mock_service
+    runner = CliRunner()
+    project_name = "configured_project"
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(
+            cli,
+            [
+                "autoresearch",
+                "init",
+                "--name",
+                project_name,
+                "--baseline-id",
+                "configured_baseline",
+                "--eval-model",
+                "edge_agent_local_openrouter",
+            ],
+        )
+
+        assert result.exit_code == 0
+        project_config = load_project_config(f"{project_name}.config.toml", required=True)
+        assert project_config is not None
+        assert project_config.baseline_id == "configured_baseline"
+        assert project_config.baseline_eval_model == "edge_agent_local_openrouter"
+
+
+@patch("cli.commands.init.CopilotSessionService")
+@patch("cli.commands.init.subprocess.run")
+def test_autoresearch_init_derives_filename_from_validated_project_name(
+    mock_run: MagicMock,
+    mock_copilot_session_service: MagicMock,
+    tmp_path: pathlib.Path,
+) -> None:
+    mock_run.return_value = MagicMock(returncode=0)
+    mock_service = MagicMock()
+    mock_service.send_message.return_value = MagicMock(is_success=True, stderr="")
+    mock_copilot_session_service.return_value = mock_service
+    runner = CliRunner()
+    raw_project_name = "  spaced_name  "
+    normalized_project_name = "spaced_name"
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(cli, ["autoresearch", "init", "--name", raw_project_name])
+
+        assert result.exit_code == 0
+        assert (
+            f"Created project configuration: {normalized_project_name}.config.toml" in result.output
+        )
+        assert pathlib.Path(f"{normalized_project_name}.config.toml").exists()
+        assert not pathlib.Path(f"{raw_project_name}.config.toml").exists()
+
+        content = pathlib.Path(f"{normalized_project_name}.config.toml").read_text()
+        assert f'name = "{normalized_project_name}"' in content
 
 
 @patch("subprocess.run")
@@ -115,6 +207,64 @@ def test_autoresearch_init_rejects_invalid_characters() -> None:
     result = runner.invoke(cli, ["autoresearch", "init", "--name", "bad/name"])
     assert result.exit_code != 0
     assert "Error: Project name contains invalid characters." in result.output
+
+
+def test_autoresearch_init_rejects_invalid_baseline_id_characters() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["autoresearch", "init", "--name", "valid_name", "--baseline-id", "bad baseline!"],
+    )
+    assert result.exit_code != 0
+    assert "Error: Baseline ID contains invalid characters." in result.output
+
+
+@patch("cli.commands.init.CopilotSessionService")
+@patch("cli.commands.init.subprocess.run")
+def test_autoresearch_init_rejects_explicit_empty_baseline_id(
+    mock_run: MagicMock,
+    mock_copilot_session_service: MagicMock,
+    tmp_path: pathlib.Path,
+) -> None:
+    mock_run.return_value = MagicMock(returncode=0)
+    mock_service = MagicMock()
+    mock_service.send_message.return_value = MagicMock(is_success=True, stderr="")
+    mock_copilot_session_service.return_value = mock_service
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(
+            cli,
+            ["autoresearch", "init", "--name", "valid_name", "--baseline-id", ""],
+        )
+
+    assert result.exit_code != 0
+    assert "Error: Baseline ID cannot be empty." in result.output
+
+
+def test_init_command_inputs_reject_invalid_eval_model() -> None:
+    from cli.commands import init as init_module
+
+    with pytest.raises(ValidationError) as excinfo:
+        init_module.InitCommandInputs.model_validate(
+            {
+                "name": "valid_name",
+                "baseline_id": "valid_baseline",
+                "eval_model": "bad/model",
+            }
+        )
+
+    assert any(error["loc"] == ("eval_model",) for error in excinfo.value.errors())
+
+
+def test_autoresearch_init_rejects_invalid_eval_model_characters() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["autoresearch", "init", "--name", "valid_name", "--eval-model", "bad/model"],
+    )
+    assert result.exit_code != 0
+    assert "Error: Evaluation model contains invalid characters." in result.output
 
 
 def test_autoresearch_init_prevents_overwrite(tmp_path: pathlib.Path) -> None:

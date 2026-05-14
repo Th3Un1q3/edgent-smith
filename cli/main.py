@@ -36,9 +36,19 @@ def autoresearch() -> None:
 
 @autoresearch.command()
 @click.option("--name", required=True, help="Internal name for the project configuration.")
-def init(name: str) -> None:
+@click.option(
+    "--baseline-id",
+    help="Baseline identifier to store in the config. Defaults to the project name.",
+)
+@click.option(
+    "--eval-model",
+    default="edge_agent_default",
+    show_default=True,
+    help="Evaluation model alias stored in the config baseline section.",
+)
+def init(name: str, baseline_id: str | None, eval_model: str) -> None:
     """Initialize a new auto-research project configuration."""
-    run_init(name)
+    run_init(name, baseline_id=baseline_id, eval_model=eval_model)
 
 
 @autoresearch.command()

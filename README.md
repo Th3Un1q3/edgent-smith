@@ -76,12 +76,12 @@ Current public `just` entrypoints are split between the Click-backed `autoresear
 
 | Surface | Backing implementation | Current commands |
 |--------|-------------------------|------------------|
-| `just autoresearch ...` | `uv run python -m cli autoresearch` | `init --name NAME`, `validate [--config PATH]`, `design [BRIEF] [--config PATH]`, `fix [--config PATH] [--autofix-config PATH] [--continue] [--parallel]`, `experiment create|start|finish|list|show ...` |
+| `just autoresearch ...` | `uv run python -m cli autoresearch` | `init --name NAME [--baseline-id ID] [--eval-model ALIAS]`, `validate [--config PATH]`, `design [BRIEF] [--config PATH]`, `fix [--config PATH] [--autofix-config PATH] [--continue] [--parallel]`, `experiment create|start|finish|list|show ...` |
 | `just run-experiment ...` | `uv run python scripts/experiment.py run` | Local script-backed experiment execution with a required prompt and forwarded flags |
 | `just run-experiment-loop ...` | `uv run python scripts/experiment.py local-loop` | Local foreground experiment loop with forwarded flags |
 | `just promote-baseline ...` | `uv run python scripts/experiment.py promote-baseline` | Baseline promotion for an existing candidate result |
 
-- `just autoresearch init --name NAME` verifies the `copilot` CLI alias and authentication before it writes `NAME.config.toml`. If the GitHub Copilot CLI is missing, the command points to `npm install -g @github/copilot`.
+- `just autoresearch init --name NAME` verifies the `copilot` CLI alias and authentication before it writes `NAME.config.toml`. The generated config now includes a `[baseline]` section with `id` defaulting to `NAME` and `eval_model` defaulting to `edge_agent_default`. If the GitHub Copilot CLI is missing, the command points to `npm install -g @github/copilot`.
 - `just autoresearch validate --config PATH` validates a specific project config. When `--config` is omitted, `validate` auto-discovers the lexicographically first `*.config.toml` file in the current directory.
 - `just autoresearch experiment ...` manages local experiment registry CRUD only. Use `just run-experiment ...`, `just run-experiment-loop ...`, and `just promote-baseline ...` for script-backed experiment execution.
 
