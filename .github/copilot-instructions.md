@@ -260,6 +260,9 @@ When integrating with an external provider or library, identify the constructs t
 - Prefer the smallest working integration.
 - Minimal change first.
 - Prefer an existing pattern in this repo over inventing a new abstraction.
+- Use domain-specific and intent-revealing names for locals and fields when the role is known; avoid placeholders like `service`, `context`, or `instance` when a clearer name is available.
+- Apply SOLID, DRY, and YAGNI pragmatically and locally: keep responsibilities narrow, remove real duplication, and do not add abstractions before the current change needs them.
+- Prefer immutable or frozen data structures for new config or value objects when that fits the local design; do not force broad rewrites of existing mutable flows.
 - Extract shared logic when duplication is real and current, not speculative.
 - Do not broaden a task into a general architecture cleanup unless the user asked for that.
 

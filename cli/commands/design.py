@@ -17,7 +17,7 @@ EDGE_ARCHITECT_AGENT = "edge-architect"
 
 def run_design(brief: str | None, config_path: str | None = None) -> None:
     """Generate and submit an experiment design through the registry CLI."""
-    context = build_command_context(
+    command_context = build_command_context(
         config_path=config_path,
         required=False,
         model=DEFAULT_MODEL,
@@ -26,21 +26,26 @@ def run_design(brief: str | None, config_path: str | None = None) -> None:
     )
     experiment_count_before = get_experiment_count()
     prompt = _build_design_prompt(brief, format_experiment_context())
-    service = context.service
-    result = _send_design_message(service, prompt)
+    copilot_session = command_context.copilot_session
+    result = _send_design_message(copilot_session, prompt)
 
     if get_experiment_count() <= experiment_count_before:
         follow_up_prompt = _build_retry_prompt()
-        result = _send_design_message(service, follow_up_prompt, continue_session=True)
+        result = _send_design_message(
+            copilot_session,
+            follow_up_prompt,
+            continue_session=True,
+        )
         if get_experiment_count() <= experiment_count_before:
             raise click.ClickException(
                 "Design agent did not create a new experiment after one retry."
             )
 
-    if result.stdout.strip():
-        click.echo(result.stdout.strip())
+    output_text = result.stdout.strip()
+    if output_text:
+        click.echo(output_text)
     else:
-        click.echo(f"Submitted design request using agentic CLI: {service.alias}")
+        click.echo(f"Submitted design request using agentic CLI: {copilot_session.alias}")
 
 
 def _build_design_prompt(brief: str | None, experiment_context: str) -> str:
@@ -89,12 +94,16 @@ def _build_retry_prompt() -> str:
 
 
 def _send_design_message(
-    service: CopilotSessionService,
+    copilot_session: CopilotSessionService,
     prompt: str,
     *,
     continue_session: bool = False,
 ) -> SessionResult:
-    result = service.send_message(prompt, output_format="json", continue_session=continue_session)
+    result = copilot_session.send_message(
+        prompt,
+        output_format="json",
+        continue_session=continue_session,
+    )
     if not result.is_success:
         detail = result.stderr.strip() or "Design request failed."
         raise click.ClickException(f"Design request failed: {detail}")

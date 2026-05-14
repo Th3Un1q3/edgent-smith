@@ -5,6 +5,7 @@ from secrets import choice
 import click
 
 from cli.commands.command_context import build_command_context
+from cli.services.copilot_session import CopilotSessionService, SessionResult
 
 MISSING_CONFIG_MESSAGE = (
     "No .config.toml file found in the current directory. "
@@ -13,10 +14,22 @@ MISSING_CONFIG_MESSAGE = (
 )
 
 
+def _send_validation_message(
+    copilot_session: CopilotSessionService,
+    prompt: str,
+    *,
+    failure_prefix: str,
+) -> SessionResult:
+    session_result = copilot_session.send_message(prompt, output_format="json")
+    if not session_result.is_success:
+        raise click.ClickException(f"{failure_prefix}: {session_result.stderr}")
+    return session_result
+
+
 def run_validate(config_path: str | None = None) -> None:
     """Logic for the autoresearch validate command."""
     try:
-        context = build_command_context(
+        command_context = build_command_context(
             config_path=config_path,
             required=True,
             model="gpt-5-mini",
@@ -29,7 +42,7 @@ def run_validate(config_path: str | None = None) -> None:
             raise click.ClickException(MISSING_CONFIG_MESSAGE) from exc
         raise
 
-    project_config = context.project_config
+    project_config = command_context.project_config
     if project_config is None:
         raise click.ClickException(MISSING_CONFIG_MESSAGE)
 
@@ -39,28 +52,27 @@ def run_validate(config_path: str | None = None) -> None:
         f"{project_config.agentic_cli_alias}"
     )
 
-    service = context.service
+    copilot_session = command_context.copilot_session
 
-    # Generate a random secret for testing (e.g., using uuid4 or a random string)
-    secret = "".join(choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(16))
+    validation_secret = "".join(choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(16))
 
-    # Message 1
     click.echo("Sending first message...")
-    res1 = service.send_message(
-        f'My pet is called "{secret}". do nothing for now.', output_format="json"
+    _send_validation_message(
+        copilot_session,
+        f'My pet is called "{validation_secret}". do nothing for now.',
+        failure_prefix="First message failed",
     )
-    if not res1.is_success:
-        raise click.ClickException(f"First message failed: {res1.stderr}")
 
-    # Message 2
     click.echo("Sending second message...")
-    res2 = service.send_message("what's the name of my pet?", output_format="json")
-    if not res2.is_success:
-        raise click.ClickException(f"Second message failed: {res2.stderr}")
+    pet_name_response = _send_validation_message(
+        copilot_session,
+        "what's the name of my pet?",
+        failure_prefix="Second message failed",
+    )
 
-    click.echo(f"Agent response: {res2.stdout}")
+    click.echo(f"Agent response: {pet_name_response.stdout}")
 
-    if secret.lower() in res2.stdout.lower():
+    if validation_secret.lower() in pet_name_response.stdout.lower():
         click.echo("Validation successful: Agent remembered the secret across messages.")
     else:
         click.echo("Validation warning: Agent did not clearly repeat the secret.")

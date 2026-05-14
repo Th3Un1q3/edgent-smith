@@ -10,6 +10,16 @@ from cli.main import cli
 from cli.services.copilot_session import PERMISSIVE_TOOLSET
 
 
+class _CountingStdout:
+    def __init__(self, raw_text: str) -> None:
+        self._raw_text = raw_text
+        self.strip_call_count = 0
+
+    def strip(self) -> str:
+        self.strip_call_count += 1
+        return self._raw_text.strip()
+
+
 def _write_project_config(config_path: pathlib.Path, *, alias: str = "copilot") -> None:
     config_path.write_text(f'name = "test-project"\nagentic_cli_alias = "{alias}"\n')
 
@@ -325,3 +335,101 @@ def test_design_raises_click_exception_when_retry_does_not_create_experiment(
     assert result.exit_code != 0
     assert mock_send.call_count == 2
     assert "did not create a new experiment after one retry" in result.output
+
+
+def test_design_strips_stdout_once_and_echoes_trimmed_output(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_project_config(pathlib.Path("project.config.toml"))
+        _write_registry([])
+        stdout_text = _CountingStdout("  designed output  ")
+
+        with patch(
+            "cli.services.copilot_session.CopilotSessionService.send_message",
+            autospec=True,
+        ) as mock_send:
+
+            def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
+                _write_registry(
+                    [
+                        {
+                            "id": "new-experiment",
+                            "title": "New experiment",
+                            "description": "Created by the agent.",
+                            "status": "pending",
+                            "created_at": "2026-05-12T12:00:00Z",
+                            "updated_at": "2026-05-12T12:00:00Z",
+                            "current_run_id": None,
+                            "runs": [],
+                        }
+                    ]
+                )
+                return MagicMock(is_success=True, stdout=stdout_text, stderr="")
+
+            mock_send.side_effect = _create_experiment
+
+            result = runner.invoke(
+                cli,
+                [
+                    "autoresearch",
+                    "design",
+                    "Improve eval throughput",
+                    "--config",
+                    "project.config.toml",
+                ],
+            )
+
+    assert result.exit_code == 0
+    assert result.output == "designed output\n"
+    assert stdout_text.strip_call_count == 1
+
+
+def test_design_falls_back_to_submission_message_for_blank_stdout(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_project_config(pathlib.Path("project.config.toml"), alias="explicit-alias")
+        _write_registry([])
+
+        with patch(
+            "cli.services.copilot_session.CopilotSessionService.send_message",
+            autospec=True,
+        ) as mock_send:
+
+            def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
+                _write_registry(
+                    [
+                        {
+                            "id": "new-experiment",
+                            "title": "New experiment",
+                            "description": "Created by the agent.",
+                            "status": "pending",
+                            "created_at": "2026-05-12T12:00:00Z",
+                            "updated_at": "2026-05-12T12:00:00Z",
+                            "current_run_id": None,
+                            "runs": [],
+                        }
+                    ]
+                )
+                return MagicMock(is_success=True, stdout="   ", stderr="")
+
+            mock_send.side_effect = _create_experiment
+
+            result = runner.invoke(
+                cli,
+                [
+                    "autoresearch",
+                    "design",
+                    "Improve eval throughput",
+                    "--config",
+                    "project.config.toml",
+                ],
+            )
+
+    assert result.exit_code == 0
+    assert result.output == "Submitted design request using agentic CLI: explicit-alias\n"

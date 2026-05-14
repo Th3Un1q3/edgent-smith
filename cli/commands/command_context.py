@@ -16,7 +16,7 @@ __all__ = ["CommandContext", "build_command_context"]
 @dataclass(frozen=True)
 class CommandContext:
     project_config: ProjectConfig | None
-    service: CopilotSessionService
+    copilot_session: CopilotSessionService
 
 
 def build_command_context(
@@ -36,7 +36,7 @@ def build_command_context(
 
     return CommandContext(
         project_config=project_config,
-        service=CopilotSessionService(
+        copilot_session=CopilotSessionService(
             alias=cli_alias,
             model=model,
             toolset=toolset,

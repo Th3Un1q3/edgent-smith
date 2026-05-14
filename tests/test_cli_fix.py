@@ -341,6 +341,8 @@ def test_fix_uses_copilot_fallback_for_failed_stage_and_continues(
     assert "just lint" in prompt
     assert "lint stdout" in prompt
     assert "lint stderr" in prompt
+    assert mock_send.call_args.kwargs["continue_session"] is False
+    assert mock_send.call_args.kwargs["output_format"] == "json"
 
 
 def test_fix_parallel_batches_first_pass_failures_into_single_remediation(
@@ -413,12 +415,9 @@ def test_fix_parallel_batches_first_pass_failures_into_single_remediation(
     assert "[first pass 2/4] lint failed." in result.output
     assert "[first pass 3/4] typecheck failed." in result.output
     assert "[first pass 4/4] test passed." in result.output
-    assert result.output.index("[first pass 3/4] typecheck failed.") < result.output.index(
-        "[first pass 2/4] lint failed."
-    )
-    assert result.output.index("[first pass 2/4] lint failed.") < result.output.index(
-        "Running remediation for 2 failed hooks..."
-    )
+    remediation_index = result.output.index("Running remediation for 2 failed hooks...")
+    assert result.output.index("[first pass 2/4] lint failed.") < remediation_index
+    assert result.output.index("[first pass 3/4] typecheck failed.") < remediation_index
     assert result.output.index("Running remediation for 2 failed hooks...") < result.output.index(
         "[retry 1/2] Retrying lint..."
     )
@@ -499,7 +498,7 @@ def test_fix_parallel_emits_first_pass_progress_as_hooks_finish(tmp_path: pathli
         patch(
             "cli.commands.fix.build_command_context",
             return_value=MagicMock(
-                service=MagicMock(
+                copilot_session=MagicMock(
                     send_message=MagicMock(
                         return_value=MagicMock(is_success=True, stdout="fixed", stderr="")
                     )
@@ -601,15 +600,19 @@ def test_fix_continue_reuses_same_service_across_fallback_turns(
     tmp_path: pathlib.Path,
 ) -> None:
     runner = CliRunner()
-    fake_service = MagicMock()
-    fake_service.send_message.return_value = MagicMock(is_success=True, stdout="fixed", stderr="")
+    fake_copilot_session = MagicMock()
+    fake_copilot_session.send_message.return_value = MagicMock(
+        is_success=True,
+        stdout="fixed",
+        stderr="",
+    )
 
     with (
         runner.isolated_filesystem(temp_dir=tmp_path),
         patch("subprocess.run") as mock_run,
         patch(
             "cli.commands.fix.build_command_context",
-            return_value=MagicMock(service=fake_service),
+            return_value=MagicMock(copilot_session=fake_copilot_session),
         ) as mock_build_command_context,
     ):
         _write_autofix_config(pathlib.Path("autofix.toml"), DEFAULT_QUALITY_HOOKS)
@@ -631,11 +634,11 @@ def test_fix_continue_reuses_same_service_across_fallback_turns(
         model="gpt-5-mini",
         toolset=PERMISSIVE_TOOLSET,
     )
-    assert fake_service.send_message.call_count == 2
-    assert fake_service.send_message.call_args_list[0].kwargs["continue_session"] is True
-    assert fake_service.send_message.call_args_list[1].kwargs["continue_session"] is False
-    assert fake_service.send_message.call_args_list[0].kwargs["output_format"] == "json"
-    assert fake_service.send_message.call_args_list[1].kwargs["output_format"] == "json"
+    assert fake_copilot_session.send_message.call_count == 2
+    assert fake_copilot_session.send_message.call_args_list[0].kwargs["continue_session"] is True
+    assert fake_copilot_session.send_message.call_args_list[1].kwargs["continue_session"] is False
+    assert fake_copilot_session.send_message.call_args_list[0].kwargs["output_format"] == "json"
+    assert fake_copilot_session.send_message.call_args_list[1].kwargs["output_format"] == "json"
 
 
 def test_fix_runs_only_configured_hooks_from_toml_config(tmp_path: pathlib.Path) -> None:

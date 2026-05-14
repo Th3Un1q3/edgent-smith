@@ -36,8 +36,8 @@ def run_fix(
 ) -> None:
     """Run the autofix workflow defined in the TOML config file."""
     autofix_config_path = Path(autofix_config)
-    hooks = _load_hook_specs(autofix_config_path)
-    if not hooks:
+    hook_specs = _load_hook_specs(autofix_config_path)
+    if not hook_specs:
         click.echo(
             f"No autofix hooks are configured in {autofix_config_path}.\n"
             "Add one or more [[hooks]] entries to "
@@ -45,32 +45,36 @@ def run_fix(
         )
         return
 
-    context = build_command_context(
+    command_context = build_command_context(
         config_path=config_path,
         required=False,
         model="gpt-5-mini",
         toolset=PERMISSIVE_TOOLSET,
     )
-    service = context.service
-    resume_first_fallback = continue_session
+    copilot_session = command_context.copilot_session
+    resume_prior_session_on_first_fallback = continue_session
 
     if parallel:
-        _run_hooks_in_parallel(hooks, service, continue_session=resume_first_fallback)
+        _run_hooks_in_parallel(
+            hook_specs,
+            copilot_session,
+            continue_session=resume_prior_session_on_first_fallback,
+        )
         click.echo("All autofix stages completed successfully.")
         return
 
-    total_hooks = len(hooks)
-    for index, hook in enumerate(hooks, start=1):
-        click.echo(f"[{index}/{total_hooks}] Running {hook.name}...")
+    total_hooks = len(hook_specs)
+    for index, hook_spec in enumerate(hook_specs, start=1):
+        click.echo(f"[{index}/{total_hooks}] Running {hook_spec.name}...")
         used_fallback = _run_hook(
-            hook,
-            service,
-            continue_session=resume_first_fallback,
+            hook_spec,
+            copilot_session,
+            continue_session=resume_prior_session_on_first_fallback,
             position=index,
             total=total_hooks,
         )
         if used_fallback:
-            resume_first_fallback = False
+            resume_prior_session_on_first_fallback = False
 
     click.echo("All autofix stages completed successfully.")
 
@@ -81,25 +85,25 @@ def _load_hook_specs(config_path: Path) -> list[HookSpec]:
 
     try:
         with config_path.open("rb") as config_file:
-            config = tomllib.load(config_file)
+            parsed_config = tomllib.load(config_file)
     except tomllib.TOMLDecodeError as exc:
         raise click.ClickException(f"Invalid autofix config: {exc}") from exc
 
-    hooks = config.get("hooks", [])
-    if not isinstance(hooks, list):
+    configured_hooks = parsed_config.get("hooks", [])
+    if not isinstance(configured_hooks, list):
         raise click.ClickException("Invalid autofix config: 'hooks' must be an array of tables.")
 
     hook_specs: list[HookSpec] = []
-    for index, hook in enumerate(hooks, start=1):
-        if not isinstance(hook, dict):
+    for index, hook_config in enumerate(configured_hooks, start=1):
+        if not isinstance(hook_config, dict):
             raise click.ClickException(
                 f"Invalid autofix config: hook #{index} must be a TOML table."
             )
 
-        name = _require_non_empty_string(hook.get("name"), index, "name")
-        command = _require_non_empty_string(hook.get("command"), index, "command")
+        name = _require_non_empty_string(hook_config.get("name"), index, "name")
+        command = _require_non_empty_string(hook_config.get("command"), index, "command")
         remediation_prompt = _require_non_empty_string(
-            hook.get("remediation_prompt"),
+            hook_config.get("remediation_prompt"),
             index,
             "remediation_prompt",
         )
@@ -129,27 +133,31 @@ def _require_non_empty_string(value: object, hook_index: int, field_name: str) -
 
 def _run_hook(
     hook: HookSpec,
-    service: CopilotSessionService,
+    copilot_session: CopilotSessionService,
     *,
     continue_session: bool,
     position: int,
     total: int,
 ) -> bool:
-    result = _run_command(hook.command)
-    if result.returncode == 0:
+    hook_run_result = _run_command(hook.command)
+    if hook_run_result.returncode == 0:
         click.echo(f"[{position}/{total}] {hook.name} passed.")
         return False
 
     click.echo(f"[{position}/{total}] {hook.name} failed. Requesting remediation...")
-    prompt = _build_remediation_prompt(hook, result.stdout, result.stderr)
-    remediation_result = service.send_message(
+    prompt = _build_remediation_prompt(hook, hook_run_result.stdout, hook_run_result.stderr)
+    remediation_result = copilot_session.send_message(
         prompt,
         output_format="json",
         continue_session=continue_session,
     )
     if not remediation_result.is_success:
-        detail = remediation_result.stderr.strip() or "Copilot remediation failed."
-        raise click.ClickException(f"Autofix remediation failed for '{hook.name}': {detail}")
+        remediation_error_detail = (
+            remediation_result.stderr.strip() or "Copilot remediation failed."
+        )
+        raise click.ClickException(
+            f"Autofix remediation failed for '{hook.name}': {remediation_error_detail}"
+        )
 
     click.echo(f"[{position}/{total}] Retrying {hook.name}...")
     retry_result = _run_command(hook.command)
@@ -165,7 +173,7 @@ def _run_hook(
 
 def _run_hooks_in_parallel(
     hooks: list[HookSpec],
-    service: CopilotSessionService,
+    copilot_session: CopilotSessionService,
     *,
     continue_session: bool,
 ) -> None:
@@ -177,7 +185,7 @@ def _run_hooks_in_parallel(
     suffix = "s" if len(first_pass_failures) != 1 else ""
     click.echo(f"Running remediation for {len(first_pass_failures)} failed hook{suffix}...")
     prompt = _build_batch_remediation_prompt(first_pass_failures)
-    remediation_result = service.send_message(
+    remediation_result = copilot_session.send_message(
         prompt,
         output_format="json",
         continue_session=continue_session,
@@ -202,15 +210,15 @@ def _run_hooks_first_pass(hooks: list[HookSpec]) -> list[HookFailure]:
         for future in as_completed(future_to_index):
             index = future_to_index[future]
             hook = hooks[index]
-            result = future.result()
+            hook_run_result = future.result()
             position = index + 1
 
-            if result.returncode != 0:
+            if hook_run_result.returncode != 0:
                 click.echo(f"[first pass {position}/{total_hooks}] {hook.name} failed.")
                 ordered_failures[index] = HookFailure(
                     hook=hook,
-                    stdout=result.stdout,
-                    stderr=result.stderr,
+                    stdout=hook_run_result.stdout,
+                    stderr=hook_run_result.stderr,
                 )
                 continue
             click.echo(f"[first pass {position}/{total_hooks}] {hook.name} passed.")

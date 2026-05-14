@@ -6,12 +6,49 @@ import re
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
+import click
+import pytest
 from click.testing import CliRunner
 
+from cli.commands import validate as validate_command
 from cli.main import cli
 
 if TYPE_CHECKING:
     from cli.services.copilot_session import CopilotSessionService
+
+
+def test_send_validation_message_requests_json_output_and_returns_the_session_result() -> None:
+    fake_copilot_session = MagicMock()
+    expected_result = MagicMock(is_success=True, stdout="stored", stderr="")
+    fake_copilot_session.send_message.return_value = expected_result
+
+    actual_result = validate_command._send_validation_message(
+        fake_copilot_session,
+        'My pet is called "secret". do nothing for now.',
+        failure_prefix="First message failed",
+    )
+
+    assert actual_result is expected_result
+    fake_copilot_session.send_message.assert_called_once_with(
+        'My pet is called "secret". do nothing for now.',
+        output_format="json",
+    )
+
+
+def test_send_validation_message_raises_a_step_specific_click_exception_on_failure() -> None:
+    fake_copilot_session = MagicMock()
+    fake_copilot_session.send_message.return_value = MagicMock(
+        is_success=False,
+        stdout="",
+        stderr="copilot unavailable",
+    )
+
+    with pytest.raises(click.ClickException, match="First message failed: copilot unavailable"):
+        validate_command._send_validation_message(
+            fake_copilot_session,
+            "what's the name of my pet?",
+            failure_prefix="First message failed",
+        )
 
 
 def test_validate_uses_auto_discovery_by_default_and_accepts_explicit_config_override(
