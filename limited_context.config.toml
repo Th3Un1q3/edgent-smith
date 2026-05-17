@@ -1,3 +1,7 @@
 name = "limited_context"
 agentic_cli_type = "copilot_cli"
 agentic_cli_alias = 'copilot'
+
+[task_prompts.design]
+kind='file'
+path='.github/prompts/create-experiment-from-ideas.prompt.md'
