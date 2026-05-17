@@ -3,6 +3,7 @@ from __future__ import annotations
 import click
 
 from cli.commands.design import run_design
+from cli.commands.discover import run_discover
 from cli.commands.experiment import (
     run_experiment_create,
     run_experiment_finish,
@@ -75,6 +76,17 @@ def validate(config_path: str | None) -> None:
 def design(brief: str | None, config_path: str | None) -> None:
     """Generate or refine an experiment design specification."""
     run_design(brief, config_path=config_path)
+
+
+@autoresearch.command()
+@click.option(
+    "--config",
+    "config_path",
+    help="Path to the project .config.toml file. Defaults to auto-discovery.",
+)
+def discover(config_path: str | None) -> None:
+    """Refresh docs/ideas.md from the latest edge-relevant agentic papers."""
+    run_discover(config_path=config_path)
 
 
 @autoresearch.command()

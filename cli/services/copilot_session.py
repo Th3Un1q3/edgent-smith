@@ -7,13 +7,19 @@ from typing import Any
 
 __all__ = [
     "CopilotSessionService",
+    "DISCOVER_TOOLSET",
     "PERMISSIVE_TOOLSET",
+    "PROMPT_ARG_MAX_BYTES",
     "RESTRICTED_TOOLSET",
     "SessionResult",
     "ToolCall",
     "Toolset",
     "allow_all_deny_git_toolset",
 ]
+
+
+# Keep a conservative cap so prompt argv usage stays well under common per-argument limits.
+PROMPT_ARG_MAX_BYTES = 64 * 1024
 
 
 @dataclass
@@ -55,6 +61,12 @@ def allow_all_deny_git_toolset() -> Toolset:
 
 # Permissive toolset as seen in fix_code.sh
 PERMISSIVE_TOOLSET = allow_all_deny_git_toolset()
+
+# Discover toolset: only file reading and writing — papers are pre-fetched into the prompt.
+DISCOVER_TOOLSET = Toolset(
+    allow_all=False,
+    allowed_tools=["read_file", "write_file"],
+)
 
 
 @dataclass
@@ -117,16 +129,20 @@ class CopilotSessionService:
             "--model",
             self.model,
         ]
+        run_input: str | None = None
 
         # Use explicitly provided agent, or default from __init__
         target_agent = agent or self.agent
         if target_agent:
             cmd.extend(["--agent", target_agent])
 
+        if self._should_send_prompt_via_stdin(prompt):
+            run_input = prompt
+        else:
+            cmd.extend(["--prompt", prompt])
+
         cmd.extend(
             [
-                "--prompt",
-                prompt,
                 "--output-format",
                 output_format,
                 "--autopilot",
@@ -146,7 +162,13 @@ class CopilotSessionService:
             cmd.append("--silent")
 
         try:
-            res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            res = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                input=run_input,
+            )
 
             if output_format == "json":
                 result = self._parse_jsonl(res.stdout, res.stderr, res.returncode)
@@ -163,6 +185,9 @@ class CopilotSessionService:
             return SessionResult(
                 stdout="", stderr=f"Command '{self.alias}' not found in PATH.", returncode=127
             )
+
+    def _should_send_prompt_via_stdin(self, prompt: str) -> bool:
+        return len(prompt.encode("utf-8")) > PROMPT_ARG_MAX_BYTES
 
     def _parse_jsonl(self, stdout: str, stderr: str, returncode: int) -> SessionResult:
         """Parses the JSONL output from Copilot CLI."""

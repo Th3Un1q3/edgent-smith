@@ -49,7 +49,8 @@ Summary: brief, actionable ideas discovered while surveying LangChain blog posts
 - Edge impact: compact, locally-relevant memories with TTL/prioritization and encrypted local stores; sync summaries to cloud for cross-device consistency.
 - Notes: privacy-first retention, periodic summarization, and re-embedding on model upgrades.
 - Source: awesome-ai-architect — "Genetic Memory".
-- Evidence: MemPrivacy (2605.09530) — type-aware placeholders that redact sensitive spans before cloud-side memory processing and locally restore originals; preserves memory utility while limiting exposure (new addition).
+- Evidence: MemPrivacy (2605.09530) — identifies privacy-sensitive spans on-device, replaces them with semantically-structured type-aware placeholders for cloud-side memory formation, and restores originals locally; reported to limit utility loss to within 1.6% versus baseline masking while substantially reducing exposed sensitive content.
+  - Repo impact: adopt type-aware placeholder redaction in memory sync (cloud-safe summaries), add a local restoration policy, and include MemPrivacy-Bench entries for validation.
 - Evidence: GenericAgent (2604.17091) — hierarchical on-demand memory and context information density maximization; suggests default high-level summaries with on-demand detail to keep context budgets efficient (revision).
 
 
@@ -78,6 +79,12 @@ Research: Hugging Face (Apr 2026) — retained high-signal papers
   - Edge relevance: demonstrates practical training recipes for viable 4B-class on-device agents; supports test-time scaling and small-model deployment.
   - Repo impact: strengthens 'small-models & model routing' idea; suggests experiments for SFT/RL recipes and test-time scaling in the harness.
   - New vs revision: New evidence — refines existing 'small-models' and 'self-healing/continual learning' entries.
+
+- 2603.04428 — Agent Memory Below the Prompt: Persistent Q4 KV Cache for Multi-Agent LLM Inference on Edge Devices
+  - Key mechanism: persist per-agent Q4-quantized KV caches (safetensors) and restore them directly into attention layers via a BatchQuantizedKVCache, eliminating repeated costly prefill operations.
+  - Edge relevance: authors report reductions in time-to-first-token up to 136x in evaluations and large memory-fit gains, enabling many-agent orchestration, rapid context switching, and practical multi-agent deployments on constrained devices.
+  - Repo impact: add a KV-cache persistence design note to the harness docs, prototype a Q4 KV-cache manager (safetensors) and BatchQuantizedKVCache loader, and add microbenchmarks for time-to-first-token and memory-fit in multi-agent flows.
+  - New vs revision: Kept (Feb 2026) — provides a concrete implementation path to unblock multi-agent orchestration on edge hardware.
 
 - 2604.16583 — POLAR: Online Learning for LoRA Adapter Caching and Routing in Edge LLM Serving
   - Key mechanism: joint cache-and-router formulated as a two-timescale contextual bandit (cache controller + LinUCB router).

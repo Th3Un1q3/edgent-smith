@@ -5,3 +5,7 @@ agentic_cli_alias = 'copilot'
 [task_prompts.design]
 kind='file'
 path='.github/prompts/create-experiment-from-ideas.prompt.md'
+
+[task_prompts.discover]
+kind='file'
+path='.github/prompts/explore-edge-agent-ideas.prompt.md'

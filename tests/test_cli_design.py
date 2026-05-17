@@ -3,15 +3,11 @@ from __future__ import annotations
 import pathlib
 from unittest.mock import MagicMock, patch
 
-import click
-import pytest
 from click.testing import CliRunner
 
 from cli.main import cli
-from cli.commands import design as design_module
 from cli.services.copilot_session import PERMISSIVE_TOOLSET
 from cli.services.experiment_storage import FileSystemExperimentStorage
-from cli.services.project_config import ProjectConfig
 
 
 class _CountingStdout:
@@ -113,23 +109,6 @@ def test_design_uses_configured_prompt_file_body_without_frontmatter(
     assert 'agent: "edge-architect"' not in prompt
     assert "\n---\n" not in prompt
     assert "User brief: Improve eval throughput" in prompt
-
-
-def test_resolve_design_prompt_requires_task_prompt_configuration() -> None:
-    project_config = ProjectConfig(
-        path=pathlib.Path("project.config.toml"),
-        name="test-project",
-        agentic_cli_type="copilot_cli",
-        agentic_cli_alias="copilot",
-        baseline_id="test-project",
-        baseline_eval_model="edge_agent_default",
-        task_prompts={},
-    )
-
-    with pytest.raises(click.ClickException) as exc_info:
-        design_module._resolve_design_prompt(project_config)
-
-    assert "task_prompts.design" in str(exc_info.value)
 
 
 def test_design_requires_task_prompt_configuration(
@@ -801,3 +780,273 @@ def test_design_falls_back_to_submission_message_for_blank_stdout(
 
     assert result.exit_code == 0
     assert result.output == "Submitted design request using agentic CLI: explicit-alias\n"
+
+
+# ---------------------------------------------------------------------------
+# run_discover tests
+# ---------------------------------------------------------------------------
+
+
+def _write_discover_project_config(config_path: pathlib.Path, *, alias: str = "copilot") -> None:
+    prompt_path = pathlib.Path(".github/prompts/discover.prompt.md")
+    prompt_path.parent.mkdir(parents=True, exist_ok=True)
+    prompt_path.write_text(
+        "\n".join(
+            [
+                "---",
+                'agent: "edge-architect"',
+                "---",
+                "Discover new research directions.",
+            ]
+        )
+        + "\n"
+    )
+    config_path.write_text(
+        "\n".join(
+            [
+                'name = "test-project"',
+                f'agentic_cli_alias = "{alias}"',
+                "",
+                "[task_prompts.discover]",
+                'kind = "file"',
+                'path = ".github/prompts/discover.prompt.md"',
+            ]
+        )
+        + "\n"
+    )
+
+
+def test_discover_calls_hf_papers(tmp_path: pathlib.Path) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_discover_project_config(pathlib.Path("project.config.toml"))
+        pathlib.Path("docs").mkdir(parents=True, exist_ok=True)
+        ideas_path = pathlib.Path("docs/ideas.md")
+        ideas_path.write_text("# Ideas\n\nInitial content.\n")
+
+        with (
+            patch(
+                "cli.services.copilot_session.CopilotSessionService.send_message",
+                autospec=True,
+            ) as mock_send,
+            patch("cli.commands.discover.fetch_papers") as mock_fetch,
+            patch("cli.commands.discover.format_papers_context") as mock_format,
+        ):
+            mock_format.return_value = "## Trending papers\n\nPaper A"
+
+            def _update_ideas(*args: object, **kwargs: object) -> MagicMock:
+                ideas_path.write_text("# Ideas\n\nUpdated content.\n")
+                return MagicMock(is_success=True, stdout="ok", stderr="")
+
+            mock_send.side_effect = _update_ideas
+
+            result = runner.invoke(
+                cli, ["autoresearch", "discover", "--config", "project.config.toml"]
+            )
+
+    assert result.exit_code == 0, result.output
+    mock_fetch.assert_called_once()
+    prompt = mock_send.call_args.args[1]
+    assert "Pre-fetched paper search results" in prompt
+
+
+def test_discover_uses_discover_toolset(tmp_path: pathlib.Path) -> None:
+
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_discover_project_config(pathlib.Path("project.config.toml"))
+        pathlib.Path("docs").mkdir(parents=True, exist_ok=True)
+        ideas_path = pathlib.Path("docs/ideas.md")
+        ideas_path.write_text("# Ideas\n\nInitial content.\n")
+
+        with (
+            patch(
+                "cli.services.copilot_session.CopilotSessionService.send_message",
+                autospec=True,
+            ) as mock_send,
+            patch("cli.commands.discover.fetch_papers"),
+            patch("cli.commands.discover.format_papers_context", return_value="papers"),
+        ):
+
+            def _update_ideas(*args: object, **kwargs: object) -> MagicMock:
+                ideas_path.write_text("# Ideas\n\nUpdated.\n")
+                return MagicMock(is_success=True, stdout="ok", stderr="")
+
+            mock_send.side_effect = _update_ideas
+
+            result = runner.invoke(
+                cli, ["autoresearch", "discover", "--config", "project.config.toml"]
+            )
+
+    assert result.exit_code == 0, result.output
+    session = mock_send.call_args.args[0]
+    assert session.toolset.allow_all is False
+    assert "read_file" in session.toolset.allowed_tools
+    assert "write_file" in session.toolset.allowed_tools
+
+
+def test_discover_sends_followup_when_ideas_unchanged(tmp_path: pathlib.Path) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_discover_project_config(pathlib.Path("project.config.toml"))
+        pathlib.Path("docs").mkdir(parents=True, exist_ok=True)
+        ideas_path = pathlib.Path("docs/ideas.md")
+        ideas_path.write_text("# Ideas\n\nInitial content.\n")
+
+        with (
+            patch(
+                "cli.services.copilot_session.CopilotSessionService.send_message",
+                autospec=True,
+            ) as mock_send,
+            patch("cli.commands.discover.fetch_papers"),
+            patch("cli.commands.discover.format_papers_context", return_value="papers"),
+        ):
+            call_count = 0
+
+            def _write_on_second_call(*args: object, **kwargs: object) -> MagicMock:
+                nonlocal call_count
+                call_count += 1
+                if call_count == 2:
+                    ideas_path.write_text("# Ideas\n\nUpdated on retry.\n")
+                return MagicMock(is_success=True, stdout="ok", stderr="")
+
+            mock_send.side_effect = _write_on_second_call
+
+            result = runner.invoke(
+                cli, ["autoresearch", "discover", "--config", "project.config.toml"]
+            )
+
+    assert result.exit_code == 0, result.output
+    assert mock_send.call_count == 2
+    second_prompt = mock_send.call_args_list[1].args[1]
+    assert "You must update docs/ideas.md now." in second_prompt
+
+
+def test_discover_raises_when_ideas_unchanged_after_retry(tmp_path: pathlib.Path) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_discover_project_config(pathlib.Path("project.config.toml"))
+        pathlib.Path("docs").mkdir(parents=True, exist_ok=True)
+        ideas_path = pathlib.Path("docs/ideas.md")
+        ideas_path.write_text("# Ideas\n\nNever changes.\n")
+
+        with (
+            patch(
+                "cli.services.copilot_session.CopilotSessionService.send_message",
+                autospec=True,
+            ) as mock_send,
+            patch("cli.commands.discover.fetch_papers"),
+            patch("cli.commands.discover.format_papers_context", return_value="papers"),
+        ):
+            mock_send.return_value = MagicMock(is_success=True, stdout="ok", stderr="")
+
+            result = runner.invoke(
+                cli, ["autoresearch", "discover", "--config", "project.config.toml"]
+            )
+
+    assert result.exit_code != 0
+    assert "did not update docs/ideas.md" in result.output
+    assert mock_send.call_count == 2
+
+
+def test_discover_succeeds_when_ideas_changes_on_first_send(tmp_path: pathlib.Path) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_discover_project_config(pathlib.Path("project.config.toml"))
+        pathlib.Path("docs").mkdir(parents=True, exist_ok=True)
+        ideas_path = pathlib.Path("docs/ideas.md")
+        ideas_path.write_text("# Ideas\n\nInitial.\n")
+
+        with (
+            patch(
+                "cli.services.copilot_session.CopilotSessionService.send_message",
+                autospec=True,
+            ) as mock_send,
+            patch("cli.commands.discover.fetch_papers"),
+            patch("cli.commands.discover.format_papers_context", return_value="papers"),
+        ):
+
+            def _update_on_first(*args: object, **kwargs: object) -> MagicMock:
+                ideas_path.write_text("# Ideas\n\nUpdated immediately.\n")
+                return MagicMock(is_success=True, stdout="ok", stderr="")
+
+            mock_send.side_effect = _update_on_first
+
+            result = runner.invoke(
+                cli, ["autoresearch", "discover", "--config", "project.config.toml"]
+            )
+
+    assert result.exit_code == 0, result.output
+    assert mock_send.call_count == 1
+
+
+def test_discover_succeeds_when_ideas_changes_on_retry(tmp_path: pathlib.Path) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_discover_project_config(pathlib.Path("project.config.toml"))
+        pathlib.Path("docs").mkdir(parents=True, exist_ok=True)
+        ideas_path = pathlib.Path("docs/ideas.md")
+        ideas_path.write_text("# Ideas\n\nInitial.\n")
+
+        with (
+            patch(
+                "cli.services.copilot_session.CopilotSessionService.send_message",
+                autospec=True,
+            ) as mock_send,
+            patch("cli.commands.discover.fetch_papers"),
+            patch("cli.commands.discover.format_papers_context", return_value="papers"),
+        ):
+            call_count = 0
+
+            def _update_on_retry(*args: object, **kwargs: object) -> MagicMock:
+                nonlocal call_count
+                call_count += 1
+                if call_count == 2:
+                    ideas_path.write_text("# Ideas\n\nUpdated on retry.\n")
+                return MagicMock(is_success=True, stdout="ok", stderr="")
+
+            mock_send.side_effect = _update_on_retry
+
+            result = runner.invoke(
+                cli, ["autoresearch", "discover", "--config", "project.config.toml"]
+            )
+
+    assert result.exit_code == 0, result.output
+    assert mock_send.call_count == 2
+
+
+def test_discover_handles_missing_ideas_file(tmp_path: pathlib.Path) -> None:
+    """No docs/ideas.md initially — agent creating it counts as a change."""
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_discover_project_config(pathlib.Path("project.config.toml"))
+
+        with (
+            patch(
+                "cli.services.copilot_session.CopilotSessionService.send_message",
+                autospec=True,
+            ) as mock_send,
+            patch("cli.commands.discover.fetch_papers"),
+            patch("cli.commands.discover.format_papers_context", return_value="papers"),
+        ):
+
+            def _create_ideas(*args: object, **kwargs: object) -> MagicMock:
+                pathlib.Path("docs").mkdir(parents=True, exist_ok=True)
+                pathlib.Path("docs/ideas.md").write_text("# Ideas\n\nNew file.\n")
+                return MagicMock(is_success=True, stdout="ok", stderr="")
+
+            mock_send.side_effect = _create_ideas
+
+            result = runner.invoke(
+                cli, ["autoresearch", "discover", "--config", "project.config.toml"]
+            )
+
+    assert result.exit_code == 0, result.output
+    assert mock_send.call_count == 1

@@ -76,9 +76,11 @@ class FileSystemExperimentStorage:
 
         current_run_id = status.get("current_run_id")
         if current_run_id is not None and not isinstance(current_run_id, str):
-            raise click.ClickException(
-                f"Invalid experiment storage for '{experiment_id}': current_run_id must be a string or null."
+            msg = (
+                f"Invalid experiment storage for '{experiment_id}': "
+                "current_run_id must be a string or null."
             )
+            raise click.ClickException(msg)
 
         runs = status.get("runs")
         if not isinstance(runs, list):
