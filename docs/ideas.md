@@ -7,6 +7,8 @@ Summary: brief, actionable ideas discovered while surveying LangChain blog posts
 - Edge impact: implement a compact harness that keeps short-term memory local, exposes safe tool adapters (sensors, actuators), and syncs checkpoints to cloud when available.
 - Notes: design for small-memory vector caches, encrypted persisted state, and clear upgrade/rollback paths.
 - Source: LangChain — "The Anatomy of an Agent Harness" (Mar 2026).
+- Evidence: ARIS (2605.03042) demonstrates a research harness with cross-model adversarial collaboration and a claim-auditing ledger; consider reviewer-model routing and integrity verification as harness extensions (revision).
+
 
 ## 2) Subagents & hierarchical/swarms
 - Idea: decompose tasks into background subagents or a swarm; delegate sensory processing and local decisions to small specialized agents.
@@ -19,12 +21,16 @@ Summary: brief, actionable ideas discovered while surveying LangChain blog posts
 - Edge impact: run lightweight evaluators locally (sanity checks, regression tests) and upload aggregated metrics for offline tuning.
 - Notes: keep evaluators small, use sampled telemetry to avoid privacy leaks.
 - Source: LangChain — "Evaluating Skills"; awesome-ai-architect (Evaluation & Observability).
+- Evidence: ARIS (2605.03042) includes a three-stage assurance process (integrity verification, result-to-claim mapping, claim auditing) that can be adapted as lightweight evaluator recipes for edge harnesses (revision).
+
 
 ## 4) Self-healing + continual learning (local + federated)
 - Idea: agents monitor their outputs, auto-roll back risky updates, and apply incremental model/skill updates via federated or differential bundles.
 - Edge impact: on-device adaptation to local distributions while ensuring safety (sandboxed model updates, signed update bundles).
 - Notes: enforce strict validation before applying updates; keep human-in-the-loop for high-risk changes.
 - Source: LangChain ("How My Agents Self-Heal", "Continual learning for AI agents").
+- Evidence: SDAR — Self-Distilled Agentic Reinforcement Learning (2605.15155): uses gated on-policy self-distillation as an auxiliary objective alongside RL to stabilize multi-turn agent training; edge relevance: reduces instability in long-horizon agent RL and improves success rates; repo impact: add gated-distillation training recipe and ablations to the agent training docs (new evidence).
+
 
 ## 5) Model routing & hybrid on-device/VM strategies
 - Idea: router that chooses between on-device tiny models, local medium models, or cloud models based on latency, cost, confidence, and privacy.
@@ -43,6 +49,9 @@ Summary: brief, actionable ideas discovered while surveying LangChain blog posts
 - Edge impact: compact, locally-relevant memories with TTL/prioritization and encrypted local stores; sync summaries to cloud for cross-device consistency.
 - Notes: privacy-first retention, periodic summarization, and re-embedding on model upgrades.
 - Source: awesome-ai-architect — "Genetic Memory".
+- Evidence: MemPrivacy (2605.09530) — type-aware placeholders that redact sensitive spans before cloud-side memory processing and locally restore originals; preserves memory utility while limiting exposure (new addition).
+- Evidence: GenericAgent (2604.17091) — hierarchical on-demand memory and context information density maximization; suggests default high-level summaries with on-demand detail to keep context budgets efficient (revision).
+
 
 ## 8) Guardrails & runtime safety
 - Idea: multi-layer guardrails (lightweight rule engines, prompt-injection detectors, optional LLM-based checks) that run before outputs reach actuators/users.
@@ -85,3 +94,5 @@ Research: Hugging Face (Apr 2026) — retained high-signal papers
 Follow-ups completed: bounded shortlist created and condensed into concise, evidence-backed additions above. Next recommended steps (not performed here): run targeted `hf papers info` and `hf papers read` for any of the above IDs to capture structured metadata and full paper markdown if deeper summaries are needed.
 
 (If this looks good, next: pick 2 ideas to prototype; ask whether to open issues or PRs with experiment plans.)
+
+<!-- instrumentation update -->
