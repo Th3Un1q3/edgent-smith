@@ -60,4 +60,28 @@ References
 - Awesome AI Architect (topics): https://github.com/Alexey-Popov/awesome-ai-architect
 - Hugging Face — Papers (month=2026-04): https://huggingface.co/papers/month/2026-04
 
+---
+
+Research: Hugging Face (Apr 2026) — retained high-signal papers
+
+- 2604.19859 — DR-Venus: Towards Frontier Edge-Scale Deep Research Agents with Only 10K Open Data
+  - Key mechanism: agentic SFT + agentic RL with information-gain turn-level rewards to train strong 4B agents from a small curated dataset.
+  - Edge relevance: demonstrates practical training recipes for viable 4B-class on-device agents; supports test-time scaling and small-model deployment.
+  - Repo impact: strengthens 'small-models & model routing' idea; suggests experiments for SFT/RL recipes and test-time scaling in the harness.
+  - New vs revision: New evidence — refines existing 'small-models' and 'self-healing/continual learning' entries.
+
+- 2604.16583 — POLAR: Online Learning for LoRA Adapter Caching and Routing in Edge LLM Serving
+  - Key mechanism: joint cache-and-router formulated as a two-timescale contextual bandit (cache controller + LinUCB router).
+  - Edge relevance: solves adapter residency and paging latency problems; directly informs model routing & adapter-caching strategies for on-device serving.
+  - Repo impact: add adapter cache controller & router experiments; prototype to simulate adapter paging and routing policies.
+  - New vs revision: New — augments 'Model routing & hybrid on-device/VM strategies' with adapter caching specifics.
+
+- 2601.14437 — Agentic AI Meets Edge Computing in Autonomous UAV Swarms
+  - Key mechanism: architecture patterns for edge-enabled UAV swarms and a wildfire SAR case study.
+  - Edge relevance: concrete swarm & subagent deployment patterns, scheduler/topology guidance, and resilience/coordination constraints.
+  - Repo impact: expands 'Subagents & hierarchical/swarms' with UAV use-cases and failure-mode considerations; useful for future evals.
+  - New vs revision: New — adds domain-specific validation for swarm patterns already listed.
+
+Follow-ups completed: bounded shortlist created and condensed into concise, evidence-backed additions above. Next recommended steps (not performed here): run targeted `hf papers info` and `hf papers read` for any of the above IDs to capture structured metadata and full paper markdown if deeper summaries are needed.
+
 (If this looks good, next: pick 2 ideas to prototype; ask whether to open issues or PRs with experiment plans.)
