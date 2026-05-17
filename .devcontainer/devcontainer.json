@@ -36,7 +36,7 @@
     }
   },
   "initializeCommand": "bash -lc \"if [ ! -f .env ]; then cp .env.example .env && echo 'Created .env from .env.example'; else echo '.env exists, skipping'; fi\"",
-  "postCreateCommand": "uv sync --dev --all-extras && npm install -g @github/copilot",
+  "postCreateCommand": "uv sync --dev --all-extras && uv tool install --force huggingface_hub && npm install -g @github/copilot",
   "remoteUser": "vscode",
   "forwardPorts": [
     8000,

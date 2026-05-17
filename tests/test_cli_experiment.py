@@ -12,7 +12,9 @@ from click.testing import CliRunner
 from cli.main import cli
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-REGISTRY_PATH = pathlib.Path("experiments/registry.state.json")
+STORAGE_DIR = pathlib.Path("experiments")
+INDEX_PATH = STORAGE_DIR / "index.json"
+EXPERIMENTS_DIR = STORAGE_DIR / "experiments"
 JsonObject = dict[str, Any]
 
 
@@ -34,8 +36,8 @@ def _invoke_error(runner: CliRunner, args: list[str]) -> str:
     return result.output
 
 
-def _read_registry() -> JsonObject:
-    return cast(JsonObject, json.loads(REGISTRY_PATH.read_text()))
+def _read_json(path: pathlib.Path) -> JsonObject:
+    return cast(JsonObject, json.loads(path.read_text()))
 
 
 def test_just_autoreseach_recipe_alias_routes_to_python_cli() -> None:
@@ -87,13 +89,8 @@ def test_just_autoresearch_create_forwards_multiline_description_without_reparsi
     assert created["title"] == title
     assert created["description"] == description
 
-    registry = cast(
-        JsonObject,
-        json.loads((tmp_path / "experiments/registry.state.json").read_text()),
-    )
-    records = cast(list[JsonObject], registry["experiments"])
-    assert len(records) == 1
-    assert records[0]["description"] == description
+    assert json.loads((tmp_path / "experiments/index.json").read_text()) == [title]
+    assert (tmp_path / "experiments/experiments" / title / "spec.md").read_text() == description
 
 
 def test_experiment_lifecycle_persists_registry_and_supports_reruns(
@@ -119,7 +116,30 @@ def test_experiment_lifecycle_persists_registry_and_supports_reruns(
         assert created["status"] == "pending"
         assert created["current_run_id"] is None
         assert created["runs"] == []
-        assert REGISTRY_PATH.exists()
+        experiment_dir = EXPERIMENTS_DIR / "improve-baseline"
+
+        assert INDEX_PATH.exists()
+        assert json.loads(INDEX_PATH.read_text()) == ["improve-baseline"]
+        assert experiment_dir.exists()
+        assert (experiment_dir / "spec.md").read_text() == (
+            "Measure whether the candidate improves the baseline."
+        )
+
+        status = _read_json(experiment_dir / "status.json")
+        meta = _read_json(experiment_dir / "meta.json")
+
+        assert status == {
+            "status": "pending",
+            "updated_at": created["updated_at"],
+            "current_run_id": None,
+            "runs": [],
+        }
+        assert meta == {
+            "id": "improve-baseline",
+            "title": "Improve baseline",
+            "created_at": created["created_at"],
+            "github_issue_id": None,
+        }
 
         experiment_id = cast(str, created["id"])
 
@@ -223,8 +243,20 @@ def test_experiment_lifecycle_persists_registry_and_supports_reruns(
         )
 
         assert shown == rerun_finished
-        registry = _read_registry()
-        assert registry["experiments"][0] == shown
+        assert json.loads(INDEX_PATH.read_text()) == [experiment_id]
+        assert _read_json(experiment_dir / "status.json") == {
+            "status": shown["status"],
+            "updated_at": shown["updated_at"],
+            "current_run_id": shown["current_run_id"],
+            "runs": shown["runs"],
+        }
+        assert _read_json(experiment_dir / "meta.json") == {
+            "id": shown["id"],
+            "title": shown["title"],
+            "created_at": shown["created_at"],
+            "github_issue_id": None,
+        }
+        assert (experiment_dir / "spec.md").read_text() == shown["description"]
 
 
 def test_experiment_list_filters_by_status_baseline_outcome_limit_and_sort(

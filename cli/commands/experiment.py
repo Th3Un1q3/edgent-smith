@@ -3,23 +3,22 @@ from __future__ import annotations
 import json
 import re
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any, cast
+from typing import cast
 from uuid import uuid4
 
 import click
 
-REGISTRY_PATH = Path("experiments/registry.state.json")
-ExperimentRecord = dict[str, Any]
-Registry = dict[str, list[ExperimentRecord]]
+from cli.services.experiment_storage import ExperimentRecord, get_default_experiment_storage
+
+ExperimentList = list[ExperimentRecord]
 
 
 def get_experiment_count() -> int:
-    return len(_load_registry()["experiments"])
+    return len(_load_experiments())
 
 
 def format_experiment_context() -> str:
-    experiments = _load_registry()["experiments"]
+    experiments = _load_experiments()
     pending = sorted(
         [
             experiment
@@ -51,8 +50,8 @@ def format_experiment_context() -> str:
 
 
 def run_experiment_create(title: str, description: str) -> None:
-    registry = _load_registry()
-    experiment_id = _generate_experiment_id(registry["experiments"], title)
+    experiments = _load_experiments()
+    experiment_id = _generate_experiment_id(experiments, title)
 
     timestamp = _utc_now()
     experiment: ExperimentRecord = {
@@ -65,8 +64,8 @@ def run_experiment_create(title: str, description: str) -> None:
         "current_run_id": None,
         "runs": [],
     }
-    registry["experiments"].append(experiment)
-    _save_registry(registry)
+    experiments.append(experiment)
+    _save_experiments(experiments)
     _echo_json(experiment)
 
 
@@ -76,8 +75,8 @@ def run_experiment_start(
     before_score: float,
     rerun_of_run_id: str | None,
 ) -> None:
-    registry = _load_registry()
-    experiment = _require_experiment(registry["experiments"], experiment_id)
+    experiments = _load_experiments()
+    experiment = _require_experiment(experiments, experiment_id)
 
     if experiment["status"] not in {"pending", "completed"}:
         raise click.ClickException(
@@ -112,7 +111,7 @@ def run_experiment_start(
     experiment["status"] = "running"
     experiment["current_run_id"] = run_id
     experiment["updated_at"] = timestamp
-    _save_registry(registry)
+    _save_experiments(experiments)
     _echo_json(experiment)
 
 
@@ -121,8 +120,8 @@ def run_experiment_finish(
     run_status: str,
     after_score: float | None,
 ) -> None:
-    registry = _load_registry()
-    experiment = _require_experiment(registry["experiments"], experiment_id)
+    experiments = _load_experiments()
+    experiment = _require_experiment(experiments, experiment_id)
 
     if experiment["status"] != "running" or experiment["current_run_id"] is None:
         raise click.ClickException(f"Experiment '{experiment_id}' does not have a running run.")
@@ -155,7 +154,7 @@ def run_experiment_finish(
     experiment["status"] = "completed"
     experiment["current_run_id"] = None
     experiment["updated_at"] = timestamp
-    _save_registry(registry)
+    _save_experiments(experiments)
     _echo_json(experiment)
 
 
@@ -167,8 +166,7 @@ def run_experiment_list(
     sort: str,
     sort_by: str,
 ) -> None:
-    registry = _load_registry()
-    experiments = registry["experiments"]
+    experiments = _load_experiments()
 
     if status is not None:
         experiments = [experiment for experiment in experiments if experiment["status"] == status]
@@ -197,36 +195,19 @@ def run_experiment_list(
 
 
 def run_experiment_show(experiment_id: str) -> None:
-    registry = _load_registry()
-    experiment = _require_experiment(registry["experiments"], experiment_id)
+    experiments = _load_experiments()
+    experiment = _require_experiment(experiments, experiment_id)
     _echo_json(experiment)
 
 
-def _load_registry() -> Registry:
-    if not REGISTRY_PATH.exists():
-        return {"experiments": []}
-
-    try:
-        raw_registry = json.loads(REGISTRY_PATH.read_text())
-    except json.JSONDecodeError as exc:
-        raise click.ClickException(f"Invalid registry file {REGISTRY_PATH}: {exc}") from exc
-
-    if not isinstance(raw_registry, dict):
-        raise click.ClickException(
-            f"Invalid registry file {REGISTRY_PATH}: expected an object with an 'experiments' list."
-        )
-
-    experiments = raw_registry.get("experiments")
-    if not isinstance(experiments, list):
-        raise click.ClickException(
-            f"Invalid registry file {REGISTRY_PATH}: expected an object with an 'experiments' list."
-        )
-    return {"experiments": cast(list[ExperimentRecord], experiments)}
+def _load_experiments() -> ExperimentList:
+    storage = get_default_experiment_storage()
+    return storage.load_experiments()
 
 
-def _save_registry(registry: Registry) -> None:
-    REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REGISTRY_PATH.write_text(json.dumps(registry, indent=2) + "\n")
+def _save_experiments(experiments: ExperimentList) -> None:
+    storage = get_default_experiment_storage()
+    storage.save_experiments(experiments)
 
 
 def _find_experiment(

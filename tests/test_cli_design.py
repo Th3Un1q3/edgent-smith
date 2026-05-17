@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import pathlib
 from unittest.mock import MagicMock, patch
 
@@ -11,6 +10,7 @@ from click.testing import CliRunner
 from cli.main import cli
 from cli.commands import design as design_module
 from cli.services.copilot_session import PERMISSIVE_TOOLSET
+from cli.services.experiment_storage import FileSystemExperimentStorage
 from cli.services.project_config import ProjectConfig
 
 
@@ -55,10 +55,8 @@ def _write_project_config(config_path: pathlib.Path, *, alias: str = "copilot") 
     )
 
 
-def _write_registry(experiments: list[dict[str, object]]) -> None:
-    registry_path = pathlib.Path("experiments/registry.state.json")
-    registry_path.parent.mkdir(parents=True, exist_ok=True)
-    registry_path.write_text(json.dumps({"experiments": experiments}, indent=2) + "\n")
+def _write_storage_experiments(experiments: list[dict[str, object]]) -> None:
+    FileSystemExperimentStorage().save_experiments(experiments)
 
 
 def test_design_uses_configured_prompt_file_body_without_frontmatter(
@@ -68,7 +66,8 @@ def test_design_uses_configured_prompt_file_body_without_frontmatter(
 
     with runner.isolated_filesystem(temp_dir=tmp_path):
         _write_project_config(pathlib.Path("project.config.toml"))
-        _write_registry([])
+        _write_storage_experiments([])
+        assert pathlib.Path("experiments/index.json").exists()
 
         with patch(
             "cli.services.copilot_session.CopilotSessionService.send_message",
@@ -76,7 +75,7 @@ def test_design_uses_configured_prompt_file_body_without_frontmatter(
         ) as mock_send:
 
             def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
-                _write_registry(
+                _write_storage_experiments(
                     [
                         {
                             "id": "prompt-body-experiment",
@@ -148,7 +147,7 @@ def test_design_requires_task_prompt_configuration(
             )
             + "\n"
         )
-        _write_registry([])
+        _write_storage_experiments([])
 
         with patch(
             "cli.services.copilot_session.CopilotSessionService.send_message",
@@ -205,7 +204,7 @@ def test_design_uses_configured_prompt_relative_to_config_and_frontmatter_agent(
             )
             + "\n"
         )
-        _write_registry([])
+        _write_storage_experiments([])
 
         with patch(
             "cli.services.copilot_session.CopilotSessionService.send_message",
@@ -213,7 +212,7 @@ def test_design_uses_configured_prompt_relative_to_config_and_frontmatter_agent(
         ) as mock_send:
 
             def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
-                _write_registry(
+                _write_storage_experiments(
                     [
                         {
                             "id": "custom-prompt-experiment",
@@ -272,7 +271,7 @@ def test_design_uses_inline_task_prompt_text_and_agent(
             )
             + "\n"
         )
-        _write_registry([])
+        _write_storage_experiments([])
 
         with patch(
             "cli.services.copilot_session.CopilotSessionService.send_message",
@@ -280,7 +279,7 @@ def test_design_uses_inline_task_prompt_text_and_agent(
         ) as mock_send:
 
             def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
-                _write_registry(
+                _write_storage_experiments(
                     [
                         {
                             "id": "inline-prompt-experiment",
@@ -352,7 +351,7 @@ def test_design_uses_no_agent_when_configured_prompt_frontmatter_has_no_agent(
             )
             + "\n"
         )
-        _write_registry([])
+        _write_storage_experiments([])
 
         with patch(
             "cli.services.copilot_session.CopilotSessionService.send_message",
@@ -360,7 +359,7 @@ def test_design_uses_no_agent_when_configured_prompt_frontmatter_has_no_agent(
         ) as mock_send:
 
             def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
-                _write_registry(
+                _write_storage_experiments(
                     [
                         {
                             "id": "no-agent-experiment",
@@ -404,7 +403,7 @@ def test_design_without_brief_instructs_agent_to_choose_one_topic(
 
     with runner.isolated_filesystem(temp_dir=tmp_path):
         _write_project_config(pathlib.Path("project.config.toml"))
-        _write_registry([])
+        _write_storage_experiments([])
 
         with patch(
             "cli.services.copilot_session.CopilotSessionService.send_message",
@@ -412,7 +411,7 @@ def test_design_without_brief_instructs_agent_to_choose_one_topic(
         ) as mock_send:
 
             def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
-                _write_registry(
+                _write_storage_experiments(
                     [
                         {
                             "id": "autonomous-experiment",
@@ -460,7 +459,7 @@ def test_design_uses_explicit_project_config_and_injects_local_experiment_contex
     with runner.isolated_filesystem(temp_dir=tmp_path):
         _write_project_config(pathlib.Path("aaa.config.toml"), alias="auto-discovered")
         _write_project_config(pathlib.Path("explicit.config.toml"), alias="explicit-alias")
-        _write_registry(
+        _write_storage_experiments(
             [
                 {
                     "id": "pending-experiment",
@@ -498,6 +497,7 @@ def test_design_uses_explicit_project_config_and_injects_local_experiment_contex
                 },
             ]
         )
+        assert pathlib.Path("experiments/index.json").exists()
 
         with patch(
             "cli.services.copilot_session.CopilotSessionService.send_message",
@@ -505,7 +505,7 @@ def test_design_uses_explicit_project_config_and_injects_local_experiment_contex
         ) as mock_send:
 
             def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
-                _write_registry(
+                _write_storage_experiments(
                     [
                         {
                             "id": "pending-experiment",
@@ -567,6 +567,7 @@ def test_design_uses_explicit_project_config_and_injects_local_experiment_contex
                     "explicit.config.toml",
                 ],
             )
+            assert pathlib.Path("experiments/index.json").exists()
 
     assert result.exit_code == 0
     assert "designed" in result.output
@@ -599,7 +600,7 @@ def test_design_retries_once_in_same_session_when_experiment_count_does_not_incr
 
     with runner.isolated_filesystem(temp_dir=tmp_path):
         _write_project_config(pathlib.Path("project.config.toml"))
-        _write_registry(
+        _write_storage_experiments(
             [
                 {
                     "id": "existing-experiment",
@@ -624,7 +625,7 @@ def test_design_retries_once_in_same_session_when_experiment_count_does_not_incr
                 nonlocal send_count
                 send_count += 1
                 if send_count == 2:
-                    _write_registry(
+                    _write_storage_experiments(
                         [
                             {
                                 "id": "existing-experiment",
@@ -680,7 +681,7 @@ def test_design_raises_click_exception_when_retry_does_not_create_experiment(
 
     with runner.isolated_filesystem(temp_dir=tmp_path):
         _write_project_config(pathlib.Path("project.config.toml"))
-        _write_registry([])
+        _write_storage_experiments([])
 
         with patch(
             "cli.services.copilot_session.CopilotSessionService.send_message",
@@ -711,7 +712,7 @@ def test_design_strips_stdout_once_and_echoes_trimmed_output(
 
     with runner.isolated_filesystem(temp_dir=tmp_path):
         _write_project_config(pathlib.Path("project.config.toml"))
-        _write_registry([])
+        _write_storage_experiments([])
         stdout_text = _CountingStdout("  designed output  ")
 
         with patch(
@@ -720,7 +721,7 @@ def test_design_strips_stdout_once_and_echoes_trimmed_output(
         ) as mock_send:
 
             def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
-                _write_registry(
+                _write_storage_experiments(
                     [
                         {
                             "id": "new-experiment",
@@ -761,7 +762,7 @@ def test_design_falls_back_to_submission_message_for_blank_stdout(
 
     with runner.isolated_filesystem(temp_dir=tmp_path):
         _write_project_config(pathlib.Path("project.config.toml"), alias="explicit-alias")
-        _write_registry([])
+        _write_storage_experiments([])
 
         with patch(
             "cli.services.copilot_session.CopilotSessionService.send_message",
@@ -769,7 +770,7 @@ def test_design_falls_back_to_submission_message_for_blank_stdout(
         ) as mock_send:
 
             def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
-                _write_registry(
+                _write_storage_experiments(
                     [
                         {
                             "id": "new-experiment",

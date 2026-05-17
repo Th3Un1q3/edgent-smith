@@ -83,7 +83,7 @@ Current public `just` entrypoints are split between the Click-backed `autoresear
 
 - `just autoresearch init --name NAME` verifies the `copilot` CLI alias and authentication before it writes `NAME.config.toml`. The generated config now includes a `[baseline]` section with `id` defaulting to `NAME` and `eval_model` defaulting to `edge_agent_default`. If the GitHub Copilot CLI is missing, the command points to `npm install -g @github/copilot`.
 - `just autoresearch validate --config PATH` validates a specific project config. When `--config` is omitted, `validate` auto-discovers the lexicographically first `*.config.toml` file in the current directory.
-- `just autoresearch experiment ...` manages local experiment registry CRUD only. Use `just run-experiment ...`, `just run-experiment-loop ...`, and `just promote-baseline ...` for script-backed experiment execution.
+- `just autoresearch experiment ...` manages CLI-owned local experiment storage under `experiments/index.json` and `experiments/experiments/<experiment_id>/`. Use `just run-experiment ...`, `just run-experiment-loop ...`, and `just promote-baseline ...` for the separate `scripts/experiment.py` runner state.
 
 ---
 
@@ -97,7 +97,7 @@ cli/
   commands/
     __init__.py
     design.py                   # run_design() - experiment design
-    experiment.py               # run_experiment_*() - registry CRUD
+    experiment.py               # run_experiment_*() - CLI experiment storage CRUD
     fix.py                       # run_fix() - autofix workflow
     init.py                      # run_init() - config initialization
     validate.py                  # run_validate() - config validation
@@ -130,9 +130,24 @@ cli/
 
 ## State ownership and compatibility
 
-The local experiment registry and the script runner state files are separate on purpose.
+The Click-backed CLI experiment storage and the script runner state files are separate on purpose.
 
-- `experiments/registry.state.json` is owned by the Click-backed local experiment registry commands in `cli/commands/experiment.py`. It stores the registry records used by `just autoresearch experiment ...`, and `just autoresearch design` reads that registry context when it builds a new experiment prompt.
+The CLI-owned storage used by `just autoresearch experiment ...` and read by `just autoresearch design` now lives under `experiments/` with this layout:
+
+```text
+experiments/
+  index.json
+  experiments/
+    <experiment_id>/
+      spec.md
+      status.json
+      meta.json
+```
+
+- `experiments/index.json` is a JSON array of experiment IDs for the Click-backed CLI storage.
+- `experiments/experiments/<experiment_id>/spec.md` stores the experiment description submitted through the CLI.
+- `experiments/experiments/<experiment_id>/status.json` stores the mutable run status, timestamps, and run history used by the CLI workflow.
+- `experiments/experiments/<experiment_id>/meta.json` stores stable metadata such as the experiment ID, title, creation time, and future issue linkage fields.
 - `experiments/<issue>.state.json` and `experiments/manual.state.json` are owned by `scripts/experiment.py`. They store script-runner attempt state for issue-backed runs and local/manual runs, including the handoff fields the workflow uses after a candidate is produced.
 - `scripts/fix_code.sh` remains a supported compatibility wrapper for the autofix workflow and forwards to the same Click-backed `autoresearch fix` implementation.
 - `just experiment-loop` remains a supported compatibility alias for `just run-experiment-loop`.
