@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import click
@@ -10,6 +10,15 @@ PROJECT_CONFIG_SUFFIX = ".config.toml"
 DEFAULT_AGENTIC_CLI_TYPE = "copilot_cli"
 DEFAULT_AGENTIC_CLI_ALIAS = "copilot"
 DEFAULT_BASELINE_EVAL_MODEL = "edge_agent_default"
+DEFAULT_DESIGN_TASK_PROMPT_PATH = ".github/prompts/create-experiment-from-ideas.prompt.md"
+
+
+@dataclass(frozen=True)
+class TaskPromptConfig:
+    kind: str
+    text: str | None = None
+    path: str | None = None
+    agent: str | None = None
 
 
 @dataclass(frozen=True)
@@ -20,6 +29,7 @@ class ProjectConfig:
     agentic_cli_alias: str
     baseline_id: str
     baseline_eval_model: str
+    task_prompts: dict[str, TaskPromptConfig] = field(default_factory=dict)
 
 
 def project_config_filename(name: str) -> str:
@@ -45,6 +55,10 @@ def render_project_config(
                 "[baseline]",
                 f'id = "{resolved_baseline_id}"',
                 f'eval_model = "{baseline_eval_model}"',
+                "",
+                "[task_prompts.design]",
+                'kind = "file"',
+                f'path = "{DEFAULT_DESIGN_TASK_PROMPT_PATH}"',
             ]
         )
         + "\n"
@@ -69,9 +83,28 @@ def load_project_config(
     if not isinstance(raw_config, dict):
         raise click.ClickException("Invalid project config: expected a TOML table.")
 
+    unsupported_root_keys = sorted(
+        set(raw_config)
+        - {
+            "name",
+            "agentic_cli_type",
+            "agentic_cli_alias",
+            "baseline",
+            "task_prompts",
+        }
+    )
+    if unsupported_root_keys:
+        unsupported_keys = ", ".join(unsupported_root_keys)
+        raise click.ClickException(
+            "Invalid project config: unsupported top-level keys: "
+            f"{unsupported_keys}. Configure task prompts under task_prompts.<task_name>."
+        )
+
     baseline_config = raw_config.get("baseline")
     if not isinstance(baseline_config, dict):
         baseline_config = {}
+
+    task_prompts = _parse_task_prompts(raw_config.get("task_prompts"))
 
     resolved_name = _string_value(raw_config.get("name"), fallback="unknown")
 
@@ -94,6 +127,7 @@ def load_project_config(
             baseline_config.get("eval_model"),
             fallback=DEFAULT_BASELINE_EVAL_MODEL,
         ),
+        task_prompts=task_prompts,
     )
 
 
@@ -122,3 +156,72 @@ def _string_value(value: object, *, fallback: str) -> str:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return fallback
+
+
+def _optional_string_value(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _parse_task_prompts(value: object) -> dict[str, TaskPromptConfig]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise click.ClickException("Invalid project config: task_prompts must be a TOML table.")
+
+    task_prompts: dict[str, TaskPromptConfig] = {}
+    for task_name, raw_prompt in value.items():
+        if not isinstance(task_name, str) or not task_name.strip():
+            raise click.ClickException(
+                "Invalid project config: task_prompts keys must be non-empty strings."
+            )
+        if not isinstance(raw_prompt, dict):
+            raise click.ClickException(
+                f"Invalid project config: task_prompts.{task_name} must be a TOML table."
+            )
+        task_prompts[task_name] = _parse_task_prompt(task_name, raw_prompt)
+
+    return task_prompts
+
+
+def _parse_task_prompt(task_name: str, raw_prompt: dict[object, object]) -> TaskPromptConfig:
+    text = _optional_string_value(raw_prompt.get("text"))
+    path = _optional_string_value(raw_prompt.get("path"))
+    agent = _optional_string_value(raw_prompt.get("agent"))
+    kind = _optional_string_value(raw_prompt.get("kind"))
+
+    if text is not None and path is not None:
+        raise click.ClickException(
+            f"Invalid project config: task_prompts.{task_name} must not define both text and path."
+        )
+
+    if kind is None:
+        if text is not None:
+            kind = "inline"
+        else:
+            raise click.ClickException(
+                f"Invalid project config: task_prompts.{task_name} must declare a supported kind."
+            )
+
+    if kind not in {"inline", "file"}:
+        raise click.ClickException(
+            f"Invalid project config: task_prompts.{task_name} has unknown kind {kind!r}."
+        )
+
+    if kind == "inline":
+        if text is None:
+            raise click.ClickException(
+                f"Invalid project config: task_prompts.{task_name} inline prompts require text."
+            )
+        return TaskPromptConfig(kind="inline", text=text, agent=agent)
+
+    if path is None:
+        raise click.ClickException(
+            f"Invalid project config: task_prompts.{task_name} file prompts require path."
+        )
+    if agent is not None:
+        raise click.ClickException(
+            f"Invalid project config: task_prompts.{task_name} file prompts must not define agent."
+        )
+    return TaskPromptConfig(kind="file", path=path)

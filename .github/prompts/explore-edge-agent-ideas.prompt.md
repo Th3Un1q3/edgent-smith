@@ -1,13 +1,14 @@
-# Research and Document ideas that inspire edge agentic systems architectures
+---
+description: "Refresh docs/ideas.md from the latest edge-relevant agentic papers"
+agent: "edge-architect"
+---
 
-## Workflow
+# Research Latest Edge-Agent Ideas
 
-1. Explore sources to identify promising arhitectural ideas for edge agentic systems.
-2. Read and summarize the most relevant papers, focusing on their architectural contributions and potential applications to edge agentic systems.
-3. Extend docs/ideas.md with the most promising ideas, including a brief description and potential impact on edge agentic systems. In case some of the ideas present are challenged by the new findings, update the docs/ideas.md accordingly.
+Task:
 
-## Sources
+1. Use the Hugging Face CLI to inspect the latest Hugging Face papers relevant to agentic engineering.
+2. Synthesize only the strongest edge-relevant insights.
+3. Update `docs/ideas.md` with concise additions or revisions grounded in those papers.
 
-- https://huggingface.co/papers/month/2026-04 - Use current month in fromat YYYY-MM. Here is index of most popular papers for the month, sorted by Hugging Face score. Some of them may be relevant for edge agentic systems.
-- https://www.langchain.com/blog?category_equal=%5B%22Agent+Architecture%22%5D - LangChain blog posts tagged with "Agent Architecture". These may contain insights and ideas relevant to edge agentic systems.
-- https://github.com/Alexey-Popov/awesome-ai-architect - A curated list of resources and papers on AI architecture. This may include relevant papers on edge agentic systems.
+Do not design or submit an experiment in this prompt. Do not substitute web search for the Hugging Face CLI.

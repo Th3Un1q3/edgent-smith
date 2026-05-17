@@ -4,10 +4,14 @@ import json
 import pathlib
 from unittest.mock import MagicMock, patch
 
+import click
+import pytest
 from click.testing import CliRunner
 
 from cli.main import cli
+from cli.commands import design as design_module
 from cli.services.copilot_session import PERMISSIVE_TOOLSET
+from cli.services.project_config import ProjectConfig
 
 
 class _CountingStdout:
@@ -21,13 +25,376 @@ class _CountingStdout:
 
 
 def _write_project_config(config_path: pathlib.Path, *, alias: str = "copilot") -> None:
-    config_path.write_text(f'name = "test-project"\nagentic_cli_alias = "{alias}"\n')
+    prompt_path = pathlib.Path(".github/prompts/create-experiment-from-ideas.prompt.md")
+    prompt_path.parent.mkdir(parents=True, exist_ok=True)
+    prompt_path.write_text(
+        "\n".join(
+            [
+                "---",
+                'agent: "edge-architect"',
+                "---",
+                "Create One Experiment From Ideas",
+                "Return one Markdown experiment spec with these headings",
+                "Submit it exactly once with `just autoresearch experiment create`.",
+            ]
+        )
+        + "\n"
+    )
+    config_path.write_text(
+        "\n".join(
+            [
+                'name = "test-project"',
+                f'agentic_cli_alias = "{alias}"',
+                "",
+                "[task_prompts.design]",
+                'kind = "file"',
+                'path = ".github/prompts/create-experiment-from-ideas.prompt.md"',
+            ]
+        )
+        + "\n"
+    )
 
 
 def _write_registry(experiments: list[dict[str, object]]) -> None:
     registry_path = pathlib.Path("experiments/registry.state.json")
     registry_path.parent.mkdir(parents=True, exist_ok=True)
     registry_path.write_text(json.dumps({"experiments": experiments}, indent=2) + "\n")
+
+
+def test_design_uses_configured_prompt_file_body_without_frontmatter(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_project_config(pathlib.Path("project.config.toml"))
+        _write_registry([])
+
+        with patch(
+            "cli.services.copilot_session.CopilotSessionService.send_message",
+            autospec=True,
+        ) as mock_send:
+
+            def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
+                _write_registry(
+                    [
+                        {
+                            "id": "prompt-body-experiment",
+                            "title": "Prompt body experiment",
+                            "description": "Created from the checked-in prompt.",
+                            "status": "pending",
+                            "created_at": "2026-05-12T12:00:00Z",
+                            "updated_at": "2026-05-12T12:00:00Z",
+                            "current_run_id": None,
+                            "runs": [],
+                        }
+                    ]
+                )
+                return MagicMock(is_success=True, stdout="designed", stderr="")
+
+            mock_send.side_effect = _create_experiment
+
+            result = runner.invoke(
+                cli,
+                [
+                    "autoresearch",
+                    "design",
+                    "Improve eval throughput",
+                    "--config",
+                    "project.config.toml",
+                ],
+            )
+
+    assert result.exit_code == 0
+    prompt = mock_send.call_args.args[1]
+    assert "Create One Experiment From Ideas" in prompt
+    assert "Return one Markdown experiment spec with these headings" in prompt
+    assert "Submit it exactly once with `just autoresearch experiment create`." in prompt
+    assert "name:" not in prompt
+    assert 'agent: "edge-architect"' not in prompt
+    assert "\n---\n" not in prompt
+    assert "User brief: Improve eval throughput" in prompt
+
+
+def test_resolve_design_prompt_requires_task_prompt_configuration() -> None:
+    project_config = ProjectConfig(
+        path=pathlib.Path("project.config.toml"),
+        name="test-project",
+        agentic_cli_type="copilot_cli",
+        agentic_cli_alias="copilot",
+        baseline_id="test-project",
+        baseline_eval_model="edge_agent_default",
+        task_prompts={},
+    )
+
+    with pytest.raises(click.ClickException) as exc_info:
+        design_module._resolve_design_prompt(project_config)
+
+    assert "task_prompts.design" in str(exc_info.value)
+
+
+def test_design_requires_task_prompt_configuration(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        pathlib.Path("project.config.toml").write_text(
+            "\n".join(
+                [
+                    'name = "test-project"',
+                    'agentic_cli_alias = "copilot"',
+                ]
+            )
+            + "\n"
+        )
+        _write_registry([])
+
+        with patch(
+            "cli.services.copilot_session.CopilotSessionService.send_message",
+            autospec=True,
+        ) as mock_send:
+            result = runner.invoke(
+                cli,
+                [
+                    "autoresearch",
+                    "design",
+                    "Improve eval throughput",
+                    "--config",
+                    "project.config.toml",
+                ],
+            )
+
+    assert result.exit_code != 0
+    assert "task_prompts.design" in result.output
+    mock_send.assert_not_called()
+
+
+def test_design_uses_configured_prompt_relative_to_config_and_frontmatter_agent(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        config_dir = pathlib.Path("config")
+        prompts_dir = pathlib.Path("prompts")
+        config_dir.mkdir()
+        prompts_dir.mkdir()
+        config_path = config_dir / "project.config.toml"
+        config_path.write_text(
+            "\n".join(
+                [
+                    'name = "test-project"',
+                    'agentic_cli_alias = "configured-alias"',
+                    "",
+                    "[task_prompts.design]",
+                    'kind = "file"',
+                    'path = "../prompts/custom.prompt.md"',
+                ]
+            )
+            + "\n"
+        )
+        (prompts_dir / "custom.prompt.md").write_text(
+            "\n".join(
+                [
+                    "---",
+                    'agent: "custom-architect"',
+                    "---",
+                    "Custom prompt body.",
+                ]
+            )
+            + "\n"
+        )
+        _write_registry([])
+
+        with patch(
+            "cli.services.copilot_session.CopilotSessionService.send_message",
+            autospec=True,
+        ) as mock_send:
+
+            def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
+                _write_registry(
+                    [
+                        {
+                            "id": "custom-prompt-experiment",
+                            "title": "Custom prompt experiment",
+                            "description": "Created from a configured prompt.",
+                            "status": "pending",
+                            "created_at": "2026-05-12T12:00:00Z",
+                            "updated_at": "2026-05-12T12:00:00Z",
+                            "current_run_id": None,
+                            "runs": [],
+                        }
+                    ]
+                )
+                return MagicMock(is_success=True, stdout="designed", stderr="")
+
+            mock_send.side_effect = _create_experiment
+
+            result = runner.invoke(
+                cli,
+                [
+                    "autoresearch",
+                    "design",
+                    "Improve eval throughput",
+                    "--config",
+                    str(config_path),
+                ],
+            )
+
+    assert result.exit_code == 0
+    session = mock_send.call_args.args[0]
+    prompt = mock_send.call_args.args[1]
+    assert session.alias == "configured-alias"
+    assert session.agent == "custom-architect"
+    assert "Custom prompt body." in prompt
+    assert 'agent: "custom-architect"' not in prompt
+    assert "Create One Experiment From Ideas" not in prompt
+
+
+def test_design_uses_inline_task_prompt_text_and_agent(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        config_path = pathlib.Path("project.config.toml")
+        config_path.write_text(
+            "\n".join(
+                [
+                    'name = "test-project"',
+                    'agentic_cli_alias = "inline-alias"',
+                    "",
+                    "[task_prompts.design]",
+                    'text = "Inline design prompt body."',
+                    'agent = "implement"',
+                ]
+            )
+            + "\n"
+        )
+        _write_registry([])
+
+        with patch(
+            "cli.services.copilot_session.CopilotSessionService.send_message",
+            autospec=True,
+        ) as mock_send:
+
+            def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
+                _write_registry(
+                    [
+                        {
+                            "id": "inline-prompt-experiment",
+                            "title": "Inline prompt experiment",
+                            "description": "Created from an inline prompt.",
+                            "status": "pending",
+                            "created_at": "2026-05-12T12:00:00Z",
+                            "updated_at": "2026-05-12T12:00:00Z",
+                            "current_run_id": None,
+                            "runs": [],
+                        }
+                    ]
+                )
+                return MagicMock(is_success=True, stdout="designed", stderr="")
+
+            mock_send.side_effect = _create_experiment
+
+            result = runner.invoke(
+                cli,
+                [
+                    "autoresearch",
+                    "design",
+                    "Improve eval throughput",
+                    "--config",
+                    str(config_path),
+                ],
+            )
+
+    assert result.exit_code == 0
+    session = mock_send.call_args.args[0]
+    prompt = mock_send.call_args.args[1]
+    assert session.alias == "inline-alias"
+    assert session.agent == "implement"
+    assert "Inline design prompt body." in prompt
+    assert "Create One Experiment From Ideas" not in prompt
+
+
+def test_design_uses_no_agent_when_configured_prompt_frontmatter_has_no_agent(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        config_dir = pathlib.Path("config")
+        prompts_dir = pathlib.Path("prompts")
+        config_dir.mkdir()
+        prompts_dir.mkdir()
+        config_path = config_dir / "project.config.toml"
+        config_path.write_text(
+            "\n".join(
+                [
+                    'name = "test-project"',
+                    "",
+                    "[task_prompts.design]",
+                    'kind = "file"',
+                    'path = "../prompts/no-agent.prompt.md"',
+                ]
+            )
+            + "\n"
+        )
+        (prompts_dir / "no-agent.prompt.md").write_text(
+            "\n".join(
+                [
+                    "---",
+                    'description: "No agent override"',
+                    "---",
+                    "Prompt without agent frontmatter.",
+                ]
+            )
+            + "\n"
+        )
+        _write_registry([])
+
+        with patch(
+            "cli.services.copilot_session.CopilotSessionService.send_message",
+            autospec=True,
+        ) as mock_send:
+
+            def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
+                _write_registry(
+                    [
+                        {
+                            "id": "no-agent-experiment",
+                            "title": "No agent experiment",
+                            "description": "Created without an agent override.",
+                            "status": "pending",
+                            "created_at": "2026-05-12T12:00:00Z",
+                            "updated_at": "2026-05-12T12:00:00Z",
+                            "current_run_id": None,
+                            "runs": [],
+                        }
+                    ]
+                )
+                return MagicMock(is_success=True, stdout="designed", stderr="")
+
+            mock_send.side_effect = _create_experiment
+
+            result = runner.invoke(
+                cli,
+                [
+                    "autoresearch",
+                    "design",
+                    "Improve eval throughput",
+                    "--config",
+                    str(config_path),
+                ],
+            )
+
+    assert result.exit_code == 0
+    session = mock_send.call_args.args[0]
+    prompt = mock_send.call_args.args[1]
+    assert session.agent is None
+    assert "Prompt without agent frontmatter." in prompt
+    assert 'description: "No agent override"' not in prompt
 
 
 def test_design_without_brief_instructs_agent_to_choose_one_topic(

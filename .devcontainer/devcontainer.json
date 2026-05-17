@@ -22,7 +22,8 @@
         "ms-python.mypy-type-checker",
         "charliermarsh.ruff",
         "GitHub.copilot",
-        "GitHub.copilot-chat"
+        "GitHub.copilot-chat",
+        "ms-vscode.vscode-chat-customizations-evaluations"
       ],
       "settings": {
         "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
