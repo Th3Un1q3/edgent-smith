@@ -21,21 +21,6 @@ class _CountingStdout:
 
 
 def _write_project_config(config_path: pathlib.Path, *, alias: str = "copilot") -> None:
-    prompt_path = pathlib.Path(".github/prompts/create-experiment-from-ideas.prompt.md")
-    prompt_path.parent.mkdir(parents=True, exist_ok=True)
-    prompt_path.write_text(
-        "\n".join(
-            [
-                "---",
-                'agent: "edge-architect"',
-                "---",
-                "Create One Experiment From Ideas",
-                "Return one Markdown experiment spec with these headings",
-                "Submit it exactly once with `just autoresearch experiment create`.",
-            ]
-        )
-        + "\n"
-    )
     config_path.write_text(
         "\n".join(
             [
@@ -43,8 +28,9 @@ def _write_project_config(config_path: pathlib.Path, *, alias: str = "copilot") 
                 f'agentic_cli_alias = "{alias}"',
                 "",
                 "[task_prompts.design]",
-                'kind = "file"',
-                'path = ".github/prompts/create-experiment-from-ideas.prompt.md"',
+                'agent = "edge-architect"',
+                'prompt = "Strictly follow the task instructions in '
+                '.github/prompts/create-experiment-from-ideas.prompt.md"',
             ]
         )
         + "\n"
@@ -55,7 +41,7 @@ def _write_storage_experiments(experiments: list[dict[str, object]]) -> None:
     FileSystemExperimentStorage().save_experiments(experiments)
 
 
-def test_design_uses_configured_prompt_file_body_without_frontmatter(
+def test_design_uses_configured_prompt_verbatim(
     tmp_path: pathlib.Path,
 ) -> None:
     runner = CliRunner()
@@ -102,12 +88,10 @@ def test_design_uses_configured_prompt_file_body_without_frontmatter(
 
     assert result.exit_code == 0
     prompt = mock_send.call_args.args[1]
-    assert "Create One Experiment From Ideas" in prompt
-    assert "Return one Markdown experiment spec with these headings" in prompt
-    assert "Submit it exactly once with `just autoresearch experiment create`." in prompt
-    assert "name:" not in prompt
-    assert 'agent: "edge-architect"' not in prompt
-    assert "\n---\n" not in prompt
+    assert (
+        "Strictly follow the task instructions in "
+        ".github/prompts/create-experiment-from-ideas.prompt.md" in prompt
+    )
     assert "User brief: Improve eval throughput" in prompt
 
 
@@ -148,17 +132,13 @@ def test_design_requires_task_prompt_configuration(
     mock_send.assert_not_called()
 
 
-def test_design_uses_configured_prompt_relative_to_config_and_frontmatter_agent(
+def test_design_uses_configured_agent_from_project_config(
     tmp_path: pathlib.Path,
 ) -> None:
     runner = CliRunner()
 
     with runner.isolated_filesystem(temp_dir=tmp_path):
-        config_dir = pathlib.Path("config")
-        prompts_dir = pathlib.Path("prompts")
-        config_dir.mkdir()
-        prompts_dir.mkdir()
-        config_path = config_dir / "project.config.toml"
+        config_path = pathlib.Path("project.config.toml")
         config_path.write_text(
             "\n".join(
                 [
@@ -166,19 +146,8 @@ def test_design_uses_configured_prompt_relative_to_config_and_frontmatter_agent(
                     'agentic_cli_alias = "configured-alias"',
                     "",
                     "[task_prompts.design]",
-                    'kind = "file"',
-                    'path = "../prompts/custom.prompt.md"',
-                ]
-            )
-            + "\n"
-        )
-        (prompts_dir / "custom.prompt.md").write_text(
-            "\n".join(
-                [
-                    "---",
-                    'agent: "custom-architect"',
-                    "---",
-                    "Custom prompt body.",
+                    'agent = "custom-architect"',
+                    'prompt = "Use this configured design instruction."',
                 ]
             )
             + "\n"
@@ -225,12 +194,10 @@ def test_design_uses_configured_prompt_relative_to_config_and_frontmatter_agent(
     prompt = mock_send.call_args.args[1]
     assert session.alias == "configured-alias"
     assert session.agent == "custom-architect"
-    assert "Custom prompt body." in prompt
-    assert 'agent: "custom-architect"' not in prompt
-    assert "Create One Experiment From Ideas" not in prompt
+    assert "Use this configured design instruction." in prompt
 
 
-def test_design_uses_inline_task_prompt_text_and_agent(
+def test_design_treats_path_like_prompt_text_as_literal_prompt(
     tmp_path: pathlib.Path,
 ) -> None:
     runner = CliRunner()
@@ -244,7 +211,7 @@ def test_design_uses_inline_task_prompt_text_and_agent(
                     'agentic_cli_alias = "inline-alias"',
                     "",
                     "[task_prompts.design]",
-                    'text = "Inline design prompt body."',
+                    'prompt = ".github/prompts/create-experiment-from-ideas.prompt.md"',
                     'agent = "implement"',
                 ]
             )
@@ -292,87 +259,7 @@ def test_design_uses_inline_task_prompt_text_and_agent(
     prompt = mock_send.call_args.args[1]
     assert session.alias == "inline-alias"
     assert session.agent == "implement"
-    assert "Inline design prompt body." in prompt
-    assert "Create One Experiment From Ideas" not in prompt
-
-
-def test_design_uses_no_agent_when_configured_prompt_frontmatter_has_no_agent(
-    tmp_path: pathlib.Path,
-) -> None:
-    runner = CliRunner()
-
-    with runner.isolated_filesystem(temp_dir=tmp_path):
-        config_dir = pathlib.Path("config")
-        prompts_dir = pathlib.Path("prompts")
-        config_dir.mkdir()
-        prompts_dir.mkdir()
-        config_path = config_dir / "project.config.toml"
-        config_path.write_text(
-            "\n".join(
-                [
-                    'name = "test-project"',
-                    "",
-                    "[task_prompts.design]",
-                    'kind = "file"',
-                    'path = "../prompts/no-agent.prompt.md"',
-                ]
-            )
-            + "\n"
-        )
-        (prompts_dir / "no-agent.prompt.md").write_text(
-            "\n".join(
-                [
-                    "---",
-                    'description: "No agent override"',
-                    "---",
-                    "Prompt without agent frontmatter.",
-                ]
-            )
-            + "\n"
-        )
-        _write_storage_experiments([])
-
-        with patch(
-            "cli.services.copilot_session.CopilotSessionService.send_message",
-            autospec=True,
-        ) as mock_send:
-
-            def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
-                _write_storage_experiments(
-                    [
-                        {
-                            "id": "no-agent-experiment",
-                            "title": "No agent experiment",
-                            "description": "Created without an agent override.",
-                            "status": "pending",
-                            "created_at": "2026-05-12T12:00:00Z",
-                            "updated_at": "2026-05-12T12:00:00Z",
-                            "current_run_id": None,
-                            "runs": [],
-                        }
-                    ]
-                )
-                return MagicMock(is_success=True, stdout="designed", stderr="")
-
-            mock_send.side_effect = _create_experiment
-
-            result = runner.invoke(
-                cli,
-                [
-                    "autoresearch",
-                    "design",
-                    "Improve eval throughput",
-                    "--config",
-                    str(config_path),
-                ],
-            )
-
-    assert result.exit_code == 0
-    session = mock_send.call_args.args[0]
-    prompt = mock_send.call_args.args[1]
-    assert session.agent is None
-    assert "Prompt without agent frontmatter." in prompt
-    assert 'description: "No agent override"' not in prompt
+    assert ".github/prompts/create-experiment-from-ideas.prompt.md" in prompt
 
 
 def test_design_without_brief_instructs_agent_to_choose_one_topic(
@@ -653,6 +540,102 @@ def test_design_retries_once_in_same_session_when_experiment_count_does_not_incr
     assert "must submit exactly one experiment" in second_call.args[1]
 
 
+def test_design_uses_configured_resque_prompt_for_retry(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        config_path = pathlib.Path("project.config.toml")
+        _write_project_config(config_path)
+        config_path.write_text(
+            config_path.read_text()
+            + "\n"
+            + 'resque_prompt = "Retry now and execute just autoresearch experiment create."\n'
+        )
+        _write_storage_experiments([])
+
+        with patch(
+            "cli.services.copilot_session.CopilotSessionService.send_message",
+            autospec=True,
+        ) as mock_send:
+            call_count = 0
+
+            def _send_message(*args: object, **kwargs: object) -> MagicMock:
+                nonlocal call_count
+                call_count += 1
+                if call_count == 2:
+                    _write_storage_experiments(
+                        [
+                            {
+                                "id": "new-experiment",
+                                "title": "New experiment",
+                                "description": "Created after retry.",
+                                "status": "pending",
+                                "created_at": "2026-05-12T12:00:00Z",
+                                "updated_at": "2026-05-12T12:00:00Z",
+                                "current_run_id": None,
+                                "runs": [],
+                            },
+                        ]
+                    )
+                return MagicMock(is_success=True, stdout="designed", stderr="")
+
+            mock_send.side_effect = _send_message
+
+            result = runner.invoke(
+                cli,
+                [
+                    "autoresearch",
+                    "design",
+                    "Improve eval throughput",
+                    "--config",
+                    "project.config.toml",
+                ],
+            )
+
+    assert result.exit_code == 0
+    assert mock_send.call_count == 2
+    second_call = mock_send.call_args_list[1]
+    assert second_call.args[1] == "Retry now and execute just autoresearch experiment create."
+
+
+def test_design_does_not_retry_for_non_retriable_rate_limit_error(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_project_config(pathlib.Path("project.config.toml"))
+        _write_storage_experiments([])
+
+        with patch(
+            "cli.services.copilot_session.CopilotSessionService.send_message",
+            autospec=True,
+        ) as mock_send:
+            mock_send.return_value = MagicMock(
+                is_success=True,
+                stdout="❌ Error: (rate_limit) You've reached your weekly rate limit.",
+                stderr="",
+            )
+
+            result = runner.invoke(
+                cli,
+                [
+                    "autoresearch",
+                    "design",
+                    "Improve eval throughput",
+                    "--config",
+                    "project.config.toml",
+                ],
+            )
+
+    assert result.exit_code != 0
+    assert mock_send.call_count == 1
+    assert "rate limit" in result.output.lower()
+    assert "without retry" in result.output.lower()
+
+
 def test_design_raises_click_exception_when_retry_does_not_create_experiment(
     tmp_path: pathlib.Path,
 ) -> None:
@@ -788,19 +771,6 @@ def test_design_falls_back_to_submission_message_for_blank_stdout(
 
 
 def _write_discover_project_config(config_path: pathlib.Path, *, alias: str = "copilot") -> None:
-    prompt_path = pathlib.Path(".github/prompts/discover.prompt.md")
-    prompt_path.parent.mkdir(parents=True, exist_ok=True)
-    prompt_path.write_text(
-        "\n".join(
-            [
-                "---",
-                'agent: "edge-architect"',
-                "---",
-                "Discover new research directions.",
-            ]
-        )
-        + "\n"
-    )
     config_path.write_text(
         "\n".join(
             [
@@ -808,8 +778,9 @@ def _write_discover_project_config(config_path: pathlib.Path, *, alias: str = "c
                 f'agentic_cli_alias = "{alias}"',
                 "",
                 "[task_prompts.discover]",
-                'kind = "file"',
-                'path = ".github/prompts/discover.prompt.md"',
+                'agent = "edge-architect"',
+                'prompt = "Strictly follow the task instructions in '
+                '.github/prompts/explore-edge-agent-ideas.prompt.md"',
             ]
         )
         + "\n"
@@ -845,10 +816,16 @@ def test_discover_calls_hf_papers(tmp_path: pathlib.Path) -> None:
                 cli, ["autoresearch", "discover", "--config", "project.config.toml"]
             )
 
+            cache_path = pathlib.Path(".cache/discover/hf_papers.md")
+            assert cache_path.exists()
+            assert cache_path.read_text() == "## Trending papers\n\nPaper A"
+
     assert result.exit_code == 0, result.output
     mock_fetch.assert_called_once()
     prompt = mock_send.call_args.args[1]
-    assert "Pre-fetched paper search results" in prompt
+    assert "Cached Hugging Face paper search results are stored at" in prompt
+    assert ".cache/discover/hf_papers.md" in prompt
+    assert "Paper A" not in prompt
 
 
 def test_discover_uses_discover_toolset(tmp_path: pathlib.Path) -> None:
@@ -923,6 +900,80 @@ def test_discover_sends_followup_when_ideas_unchanged(tmp_path: pathlib.Path) ->
     assert mock_send.call_count == 2
     second_prompt = mock_send.call_args_list[1].args[1]
     assert "You must update docs/ideas.md now." in second_prompt
+
+
+def test_discover_uses_configured_rescue_prompt_for_retry(tmp_path: pathlib.Path) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        config_path = pathlib.Path("project.config.toml")
+        _write_discover_project_config(config_path)
+        config_path.write_text(
+            config_path.read_text() + '\nresque_prompt = "Update docs/ideas.md immediately."\n'
+        )
+        pathlib.Path("docs").mkdir(parents=True, exist_ok=True)
+        ideas_path = pathlib.Path("docs/ideas.md")
+        ideas_path.write_text("# Ideas\n\nInitial content.\n")
+
+        with (
+            patch(
+                "cli.services.copilot_session.CopilotSessionService.send_message",
+                autospec=True,
+            ) as mock_send,
+            patch("cli.commands.discover.fetch_papers"),
+            patch("cli.commands.discover.format_papers_context", return_value="papers"),
+        ):
+            call_count = 0
+
+            def _write_on_second_call(*args: object, **kwargs: object) -> MagicMock:
+                nonlocal call_count
+                call_count += 1
+                if call_count == 2:
+                    ideas_path.write_text("# Ideas\n\nUpdated on retry.\n")
+                return MagicMock(is_success=True, stdout="ok", stderr="")
+
+            mock_send.side_effect = _write_on_second_call
+
+            result = runner.invoke(
+                cli, ["autoresearch", "discover", "--config", "project.config.toml"]
+            )
+
+    assert result.exit_code == 0, result.output
+    assert mock_send.call_count == 2
+    second_prompt = mock_send.call_args_list[1].args[1]
+    assert second_prompt == "Update docs/ideas.md immediately."
+
+
+def test_discover_does_not_retry_for_non_retriable_rate_limit_error(tmp_path: pathlib.Path) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_discover_project_config(pathlib.Path("project.config.toml"))
+        pathlib.Path("docs").mkdir(parents=True, exist_ok=True)
+        pathlib.Path("docs/ideas.md").write_text("# Ideas\n\nInitial content.\n")
+
+        with (
+            patch(
+                "cli.services.copilot_session.CopilotSessionService.send_message",
+                autospec=True,
+            ) as mock_send,
+            patch("cli.commands.discover.fetch_papers"),
+            patch("cli.commands.discover.format_papers_context", return_value="papers"),
+        ):
+            mock_send.return_value = MagicMock(
+                is_success=True,
+                stdout="❌ Error: (rate_limit) You've reached your weekly rate limit.",
+                stderr="",
+            )
+
+            result = runner.invoke(
+                cli, ["autoresearch", "discover", "--config", "project.config.toml"]
+            )
+
+    assert result.exit_code != 0
+    assert mock_send.call_count == 1
+    assert "rate limit" in result.output.lower()
+    assert "without retry" in result.output.lower()
 
 
 def test_discover_raises_when_ideas_unchanged_after_retry(tmp_path: pathlib.Path) -> None:

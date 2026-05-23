@@ -44,8 +44,9 @@ def test_autoresearch_init_creates_config_file(
         assert 'agentic_cli_type = "copilot_cli"' in content
         assert 'agentic_cli_alias = "copilot"' in content
         assert "[task_prompts.design]" in content
-        assert 'kind = "file"' in content
-        assert 'path = ".github/prompts/create-experiment-from-ideas.prompt.md"' in content
+        assert 'agent = "edge-architect"' in content
+        assert 'prompt = ".github/prompts/create-experiment-from-ideas.prompt.md"' in content
+        assert "prompt_file" not in content
 
 
 @patch("cli.commands.init.CopilotSessionService")

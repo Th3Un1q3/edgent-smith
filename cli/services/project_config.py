@@ -15,10 +15,9 @@ DEFAULT_DESIGN_TASK_PROMPT_PATH = ".github/prompts/create-experiment-from-ideas.
 
 @dataclass(frozen=True)
 class TaskPromptConfig:
-    kind: str
-    text: str | None = None
-    path: str | None = None
-    agent: str | None = None
+    agent: str
+    prompt: str
+    resque_prompt: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,8 +56,8 @@ def render_project_config(
                 f'eval_model = "{baseline_eval_model}"',
                 "",
                 "[task_prompts.design]",
-                'kind = "file"',
-                f'path = "{DEFAULT_DESIGN_TASK_PROMPT_PATH}"',
+                'agent = "edge-architect"',
+                f'prompt = "{DEFAULT_DESIGN_TASK_PROMPT_PATH}"',
             ]
         )
         + "\n"
@@ -186,42 +185,40 @@ def _parse_task_prompts(value: object) -> dict[str, TaskPromptConfig]:
 
 
 def _parse_task_prompt(task_name: str, raw_prompt: dict[object, object]) -> TaskPromptConfig:
-    text = _optional_string_value(raw_prompt.get("text"))
-    path = _optional_string_value(raw_prompt.get("path"))
-    agent = _optional_string_value(raw_prompt.get("agent"))
-    kind = _optional_string_value(raw_prompt.get("kind"))
-
-    if text is not None and path is not None:
+    allowed_keys = {"agent", "prompt", "resque_prompt"}
+    unknown_keys = sorted(str(key) for key in raw_prompt if key not in allowed_keys)
+    if unknown_keys:
         raise click.ClickException(
-            f"Invalid project config: task_prompts.{task_name} must not define both text and path."
+            "Invalid project config: task_prompts."
+            f"{task_name} supports only keys: agent, prompt, resque_prompt. "
+            f"Unknown keys: {', '.join(unknown_keys)}"
         )
 
-    if kind is None:
-        if text is not None:
-            kind = "inline"
-        else:
-            raise click.ClickException(
-                f"Invalid project config: task_prompts.{task_name} must declare a supported kind."
-            )
-
-    if kind not in {"inline", "file"}:
+    missing_keys = [
+        required_key for required_key in ("agent", "prompt") if required_key not in raw_prompt
+    ]
+    if missing_keys:
         raise click.ClickException(
-            f"Invalid project config: task_prompts.{task_name} has unknown kind {kind!r}."
+            "Invalid project config: task_prompts."
+            f"{task_name} must define required keys: agent, prompt."
         )
 
-    if kind == "inline":
-        if text is None:
-            raise click.ClickException(
-                f"Invalid project config: task_prompts.{task_name} inline prompts require text."
-            )
-        return TaskPromptConfig(kind="inline", text=text, agent=agent)
+    agent = _required_string_value(raw_prompt.get("agent"), task_name=task_name, key="agent")
+    prompt = _required_string_value(raw_prompt.get("prompt"), task_name=task_name, key="prompt")
+    resque_prompt = _optional_string_value(raw_prompt.get("resque_prompt"))
+    if "resque_prompt" in raw_prompt and resque_prompt is None:
+        raise click.ClickException(
+            "Invalid project config: task_prompts."
+            f"{task_name}.resque_prompt must be a non-empty string when provided."
+        )
 
-    if path is None:
+    return TaskPromptConfig(agent=agent, prompt=prompt, resque_prompt=resque_prompt)
+
+
+def _required_string_value(value: object, *, task_name: str, key: str) -> str:
+    resolved_value = _optional_string_value(value)
+    if resolved_value is None:
         raise click.ClickException(
-            f"Invalid project config: task_prompts.{task_name} file prompts require path."
+            f"Invalid project config: task_prompts.{task_name}.{key} must be a non-empty string."
         )
-    if agent is not None:
-        raise click.ClickException(
-            f"Invalid project config: task_prompts.{task_name} file prompts must not define agent."
-        )
-    return TaskPromptConfig(kind="file", path=path)
+    return resolved_value

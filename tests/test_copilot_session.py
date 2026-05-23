@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 from cli.services import copilot_session as copilot_session_module
 from cli.services.copilot_session import (
     PERMISSIVE_TOOLSET,
-    CopilotSessionService,
     PROMPT_ARG_MAX_BYTES,
+    CopilotSessionService,
     Toolset,
 )
 

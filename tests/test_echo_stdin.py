@@ -3,7 +3,13 @@ import sys
 
 
 def run_input(inp):
-    p = subprocess.Popen([sys.executable, "scripts/echo_stdin.py"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    p = subprocess.Popen(
+        [sys.executable, "scripts/echo_stdin.py"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
     out, err = p.communicate(inp)
     return out.strip()
 

@@ -3,9 +3,11 @@ agentic_cli_type = "copilot_cli"
 agentic_cli_alias = 'copilot'
 
 [task_prompts.design]
-kind='file'
-path='.github/prompts/create-experiment-from-ideas.prompt.md'
+agent='edge-architect'
+prompt='Strictly follow the task instructions in .github/prompts/create-experiment-from-ideas.prompt.md'
+resque_prompt='Execute `just autoresearch experiment create` now and confirm completion.'
 
 [task_prompts.discover]
-kind='file'
-path='.github/prompts/explore-edge-agent-ideas.prompt.md'
+agent='edge-architect'
+prompt='Strictly follow the task instructions in .github/prompts/explore-edge-agent-ideas.prompt.md'
+resque_prompt='Update docs/ideas.md with at least one paper-backed idea.'

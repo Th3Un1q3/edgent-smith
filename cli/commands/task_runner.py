@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 
 import click
@@ -8,48 +9,11 @@ import click
 from cli.services.copilot_session import CopilotSessionService, SessionResult
 from cli.services.project_config import ProjectConfig, TaskPromptConfig
 
-
-def split_yaml_frontmatter(prompt_text: str) -> tuple[list[str], str]:
-    """Split YAML frontmatter from prompt text.
-
-    Returns:
-        Tuple of (frontmatter_lines, prompt_body).
-    """
-    lines = prompt_text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return [], prompt_text
-
-    for index, line in enumerate(lines[1:], start=1):
-        if line.strip() == "---":
-            return lines[1:index], "\n".join(lines[index + 1 :])
-
-    return [], prompt_text
-
-
-def extract_frontmatter_agent(frontmatter_lines: list[str]) -> str | None:
-    """Extract the 'agent' field from YAML frontmatter lines.
-
-    Args:
-        frontmatter_lines: List of YAML lines (without the --- delimiters).
-
-    Returns:
-        Agent name string or None if not found or empty.
-    """
-    for line in frontmatter_lines:
-        key, separator, value = line.partition(":")
-        if separator != ":" or key.strip() != "agent":
-            continue
-
-        stripped_value = value.strip()
-        if not stripped_value:
-            return None
-
-        if stripped_value[:1] in {'"', "'"} and stripped_value[-1:] == stripped_value[:1]:
-            stripped_value = stripped_value[1:-1].strip()
-
-        return stripped_value or None
-
-    return None
+NON_RETRIABLE_AGENT_ERROR_PATTERNS = (
+    re.compile(r"\brate[_ -]?limit\b", re.IGNORECASE),
+    re.compile(r"\b429\b", re.IGNORECASE),
+    re.compile(r"\bquota\s+exceeded\b", re.IGNORECASE),
+)
 
 
 def calculate_file_digest(file_path: Path) -> bytes | None:
@@ -58,55 +22,6 @@ def calculate_file_digest(file_path: Path) -> bytes | None:
         return None
     with file_path.open("rb") as f:
         return hashlib.file_digest(f, "sha256").digest()
-
-
-def resolve_prompt_path(project_config: ProjectConfig, configured_path: str) -> Path:
-    """Resolve a prompt path relative to the project config location.
-
-    Args:
-        project_config: Loaded project configuration.
-        configured_path: Path string (absolute or relative).
-
-    Returns:
-        Resolved absolute Path.
-    """
-    path = Path(configured_path)
-    if path.is_absolute():
-        return path
-
-    return project_config.path.parent / path
-
-
-def load_prompt_file(prompt_path: Path) -> tuple[str, str | None]:
-    """Load a prompt from a file and extract frontmatter.
-
-    Args:
-        prompt_path: Path to the prompt file.
-
-    Returns:
-        Tuple of (prompt_body, agent_name_or_none).
-    """
-    frontmatter_lines, prompt_body = split_yaml_frontmatter(prompt_path.read_text())
-    return prompt_body.strip(), extract_frontmatter_agent(frontmatter_lines)
-
-
-def load_configured_task_prompt(
-    project_config: ProjectConfig,
-    configured_prompt: TaskPromptConfig,
-) -> tuple[str, str | None]:
-    """Load a configured task prompt from inline text or file.
-
-    Args:
-        project_config: Loaded project configuration.
-        configured_prompt: Task prompt configuration.
-
-    Returns:
-        Tuple of (prompt_body, agent_name_or_none).
-    """
-    if configured_prompt.kind == "inline":
-        return (configured_prompt.text or "").strip(), configured_prompt.agent
-
-    return load_prompt_file(resolve_prompt_path(project_config, configured_prompt.path or ""))
 
 
 def load_task_prompt_config(
@@ -125,6 +40,12 @@ def load_task_prompt_config(
     Raises:
         ClickException: If config is None or task_name not in task_prompts.
     """
+    configured_prompt = get_task_prompt(project_config, task_name)
+    return configured_prompt.prompt, configured_prompt.agent
+
+
+def get_task_prompt(project_config: ProjectConfig | None, task_name: str) -> TaskPromptConfig:
+    """Return task prompt config for a task name."""
     if project_config is None:
         raise click.ClickException(f"No project config found for {task_name} prompt.")
 
@@ -136,7 +57,37 @@ def load_task_prompt_config(
         )
         raise click.ClickException(msg)
 
-    return load_configured_task_prompt(project_config, configured_prompt)
+    return configured_prompt
+
+
+def get_task_rescue_prompt(
+    project_config: ProjectConfig | None,
+    task_name: str,
+    *,
+    fallback: str,
+) -> str:
+    """Return configured rescue prompt for a task, or fallback text."""
+    resque_prompt = get_task_prompt(project_config, task_name).resque_prompt
+    if resque_prompt is None:
+        return fallback
+    return resque_prompt
+
+
+def is_non_retriable_agent_error_text(text: str) -> bool:
+    """Return True when output looks like a non-retriable agent/provider error."""
+    return any(pattern.search(text) is not None for pattern in NON_RETRIABLE_AGENT_ERROR_PATTERNS)
+
+
+def non_retriable_agent_error_detail(result: SessionResult) -> str | None:
+    """Return matching error detail when output appears to be non-retriable."""
+    combined_output = "\n".join(
+        part.strip() for part in (result.stdout, result.stderr) if part.strip()
+    )
+    if not combined_output:
+        return None
+    if is_non_retriable_agent_error_text(combined_output):
+        return combined_output
+    return None
 
 
 def send_task_message(

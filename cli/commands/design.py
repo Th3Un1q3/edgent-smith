@@ -8,7 +8,9 @@ from cli.services.project_config import load_project_config
 from .command_context import build_command_context
 from .experiment import format_experiment_context, get_experiment_count
 from .task_runner import (
+    get_task_rescue_prompt,
     load_task_prompt_config,
+    non_retriable_agent_error_detail,
     send_task_message,
 )
 
@@ -32,7 +34,18 @@ def run_design(brief: str | None, config_path: str | None = None) -> None:
     result = send_task_message(copilot_session, prompt)
 
     if get_experiment_count() <= experiment_count_before:
-        follow_up_prompt = _build_retry_prompt()
+        non_retriable_error = non_retriable_agent_error_detail(result)
+        if non_retriable_error is not None:
+            raise click.ClickException(
+                "Design agent returned a non-retriable provider error without retry: "
+                f"{non_retriable_error}"
+            )
+
+        follow_up_prompt = get_task_rescue_prompt(
+            project_config,
+            "design",
+            fallback=_build_retry_prompt(),
+        )
         result = send_task_message(
             copilot_session,
             follow_up_prompt,

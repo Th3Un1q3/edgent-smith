@@ -77,12 +77,13 @@ def test_load_project_config_reads_task_prompts_mapping(tmp_path: Path) -> None:
                 'name = "demo"',
                 "",
                 "[task_prompts.design]",
-                'kind = "file"',
-                'path = "prompts/design.prompt.md"',
+                'agent = "edge-architect"',
+                'prompt = "Strictly follow .github/prompts/create-experiment-from-ideas.prompt.md"',
+                'resque_prompt = "Execute just autoresearch experiment create now."',
                 "",
                 "[task_prompts.execute_experiment]",
-                'text = "Execute something"',
                 'agent = "implement"',
+                'prompt = "Execute the queued experiment now."',
             ]
         )
         + "\n"
@@ -91,14 +92,114 @@ def test_load_project_config_reads_task_prompts_mapping(tmp_path: Path) -> None:
     project_config = services.load_project_config(config_path, required=True)
 
     assert project_config is not None
-    assert project_config.task_prompts["design"].kind == "file"
-    assert project_config.task_prompts["design"].path == "prompts/design.prompt.md"
-    assert project_config.task_prompts["design"].text is None
-    assert project_config.task_prompts["design"].agent is None
-    assert project_config.task_prompts["execute_experiment"].kind == "inline"
-    assert project_config.task_prompts["execute_experiment"].text == "Execute something"
+    assert project_config.task_prompts["design"].agent == "edge-architect"
+    assert (
+        project_config.task_prompts["design"].prompt
+        == "Strictly follow .github/prompts/create-experiment-from-ideas.prompt.md"
+    )
+    assert (
+        project_config.task_prompts["design"].resque_prompt
+        == "Execute just autoresearch experiment create now."
+    )
     assert project_config.task_prompts["execute_experiment"].agent == "implement"
-    assert project_config.task_prompts["execute_experiment"].path is None
+    assert (
+        project_config.task_prompts["execute_experiment"].prompt
+        == "Execute the queued experiment now."
+    )
+    assert project_config.task_prompts["execute_experiment"].resque_prompt is None
+
+
+def test_load_project_config_accepts_resque_prompt(tmp_path: Path) -> None:
+    services = importlib.import_module("cli.services.project_config")
+    config_path = tmp_path / "project.config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                'name = "demo"',
+                "",
+                "[task_prompts.design]",
+                'agent = "edge-architect"',
+                'prompt = "Strictly follow .github/prompts/create-experiment-from-ideas.prompt.md"',
+                'resque_prompt = "Execute just autoresearch experiment create now."',
+            ]
+        )
+        + "\n"
+    )
+
+    project_config = services.load_project_config(config_path, required=True)
+
+    assert project_config is not None
+    assert project_config.task_prompts["design"].agent == "edge-architect"
+    assert (
+        project_config.task_prompts["design"].prompt
+        == "Strictly follow .github/prompts/create-experiment-from-ideas.prompt.md"
+    )
+    assert (
+        project_config.task_prompts["design"].resque_prompt
+        == "Execute just autoresearch experiment create now."
+    )
+
+
+@pytest.mark.parametrize("missing_key", ["agent", "prompt"])
+def test_load_project_config_requires_strict_task_prompt_keys(
+    tmp_path: Path,
+    missing_key: str,
+) -> None:
+    services = importlib.import_module("cli.services.project_config")
+    config_path = tmp_path / "project.config.toml"
+    task_prompt_lines = {
+        "agent": 'agent = "edge-architect"',
+        "prompt": 'prompt = "Strictly follow '
+        '.github/prompts/create-experiment-from-ideas.prompt.md"',
+    }
+    task_prompt_lines.pop(missing_key)
+
+    config_path.write_text(
+        "\n".join(['name = "demo"', "", "[task_prompts.design]", *task_prompt_lines.values()])
+        + "\n",
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        services.load_project_config(config_path, required=True)
+
+    assert "must define required keys: agent, prompt" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "invalid_key",
+    ["prompt_file", "kind", "path", "rescue_prompt"],
+)
+def test_load_project_config_rejects_unknown_task_prompt_keys(
+    tmp_path: Path,
+    invalid_key: str,
+) -> None:
+    services = importlib.import_module("cli.services.project_config")
+    config_path = tmp_path / "project.config.toml"
+    invalid_line_by_key = {
+        "prompt_file": 'prompt_file = "prompts/design.prompt.md"',
+        "kind": 'kind = "inline"',
+        "path": 'path = "prompts/design.prompt.md"',
+        "rescue_prompt": 'rescue_prompt = "Retry with side effects now."',
+    }
+
+    config_path.write_text(
+        "\n".join(
+            [
+                'name = "demo"',
+                "",
+                "[task_prompts.design]",
+                'agent = "edge-architect"',
+                'prompt = "Strictly follow .github/prompts/create-experiment-from-ideas.prompt.md"',
+                invalid_line_by_key[invalid_key],
+            ]
+        )
+        + "\n"
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        services.load_project_config(config_path, required=True)
+
+    assert "supports only keys: agent, prompt, resque_prompt" in str(exc_info.value)
 
 
 def test_load_project_config_rejects_legacy_root_design_prompt_even_when_task_prompt_exists(
@@ -113,8 +214,8 @@ def test_load_project_config_rejects_legacy_root_design_prompt_even_when_task_pr
                 'design_prompt = "prompts/legacy.prompt.md"',
                 "",
                 "[task_prompts.design]",
-                'kind = "file"',
-                'path = "prompts/design.prompt.md"',
+                'agent = "edge-architect"',
+                'prompt = "Strictly follow .github/prompts/create-experiment-from-ideas.prompt.md"',
             ]
         )
         + "\n"
@@ -124,39 +225,3 @@ def test_load_project_config_rejects_legacy_root_design_prompt_even_when_task_pr
         services.load_project_config(config_path, required=True)
 
     assert "unsupported top-level keys: design_prompt" in str(exc_info.value)
-
-
-@pytest.mark.parametrize(
-    ("task_prompt_lines", "expected_message"),
-    [
-        (
-            [
-                "[task_prompts.design]",
-                'text = "Inline design prompt body."',
-                'path = "prompts/design.prompt.md"',
-            ],
-            "must not define both text and path",
-        ),
-        (
-            [
-                "[task_prompts.design]",
-                'kind = "vscode-file"',
-                'path = "prompts/design.prompt.md"',
-            ],
-            "unknown kind",
-        ),
-    ],
-)
-def test_load_project_config_rejects_invalid_task_prompt_shapes(
-    tmp_path: Path,
-    task_prompt_lines: list[str],
-    expected_message: str,
-) -> None:
-    services = importlib.import_module("cli.services.project_config")
-    config_path = tmp_path / "project.config.toml"
-    config_path.write_text("\n".join(['name = "demo"', "", *task_prompt_lines]) + "\n")
-
-    with pytest.raises(Exception) as exc_info:
-        services.load_project_config(config_path, required=True)
-
-    assert expected_message in str(exc_info.value)
