@@ -1,11 +1,16 @@
 {
-    "servers": {
-        "context7": {
-            "type": "http",
-            "url": "https://mcp.context7.com/mcp",
-            "headers": {
-                "CONTEXT7_API_KEY": "${env:CONTEXT7_API_KEY}"
-            }
-        }
-    }
+	"servers": {
+		"context7": {
+			"type": "http",
+			"url": "https://mcp.context7.com/mcp",
+			"headers": {
+				"CONTEXT7_API_KEY": "${env:CONTEXT7_API_KEY}"
+			}
+		},
+		"deepwiki": {
+			"url": "https://mcp.deepwiki.com/mcp",
+			"type": "http"
+		}
+	},
+	"inputs": []
 }

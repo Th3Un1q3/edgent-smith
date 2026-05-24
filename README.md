@@ -29,6 +29,25 @@ tests/
 
 ---
 
+## Install pydantic ai evals skill
+
+This repository publishes skills under .agents/skills. You can install the
+pydantic-evaluations skill from GitHub with npx skills:
+
+```bash
+npx skills add Th3Un1q3/edgent-smith --skill pydantic-evaluations
+```
+
+```bash
+npx skills add https://github.com/Th3Un1q3/edgent-smith --skill pydantic-evaluations
+```
+
+```bash
+npx skills add Th3Un1q3/edgent-smith --list
+```
+
+---
+
 ## Three-agent workflow
 
 ```
