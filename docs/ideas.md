@@ -60,6 +60,13 @@ Summary: brief, actionable ideas discovered while surveying LangChain blog posts
 - Notes: combine NeMo Guardrails/Rebuff patterns with local policy caches.
 - Source: awesome-ai-architect — "Guardrails"; LangChain safety posts.
 
+## 9) SkillOpt: skill evolution optimizer
+- Idea: a bounded text-space optimizer that proposes, validates, and applies incremental edits to skill documents (add/replace/delete) using an edit-budget, held-out validation gate, and a rejected-edit buffer.
+- Edge impact: enables low-cost continual improvement of compact on-device skills/adapters without full model retraining; reduces deployment risk by validating edits before acceptance.
+- Notes: add an edit-budget API, validation-gate hooks, rejected-step logging, and a small simulator to evaluate acceptance criteria and stability under noisy updates.
+- Source: 2605.23904 — SkillOpt: Executive Strategy for Self-Evolving Agent Skills.
+- New vs revision: New — refines self-healing/continual-learning with a concrete optimizer pattern for skill evolution.
+
 ---
 Follow-ups
 - Deep-dive into Hugging Face April 2026 papers index for edge/federated/continual-learning papers (examples from the index: 2604.02176, 2604.02721, 2604.08364) and add any architecture-relevant papers to this file.
@@ -117,5 +124,13 @@ Research: Hugging Face (May–Apr 2026) — retained high-signal papers
   - New vs revision: New — complements 'On-device optimizations' and 'Model routing'.
 
 Follow-ups completed: shortlisted May–Apr 2026 high-signal papers and condensed them into concise, evidence-backed additions above. Next recommended steps (not performed here): run targeted `hf papers info` and `hf papers read` for any additional shortlisted IDs to extract full metadata and longer-form evidence for PR-ready changes.
+
+<!-- instrumentation update -->
+
+- 2604.24273 — BitRL: Reinforcement Learning with 1-bit Quantized Language Models for Resource-Constrained Edge Deployment
+  - Key mechanism: 1-bit (ternary) quantized language models and an optimized inference stack enabling RL agents to run with extreme memory and energy efficiency while retaining task performance.
+  - Edge relevance: enables practical on-device RL training and continual adaptation under severe resource constraints (reported 10–16x memory reduction and 3–5x energy savings), making policy learning and local fine-tuning feasible for edge agents.
+  - Repo impact: add a "BitRL" design note and experiment sketch; prototype a 1-bit quantized inference stack for adapter-based RL or policy adapters, and add microbenchmarks (memory, energy, wall-time, task accuracy) to evals/smoke to validate trade-offs.
+  - New vs revision: New — complements 'On-device optimizations' and 'Self-healing + continual learning'.
 
 <!-- instrumentation update -->
