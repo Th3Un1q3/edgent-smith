@@ -68,9 +68,6 @@ Summary: brief, actionable ideas discovered while surveying LangChain blog posts
 - New vs revision: New — refines self-healing/continual-learning with a concrete optimizer pattern for skill evolution.
 
 ---
-Follow-ups
-- Deep-dive into Hugging Face April 2026 papers index for edge/federated/continual-learning papers (examples from the index: 2604.02176, 2604.02721, 2604.08364) and add any architecture-relevant papers to this file.
-- Prototype: pick 1–2 ideas (Harness + Model Routing) and create an experiment plan.
 
 References
 - LangChain Agent Architecture posts (Mar–Apr 2026): https://www.langchain.com/blog?category_equal=%5B%22Agent+Architecture%22%5D
@@ -123,7 +120,6 @@ Research: Hugging Face (May–Apr 2026) — retained high-signal papers
   - Repo impact: add a "reasoning-on-edge" recipe: LoRA adapters, budget-forcing objective, dynamic adapter activation policy, and KV-cache-sharing design notes.
   - New vs revision: New — complements 'On-device optimizations' and 'Model routing'.
 
-Follow-ups completed: shortlisted May–Apr 2026 high-signal papers and condensed them into concise, evidence-backed additions above. Next recommended steps (not performed here): run targeted `hf papers info` and `hf papers read` for any additional shortlisted IDs to extract full metadata and longer-form evidence for PR-ready changes.
 
 <!-- instrumentation update -->
 
