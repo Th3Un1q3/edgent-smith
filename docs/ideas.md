@@ -130,3 +130,10 @@ Research: Hugging Face (May–Apr 2026) — retained high-signal papers
   - New vs revision: New — complements 'On-device optimizations' and 'Self-healing + continual learning'.
 
 <!-- instrumentation update -->
+
+## 10) Action reasoning models (MolmoAct2)
+- Key mechanism: action-conditioned reasoning models trained to map perception to robust action plans with affordance grounding and safety filters.
+- Edge relevance: enables low-latency on-device decision-making for real-world control loops (robotics, sensors) by compressing perception->action reasoning into compact models and pipelines.
+- Notes: include micro-benchmarks for action latency, safety gate checks, and adapter-based deployment (quantized variants).
+- Source: 2605.02881 — MolmoAct2: Action Reasoning Models for Real-world Deployment.
+- New vs revision: New — adds action-reasoning to the 'subagents & sensing' and 'on-device optimizations' entries.
