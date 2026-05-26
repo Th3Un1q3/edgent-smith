@@ -72,34 +72,52 @@ References
 
 ---
 
-Research: Hugging Face (Apr 2026) — retained high-signal papers
+Research: Hugging Face (May–Apr 2026) — retained high-signal papers
 
-- 2604.19859 — DR-Venus: Towards Frontier Edge-Scale Deep Research Agents with Only 10K Open Data
-  - Key mechanism: agentic SFT + agentic RL with information-gain turn-level rewards to train strong 4B agents from a small curated dataset.
-  - Edge relevance: demonstrates practical training recipes for viable 4B-class on-device agents; supports test-time scaling and small-model deployment.
-  - Repo impact: strengthens 'small-models & model routing' idea; suggests experiments for SFT/RL recipes and test-time scaling in the harness.
-  - New vs revision: New evidence — refines existing 'small-models' and 'self-healing/continual learning' entries.
+- 2605.23904 — SkillOpt: Executive Strategy for Self-Evolving Agent Skills
+  - Key mechanism: executive-level meta-controller that autonomously schedules, composes, and evolves agent skills (LoRA/adapter-level), using automated curricula and evaluation signals.
+  - Edge relevance: enables low-cost on-device continual improvement by orchestrating small adapters and local evaluation loops instead of full-model retraining.
+  - Repo impact: add a SkillOpt-inspired "skill executive" design note (adapter catalog, local eval hooks, evolution policy), plus a small simulator to test adapter-selection and reward signals on-device.
+  - New vs revision: New — augments 'Self-healing + continual learning'.
+
+- 2605.09530 — MemPrivacy: Privacy-Preserving Personalized Memory Management for Edge-Cloud Agents
+  - Key mechanism: detect privacy-sensitive spans on-device, replace them with semantically structured, type-aware placeholders for cloud-side memory formation, and restore originals locally when needed.
+  - Edge relevance: preserves memory utility while preventing sensitive data leakage during cloud sync; minimal utility loss vs aggressive masking.
+  - Repo impact: adopt type-aware placeholder redaction in memory sync, implement local restoration policy, and add MemPrivacy-Bench entries to memory tests.
+  - New vs revision: Kept (already referenced) — sharpened implementation notes.
+
+- 2604.19859 — DR-Venus: Frontier Edge-Scale Deep Research Agents from Only 10K Open Data
+  - Key mechanism: targeted agentic SFT followed by agentic RL with information-gain turn-level rewards and format-aware regularization to train robust 4B-class research agents.
+  - Edge relevance: demonstrates practical recipes that make 4B-class on-device agents viable for deep-research workflows and suggests test-time scaling strategies.
+  - Repo impact: add SFT+agentic-RL training recipe, include turn-level IG reward template, and test-time scaling notes for harness experiments.
+  - New vs revision: Kept — reinforces 'small-models & model routing' and 'self-healing'.
 
 - 2603.04428 — Agent Memory Below the Prompt: Persistent Q4 KV Cache for Multi-Agent LLM Inference on Edge Devices
-  - Key mechanism: persist per-agent Q4-quantized KV caches (safetensors) and restore them directly into attention layers via a BatchQuantizedKVCache, eliminating repeated costly prefill operations.
-  - Edge relevance: authors report reductions in time-to-first-token up to 136x in evaluations and large memory-fit gains, enabling many-agent orchestration, rapid context switching, and practical multi-agent deployments on constrained devices.
-  - Repo impact: add a KV-cache persistence design note to the harness docs, prototype a Q4 KV-cache manager (safetensors) and BatchQuantizedKVCache loader, and add microbenchmarks for time-to-first-token and memory-fit in multi-agent flows.
-  - New vs revision: Kept (Feb 2026) — provides a concrete implementation path to unblock multi-agent orchestration on edge hardware.
+  - Key mechanism: persist per-agent Q4-quantized KV caches (safetensors) and restore them directly into attention layers via a BatchQuantizedKVCache to avoid repeated prefill costs.
+  - Edge relevance: enables practical multi-agent orchestration on constrained devices by reducing time-to-first-token by orders of magnitude and increasing context residency.
+  - Repo impact: add KV-cache persistence design note to harness docs, prototype a Q4 KV-cache manager (safetensors) + loader, and add microbenchmarks for time-to-first-token and memory-fit in multi-agent flows.
+  - New vs revision: Kept (Feb 2026) — concrete implementation path for multi-agent context management.
 
-- 2604.16583 — POLAR: Online Learning for LoRA Adapter Caching and Routing in Edge LLM Serving
-  - Key mechanism: joint cache-and-router formulated as a two-timescale contextual bandit (cache controller + LinUCB router).
-  - Edge relevance: solves adapter residency and paging latency problems; directly informs model routing & adapter-caching strategies for on-device serving.
-  - Repo impact: add adapter cache controller & router experiments; prototype to simulate adapter paging and routing policies.
-  - New vs revision: New — augments 'Model routing & hybrid on-device/VM strategies' with adapter caching specifics.
+- 2605.20025 — AutoResearchClaw: Self-Reinforcing Autonomous Research with Human–AI Collaboration
+  - Key mechanism: self-reinforcing autonomous research loop that combines agentic proposal generation, automated execution, and human curation to bootstrap research progress.
+  - Edge relevance: useful blueprint for on-device assistant agents that run lightweight experiments, collect signals, and escalate promising leads for cloud-scale evaluation.
+  - Repo impact: add an "autonomous-research" recipe to the docs that captures small-loop experiments (local proposal -> run -> summarize -> escalate) and tooling for human-in-the-loop curation.
+  - New vs revision: New — augments research-workflow ideas in the harness and evaluation sections.
 
-- 2601.14437 — Agentic AI Meets Edge Computing in Autonomous UAV Swarms
-  - Key mechanism: architecture patterns for edge-enabled UAV swarms and a wildfire SAR case study.
-  - Edge relevance: concrete swarm & subagent deployment patterns, scheduler/topology guidance, and resilience/coordination constraints.
-  - Repo impact: expands 'Subagents & hierarchical/swarms' with UAV use-cases and failure-mode considerations; useful for future evals.
-  - New vs revision: New — adds domain-specific validation for swarm patterns already listed.
+- 2602.06485 — AgentCPM-Explore: Realizing Long-Horizon Deep Exploration for Edge-Scale Agents
+  - Key mechanism: training framework for 4B-class agent models addressing catastrophic forgetting, reward-noise sensitivity, and context redundancy (parameter-space model fusion, reward denoising, contextual refinement).
+  - Edge relevance: training guidance and stability techniques that directly apply to building robust on-device agents under resource constraints.
+  - Repo impact: capture training-stability checklist and implement small-scale replication experiment for adapter-based stability tricks.
+  - New vs revision: New — adds training-stability guidance for edge-scale agents.
 
-Follow-ups completed: bounded shortlist created and condensed into concise, evidence-backed additions above. Next recommended steps (not performed here): run targeted `hf papers info` and `hf papers read` for any of the above IDs to capture structured metadata and full paper markdown if deeper summaries are needed.
+- 2603.16867 — Efficient Reasoning on the Edge
+  - Key mechanism: LoRA-based reasoning adapters + budget-forcing RL and dynamic adapter switching to enable concise, accurate reasoning on small models; KV-cache sharing for prompt-time efficiency.
+  - Edge relevance: makes chain-of-thought and reasoning practical on-device by reducing token and memory overhead while preserving accuracy.
+  - Repo impact: add a "reasoning-on-edge" recipe: LoRA adapters, budget forcing objective, dynamic adapter activation policy, and KV-cache-sharing design notes.
+  - New vs revision: New — complements 'On-device optimizations' and 'Model routing'.
 
-(If this looks good, next: pick 2 ideas to prototype; ask whether to open issues or PRs with experiment plans.)
+Follow-ups completed: shortlisted May–Apr 2026 high-signal papers and condensed them into concise, evidence-backed additions above. Next recommended steps (not performed here): run targeted `hf papers info` and `hf papers read` for selected IDs to extract structured metadata and full-text evidence for PR-ready changes.
+
+(If this looks good, next: pick 2 ideas to prototype; open issues/PRs with experiment plans.)
 
 <!-- instrumentation update -->
