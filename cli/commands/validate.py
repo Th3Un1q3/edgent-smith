@@ -20,7 +20,7 @@ def _send_validation_message(
     *,
     failure_prefix: str,
 ) -> SessionResult:
-    session_result = copilot_session.send_message(prompt, output_format="json")
+    session_result = copilot_session.send_message(prompt)
     if not session_result.is_success:
         raise click.ClickException(f"{failure_prefix}: {session_result.stderr}")
     return session_result

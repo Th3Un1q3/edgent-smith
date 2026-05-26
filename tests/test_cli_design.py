@@ -713,7 +713,7 @@ def test_design_strips_stdout_once_and_echoes_trimmed_output(
             )
 
     assert result.exit_code == 0
-    assert result.output == "designed output\n"
+    assert result.stdout == "designed output\n"
     assert stdout_text.strip_call_count == 1
 
 
@@ -762,7 +762,63 @@ def test_design_falls_back_to_submission_message_for_blank_stdout(
             )
 
     assert result.exit_code == 0
-    assert result.output == "Submitted design request using agentic CLI: explicit-alias\n"
+    assert result.stdout == "Submitted design request using agentic CLI: explicit-alias\n"
+
+
+def test_design_writes_transcript_file_and_keeps_progress_off_stdout(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+    transcript_path = tmp_path / "design-transcript.txt"
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_project_config(pathlib.Path("project.config.toml"))
+        _write_storage_experiments([])
+
+        with patch(
+            "cli.services.copilot_session.CopilotSessionService.send_message",
+            autospec=True,
+        ) as mock_send:
+
+            def _create_experiment(*args: object, **kwargs: object) -> MagicMock:
+                _write_storage_experiments(
+                    [
+                        {
+                            "id": "new-experiment",
+                            "title": "New experiment",
+                            "description": "Created by the agent.",
+                            "status": "pending",
+                            "created_at": "2026-05-12T12:00:00Z",
+                            "updated_at": "2026-05-12T12:00:00Z",
+                            "current_run_id": None,
+                            "runs": [],
+                        }
+                    ]
+                )
+                return MagicMock(is_success=True, stdout="designed output", stderr="")
+
+            mock_send.side_effect = _create_experiment
+
+            result = runner.invoke(
+                cli,
+                [
+                    "autoresearch",
+                    "design",
+                    "Improve eval throughput",
+                    "--config",
+                    "project.config.toml",
+                    "--transcript-file",
+                    str(transcript_path),
+                ],
+            )
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout == "designed output\n"
+    assert result.stderr
+    assert "designed output" not in result.stderr
+    transcript_text = transcript_path.read_text()
+    assert "Improve eval throughput" in transcript_text
+    assert "designed output" in transcript_text
 
 
 # ---------------------------------------------------------------------------
@@ -826,6 +882,54 @@ def test_discover_calls_hf_papers(tmp_path: pathlib.Path) -> None:
     assert "Cached Hugging Face paper search results are stored at" in prompt
     assert ".cache/discover/hf_papers.md" in prompt
     assert "Paper A" not in prompt
+
+
+def test_discover_writes_transcript_file_and_keeps_progress_off_stdout(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+    transcript_path = tmp_path / "discover-transcript.txt"
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_discover_project_config(pathlib.Path("project.config.toml"))
+        pathlib.Path("docs").mkdir(parents=True, exist_ok=True)
+        ideas_path = pathlib.Path("docs/ideas.md")
+        ideas_path.write_text("# Ideas\n\nInitial content.\n")
+
+        with (
+            patch(
+                "cli.services.copilot_session.CopilotSessionService.send_message",
+                autospec=True,
+            ) as mock_send,
+            patch("cli.commands.discover.fetch_papers"),
+            patch("cli.commands.discover.format_papers_context", return_value="papers"),
+        ):
+
+            def _update_ideas(*args: object, **kwargs: object) -> MagicMock:
+                ideas_path.write_text("# Ideas\n\nUpdated content.\n")
+                return MagicMock(is_success=True, stdout="discover completed", stderr="")
+
+            mock_send.side_effect = _update_ideas
+
+            result = runner.invoke(
+                cli,
+                [
+                    "autoresearch",
+                    "discover",
+                    "--config",
+                    "project.config.toml",
+                    "--transcript-file",
+                    str(transcript_path),
+                ],
+            )
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout == "discover completed\n"
+    assert result.stderr
+    assert "discover completed" not in result.stderr
+    transcript_text = transcript_path.read_text()
+    assert "docs/ideas.md" in transcript_text
+    assert "discover completed" in transcript_text
 
 
 def test_discover_uses_discover_toolset(tmp_path: pathlib.Path) -> None:

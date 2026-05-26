@@ -38,11 +38,32 @@ Quick reference for common `click` constructs, options, and types.
 - `click.progressbar()` — simple progress UI for iterables.
 - `click.get_current_context()` — retrieve current `Context` object.
 
+## Progress Output (stdout vs stderr)
+
+- Put final command results on `stdout` (default `click.echo()`).
+- Put progress/status on `stderr` with `click.echo(..., err=True)`.
+- Use `click.secho()` or `click.style()` only as optional emphasis. Do not depend on color for meaning.
+
+Recommended progress line schema:
+
+`[task=<name> phase=<phase> attempt=<n>/<total>] <message>`
+
+Guidelines:
+
+- Keep schema and prefix consistent for every progress event.
+- Include `task`, `phase`, and attempt fraction (`<n>/<total>`) whenever retries can happen.
+- Keep the trailing message short, action-oriented, and grep-friendly.
+
+Use `click.progressbar()` only when work is iterative and countable. Avoid it for coarse non-iterative phases (for example `submit`, `retry`, `validate`).
+
 ## Testing
 
 - Use `click.testing.CliRunner` for isolated CLI tests.
 - `runner.invoke(cli, args, input=...)` returns a `Result` with `exit_code`, `output`, `exception`.
 - Use `runner.isolated_filesystem()` to test file operations.
+- For progress-enabled commands, assert result and progress streams separately (`stdout` vs `stderr`).
+- Assert progress lifecycle order (`send -> retry -> success` or `send -> failure`).
+- Prefer schema/token assertions over brittle full-line equality.
 
 ## Best Practices (short)
 

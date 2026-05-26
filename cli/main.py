@@ -73,9 +73,17 @@ def validate(config_path: str | None) -> None:
     "config_path",
     help="Path to the project .config.toml file. Defaults to auto-discovery.",
 )
-def design(brief: str | None, config_path: str | None) -> None:
+@click.option(
+    "--transcript-file",
+    help="Append prompt and session output turns to this file for later triage.",
+)
+def design(
+    brief: str | None,
+    config_path: str | None,
+    transcript_file: str | None,
+) -> None:
     """Generate or refine an experiment design specification."""
-    run_design(brief, config_path=config_path)
+    run_design(brief, config_path=config_path, transcript_file=transcript_file)
 
 
 @autoresearch.command()
@@ -84,9 +92,13 @@ def design(brief: str | None, config_path: str | None) -> None:
     "config_path",
     help="Path to the project .config.toml file. Defaults to auto-discovery.",
 )
-def discover(config_path: str | None) -> None:
+@click.option(
+    "--transcript-file",
+    help="Append prompt and session output turns to this file for later triage.",
+)
+def discover(config_path: str | None, transcript_file: str | None) -> None:
     """Refresh docs/ideas.md from the latest edge-relevant agentic papers."""
-    run_discover(config_path=config_path)
+    run_discover(config_path=config_path, transcript_file=transcript_file)
 
 
 @autoresearch.command()

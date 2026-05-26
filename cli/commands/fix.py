@@ -148,7 +148,6 @@ def _run_hook(
     prompt = _build_remediation_prompt(hook, hook_run_result.stdout, hook_run_result.stderr)
     remediation_result = copilot_session.send_message(
         prompt,
-        output_format="json",
         continue_session=continue_session,
     )
     if not remediation_result.is_success:
@@ -187,7 +186,6 @@ def _run_hooks_in_parallel(
     prompt = _build_batch_remediation_prompt(first_pass_failures)
     remediation_result = copilot_session.send_message(
         prompt,
-        output_format="json",
         continue_session=continue_session,
     )
     if not remediation_result.is_success:

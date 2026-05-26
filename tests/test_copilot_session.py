@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from cli.services import copilot_session as copilot_session_module
 from cli.services.copilot_session import (
@@ -39,25 +42,50 @@ def test_session_agent_override() -> None:
         assert "initial-agent" not in args
 
 
-def test_session_service_success() -> None:
+def test_session_service_always_uses_structured_output_and_returns_final_content() -> None:
     service = CopilotSessionService(alias="test-copilot", model="test-model")
 
+    jsonl_output = "\n".join(
+        [
+            json.dumps({"type": "session.started", "data": {"sessionId": "remote-id-123"}}),
+            json.dumps({"type": "assistant.message", "data": {"content": "success response"}}),
+            json.dumps({"type": "result", "exitCode": 0}),
+        ]
+    )
+
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(stdout="success response", stderr="", returncode=0)
+        mock_run.return_value = MagicMock(stdout=jsonl_output, stderr="", returncode=0)
 
         result = service.send_message("test prompt")
 
         assert result.is_success
         assert result.stdout == "success response"
+        assert result.session_id == "remote-id-123"
+        assert service.session_id == "remote-id-123"
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]
         assert "test-copilot" in args
         assert "test-model" in args
         assert "test prompt" in args
+        assert "--output-format" in args
+        assert "json" in args
 
 
-def test_session_service_json_parsing() -> None:
-    """Test parsing of JSONL output to extract messages and tools."""
+def test_send_message_rejects_output_format_override_from_callers() -> None:
+    service = CopilotSessionService()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(stdout="", stderr="", returncode=0)
+        send_message: Any = service.send_message
+
+        with pytest.raises(TypeError, match="output_format"):
+            send_message("test prompt", output_format="json")
+
+        mock_run.assert_not_called()
+
+
+def test_send_message_persists_session_id_from_session_started_event() -> None:
+    """Test parsing of JSONL output to extract messages, tools, and session ids."""
     service = CopilotSessionService()
 
     # Mock JSONL output
@@ -87,13 +115,15 @@ def test_session_service_json_parsing() -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(stdout=jsonl_output, stderr="", returncode=0)
 
-        result = service.send_message("list files", output_format="json")
+        result = service.send_message("list files")
 
         assert result.is_success
-        assert result.stdout == "I am looking for files."
+        assert result.session_id == "s1"
+        assert service.session_id == "s1"
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0].name == "ls"
         assert result.tool_calls[0].arguments == {"path": "."}
+        assert result.stdout == "I am looking for files."
 
 
 def test_session_persistence() -> None:
@@ -113,7 +143,7 @@ def test_session_persistence() -> None:
         ]
 
         # First message (no session_id in command initially)
-        service.send_message("first", output_format="json")
+        service.send_message("first")
         assert service.session_id == "remote-id-123"
 
         args1 = mock_run.call_args_list[0][0][0]
@@ -122,7 +152,7 @@ def test_session_persistence() -> None:
         assert not any(arg.startswith("--resume") for arg in args1)
 
         # Second message should use the session_id from the first call via --resume=ID
-        service.send_message("second", output_format="json")
+        service.send_message("second")
         assert service.session_id == "remote-id-123"
 
         args2 = mock_run.call_args_list[1][0][0]
@@ -137,7 +167,7 @@ def test_session_service_supports_initial_continue_without_session_id() -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(stdout=first_jsonl, stderr="", returncode=0)
 
-        service.send_message("first", output_format="json", continue_session=True)
+        service.send_message("first", continue_session=True)
 
         args = mock_run.call_args[0][0]
         assert "--continue" in args
@@ -157,8 +187,8 @@ def test_session_service_reuses_persisted_session_after_initial_continue() -> No
             MagicMock(stdout=second_jsonl, stderr="", returncode=0),
         ]
 
-        service.send_message("first", output_format="json", continue_session=True)
-        service.send_message("second", output_format="json", continue_session=True)
+        service.send_message("first", continue_session=True)
+        service.send_message("second", continue_session=True)
 
         args1 = mock_run.call_args_list[0][0][0]
         assert "--continue" in args1
@@ -283,7 +313,7 @@ def test_large_prompt_uses_stdin_not_argv_and_keeps_session_tool_flags() -> None
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(stdout="", stderr="", returncode=0)
 
-        service.send_message(prompt, output_format="json")
+        service.send_message(prompt)
 
         args = mock_run.call_args[0][0]
         kwargs = mock_run.call_args.kwargs
@@ -342,7 +372,7 @@ def test_large_prompt_json_output_parses_response() -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(stdout=jsonl_output, stderr="", returncode=0)
 
-        result = service.send_message(prompt, output_format="json")
+        result = service.send_message(prompt)
 
         args = mock_run.call_args[0][0]
         kwargs = mock_run.call_args.kwargs

@@ -4,10 +4,10 @@ agentic_cli_alias = 'copilot'
 
 [task_prompts.design]
 agent='edge-architect'
-prompt='Strictly follow the task instructions in .github/prompts/create-experiment-from-ideas.prompt.md'
+prompt='Read the instructions in .github/prompts/create-experiment-from-ideas.prompt.md. Strictly follow instructions in the file.'
 resque_prompt='Execute `just autoresearch experiment create` now and confirm completion.'
 
 [task_prompts.discover]
 agent='edge-architect'
-prompt='Strictly follow the task instructions in .github/prompts/explore-edge-agent-ideas.prompt.md'
+prompt='Read the instructions in .github/prompts/explore-edge-agent-ideas.prompt.md, Strictly follow the task instructions specified in the prompt.'
 resque_prompt='Update docs/ideas.md with at least one paper-backed idea.'

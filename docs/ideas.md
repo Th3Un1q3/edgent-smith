@@ -79,22 +79,22 @@ References
 Research: Hugging Face (May–Apr 2026) — retained high-signal papers
 
 - 2605.23904 — SkillOpt: Executive Strategy for Self-Evolving Agent Skills
-  - Key mechanism: text-space optimizer for skill documents — frontier optimizer model proposes bounded add/replace/delete edits, a textual learning-rate (edit budget), a held-out validation gate, a rejected-edit buffer, and epoch-wise slow/meta updates to stabilize evolution.
-  - Edge relevance: trains compact, reusable skill artifacts offline or on-device with zero deployment inference overhead; enables low-cost continual improvement via adapter/skill composition instead of full-model updates.
-  - Repo impact: add a "SkillOpt" design note (optimizer sandbox, edit-budget API, validation gate hooks, rejected-step logging) and a small simulator to validate adapter/skill-selection and acceptance criteria on-device.
-  - New vs revision: New — refines 'Self-healing + continual learning' with concrete optimization controls.
+  - Key mechanism: text-space optimizer for skill documents — bounded add/replace/delete edits governed by an edit-budget, held-out validation gate, and a rejected-edit buffer for safe rollbacks.
+  - Edge relevance: enables low-cost on-device or local-batch skill/adaptor evolution with zero inference overhead, reducing the need for full-model updates.
+  - Repo impact: add a SkillOpt sandbox, edit-budget API, validation-gate hooks, rejected-step logging, and a small simulator with CI checks to validate safe adapter edits.
+  - New vs revision: New — concretizes the self-healing/continual-learning pattern.
 
 - 2605.09530 — MemPrivacy: Privacy-Preserving Personalized Memory Management for Edge-Cloud Agents
-  - Key mechanism: on-device detection of privacy-sensitive spans, replacement with semantically structured type-aware placeholders for cloud-side memory formation, and local restoration when needed.
-  - Edge relevance: preserves memory utility while preventing sensitive data leakage during cloud sync; minimal utility loss vs aggressive masking (reported ~1.6% utility drop).
-  - Repo impact: adopt type-aware placeholder redaction in memory sync, implement local restoration policy, and add MemPrivacy-Bench entries and test vectors to memory tests.
-  - New vs revision: Kept (already referenced) — sharpened implementation notes.
+  - Key mechanism: on-device detection of privacy-sensitive spans, replacement with semantically structured type-aware placeholders for cloud-side memory formation, and local restoration when needed. Repo: https://github.com/MemTensor/MemPrivacy
+  - Edge relevance: preserves memory utility while preventing sensitive data leakage during cloud sync; reported utility loss ~1.6% vs aggressive masking.
+  - Repo impact: implement type-aware placeholder redaction in memory sync, local restoration policy, add MemPrivacy-Bench test vectors and privacy-utility regression checks in CI.
+  - New vs revision: Revision — sharpened implementation guidance.
 
 - 2604.19859 — DR-Venus: Frontier Edge-Scale Deep Research Agents from Only 10K Open Data
-  - Key mechanism: two-stage recipe — agentic supervised fine-tuning (SFT) with long-horizon trajectory resampling, then agentic RL with turn-level information-gain rewards and format-aware regularization.
-  - Edge relevance: shows 4B-class agents can perform deep-research workflows when trained with targeted SFT+RL recipes and test-time scaling strategies, making research-capable on-device agents feasible.
-  - Repo impact: add SFT+agentic-RL recipe, include turn-level IG reward templates, and document test-time scaling guidance for harness experiments.
-  - New vs revision: Kept — reinforces 'small-models & model routing' and 'self-healing'.
+  - Key mechanism: two-stage recipe — agentic supervised fine-tuning (SFT) with long-horizon trajectory resampling, then agentic RL with turn-level information-gain (IG) rewards and format-aware regularization. Repo: https://github.com/inclusionAI/DR-Venus
+  - Edge relevance: demonstrates that carefully curated SFT+agentic-RL recipes enable 4B-class agents to perform deep-research workflows with on-device deployment trade-offs.
+  - Repo impact: add an SFT+agentic-RL training recipe, provide turn-level IG reward templates, and document test-time scaling guidance and replication notes for harness experiments.
+  - New vs revision: Revision — strengthen small-model training guidance.
 
 - 2603.04428 — Agent Memory Below the Prompt: Persistent Q4 KV Cache for Multi-Agent LLM Inference on Edge Devices
   - Key mechanism: persist per-agent Q4-quantized KV caches (safetensors) and restore them directly into attention layers via a BatchQuantizedKVCache to avoid repeated prefill costs.
@@ -124,10 +124,10 @@ Research: Hugging Face (May–Apr 2026) — retained high-signal papers
 <!-- instrumentation update -->
 
 - 2604.24273 — BitRL: Reinforcement Learning with 1-bit Quantized Language Models for Resource-Constrained Edge Deployment
-  - Key mechanism: 1-bit (ternary) quantized language models and an optimized inference stack enabling RL agents to run with extreme memory and energy efficiency while retaining task performance.
-  - Edge relevance: enables practical on-device RL training and continual adaptation under severe resource constraints (reported 10–16x memory reduction and 3–5x energy savings), making policy learning and local fine-tuning feasible for edge agents.
-  - Repo impact: add a "BitRL" design note and experiment sketch; prototype a 1-bit quantized inference stack for adapter-based RL or policy adapters, and add microbenchmarks (memory, energy, wall-time, task accuracy) to evals/smoke to validate trade-offs.
-  - New vs revision: New — complements 'On-device optimizations' and 'Self-healing + continual learning'.
+  - Key mechanism: 1-bit (ternary) quantized language models (BitNet b1.58) and an optimized inference stack enabling RL agents to run with extreme memory and energy efficiency while retaining much of task performance.
+  - Edge relevance: enables practical on-device RL training and continual adaptation under severe constraints (reported 10–16x memory reduction and 3–5x energy savings); identifies value-estimation as primary stability bottleneck.
+  - Repo impact: add a BitRL design note and experiment sketch, prototype a ternary-inference stack for adapter-based policy heads, and add microbenchmarks (memory, energy, latency, task accuracy) to evals/smoke; document hybrid-precision mitigations for value heads.
+  - New vs revision: Revision — include stability mitigations and suggested experiments.
 
 <!-- instrumentation update -->
 

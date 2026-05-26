@@ -1,10 +1,11 @@
 # Workflow: Research Latest Agentic Insights
 
-Use this workflow to refresh `docs/ideas.md` from the latest Hugging Face papers without designing or submitting an experiment.
+Use this workflow to refresh `docs/ideas.md` from the latest Hugging Face papers and relevant repository evidence without designing or submitting an experiment.
 
 ## Inputs
 
 - `docs/ideas.md`
+- `.cache/discover/hf_papers.md` when the invoking task provides it
 - `agents/edge.py`
 - `evals/smoke.py`
 - `README.md`
@@ -12,8 +13,9 @@ Use this workflow to refresh `docs/ideas.md` from the latest Hugging Face papers
 ## Steps
 
 1. Read `docs/ideas.md` first so you can extend or correct the existing idea bank instead of duplicating it.
-2. Use the Hugging Face CLI as the required discovery surface for latest papers, specifically `hf` and `hf papers`.
-3. In the current environment, actually run the current CLI help before choosing commands so the workflow stays accurate for the installed version. Do not claim the CLI is unavailable until both help commands have been attempted.
+2. If the invoking task provides a cached discovery artifact such as `.cache/discover/hf_papers.md`, inspect it before additional discovery or edits. If the file is too large to read at once, use ranged reads or targeted search immediately. Do not treat a file-too-large response as successful inspection.
+3. Use the Hugging Face CLI as the required discovery surface for latest papers, specifically `hf` and `hf papers`.
+4. In the current environment, actually run the current CLI help before choosing commands so the workflow stays accurate for the installed version. Do not claim the CLI is unavailable until both help commands have been attempted.
 
 ```bash
 hf --help
@@ -22,17 +24,21 @@ hf papers --help
 
 If either help command genuinely fails after being attempted, report the blocker briefly and stop. Do not ask the user to run `hf` manually, and do not substitute another discovery surface.
 
-4. Use a staged funnel instead of broad paper reading:
+5. Use a staged funnel instead of broad paper and repository reading:
 	- List recent or trending papers with `hf papers ls`.
 	- Run targeted searches for agentic engineering on constrained or edge-like systems with `hf papers search`.
 	- Treat "latest" as the current month plus the previous month by default; only retain an older paper when it clearly dominates on relevance, and label that choice explicitly.
 	- Build a bounded shortlist from the returned metadata and keep the retained set small and high-signal.
 	- Fetch structured information for every retained paper first with `hf papers info`.
 	- Read full markdown only for the final evidence-driving subset with `hf papers read`.
-5. Keep the funnel tight: prefer a few strong candidates over a long queue of weak reads.
-6. Extract only concrete architectural insights, not generic trend summaries.
-7. Before writing, deduplicate against `docs/ideas.md` and prefer revising, consolidating, or sharpening existing weak or overlapping ideas instead of appending noise.
-8. Update `docs/ideas.md` with concise idea entries or revisions only. Do not add meta process notes, command checklists, next steps, or conversational prose. For each retained idea, capture: paper ID/title, one key mechanism, edge relevance, likely repo impact, and whether the entry is new or a revision.
+	- Use DeepWiki MCP as the required primary discovery surface for repository exploration when the shortlisted repository is covered there. Start with `mcp_deepwiki_read_wiki_structure`, then use `mcp_deepwiki_ask_question` or `mcp_deepwiki_read_wiki_contents` for the smallest documentation slices that can materially change `docs/ideas.md`.
+	- Start from this bounded shortlist of repositories: `punkpeye/awesome-mcp-servers`, `dair-ai/Prompt-Engineering-Guide`, `Meirtz/Awesome-Context-Engineering`, `Shubhamsaboo/awesome-llm-apps`, and `shareAI-lab/learn-claude-code`.
+	- Use those repositories to answer targeted questions about local-first MCP server patterns, prompt compression and routing, context packing and memory distillation, lightweight agent or RAG architectures, and shell-first coding-agent harness loops.
+	- Keep the repository pass small and evidence-driven. Retain only the strongest repository-derived patterns, and ensure at least one retained repository-derived pattern is backed by an actual DeepWiki inspection when coverage exists.
+6. Keep the funnel tight: prefer a few strong candidates over a long queue of weak reads.
+7. Extract only concrete architectural insights, not generic trend summaries.
+8. Before writing, deduplicate against `docs/ideas.md` and prefer revising, consolidating, or sharpening existing weak or overlapping ideas instead of appending noise.
+9. Update `docs/ideas.md` with concise idea entries or revisions only. Do not add meta process notes, command checklists, next steps, or conversational prose. For each retained idea, capture: paper ID/title if applicable, repository name if applicable, one key mechanism, edge relevance, likely repo impact, and whether the entry is new or a revision.
 
 ## Output
 
@@ -46,6 +52,9 @@ If either help command genuinely fails after being attempted, report the blocker
 - Do not substitute generic web search for the Hugging Face CLI.
 - Do not ask the user to run `hf` commands manually when executing this workflow autonomously in Copilot CLI.
 - If `hf` or `hf papers` fails after you attempt the help commands above, report that blocker briefly and stop instead of inventing a workaround.
+- If DeepWiki coverage exists for a shortlisted repository, you must use DeepWiki for that repository before letting it influence `docs/ideas.md`.
+- Do not treat a file-too-large response for a required artifact as permission to skip that artifact; continue with ranged reads or targeted search.
+- Do not edit, clean up, delete from, or commit `docs/ideas.md` until the cached-file read, the required `hf` steps, and the DeepWiki-backed repository pass are complete.
 - Prefer a few high-signal ideas over a long list of weak ideas.
 - Focus on ideas that could plausibly affect `agents/edge.py`, eval design, or the experiment loop.
 - Do not retain a paper without `hf papers info`, and do not let a paper drive changes unless it is in the final subset read with `hf papers read`.

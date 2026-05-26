@@ -21,6 +21,16 @@ Preference order (strict):
 
 If blocked: report the blocker, what you verified, and the exact action requested from the user.
 
+## User-facing text quality
+
+Apply these rules to all user-facing text (chat responses, CLI output, logs, status/progress updates):
+
+- Avoid generic filler phrasing such as "sending request" when the concrete action is known.
+- Prefer intent-first phrasing: state what action is running and include the relevant context (target, scope, or input).
+- Keep progress and status messages diagnostic: include task, phase, and attempt number when relevant.
+- For CLIs, write final/result content to stdout and progress/status content to stderr.
+- Keep wording consistent and grep-friendly by using stable verbs and labels for repeated actions.
+
 ## Three-agent architecture
 
 | Agent | File | Role |
@@ -278,6 +288,43 @@ Use this order:
 4. GitHub source or release notes for version-specific behavior.
 
 Apply what you learned to the change you are making. Do not turn a local fix into a repo-wide sweep unless the same bug is clearly present elsewhere and the scope still matches the user request.
+
+## Hallucination resilience
+
+When a request is underspecified, ambiguous, or knowledge-sensitive, use adaptive query shaping before answering. Do not use a single fixed rewrite style.
+
+- Always compare against a `NO_REWRITE` baseline. Static rewrites can perform worse than no rewrite.
+- Generate at most one candidate from each rewrite arm, then choose one path:
+  - `PARAPHRASE`: preserve meaning with alternative phrasing.
+  - `SIMPLIFY`: reduce nested clauses and instruction complexity.
+  - `DISAMBIGUATE`: resolve vague references, pronouns, and missing anchors.
+  - `EXPAND`: add explicit constraints or entity details already present in user context.
+  - `CLARIFY_TERMS`: define domain-specific jargon before solving.
+- Select the path using per-query signals, not habit. Prefer:
+  - `DISAMBIGUATE` when references are unclear.
+  - `SIMPLIFY` when syntax is overloaded.
+  - `EXPAND` when constraints are implicit.
+  - `CLARIFY_TERMS` when terminology is specialized.
+  - `PARAPHRASE` when wording is likely to trigger brittle interpretation.
+
+Use a lightweight reward check before finalizing an answer. Rank candidate drafts with:
+
+$$
+r = 0.6 \cdot s_{judge} + 0.3 \cdot s_{consistency} + 0.1 \cdot s_{lexical}
+$$
+
+Where:
+- `s_judge`: factuality/coherence judgment from explicit self-check against available evidence.
+- `s_consistency`: consistency with user-provided context, repository files, and tool outputs.
+- `s_lexical`: lexical faithfulness to key user constraints and terms.
+
+Operational safeguards:
+
+- Never guess when required facts are missing. Ask a concise clarification question or explicitly abstain.
+- For high-risk domains (medical, legal, financial, security), prefer refusal over speculative completion.
+- State uncertainty explicitly when confidence is low and provide a verification path.
+- Logically separate facts from assumptions in the response.
+- If evidence conflicts across sources, surface the conflict and request user direction.
 
 Example: for `devcontainers/ci` env-passing, the docs state that step-level `env:` is not forwarded into the container shell and only variables listed under `with.env` are available inside `runCmd`. Follow that documented behavior exactly rather than inferring from general GitHub Actions patterns.
 

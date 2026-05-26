@@ -16,16 +16,29 @@ Step-by-step workflow to scaffold a reusable Click CLI, add tests, and validate 
    - Copy `templates/cli_template.py` and rename to your package/module.
    - Adjust command names, docstrings, and option defaults.
 
-4. Add tests
+4. Add a progress contract for operational commands
+   - Keep final user-facing result on `stdout`.
+   - Emit progress/status lines to `stderr` with `click.echo(..., err=True)`.
+   - Use one stable schema, for example:
+       - `[task=<name> phase=<phase> attempt=<n>/<total>] <message>`
+    - Include `task`, `phase`, and attempt fraction for retry-capable operations.
+   - Keep messages short and grep-friendly.
+   - Use `click.secho()`/`click.style()` only for optional emphasis.
+   - Avoid `click.progressbar()` for non-iterative phases.
+
+5. Add tests
    - Use `click.testing.CliRunner()` to exercise the CLI.
    - Use `runner.isolated_filesystem()` for file-based commands.
-   - Assert on `result.exit_code` and `result.output`.
+   - Assert on `result.exit_code`.
+   - Assert final results from `stdout` and progress lines from `stderr` separately.
+   - Assert progress lifecycle ordering (`send`, retry if needed, then `success` or `failure`).
+   - Avoid brittle full-string assertions; lock schema and key tokens.
 
-5. Validate and iterate
+6. Validate and iterate
    - Run tests locally. Check help text and exit codes.
    - Verify `--help` output for clarity and correctness.
 
-6. Packaging and entry points
+7. Packaging and entry points
    - Add a `console_scripts` entry point in `pyproject.toml` or `setup.cfg`.
    - Ensure `main()` calls `cli()` to be import-safe.
 

@@ -17,7 +17,7 @@ Preserve this file as the stable entry point for edge architect automation. Keep
 
 Load the workflow that matches the task:
 
-- Refresh the idea bank from the latest Hugging Face papers.
+- Refresh the idea bank from the latest Hugging Face papers and repository evidence.
 - Read `docs/ideas.md`, design exactly one experiment, and submit it.
 - Brainstorm evaluation extensions that push the edge agent outside its comfort zone.
 

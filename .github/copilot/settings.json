@@ -1,4 +1,5 @@
 {
+    "reasoningEffort": "high",
     "effortLevel": "high",
     "model": "gpt-5-mini"
 }

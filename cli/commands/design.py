@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 
 from cli.services.copilot_session import PERMISSIVE_TOOLSET
@@ -10,14 +12,17 @@ from .experiment import format_experiment_context, get_experiment_count
 from .task_runner import (
     get_task_rescue_prompt,
     load_task_prompt_config,
-    non_retriable_agent_error_detail,
-    send_task_message,
+    run_task_with_retry,
 )
 
 DEFAULT_MODEL = "gpt-5-mini"
 
 
-def run_design(brief: str | None, config_path: str | None = None) -> None:
+def run_design(
+    brief: str | None,
+    config_path: str | None = None,
+    transcript_file: str | None = None,
+) -> None:
     """Generate and submit an experiment design through the registry CLI."""
     project_config = load_project_config(config_path, required=False)
     prompt_body, prompt_agent = load_task_prompt_config(project_config, "design")
@@ -30,37 +35,30 @@ def run_design(brief: str | None, config_path: str | None = None) -> None:
     )
     experiment_count_before = get_experiment_count()
     prompt = _build_design_prompt(brief, format_experiment_context(), prompt_body)
-    copilot_session = command_context.copilot_session
-    result = send_task_message(copilot_session, prompt)
-
-    if get_experiment_count() <= experiment_count_before:
-        non_retriable_error = non_retriable_agent_error_detail(result)
-        if non_retriable_error is not None:
-            raise click.ClickException(
-                "Design agent returned a non-retriable provider error without retry: "
-                f"{non_retriable_error}"
-            )
-
-        follow_up_prompt = get_task_rescue_prompt(
+    result = run_task_with_retry(
+        task_name="design",
+        copilot_session=command_context.copilot_session,
+        prompt=prompt,
+        retry_prompt=get_task_rescue_prompt(
             project_config,
             "design",
             fallback=_build_retry_prompt(),
-        )
-        result = send_task_message(
-            copilot_session,
-            follow_up_prompt,
-            continue_session=True,
-        )
-        if get_experiment_count() <= experiment_count_before:
-            raise click.ClickException(
-                "Design agent did not create a new experiment after one retry."
-            )
+        ),
+        success_check=lambda: get_experiment_count() > experiment_count_before,
+        failure_message="Design agent did not create a new experiment after one retry.",
+        transcript_path=Path(transcript_file) if transcript_file is not None else None,
+        non_retriable_error_prefix=(
+            "Design agent returned a non-retriable provider error without retry"
+        ),
+    )
 
     output_text = result.stdout.strip()
     if output_text:
         click.echo(output_text)
     else:
-        click.echo(f"Submitted design request using agentic CLI: {copilot_session.alias}")
+        click.echo(
+            f"Submitted design request using agentic CLI: {command_context.copilot_session.alias}"
+        )
 
 
 def _build_design_prompt(brief: str | None, experiment_context: str, base_prompt: str) -> str:

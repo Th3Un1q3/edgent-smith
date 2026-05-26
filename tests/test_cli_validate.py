@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from cli.services.copilot_session import CopilotSessionService
 
 
-def test_send_validation_message_requests_json_output_and_returns_the_session_result() -> None:
+def test_send_validation_message_returns_result_without_exposing_output_format() -> None:
     fake_copilot_session = MagicMock()
     expected_result = MagicMock(is_success=True, stdout="stored", stderr="")
     fake_copilot_session.send_message.return_value = expected_result
@@ -31,7 +31,6 @@ def test_send_validation_message_requests_json_output_and_returns_the_session_re
     assert actual_result is expected_result
     fake_copilot_session.send_message.assert_called_once_with(
         'My pet is called "secret". do nothing for now.',
-        output_format="json",
     )
 
 
@@ -76,6 +75,7 @@ def test_validate_uses_auto_discovery_by_default_and_accepts_explicit_config_ove
             prompt: str,
             **kwargs: object,
         ) -> MagicMock:
+            assert "output_format" not in kwargs
             if 'My pet is called "' in prompt:
                 aliases_seen.append(service.alias)
                 models_seen.append(service.model)

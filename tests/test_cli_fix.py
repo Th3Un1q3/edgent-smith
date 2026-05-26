@@ -214,6 +214,7 @@ def test_fix_uses_project_config_alias_by_default_while_loading_hooks_from_autof
             ) -> MagicMock:
                 assert session.alias == "gh-copilot"
                 assert "just validate" in prompt
+                assert "output_format" not in kwargs
                 return MagicMock(is_success=True, stdout="fixed", stderr="")
 
             with patch(
@@ -266,6 +267,7 @@ def test_fix_uses_explicit_project_config_when_config_flag_is_provided(
             ) -> MagicMock:
                 assert session.alias == "explicit-alias"
                 assert "just validate" in prompt
+                assert "output_format" not in kwargs
                 return MagicMock(is_success=True, stdout="fixed", stderr="")
 
             with patch(
@@ -342,7 +344,7 @@ def test_fix_uses_copilot_fallback_for_failed_stage_and_continues(
     assert "lint stdout" in prompt
     assert "lint stderr" in prompt
     assert mock_send.call_args.kwargs["continue_session"] is False
-    assert mock_send.call_args.kwargs["output_format"] == "json"
+    assert "output_format" not in mock_send.call_args.kwargs
 
 
 def test_fix_parallel_batches_first_pass_failures_into_single_remediation(
@@ -396,6 +398,7 @@ def test_fix_parallel_batches_first_pass_failures_into_single_remediation(
                 }
             )
             assert len(first_pass_completed) == 4
+            assert "output_format" not in kwargs
             return MagicMock(is_success=True, stdout="fixed", stderr="")
 
         with (
@@ -434,6 +437,7 @@ def test_fix_parallel_batches_first_pass_failures_into_single_remediation(
         }
     )
     mock_send.assert_called_once()
+    assert "output_format" not in mock_send.call_args.kwargs
     prompt = mock_send.call_args.args[0]
     assert prompt.index("Hook name: lint") < prompt.index("Hook name: typecheck")
     assert "Command: just lint" in prompt
@@ -637,8 +641,8 @@ def test_fix_continue_reuses_same_service_across_fallback_turns(
     assert fake_copilot_session.send_message.call_count == 2
     assert fake_copilot_session.send_message.call_args_list[0].kwargs["continue_session"] is True
     assert fake_copilot_session.send_message.call_args_list[1].kwargs["continue_session"] is False
-    assert fake_copilot_session.send_message.call_args_list[0].kwargs["output_format"] == "json"
-    assert fake_copilot_session.send_message.call_args_list[1].kwargs["output_format"] == "json"
+    assert "output_format" not in fake_copilot_session.send_message.call_args_list[0].kwargs
+    assert "output_format" not in fake_copilot_session.send_message.call_args_list[1].kwargs
 
 
 def test_fix_runs_only_configured_hooks_from_toml_config(tmp_path: pathlib.Path) -> None:

@@ -85,7 +85,7 @@ def run_init(
 
     click.echo(f"Verifying authentication for {cli_alias}...")
     service = CopilotSessionService(alias=cli_alias)
-    result = service.send_message("Simply respond with 'OK'", output_format="json")
+    result = service.send_message("Simply respond with 'OK'")
 
     if not result.is_success:
         error_detail = result.stderr.strip() or "Verification check failed."

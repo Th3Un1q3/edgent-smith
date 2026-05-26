@@ -35,6 +35,7 @@ def test_autoresearch_init_creates_config_file(
 
         assert result.exit_code == 0
         assert f"Created project configuration: {config_filename}" in result.output
+        mock_service.send_message.assert_called_once_with("Simply respond with 'OK'")
 
         config_file = pathlib.Path(config_filename)
         assert config_file.exists()

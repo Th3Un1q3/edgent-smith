@@ -1,4 +1,6 @@
 [
   "experiment-confidence-guided-model-routing",
-  "experiment-lightweight-on-device-evaluator-templates"
+  "experiment-lightweight-on-device-evaluator-templates",
+  "experiment-skillopt-skill-evolution-optimizer",
+  "experiment-kv-cache-persistence-manager"
 ]

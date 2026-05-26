@@ -117,7 +117,6 @@ class CopilotSessionService:
         self,
         prompt: str,
         silent: bool = True,
-        output_format: str = "text",
         agent: str | None = None,
         continue_session: bool = False,
     ) -> SessionResult:
@@ -144,7 +143,7 @@ class CopilotSessionService:
         cmd.extend(
             [
                 "--output-format",
-                output_format,
+                "json",
                 "--autopilot",
                 "--yolo",
             ]
@@ -170,17 +169,11 @@ class CopilotSessionService:
                 input=run_input,
             )
 
-            if output_format == "json":
-                result = self._parse_jsonl(res.stdout, res.stderr, res.returncode)
+            result = self._parse_jsonl(res.stdout, res.stderr, res.returncode)
 
-                # Update persistent session_id if returned
-                if result.session_id:
-                    self.session_id = result.session_id
-                return result
-
-            return SessionResult(
-                stdout=res.stdout.strip(), stderr=res.stderr, returncode=res.returncode
-            )
+            if result.session_id:
+                self.session_id = result.session_id
+            return result
         except FileNotFoundError:
             return SessionResult(
                 stdout="", stderr=f"Command '{self.alias}' not found in PATH.", returncode=127
@@ -214,8 +207,10 @@ class CopilotSessionService:
                                 arguments=req.get("arguments", {}),
                             )
                         )
+                elif event_type == "session.started":
+                    session_id = data.get("sessionId") or event.get("sessionId") or session_id
                 elif event_type == "result":
-                    session_id = event.get("sessionId")
+                    session_id = event.get("sessionId") or data.get("sessionId") or session_id
             except json.JSONDecodeError:
                 continue
 
