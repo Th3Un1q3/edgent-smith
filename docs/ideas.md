@@ -75,49 +75,47 @@ References
 Research: Hugging Face (May–Apr 2026) — retained high-signal papers
 
 - 2605.23904 — SkillOpt: Executive Strategy for Self-Evolving Agent Skills
-  - Key mechanism: executive-level meta-controller that autonomously schedules, composes, and evolves agent skills (LoRA/adapter-level), using automated curricula and evaluation signals.
-  - Edge relevance: enables low-cost on-device continual improvement by orchestrating small adapters and local evaluation loops instead of full-model retraining.
-  - Repo impact: add a SkillOpt-inspired "skill executive" design note (adapter catalog, local eval hooks, evolution policy), plus a small simulator to test adapter-selection and reward signals on-device.
-  - New vs revision: New — augments 'Self-healing + continual learning'.
+  - Key mechanism: text-space optimizer for skill documents — frontier optimizer model proposes bounded add/replace/delete edits, a textual learning-rate (edit budget), a held-out validation gate, a rejected-edit buffer, and epoch-wise slow/meta updates to stabilize evolution.
+  - Edge relevance: trains compact, reusable skill artifacts offline or on-device with zero deployment inference overhead; enables low-cost continual improvement via adapter/skill composition instead of full-model updates.
+  - Repo impact: add a "SkillOpt" design note (optimizer sandbox, edit-budget API, validation gate hooks, rejected-step logging) and a small simulator to validate adapter/skill-selection and acceptance criteria on-device.
+  - New vs revision: New — refines 'Self-healing + continual learning' with concrete optimization controls.
 
 - 2605.09530 — MemPrivacy: Privacy-Preserving Personalized Memory Management for Edge-Cloud Agents
-  - Key mechanism: detect privacy-sensitive spans on-device, replace them with semantically structured, type-aware placeholders for cloud-side memory formation, and restore originals locally when needed.
-  - Edge relevance: preserves memory utility while preventing sensitive data leakage during cloud sync; minimal utility loss vs aggressive masking.
-  - Repo impact: adopt type-aware placeholder redaction in memory sync, implement local restoration policy, and add MemPrivacy-Bench entries to memory tests.
+  - Key mechanism: on-device detection of privacy-sensitive spans, replacement with semantically structured type-aware placeholders for cloud-side memory formation, and local restoration when needed.
+  - Edge relevance: preserves memory utility while preventing sensitive data leakage during cloud sync; minimal utility loss vs aggressive masking (reported ~1.6% utility drop).
+  - Repo impact: adopt type-aware placeholder redaction in memory sync, implement local restoration policy, and add MemPrivacy-Bench entries and test vectors to memory tests.
   - New vs revision: Kept (already referenced) — sharpened implementation notes.
 
 - 2604.19859 — DR-Venus: Frontier Edge-Scale Deep Research Agents from Only 10K Open Data
-  - Key mechanism: targeted agentic SFT followed by agentic RL with information-gain turn-level rewards and format-aware regularization to train robust 4B-class research agents.
-  - Edge relevance: demonstrates practical recipes that make 4B-class on-device agents viable for deep-research workflows and suggests test-time scaling strategies.
-  - Repo impact: add SFT+agentic-RL training recipe, include turn-level IG reward template, and test-time scaling notes for harness experiments.
+  - Key mechanism: two-stage recipe — agentic supervised fine-tuning (SFT) with long-horizon trajectory resampling, then agentic RL with turn-level information-gain rewards and format-aware regularization.
+  - Edge relevance: shows 4B-class agents can perform deep-research workflows when trained with targeted SFT+RL recipes and test-time scaling strategies, making research-capable on-device agents feasible.
+  - Repo impact: add SFT+agentic-RL recipe, include turn-level IG reward templates, and document test-time scaling guidance for harness experiments.
   - New vs revision: Kept — reinforces 'small-models & model routing' and 'self-healing'.
 
 - 2603.04428 — Agent Memory Below the Prompt: Persistent Q4 KV Cache for Multi-Agent LLM Inference on Edge Devices
   - Key mechanism: persist per-agent Q4-quantized KV caches (safetensors) and restore them directly into attention layers via a BatchQuantizedKVCache to avoid repeated prefill costs.
-  - Edge relevance: enables practical multi-agent orchestration on constrained devices by reducing time-to-first-token by orders of magnitude and increasing context residency.
-  - Repo impact: add KV-cache persistence design note to harness docs, prototype a Q4 KV-cache manager (safetensors) + loader, and add microbenchmarks for time-to-first-token and memory-fit in multi-agent flows.
+  - Edge relevance: reduces time-to-first-token by orders of magnitude and increases practical multi-agent context residency on constrained devices.
+  - Repo impact: add KV-cache persistence design note, prototype a Q4 KV-cache manager + loader, and add microbenchmarks for time-to-first-token and memory-fit in multi-agent flows.
   - New vs revision: Kept (Feb 2026) — concrete implementation path for multi-agent context management.
 
 - 2605.20025 — AutoResearchClaw: Self-Reinforcing Autonomous Research with Human–AI Collaboration
-  - Key mechanism: self-reinforcing autonomous research loop that combines agentic proposal generation, automated execution, and human curation to bootstrap research progress.
-  - Edge relevance: useful blueprint for on-device assistant agents that run lightweight experiments, collect signals, and escalate promising leads for cloud-scale evaluation.
-  - Repo impact: add an "autonomous-research" recipe to the docs that captures small-loop experiments (local proposal -> run -> summarize -> escalate) and tooling for human-in-the-loop curation.
+  - Key mechanism: multi-agent autonomous research loop combining structured multi-agent debate for proposal generation, a self-healing executor with Pivot/Refine loops, verifiable result reporting, seven human-in-the-loop intervention modes, and cross-run evolutionary learning.
+  - Edge relevance: blueprint for on-device assistants that run lightweight experiments, collect signals, and escalate promising leads for cloud evaluation while maintaining human oversight.
+  - Repo impact: add an "autonomous-research" recipe (local proposal -> execute -> summarize -> escalate), execution safety/verifiability patterns, and a small harness for human-curated micro-experiments.
   - New vs revision: New — augments research-workflow ideas in the harness and evaluation sections.
 
 - 2602.06485 — AgentCPM-Explore: Realizing Long-Horizon Deep Exploration for Edge-Scale Agents
-  - Key mechanism: training framework for 4B-class agent models addressing catastrophic forgetting, reward-noise sensitivity, and context redundancy (parameter-space model fusion, reward denoising, contextual refinement).
-  - Edge relevance: training guidance and stability techniques that directly apply to building robust on-device agents under resource constraints.
-  - Repo impact: capture training-stability checklist and implement small-scale replication experiment for adapter-based stability tricks.
+  - Key mechanism: stability-focused training framework for 4B-class agents (parameter-space fusion, reward denoising, contextual refinement) to mitigate catastrophic forgetting and reward-noise sensitivity.
+  - Edge relevance: provides training-stability techniques applicable for robust on-device agents under resource constraints.
+  - Repo impact: capture a training-stability checklist and create a small-scale replication experiment for adapter-based stability tricks.
   - New vs revision: New — adds training-stability guidance for edge-scale agents.
 
 - 2603.16867 — Efficient Reasoning on the Edge
-  - Key mechanism: LoRA-based reasoning adapters + budget-forcing RL and dynamic adapter switching to enable concise, accurate reasoning on small models; KV-cache sharing for prompt-time efficiency.
-  - Edge relevance: makes chain-of-thought and reasoning practical on-device by reducing token and memory overhead while preserving accuracy.
-  - Repo impact: add a "reasoning-on-edge" recipe: LoRA adapters, budget forcing objective, dynamic adapter activation policy, and KV-cache-sharing design notes.
+  - Key mechanism: LoRA-based reasoning adapters, budget-forcing RL, dynamic adapter switching, and KV-cache sharing to reduce token/memory overhead while preserving reasoning accuracy.
+  - Edge relevance: makes chain-of-thought and concise multi-step reasoning practical on-device.
+  - Repo impact: add a "reasoning-on-edge" recipe: LoRA adapters, budget-forcing objective, dynamic adapter activation policy, and KV-cache-sharing design notes.
   - New vs revision: New — complements 'On-device optimizations' and 'Model routing'.
 
-Follow-ups completed: shortlisted May–Apr 2026 high-signal papers and condensed them into concise, evidence-backed additions above. Next recommended steps (not performed here): run targeted `hf papers info` and `hf papers read` for selected IDs to extract structured metadata and full-text evidence for PR-ready changes.
-
-(If this looks good, next: pick 2 ideas to prototype; open issues/PRs with experiment plans.)
+Follow-ups completed: shortlisted May–Apr 2026 high-signal papers and condensed them into concise, evidence-backed additions above. Next recommended steps (not performed here): run targeted `hf papers info` and `hf papers read` for any additional shortlisted IDs to extract full metadata and longer-form evidence for PR-ready changes.
 
 <!-- instrumentation update -->
