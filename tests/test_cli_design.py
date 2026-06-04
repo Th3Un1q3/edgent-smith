@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pathlib
+import subprocess
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
@@ -1110,6 +1111,79 @@ def test_discover_raises_when_ideas_unchanged_after_retry(tmp_path: pathlib.Path
     assert result.exit_code != 0
     assert "did not update docs/ideas.md" in result.output
     assert mock_send.call_count == 2
+
+
+def test_discover_rejects_git_head_changes_even_when_ideas_file_updates(
+    tmp_path: pathlib.Path,
+) -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_discover_project_config(pathlib.Path("project.config.toml"))
+        pathlib.Path("docs").mkdir(parents=True, exist_ok=True)
+        ideas_path = pathlib.Path("docs/ideas.md")
+        ideas_path.write_text("# Ideas\n\nInitial content.\n")
+
+        subprocess.run(["git", "init"], check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test User"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            ["git", "add", "project.config.toml", "docs/ideas.md"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "Initial state"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        with (
+            patch(
+                "cli.services.copilot_session.CopilotSessionService.send_message",
+                autospec=True,
+            ) as mock_send,
+            patch("cli.commands.discover.fetch_papers"),
+            patch("cli.commands.discover.format_papers_context", return_value="papers"),
+        ):
+
+            def _update_and_commit(*args: object, **kwargs: object) -> MagicMock:
+                ideas_path.write_text("# Ideas\n\nCommitted update.\n")
+                subprocess.run(
+                    ["git", "add", "docs/ideas.md"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                subprocess.run(
+                    ["git", "commit", "-m", "docs: update ideas"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                return MagicMock(is_success=True, stdout="ok", stderr="")
+
+            mock_send.side_effect = _update_and_commit
+
+            result = runner.invoke(
+                cli, ["autoresearch", "discover", "--config", "project.config.toml"]
+            )
+
+    assert result.exit_code != 0
+    assert "must not create commits" in result.output
+    assert mock_send.call_count == 1
 
 
 def test_discover_succeeds_when_ideas_changes_on_first_send(tmp_path: pathlib.Path) -> None:

@@ -55,16 +55,17 @@ RESTRICTED_TOOLSET = Toolset(allow_all=False)
 def allow_all_deny_git_toolset() -> Toolset:
     return Toolset(
         allow_all=True,
-        denied_tools=["shell(git push)", "shell(git commit)", "shell(git checkout)"],
+        denied_tools=["shell(git:*)"],
     )
 
 
 # Permissive toolset as seen in fix_code.sh
 PERMISSIVE_TOOLSET = allow_all_deny_git_toolset()
 
-# Discover toolset: only file reading and writing — papers are pre-fetched into the prompt.
+# Discover needs shell access for `hf` lookups, but must never mutate git state.
 DISCOVER_TOOLSET = Toolset(
     allow_all=False,
+    denied_tools=["shell(git:*)"],
     allowed_tools=["read_file", "write_file"],
 )
 

@@ -2,5 +2,6 @@
   "experiment-confidence-guided-model-routing",
   "experiment-lightweight-on-device-evaluator-templates",
   "experiment-skillopt-skill-evolution-optimizer",
-  "experiment-kv-cache-persistence-manager"
+  "experiment-kv-cache-persistence-manager",
+  "experiment-memprivacy-type-aware-placeholder-redaction-for-memory-sync"
 ]

@@ -231,18 +231,14 @@ def test_session_change_toolset() -> None:
         service.send_message("second")
         args2 = mock_run.call_args[0][0]
         assert "--allow-all-tools" in args2
-        assert "shell(git push)" in args2
+        assert "shell(git:*)" in args2
 
 
 def test_allow_all_deny_git_toolset_returns_expected_flags() -> None:
     assert copilot_session_module.allow_all_deny_git_toolset().to_flags() == [
         "--allow-all-tools",
         "--deny-tool",
-        "shell(git push)",
-        "--deny-tool",
-        "shell(git commit)",
-        "--deny-tool",
-        "shell(git checkout)",
+        "shell(git:*)",
     ]
 
 
@@ -274,6 +270,8 @@ def test_discover_toolset_flags() -> None:
     from cli.services.copilot_session import DISCOVER_TOOLSET
 
     assert DISCOVER_TOOLSET.to_flags() == [
+        "--deny-tool",
+        "shell(git:*)",
         "--allow-tool",
         "read_file",
         "--allow-tool",

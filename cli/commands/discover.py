@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import click
@@ -54,30 +55,69 @@ def run_discover(
     )
     copilot_session = command_context.copilot_session
 
+    repo_root = project_config.path.parent
     ideas_path = project_config.path.parent / "docs" / "ideas.md"
     digest_before = calculate_file_digest(ideas_path)
-    result = run_task_with_retry(
-        task_name="discover",
-        copilot_session=copilot_session,
-        prompt=full_prompt,
-        retry_prompt=get_task_rescue_prompt(
-            project_config,
-            "discover",
-            fallback=_build_discover_retry_prompt(),
-        ),
-        success_check=lambda: calculate_file_digest(ideas_path) != digest_before,
-        failure_message="Discover agent did not update docs/ideas.md after one retry.",
-        transcript_path=Path(transcript_file) if transcript_file is not None else None,
-        non_retriable_error_prefix=(
-            "Discover agent returned a non-retriable provider error without retry"
-        ),
-    )
+    git_head_before = _current_git_head(repo_root)
+
+    try:
+        result = run_task_with_retry(
+            task_name="discover",
+            copilot_session=copilot_session,
+            prompt=full_prompt,
+            retry_prompt=get_task_rescue_prompt(
+                project_config,
+                "discover",
+                fallback=_build_discover_retry_prompt(),
+            ),
+            success_check=lambda: calculate_file_digest(ideas_path) != digest_before,
+            failure_message="Discover agent did not update docs/ideas.md after one retry.",
+            transcript_path=Path(transcript_file) if transcript_file is not None else None,
+            non_retriable_error_prefix=(
+                "Discover agent returned a non-retriable provider error without retry"
+            ),
+        )
+    except click.ClickException:
+        _raise_if_git_head_changed(repo_root, git_head_before)
+        raise
+
+    _raise_if_git_head_changed(repo_root, git_head_before)
 
     output_text = result.stdout.strip()
     if output_text:
         click.echo(output_text)
     else:
         click.echo(f"Submitted discover request using agentic CLI: {copilot_session.alias}")
+
+
+def _current_git_head(repo_root: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    head = result.stdout.strip()
+    if head:
+        return head
+    return None
+
+
+def _raise_if_git_head_changed(repo_root: Path, git_head_before: str | None) -> None:
+    if _current_git_head(repo_root) == git_head_before:
+        return
+
+    raise click.ClickException(
+        "Discover agent must not create commits. Git HEAD changed during discover."
+    )
 
 
 def _build_discover_retry_prompt() -> str:
