@@ -48,12 +48,19 @@ Only read the parts necessary for the task.
 
 ## Skills Directory
 
-- **Repo-local skills:** Place skill manifests and supporting files under `.agents/skills/<name>/`. This repository expects reusable, repo-scoped skills to live there so agents and workflows can find them.
-- **Using `npx skill`:** The `npx skill` tool downloads into `.codebuddy/skills` by default. After running it, move the downloaded skill into `.agents/skills/<name>/`. Example:
+- **Repo-local skills:** Put skill directories containing `SKILL.md` under `./.agents/skills/<name>/` so agents and workflows can find them.
 
-  mv .codebuddy/skills/conductor .agents/skills/conductor
+- **Happy path (recommended, minimal):** Install a skill into this repository's project-scoped directory with the `skills` CLI. This single command is the proven, minimal flow:
 
-  (Alternatively, clone the skill repo directly into `.agents/skills/<name>/`.)
+  `npx skills add Th3Un1q3/edgent-smith --skill pydantic-evaluations --agent github-copilot --yes`
+
+  - Effect: installs the skill into `./.agents/skills/pydantic-evaluations/`.
+  - `--agent github-copilot`: targets GitHub Copilot and maps to the project `./.agents/skills/` directory.
+  - `--yes`: skip prompts for a non-interactive, repeatable install.
+
+- **Quick verify:** run `npx skills list` or check `ls ./.agents/skills/pydantic-evaluations` to confirm files are present.
+
+Keep this flow as the default. Use `--global` only when you intentionally want a user-wide install (e.g. `~/.copilot/skills/`).
 
 ## Quick task sizing
 
