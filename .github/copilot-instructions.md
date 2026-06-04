@@ -46,6 +46,15 @@ Only read the parts necessary for the task.
 - Localized code changes: read the target module and the Validation checklist.
 - Provider wiring, eval behavior, runtime setup, or DevContainer changes: read the corresponding sections before editing.
 
+## Skills Directory
+
+- **Repo-local skills:** Place skill manifests and supporting files under `.agents/skills/<name>/`. This repository expects reusable, repo-scoped skills to live there so agents and workflows can find them.
+- **Using `npx skill`:** The `npx skill` tool downloads into `.codebuddy/skills` by default. After running it, move the downloaded skill into `.agents/skills/<name>/`. Example:
+
+  mv .codebuddy/skills/conductor .agents/skills/conductor
+
+  (Alternatively, clone the skill repo directly into `.agents/skills/<name>/`.)
+
 ## Quick task sizing
 
 Match the amount of process to the size of the change.
