@@ -62,9 +62,9 @@ def _assert_progress_schema(
     required_phase_message_terms: dict[str, list[str]] | None = None,
 ) -> None:
     assert events, "expected progress events"
-    assert all(
-        is_err is True for _, is_err in events
-    ), "progress events must be emitted on stderr via click.echo(err=True)"
+    assert all(is_err is True for _, is_err in events), (
+        "progress events must be emitted on stderr via click.echo(err=True)"
+    )
 
     parsed_events: list[dict[str, str]] = []
     for line, _is_err in events:
@@ -75,9 +75,9 @@ def _assert_progress_schema(
         )
         parsed_events.append(match.groupdict())
 
-    assert [event["task"].lower() for event in parsed_events] == [
-        task_name.lower()
-    ] * len(parsed_events)
+    assert [event["task"].lower() for event in parsed_events] == [task_name.lower()] * len(
+        parsed_events
+    )
     assert [event["attempt"] for event in parsed_events] == expected_attempts
 
     messages = [event["message"].lower() for event in parsed_events]

@@ -137,3 +137,15 @@ Research: Hugging Face (May–Apr 2026) — retained high-signal papers
 - Notes: include micro-benchmarks for action latency, safety gate checks, and adapter-based deployment (quantized variants).
 - Source: 2605.02881 — MolmoAct2: Action Reasoning Models for Real-world Deployment.
 - New vs revision: New — adds action-reasoning to the 'subagents & sensing' and 'on-device optimizations' entries.
+
+- 2606.01770 — Adaptive Auto-Harness: Sustained Self-Improvement for Agentic System Deployment on Open-Ended Task Streams
+  - Key mechanism: stateful multi-agent evolver + harness tree with solve-time routing and human-steering hooks to address evolution vs adaptation loss in open-ended streams.
+  - Edge relevance: keeps harnesses adaptive to shifting task distributions on-device (or near-edge) with solve-time routing and lightweight evolver loops; reduces brittleness when history grows without fixed endpoints.
+  - Repo impact: add an 'adaptive-auto-harness' recipe, harness-tree routing examples, and evolver simulator; include human-steering hooks and ablation notes in harness docs.
+  - New vs revision: New — extends 'Agent harness' and 'Self-healing' entries with concrete evolver and routing patterns.
+
+- 2606.02951 — SCOPE: Real-Time Natural Language Camera Agent at the Edge
+  - Key mechanism: modular PTZ camera agent integrating small planning SLMs with VLM perception; sim-to-real validated 536-task benchmark for latency/accuracy/error-mode evaluation.
+  - Edge relevance: demonstrates practical sim-to-real camera control with fully local perception/planning—useful for lightweight perception+control agent patterns and latency-aware model routing.
+  - Repo impact: add a 'camera-agent' recipe, PTZ control tool adapters, perception-planner model-pairing guidelines, and microbenchmarks for latency and time-to-first-token.
+  - New vs revision: New — introduces a practical on-device perception+control blueprint for SLM+VLM pairings.

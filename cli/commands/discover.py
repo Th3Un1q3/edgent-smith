@@ -41,11 +41,7 @@ def run_discover(
     full_prompt = "\n\n".join(
         [
             prompt_body,
-            (
-                "Cached Hugging Face paper search results are stored at "
-                f"{DISCOVER_CACHE_PATH.as_posix()}."
-            ),
-            "Use cached file to get latest relevant papers quickly.",
+            (f"Relevant local sources: docs/ideas.md and {DISCOVER_CACHE_PATH.as_posix()}."),
         ]
     )
 

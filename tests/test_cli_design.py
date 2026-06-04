@@ -879,7 +879,11 @@ def test_discover_calls_hf_papers(tmp_path: pathlib.Path) -> None:
     assert result.exit_code == 0, result.output
     mock_fetch.assert_called_once()
     prompt = mock_send.call_args.args[1]
-    assert "Cached Hugging Face paper search results are stored at" in prompt
+    assert "Relevant local sources:" in prompt
+    assert (
+        "Inspect docs/ideas.md first as the primary source of candidate directions." not in prompt
+    )
+    assert "Use cached file to get latest relevant papers quickly." not in prompt
     assert ".cache/discover/hf_papers.md" in prompt
     assert "Paper A" not in prompt
 
