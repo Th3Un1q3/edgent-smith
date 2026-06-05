@@ -23,7 +23,8 @@
         "charliermarsh.ruff",
         "GitHub.copilot",
         "GitHub.copilot-chat",
-        "ms-vscode.vscode-chat-customizations-evaluations"
+        "ms-vscode.vscode-chat-customizations-evaluations",
+        "johnny-zhao.oai-compatible-copilot"
       ],
       "settings": {
         "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
@@ -36,7 +37,7 @@
     }
   },
   "initializeCommand": "bash -lc \"if [ ! -f .env ]; then cp .env.example .env && echo 'Created .env from .env.example'; else echo '.env exists, skipping'; fi\"",
-  "postCreateCommand": "uv sync --dev --all-extras && uv tool install --force huggingface_hub && npm install -g @github/copilot",
+  "postCreateCommand": "uv sync --dev --all-extras && uv tool install --force huggingface_hub && npm install -g @github/copilot && CONDUCTOR_INSTALL_FORCE=1 curl -sSfL https://aka.ms/conductor/install.sh | sh -s -- --source \"git+https://github.com/microsoft/conductor.git@v0.1.18\" && conductor --version",
   "remoteUser": "vscode",
   "forwardPorts": [
     8000,
