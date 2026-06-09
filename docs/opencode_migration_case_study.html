@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenCode Local AI Architecture</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            themeVariables: {
+                primaryColor: '#0f172a',
+                primaryTextColor: '#fff',
+                primaryBorderColor: '#06b6d4',
+                lineColor: '#d946ef',
+                secondaryColor: '#1e1b4b',
+                tertiaryColor: '#020617'
+            }
+        });
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #050505;
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(6, 182, 212, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 85% 30%, rgba(217, 70, 239, 0.08) 0%, transparent 50%);
+            color: #e5e7eb;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        h1,
+        h2,
+        h3,
+        .font-display {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        /* Neon Glow Utilities */
+        .neon-border-cyan {
+            border: 1px solid #06b6d4;
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.3), inset 0 0 10px rgba(6, 182, 212, 0.1);
+        }
+
+        .neon-border-magenta {
+            border: 1px solid #d946ef;
+            box-shadow: 0 0 10px rgba(217, 70, 239, 0.3), inset 0 0 10px rgba(217, 70, 239, 0.1);
+        }
+
+        .neon-border-lime {
+            border: 1px solid #84cc16;
+            box-shadow: 0 0 10px rgba(132, 204, 22, 0.3), inset 0 0 10px rgba(132, 204, 22, 0.1);
+        }
+
+        .neon-border-purple {
+            border: 1px solid #8b5cf6;
+            box-shadow: 0 0 10px rgba(139, 92, 246, 0.3), inset 0 0 10px rgba(139, 92, 246, 0.1);
+        }
+
+        .neon-text-cyan {
+            color: #22d3ee;
+            text-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+        }
+
+        .neon-text-magenta {
+            color: #e879f9;
+            text-shadow: 0 0 8px rgba(232, 121, 249, 0.6);
+        }
+
+        .neon-text-lime {
+            color: #a3e635;
+            text-shadow: 0 0 8px rgba(163, 230, 53, 0.6);
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #000;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #06b6d4;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #d946ef;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen pb-20">
+
+    <!-- Header Section -->
+    <header class="relative pt-20 pb-12 px-6 text-center z-10">
+        <div class="max-w-4xl mx-auto">
+            <div
+                class="inline-flex items-center justify-center space-x-2 px-4 py-1 rounded-full neon-border-purple text-sm font-semibold text-purple-400 mb-6 uppercase tracking-wider">
+                <i data-lucide="zap" class="w-4 h-4"></i>
+                <span>Case Study</span>
+            </div>
+            <h1 class="text-5xl md:text-7xl font-bold mb-6 leading-tight">
+                Migrating to a <br />
+                <span class="neon-text-cyan">Local Agentic</span> IDE
+            </h1>
+            <p class="text-xl md:text-2xl text-gray-400 font-light max-w-2xl mx-auto">
+                Ditching cloud-locked Copilot for an offline, isolated OpenCode environment.
+            </p>
+        </div>
+    </header>
+
+    <!-- Core Constraint Callout (Meme Style) -->
+    <section class="px-6 relative z-10 -mt-4 mb-16">
+        <div class="max-w-4xl mx-auto">
+            <div class="glass-panel neon-border-magenta rounded-2xl p-8 text-center relative overflow-hidden">
+                <div
+                    class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-400 via-magenta-500 to-lime-400">
+                </div>
+
+                <h2
+                    class="text-2xl md:text-3xl font-extrabold neon-text-magenta mb-4 uppercase tracking-wide flex items-center justify-center gap-3">
+                    <i data-lucide="shield-alert" class="w-7 h-7"></i>
+                    One Does Not Simply Point Copilot to a Local Model
+                </h2>
+
+                <p class="text-gray-300 text-base leading-relaxed max-w-2xl mx-auto mb-6">
+                    If you point GitHub Copilot directly to a locally running LLM, the system breaks instantly. Any
+                    model you can run locally is simply too slow and too dumb to process the massive, unoptimized
+                    context payloads generated by Copilot Chat. To make local setups work, you must switch from working
+                    hard to working smart.
+                </p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left border-t border-gray-800/80 pt-6">
+                    <div class="md:border-r border-gray-850 md:pr-6">
+                        <span
+                            class="text-xs text-red-400 font-mono uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+                            <i data-lucide="gauge" class="w-4 h-4"></i> Context Flooding
+                        </span>
+                        <p class="text-gray-400 text-sm leading-relaxed">
+                            A single normal query in GitHub Copilot Chat immediately dumps <strong
+                                class="text-white">40,000+ tokens</strong> of raw codebase data. Any locally hosted
+                            model running on consumer hardware will choke, freeze, or crash under this payload.
+                        </p>
+                    </div>
+                    <div class="md:pl-2">
+                        <span
+                            class="text-xs text-cyan-400 font-mono uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+                            <i data-lucide="cloud-off" class="w-4 h-4"></i> Cloud vs. Local Context
+                        </span>
+                        <p class="text-gray-400 text-sm leading-relaxed">
+                            Cloud-hosted systems easily handle brute-force context dumps by throwing massive parameter
+                            scale at the problem. Local models don't have that luxury. You must shift from wasteful
+                            context dumps to smart, progressive context discovery.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 4 Pillars Grid -->
+    <section class="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-8 mb-20 relative z-10">
+
+        <!-- Pillar 1: Local LLM and Backend -->
+        <div
+            class="glass-panel neon-border-cyan rounded-2xl p-8 flex flex-col justify-between transition-transform hover:-translate-y-1 duration-300">
+            <div>
+                <div class="w-14 h-14 rounded-full bg-cyan-950 flex items-center justify-center neon-border-cyan mb-6">
+                    <i data-lucide="cpu" class="w-7 h-7 neon-text-cyan"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-white mb-2">1. Local LLM and Backend</h3>
+                <p class="text-sm text-gray-400 mb-4">Requirement: Fast, performant, and efficient model running.</p>
+                <div class="mb-6 space-y-3 bg-red-950/20 p-4 rounded-xl border border-red-500/20">
+                    <span class="text-xs text-red-400 font-mono uppercase tracking-wider flex items-center gap-1">
+                        <i data-lucide="x-circle" class="w-4 h-4"></i> Failed Paths & Dead Ends
+                    </span>
+                    <ul class="text-sm text-gray-400 space-y-2 list-disc list-inside">
+                        <li><strong>Qwen 3.5 27B (Ollama):</strong> Too large, generating only 5 tokens/sec.</li>
+                        <li><strong>Ollama as model runner:</strong> Update Cadence too slow for cutting-edge models.</li>
+                        <li><strong>Gemma 4 4B / Small Models:</strong> Lazy, failed complex logic.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="bg-cyan-950/20 p-4 rounded-xl border border-cyan-500/20">
+                    <span class="text-xs text-cyan-400 font-mono uppercase tracking-wider flex items-center gap-1 mb-2">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i> Selected Stack
+                    </span>
+                    <p class="text-sm text-gray-300">
+                         <strong>LM Studio + Gemma 4 12B (QAT):</strong> Provides hardware acceleration for faster generation and leverages the model's inherent intelligence.
+                    </p>
+                </div>
+                <div class="bg-cyan-950/10 p-4 rounded-xl border border-cyan-500/10 border-dashed">
+                    <span class="text-xs text-cyan-500 font-mono uppercase tracking-wider flex items-center gap-1 mb-2">
+                        <i data-lucide="trending-up" class="w-4 h-4"></i> Next-Gen Upgrade
+                    </span>
+                     <p class="text-sm text-gray-400">
+                         The next-generation improvement lies in either next-release models or substantial hardware advancements.
+</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pillar 2: Freeing Up Memory -->
+        <div
+            class="glass-panel neon-border-lime rounded-2xl p-8 flex flex-col justify-between transition-transform hover:-translate-y-1 duration-300">
+            <div>
+                <div class="w-14 h-14 rounded-full bg-lime-950 flex items-center justify-center neon-border-lime mb-6">
+                    <i data-lucide="hard-drive" class="w-7 h-7 neon-text-lime"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-white mb-2">2. System Resources</h3>
+                <p class="text-sm text-gray-400 mb-4">Requirement: Sufficient resources to keep the host machine performant and responsive.</p>
+                <div class="mb-6 space-y-3 bg-red-950/20 p-4 rounded-xl border border-red-500/20">
+                    <span class="text-xs text-red-400 font-mono uppercase tracking-wider flex items-center gap-1">
+                        <i data-lucide="x-circle" class="w-4 h-4"></i> Failed Paths & Dead Ends
+                    </span>
+                    <ul class="text-sm text-gray-400 space-y-2 list-disc list-inside">
+                        <li><strong>Docker Desktop (Default Virtualization):</strong> Consumed 24 GB of RAM
+                            unnecessarily, starving the local LLM.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="bg-lime-950/20 p-4 rounded-xl border border-lime-500/20">
+                    <span class="text-xs text-lime-400 font-mono uppercase tracking-wider flex items-center gap-1 mb-2">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i> Selected Stack
+                    </span>
+                    <p class="text-sm text-gray-300">
+                        <strong>Apple Virtualization Framework:</strong> Native reclamation of precious memory for
+                        side-by-side performance.
+                    </p>
+                </div>
+                <div class="bg-lime-950/10 p-4 rounded-xl border border-lime-500/10 border-dashed">
+                    <span class="text-xs text-lime-500 font-mono uppercase tracking-wider flex items-center gap-1 mb-2">
+                        <i data-lucide="trending-up" class="w-4 h-4"></i> Next-Gen Upgrade
+                    </span>
+                    <p class="text-sm text-gray-400">
+                        <strong>Replacing Docker Desktop with OrbStack</strong> achieves superior resource efficiency and allows for continuous memory footprint reduction.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pillar 3: Agentic System -->
+        <div
+            class="glass-panel neon-border-magenta rounded-2xl p-8 flex flex-col justify-between transition-transform hover:-translate-y-1 duration-300">
+            <div>
+                <div
+                    class="w-14 h-14 rounded-full bg-fuchsia-950 flex items-center justify-center neon-border-magenta mb-6">
+                    <i data-lucide="network" class="w-7 h-7 neon-text-magenta"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-white mb-2">3. Agentic System</h3>
+                <p class="text-sm text-gray-400 mb-4">Requirement: An agentic system that integrates seamlessly with locally running models.</p>
+                <div class="mb-6 space-y-3 bg-red-950/20 p-4 rounded-xl border border-red-500/20">
+                    <span class="text-xs text-red-400 font-mono uppercase tracking-wider flex items-center gap-1">
+                        <i data-lucide="x-circle" class="w-4 h-4"></i> Failed Paths & Dead Ends
+                    </span>
+                    <ul class="text-sm text-gray-400 space-y-2 list-disc list-inside">
+                         <li><strong>oh-my-opencode (Ultrawork-style):</strong> The plugin demanded extremely high token throughput, which overwhelmed local models constrained by limited generation capacity.</li>
+                        <li><strong>Direct OpenCode Execution:</strong> Small models are too lazy, look in wrong places,
+                            and give up immediately upon encountering a first error instead of troubleshooting
+                            workloads.</li>
+                        <li><strong>VS Code + Github Copilot (Local Model):</strong> Attempting to point Github Copilot to a local model was too slow and inefficient; its internal limitations (tool exposure, context systems, and journals) made performance improvements impossible.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="bg-fuchsia-950/20 p-4 rounded-xl border border-fuchsia-500/20">
+                    <span
+                        class="text-xs text-magenta-400 font-mono uppercase tracking-wider flex items-center gap-1 mb-2">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i> Selected Stack
+                    </span>
+                    <p class="text-sm text-gray-300">
+                         <strong>Opencode + OpenAgentsControl:</strong> Agentic design with incremental context discovery and robust
+                         workflow management.
+                    </p>
+                </div>
+                <div class="bg-fuchsia-950/10 p-4 rounded-xl border border-fuchsia-500/10 border-dashed">
+                    <span
+                        class="text-xs text-magenta-500 font-mono uppercase tracking-wider flex items-center gap-1 mb-2">
+                        <i data-lucide="trending-up" class="w-4 h-4"></i> Next-Gen Upgrade
+                    </span>
+                         <p class="text-sm text-gray-400">
+                         Future improvements include exploring advanced context and memory management techniques, seeking enhancing plugins, and implementing mixed-model approaches for optimal task-specific performance.
+</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pillar 4: Tooling Gateway -->
+        <div
+            class="glass-panel neon-border-purple rounded-2xl p-8 flex flex-col justify-between transition-transform hover:-translate-y-1 duration-300">
+            <div>
+                <div
+                    class="w-14 h-14 rounded-full bg-purple-950 flex items-center justify-center neon-border-purple mb-6">
+                    <i data-lucide="workflow" class="w-7 h-7 neon-text-purple"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-white mb-2">4. Tooling Gateway</h3>
+                <p class="text-sm text-gray-400 mb-4">Requirement: The most efficient, extensible, and portable method for interacting with tools.</p>
+                <div class="mb-6 space-y-3 bg-red-950/20 p-4 rounded-xl border border-red-500/20">
+                    <span class="text-xs text-red-400 font-mono uppercase tracking-wider flex items-center gap-1">
+                        <i data-lucide="x-circle" class="w-4 h-4"></i> Failed Paths & Dead Ends
+                    </span>
+                    <ul class="text-sm text-gray-400 space-y-2 list-disc list-inside">
+                        <li><strong>Stock VS Code + Copilot Extension:</strong> Uses a proprietary MCP connection setup, making it difficult to share across multiple agents; migrating for cross-agent support requires significant effort without providing performance gains.</li>
+                        <li><strong>Router Nexus Gateway:</strong> A two-tool approach (search and execute) requires excessive agent labor to understand, is unreliable, and fails to provide significant performance bonuses. It still limits execution to one tool at a time, lacks return value preprocessing, and remains susceptible to context flooding from MCP responses.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="bg-purple-950/20 p-4 rounded-xl border border-purple-500/20">
+                    <span
+                        class="text-xs text-purple-400 font-mono uppercase tracking-wider flex items-center gap-1 mb-2">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i> Selected Stack
+                    </span>
+                    <p class="text-sm text-gray-300">
+                         <strong>Docker MCP Gateway (Code Mode):</strong> Enables progressive tool discovery and effective multi-tool chaining. Allows agents to execute multiple tools in a single run, truncate responses to prevent context flooding, and focus only on relevant results, making complex coding tasks significantly easier.
+                    </p>
+                </div>
+                <div class="bg-purple-950/10 p-4 rounded-xl border border-purple-500/10 border-dashed">
+                    <span
+                        class="text-xs text-purple-500 font-mono uppercase tracking-wider flex items-center gap-1 mb-2">
+                        <i data-lucide="trending-up" class="w-4 h-4"></i> Next-Gen Upgrade
+                    </span>
+                    <p class="text-sm text-gray-400">
+                        <strong>Scaling with more MCPs:</strong> The architecture supports continuous expansion by adding more MCP instances and training agents to interact with them effectively.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- Architecture Diagram -->
+    <section class="max-w-5xl mx-auto px-6 relative z-10">
+        <h2 class="text-3xl font-bold text-center mb-10 font-display neon-text-cyan">System Architecture</h2>
+
+        <div class="glass-panel neon-border-cyan rounded-2xl p-4 md:p-8 overflow-x-auto">
+            <pre class="mermaid flex justify-center">
+C4Deployment
+    title Opencode Agentic System
+    Deployment_Node(host, "Host Machine", "Physical Workstation", "Hardware providing the base environment") {
+        Deployment_Node(devcontainer, "Devcontainer", "Docker", "Isolated development environment") {
+            Container(opencode, "Opencode", "Application", "Main execution logic")
+            Container(mcp_gateway, "Docker MCP Gateway", "Gateway", "Code mode intermediary")
+            Container(serena, "Serena MCP", "Service", "Local MCP instance")
+        }
+        Container(lm_studio, "LM Studio", "Local AI Server", "Runs gemma4-12b (Hardware Accelerated)")
+    }
+    Boundary(external, "External Services") {
+        Container(tavily, "Tavily MCP", "Cloud API")
+        Container(deepwiki, "DeepWiki MCP", "Cloud API")
+        Container(context7, "Context7 MCP", "Cloud API")
+    }
+    Rel(opencode, mcp_gateway, "Uses", "Internal Network")
+    Rel(opencode, lm_studio, "Inference calls", "Localhost")
+    Rel(mcp_gateway, serena, "Routes to", "Internal Network")
+    Rel(mcp_gateway, tavily, "Routes to", "HTTPS")
+    Rel(mcp_gateway, deepwiki, "Routes to", "HTTPS")
+    Rel(mcp_gateway, context7, "Routes to", "HTTPS")
+            </pre>
+        </div>
+    </section>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>
