@@ -8,13 +8,10 @@ permission:
     "**/*": "deny"
     ".opencode/skills/context7/**": "allow"
     ".tmp/external-context/**": "allow"
-  bash:
-    "*": "deny"
-    "curl -s https://context7.com/*": "allow"
-    "jq *": "allow"
-  skill:
-    "*": "deny"
-    "*context7*": "allow"
+  "the_mcp*": deny
+  "the_mcp_code-mode": allow
+  "the_mcp_mcp-exec": allow
+  "the_mcp_code-mode*": allow
   task:
     "*": "deny"
 ---
@@ -31,13 +28,12 @@ permission:
   <rule id="tool_usage">
     ALLOWED: 
     - read: ONLY .opencode/skills/context7/** and .tmp/external-context/**
-    - bash: ONLY curl to context7.com
-    - skill: ONLY context7
+    - mcp: the_mcp
     - grep: ONLY within .tmp/external-context/
-    - webfetch: Any URL
     - write: ONLY to .tmp/external-context/**
     - edit: ONLY .tmp/external-context/**
     - glob: ONLY .opencode/skills/context7/** and .tmp/external-context/**
+
     
     NEVER use: task | todoread | todowrite
     NEVER read: Project files, source code, or any files outside allowed paths
@@ -141,39 +137,54 @@ permission:
   </stage>
 
   <stage id="2" name="FetchDocumentation">
-    <action>Fetch live docs with tech stack context and common pitfalls</action>
+    <action>Fetch live docs using the_mcp via code-mode flow</action>
     <process>
-      **Build context-aware query**:
-      - Base query: User's original question
-      - Add tech stack context: "with {framework}" (e.g., "with Next.js App Router")
-      - Add integration context: "and {other-lib}" (e.g., "and Drizzle ORM")
-      - Add common pitfalls: "common mistakes", "gotchas", "troubleshooting"
+      1. **Code-Mode Activation**: Create/initialize a codemode environment by callting `the_mcp-code-mode` tool with following servers: ["deepwiki", "context7", "tavily"] and name "external-research-sandbox". Read the available tools in the servers you just connected to and understand what you can use for research.
+      2. **Build context-aware script**: Construct a JS script to:
+         - Use `globalThis["askQuestion"]` to ask direct questions about specific repository. Use when you know exact repository name.
+         - Use `globalThis["resolve-library-id"]` to get the correct ID.
+         - Use `globalThis["query-docs"]` (from context7) as the primary source for docs, using an enhanced query that includes tech stack and common pitfalls.
+         - Use `globalThis["tavily_research"]` or `globalThis["tavily_search"]` as the fallback if Context7 results are missing or insufficient.
+      3. **Execution**: Run the `the_mcp_mcp-exec` tool with the `external-research-sandbox` as the script that calls underlying tools.
+      4. **Error Handling**: If execution failed escalate as follows:
+        - correct script errors and retry (up to 2 attempts), split into smaller steps if needed, call `the_mcp_mcp-exec` again with updated script
+        - use different tools in the sandbox (e.g., if `query-docs` fails, try `tavily_research` directly)
+        - if all attempts fail, return error with official docs link and suggest checking cache
       
-      **Example enhanced queries**:
-      - Original: "TanStack Query setup"
-      - Enhanced: "TanStack Query setup with Next.js App Router SSR hydration common mistakes"
+      **Example Logic(multi-step library docs)**:
+      ```javascript
+      const libInfo = globalThis["resolve-library-id"]({
+        libraryName: 'Next.js',
+        query: 'How to set up auth?'
+      });
       
-      - Original: "Drizzle schema"
-      - Enhanced: "Drizzle schema with PostgreSQL modular patterns common pitfalls"
+      let libraryId = libInfo.match(/Selected Library ID:\s*([^\s\n]+)/)?.[1] || libInfo.match(/(\/[a-zA-Z0-9.\-\/]+)/)?.[1];
       
-      **Primary**: Use Context7 API with enhanced query
-      ```bash
-      curl -s "https://context7.com/api/v2/context?libraryId=LIBRARY_ID&query=ENHANCED_QUERY&type=txt"
+      if (!libraryId) return "ERROR: Could not parse ID: " + libInfo;
+      
+      const docs = globalThis["query-docs"]({
+        libraryId: libraryId,
+        query: "TanStack Query setup with Next.js App Router SSR hydration common mistakes"
+      });
+      
+      if (!docs || docs.error) {
+        return globalThis["tavily_research"]({
+          query: "TanStack Query setup with Next.js App Router SSR hydration"
+        });
+      }
+      return docs;
       ```
-      
-      **Fallback**: If Context7 fails→fetch from official docs with multiple URLs
-      ```bash
-      # Fetch main docs
-      webfetch: url="https://official-docs-url.com/main-topic"
-      
-      # Fetch integration docs if tech stack detected
-      webfetch: url="https://official-docs-url.com/integration-{framework}"
-      
-      # Fetch troubleshooting/common issues
-      webfetch: url="https://official-docs-url.com/troubleshooting"
+
+      **Example single-step general search**:
+      ```javascript
+         const searchResults = globalThis["tavily_search"]({
+           query: "Opencode plugins for structured workflow management"
+         });
+
+        return searchResults.slice(0, 5000); // Return first 5000 chars to avoid overload, adjust as needed
       ```
     </process>
-    <checkpoint>Documentation fetched with tech stack context and common pitfalls</checkpoint>
+    <checkpoint>Documentation fetched using the_mcp via code-mode</checkpoint>
   </stage>
 
   <stage id="3" name="FilterRelevant">
@@ -286,7 +297,7 @@ permission:
 ## Error Handling
 
 If Context7 API fails:
-1. Try fallback→Fetch from official docs using `webfetch`
+1. Try fallback→Fetch from official docs using `tavily_research`
 2. Return error with official docs link
 3. Suggest checking `.opencode/context/` for cached docs
 

@@ -38,7 +38,7 @@
     }
   },
   "initializeCommand": "echo \"Here could go a host command\"",
-  "postCreateCommand": "uv sync --dev --all-extras && uv tool install --force huggingface_hub && npm install -g @github/copilot && CONDUCTOR_INSTALL_FORCE=1 curl -sSfL https://aka.ms/conductor/install.sh | sh -s -- --source \"git+https://github.com/microsoft/conductor.git@v0.1.18\" && conductor --version && curl -fsSL https://opencode.ai/install | bash",
+  "postCreateCommand": "bash .devcontainer/setup-dev.sh",
   "remoteUser": "vscode",
   "forwardPorts": [
     8000,
