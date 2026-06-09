@@ -64,3 +64,5 @@ pi_cache/
 
 # CI eval artefacts
 eval_result.json
+secrets/
+.tmp/

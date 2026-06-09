@@ -11,7 +11,13 @@
       "source": "afonsograca/devcontainers-best-practices",
       "sourceType": "github",
       "skillPath": "skills/devcontainers-best-practices/SKILL.md",
-      "computedHash": "b8eae6747b3038e162b6b2b46955c42836502f7e0700fdc13e49e44bae6ad024"
+      "computedHash": "d932a6e54100d035f46222e8409fd4bc19150a59b88ddb8552d5a7d13e397a35"
+    },
+    "docker-patterns": {
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "github",
+      "skillPath": "skills/docker-patterns/SKILL.md",
+      "computedHash": "2750c564c7b600fbbfd44de2c693955c677c18c872d06019fa896ab770c69ed9"
     },
     "prompt-builder": {
       "source": "github/awesome-copilot",

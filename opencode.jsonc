@@ -1,0 +1,69 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    "model": "local/google/gemma-4-12b-qat",
+    "provider": {
+        "local": {
+            "options": {
+                "baseURL": "http://host.docker.internal:1289/v1"
+            },
+            "models": {
+                "google/gemma-4-12b-qat": {
+                    "name": "lmstudio-default"
+                },
+                "google/gemma-4-e4b": {
+                    "name": "lmstudio-fast"
+                },
+                "google/gemma-4-e2b": {
+                    "name": "lmstudio-ultra-fast"
+                }
+            }
+        }
+    },
+    "instructions": [
+        "./.github/instructions/writing-style.instructions.md"
+    ],
+    "permission": {
+        "bash": {
+            "*": "allow",
+            "git *": "deny"
+        },
+        // "devtools_insights_*": "deny",
+        // "devtools_insights_mcp-find": "allow",
+        // "devtools_insights_code-mode": "allow",
+        // "devtools_insights_code-mode-*": "allow"
+    },
+    "plugin": [
+        "opencode-snip@latest",
+        "@tarquinen/opencode-dcp@latest"
+    ],
+    "mcp": {
+        // "remote_tools": {
+        //     "type": "remote",
+        //     "url": "http://nexus:3000/mcp",
+        //     "headers": {
+        //         "Authorization": "Bearer {env:MCP_GATEWAY_AUTH_TOKEN}"
+        //     },
+        // }
+        "the_mcp": {
+            "type": "remote",
+            "url": "http://mcp_gateway:8080/mcp"
+        },
+        // "context7": {
+        //     "type": "remote",
+        //     "url": "https://mcp.context7.com/mcp",
+        //     "headers": {
+        //         "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+        //     },
+        //     "tools": [
+        //         "*"
+        //     ]
+        // },
+        // "deepwiki": {
+        //     "url": "https://mcp.deepwiki.com/mcp",
+        //     "type": "remote",
+        //     "tools": [
+        //         "*"
+        //     ]
+        // }
+    }
+}

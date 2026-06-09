@@ -1,0 +1,26 @@
+workflow:
+  name: shared_data_flow
+  entry_point: get_data
+  input: {}
+
+agents:
+  - name: get_data
+    type: script
+    command: /workspace/workflows/step1.sh
+    output:
+      data_count:
+        type: number
+        description: Field data_count taken from stdout of the script execution
+    routes:
+      - to: process_data
+
+  - name: process_data
+    type: script
+    command: /workspace/workflows/step2.sh
+    args:
+      - "{{ get_data.output.data_count }}"
+    routes:
+      - to: $end
+
+output:
+  final_message: "{{ process_data.output.stdout }}"

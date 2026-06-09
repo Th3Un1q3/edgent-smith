@@ -62,6 +62,9 @@ promote-baseline baseline_id:
 pull-ollama-model:
   bash scripts/pull_ollama_model.sh
 
+oc *ARGS:
+  opencode {{ARGS}}
+
 # Script-backed experiment runner entrypoint: run experiment execution locally with a prompt.
 # This is separate from the `autoresearch experiment` local experiment registry CRUD surface.
 # The prompt is required; additional flags are forwarded to experiment.py.

@@ -1,6 +1,6 @@
 ---
 name: devcontainers-best-practices
-description: Looks up the Development Container spec, devcontainer.json reference, and schema; finds Features and Templates; identifies tools that support devcontainers (VS Code, VS Code-based editors such as Cursor, Zed, Codespaces, DevPod, etc.). Use when editing devcontainer.json, choosing Features or Templates, or when the user asks about dev containers, devcontainer.json, or containers.dev.
+description: Expert reference for the Dev Container ecosystem. Consult this skill whenever the user is setting up a dev container, configuring or debugging devcontainer.json, working in a Docker-based development environment, or asking about dev containers, GitHub Codespaces, DevPod, or Zed — even if they don't say "devcontainer" explicitly. Covers the full Dev Container spec, schema validation, tool-specific behaviors and limitations (VS Code, Cursor, Zed, Codespaces, CodeSandbox, Podman), Features and Templates (choosing, authoring, publishing), lifecycle scripts, environment variables, port forwarding, multi-container setups, and official best practices from containers.dev and devcontainers.github.io. Also use when the user is confused by container behavior that differs between tools, wants to write or publish a custom Feature, or needs to validate or debug a devcontainer.json.
 license: MIT
 metadata:
   author: Afonso Graça

@@ -26,6 +26,27 @@ services:
     networks:
       - edgent-dev
 
+  mcp_gateway:
+    image: docker/mcp-gateway:dind
+    privileged: true
+    env_file:
+      - ../.env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../mcp/catalog.yaml:/mcp/catalog.yaml:ro
+      - ../mcp/docker-config.json:/root/.docker/config.json:ro  
+    command:
+      - --transport=streaming
+      - --catalog=/mcp/catalog.yaml  
+      # - --enable-all-servers  
+      - --port=8080
+      - --secrets=/run/secrets/mcp_creds
+    networks:
+      - edgent-dev
+    secrets:  
+      - mcp_creds
+
   ollama:
     image: ollama/ollama:latest
     ports:
@@ -36,6 +57,7 @@ services:
     networks:
       - edgent-dev
 
+
   jaeger:
     image: cr.jaegertracing.io/jaegertracing/jaeger:2.17.0
     ports:
@@ -45,8 +67,20 @@ services:
     networks:
       - edgent-dev
 
+  serena:
+    image: ghcr.io/oraios/serena:latest
+    command: serena
+    volumes:
+      - ../.:/workspaces/projects/edgent_smith:cached
+    networks:
+      - edgent-dev
+
 networks:
   edgent-dev:
 
 volumes:
   ollama_data:
+
+secrets:  
+  mcp_creds:  
+    file: ../secrets/mcp_creds

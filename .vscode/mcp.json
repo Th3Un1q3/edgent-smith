@@ -10,6 +10,14 @@
 		"deepwiki": {
 			"url": "https://mcp.deepwiki.com/mcp",
 			"type": "http"
+		},
+		"nexus_gateway": {
+			"url": "http://nexus:3000/mcp",
+			"type": "http"
+		},
+		"container-docker": {
+			"url": "http://mcp_gateway:8080/mcp",
+			"type": "http"
 		}
 	},
 	"inputs": []
