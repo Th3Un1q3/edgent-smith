@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenCode Local AI Architecture</title>
+    <title>Opencode Local AI Architecture</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script type="module">
@@ -175,6 +175,15 @@
     </section>
 
     <!-- 4 Pillars Grid -->
+    <div class="text-center mb-16 px-6 relative z-10">
+        <h2 class="text-4xl md:text-6xl font-extrabold font-display neon-text-cyan uppercase tracking-wide">
+            Four Pillars of the System
+        </h2>
+        <p class="text-gray-400 text-base md:text-lg mt-4 max-w-2xl mx-auto font-light">
+            An architectural breakdown of the key elements supporting a fast, reliable, and private local development
+            ecosystem.
+        </p>
+    </div>
     <section class="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-8 mb-20 relative z-10">
 
         <!-- Pillar 1: Local LLM and Backend -->
@@ -192,7 +201,8 @@
                     </span>
                     <ul class="text-sm text-gray-400 space-y-2 list-disc list-inside">
                         <li><strong>Qwen 3.5 27B (Ollama):</strong> Too large, generating only 5 tokens/sec.</li>
-                        <li><strong>Ollama as model runner:</strong> Update Cadence too slow for cutting-edge models.</li>
+                        <li><strong>Ollama as model runner:</strong> Update Cadence too slow for cutting-edge models.
+                        </li>
                         <li><strong>Gemma 4 4B / Small Models:</strong> Lazy, failed complex logic.</li>
                     </ul>
                 </div>
@@ -204,16 +214,18 @@
                         <i data-lucide="check-circle" class="w-4 h-4"></i> Selected Stack
                     </span>
                     <p class="text-sm text-gray-300">
-                         <strong>LM Studio + Gemma 4 12B (QAT):</strong> Provides hardware acceleration for faster generation and leverages the model's inherent intelligence.
+                        <strong>LM Studio + Gemma 4 12B (QAT):</strong> Provides hardware acceleration for faster
+                        generation and leverages the model's inherent intelligence.
                     </p>
                 </div>
                 <div class="bg-cyan-950/10 p-4 rounded-xl border border-cyan-500/10 border-dashed">
                     <span class="text-xs text-cyan-500 font-mono uppercase tracking-wider flex items-center gap-1 mb-2">
                         <i data-lucide="trending-up" class="w-4 h-4"></i> Next-Gen Upgrade
                     </span>
-                     <p class="text-sm text-gray-400">
-                         The next-generation improvement lies in either next-release models or substantial hardware advancements.
-</p>
+                    <p class="text-sm text-gray-400">
+                        The next-generation improvement lies in either next-release models or substantial hardware
+                        advancements.
+                    </p>
                 </div>
             </div>
         </div>
@@ -226,7 +238,8 @@
                     <i data-lucide="hard-drive" class="w-7 h-7 neon-text-lime"></i>
                 </div>
                 <h3 class="text-2xl font-bold text-white mb-2">2. System Resources</h3>
-                <p class="text-sm text-gray-400 mb-4">Requirement: Sufficient resources to keep the host machine performant and responsive.</p>
+                <p class="text-sm text-gray-400 mb-4">Requirement: Sufficient resources to keep the host machine
+                    performant and responsive.</p>
                 <div class="mb-6 space-y-3 bg-red-950/20 p-4 rounded-xl border border-red-500/20">
                     <span class="text-xs text-red-400 font-mono uppercase tracking-wider flex items-center gap-1">
                         <i data-lucide="x-circle" class="w-4 h-4"></i> Failed Paths & Dead Ends
@@ -253,7 +266,8 @@
                         <i data-lucide="trending-up" class="w-4 h-4"></i> Next-Gen Upgrade
                     </span>
                     <p class="text-sm text-gray-400">
-                        <strong>Replacing Docker Desktop with OrbStack</strong> achieves superior resource efficiency and allows for continuous memory footprint reduction.
+                        <strong>Replacing Docker Desktop with OrbStack</strong> achieves superior resource efficiency
+                        and allows for continuous memory footprint reduction.
                     </p>
                 </div>
             </div>
@@ -268,17 +282,21 @@
                     <i data-lucide="network" class="w-7 h-7 neon-text-magenta"></i>
                 </div>
                 <h3 class="text-2xl font-bold text-white mb-2">3. Agentic System</h3>
-                <p class="text-sm text-gray-400 mb-4">Requirement: An agentic system that integrates seamlessly with locally running models.</p>
+                <p class="text-sm text-gray-400 mb-4">Requirement: An agentic system that integrates seamlessly with
+                    locally running models.</p>
                 <div class="mb-6 space-y-3 bg-red-950/20 p-4 rounded-xl border border-red-500/20">
                     <span class="text-xs text-red-400 font-mono uppercase tracking-wider flex items-center gap-1">
                         <i data-lucide="x-circle" class="w-4 h-4"></i> Failed Paths & Dead Ends
                     </span>
                     <ul class="text-sm text-gray-400 space-y-2 list-disc list-inside">
-                         <li><strong>oh-my-opencode (Ultrawork-style):</strong> The plugin demanded extremely high token throughput, which overwhelmed local models constrained by limited generation capacity.</li>
+                        <li><strong>oh-my-opencode (Ultrawork-style):</strong> The plugin demanded extremely high token
+                            throughput, which overwhelmed local models constrained by limited generation capacity.</li>
                         <li><strong>Direct OpenCode Execution:</strong> Small models are too lazy, look in wrong places,
                             and give up immediately upon encountering a first error instead of troubleshooting
                             workloads.</li>
-                        <li><strong>VS Code + Github Copilot (Local Model):</strong> Attempting to point Github Copilot to a local model was too slow and inefficient; its internal limitations (tool exposure, context systems, and journals) made performance improvements impossible.</li>
+                        <li><strong>VS Code + Github Copilot (Local Model):</strong> Attempting to point Github Copilot
+                            to a local model was too slow and inefficient; its internal limitations (tool exposure,
+                            context systems, and journals) made performance improvements impossible.</li>
                     </ul>
                 </div>
             </div>
@@ -290,8 +308,9 @@
                         <i data-lucide="check-circle" class="w-4 h-4"></i> Selected Stack
                     </span>
                     <p class="text-sm text-gray-300">
-                         <strong>Opencode + OpenAgentsControl:</strong> Agentic design with incremental context discovery and robust
-                         workflow management.
+                        <strong>Opencode + OpenAgentsControl:</strong> Agentic design with incremental context discovery
+                        and robust
+                        workflow management.
                     </p>
                 </div>
                 <div class="bg-fuchsia-950/10 p-4 rounded-xl border border-fuchsia-500/10 border-dashed">
@@ -299,9 +318,11 @@
                         class="text-xs text-magenta-500 font-mono uppercase tracking-wider flex items-center gap-1 mb-2">
                         <i data-lucide="trending-up" class="w-4 h-4"></i> Next-Gen Upgrade
                     </span>
-                         <p class="text-sm text-gray-400">
-                         Future improvements include exploring advanced context and memory management techniques, seeking enhancing plugins, and implementing mixed-model approaches for optimal task-specific performance.
-</p>
+                    <p class="text-sm text-gray-400">
+                        Future improvements include exploring advanced context and memory management techniques, seeking
+                        enhancing plugins, and implementing mixed-model approaches for optimal task-specific
+                        performance.
+                    </p>
                 </div>
             </div>
         </div>
@@ -315,14 +336,20 @@
                     <i data-lucide="workflow" class="w-7 h-7 neon-text-purple"></i>
                 </div>
                 <h3 class="text-2xl font-bold text-white mb-2">4. Tooling Gateway</h3>
-                <p class="text-sm text-gray-400 mb-4">Requirement: The most efficient, extensible, and portable method for interacting with tools.</p>
+                <p class="text-sm text-gray-400 mb-4">Requirement: The most efficient, extensible, and portable method
+                    for interacting with tools.</p>
                 <div class="mb-6 space-y-3 bg-red-950/20 p-4 rounded-xl border border-red-500/20">
                     <span class="text-xs text-red-400 font-mono uppercase tracking-wider flex items-center gap-1">
                         <i data-lucide="x-circle" class="w-4 h-4"></i> Failed Paths & Dead Ends
                     </span>
                     <ul class="text-sm text-gray-400 space-y-2 list-disc list-inside">
-                        <li><strong>Stock VS Code + Copilot Extension:</strong> Uses a proprietary MCP connection setup, making it difficult to share across multiple agents; migrating for cross-agent support requires significant effort without providing performance gains.</li>
-                        <li><strong>Router Nexus Gateway:</strong> A two-tool approach (search and execute) requires excessive agent labor to understand, is unreliable, and fails to provide significant performance bonuses. It still limits execution to one tool at a time, lacks return value preprocessing, and remains susceptible to context flooding from MCP responses.</li>
+                        <li><strong>Stock VS Code + Copilot Extension:</strong> Uses a proprietary MCP connection setup,
+                            making it difficult to share across multiple agents; migrating for cross-agent support
+                            requires significant effort without providing performance gains.</li>
+                        <li><strong>Router Nexus Gateway:</strong> A two-tool approach (search and execute) requires
+                            excessive agent labor to understand, is unreliable, and fails to provide significant
+                            performance bonuses. It still limits execution to one tool at a time, lacks return value
+                            preprocessing, and remains susceptible to context flooding from MCP responses.</li>
                     </ul>
                 </div>
             </div>
@@ -334,7 +361,10 @@
                         <i data-lucide="check-circle" class="w-4 h-4"></i> Selected Stack
                     </span>
                     <p class="text-sm text-gray-300">
-                         <strong>Docker MCP Gateway (Code Mode):</strong> Enables progressive tool discovery and effective multi-tool chaining. Allows agents to execute multiple tools in a single run, truncate responses to prevent context flooding, and focus only on relevant results, making complex coding tasks significantly easier.
+                        <strong>Docker MCP Gateway (Code Mode):</strong> Enables progressive tool discovery and
+                        effective multi-tool chaining. Allows agents to execute multiple tools in a single run, truncate
+                        responses to prevent context flooding, and focus only on relevant results, making complex coding
+                        tasks significantly easier.
                     </p>
                 </div>
                 <div class="bg-purple-950/10 p-4 rounded-xl border border-purple-500/10 border-dashed">
@@ -343,7 +373,8 @@
                         <i data-lucide="trending-up" class="w-4 h-4"></i> Next-Gen Upgrade
                     </span>
                     <p class="text-sm text-gray-400">
-                        <strong>Scaling with more MCPs:</strong> The architecture supports continuous expansion by adding more MCP instances and training agents to interact with them effectively.
+                        <strong>Scaling with more MCPs:</strong> The architecture supports continuous expansion by
+                        adding more MCP instances and training agents to interact with them effectively.
                     </p>
                 </div>
             </div>
@@ -353,7 +384,8 @@
 
     <!-- Architecture Diagram -->
     <section class="max-w-5xl mx-auto px-6 relative z-10">
-        <h2 class="text-3xl font-bold text-center mb-10 font-display neon-text-cyan">System Architecture</h2>
+        <h2 class="text-5xl md:text-6xl font-bold text-center mb-10 font-display neon-text-cyan">Four Pillars of the
+            System</h2>
 
         <div class="glass-panel neon-border-cyan rounded-2xl p-4 md:p-8 overflow-x-auto">
             <pre class="mermaid flex justify-center">
