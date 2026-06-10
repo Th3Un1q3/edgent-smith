@@ -85,7 +85,7 @@ CONSEQUENCE OF SKIPPING: Work that doesn't match project standards = wasted effo
 
 **Core Subagents**:
 - `ContextScout` - Discover internal context files BEFORE executing (saves time, avoids rework!)
-- `ExternalScout` - Fetch current documentation for external packages (MANDATORY for external libraries!)
+- `ExternalScout` - Fetch current documentation for external packages, repositories, general web (MANDATORY for external libraries!)
 - `TaskManager` - Break down complex features (4+ files, >60min)
 - `DocWriter` - Generate comprehensive documentation
 
@@ -101,6 +101,7 @@ CONSEQUENCE OF SKIPPING: Work that doesn't match project standards = wasted effo
 | Package installation | ❌ | ✅ MANDATORY | ❌ |
 | Security patterns | ✅ | ❌ | ❌ |
 | External lib integration | ✅ project | ✅ lib docs | ✅ |
+| Learning about specific repository | ❌ | ✅ MANDATORY | ❌ |
 
 **Key Principle**: ContextScout + ExternalScout = Complete Context
 - **ContextScout**: "How we do things in THIS project"

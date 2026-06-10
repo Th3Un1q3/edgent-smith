@@ -8,10 +8,10 @@ permission:
     "**/*": "deny"
     ".opencode/skills/context7/**": "allow"
     ".tmp/external-context/**": "allow"
-  "the_mcp*": deny
-  "the_mcp_code-mode": allow
-  "the_mcp_mcp-exec": allow
-  "the_mcp_code-mode*": allow
+  # "the_mcp*": deny
+  # "the_mcp_code-mode": allow
+  # "the_mcp_mcp-exec": allow
+  # "the_mcp_code-mode*": allow
   task:
     "*": "deny"
 ---
@@ -182,6 +182,15 @@ permission:
          });
 
         return searchResults.slice(0, 5000); // Return first 5000 chars to avoid overload, adjust as needed
+      ```
+
+      **Example direct question about repository**:
+      ```javascript
+      const answer = globalThis["askQuestion"]({
+        repoName: "vercel/next.js",
+        question: "What are the common issues when using TanStack Query with Next.js App Router for SSR hydration, based on recent discussions in the Next.js repository?"
+      });
+      return answer;
       ```
     </process>
     <checkpoint>Documentation fetched using the_mcp via code-mode</checkpoint>
