@@ -7,6 +7,9 @@
                 "baseURL": "http://host.docker.internal:1289/v1"
             },
             "models": {
+                "google/gemma-4-26b-a4b-qat": {
+                    "name": "lmstudio-advanced"
+                },
                 "google/gemma-4-12b-qat": {
                     "name": "lmstudio-default"
                 },
