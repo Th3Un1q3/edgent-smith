@@ -23,50 +23,28 @@
         }
     },
     "instructions": [
-        "./.github/instructions/writing-style.instructions.md"
+        "./.github/instructions/writing-style.instructions.md",
+        "./.github/instructions/mcp-tool-usage.instructions.md"
     ],
     "permission": {
         "bash": {
             "*": "allow",
             "git *": "deny"
         },
-        // "devtools_insights_*": "deny",
-        // "devtools_insights_mcp-find": "allow",
-        // "devtools_insights_code-mode": "allow",
-        // "devtools_insights_code-mode-*": "allow"
+        "the_mcp_*": "deny",
+        "the_mcp_mcp-find": "allow",
+        "the_mcp_code-mode": "allow",
+        "the_mcp_mcp-exec": "allow",
+        "webfetch": "deny"
     },
     "plugin": [
         "opencode-snip@latest",
         "@tarquinen/opencode-dcp@latest"
     ],
     "mcp": {
-        // "remote_tools": {
-        //     "type": "remote",
-        //     "url": "http://nexus:3000/mcp",
-        //     "headers": {
-        //         "Authorization": "Bearer {env:MCP_GATEWAY_AUTH_TOKEN}"
-        //     },
-        // }
         "the_mcp": {
             "type": "remote",
             "url": "http://mcp_gateway:8080/mcp"
         },
-        // "context7": {
-        //     "type": "remote",
-        //     "url": "https://mcp.context7.com/mcp",
-        //     "headers": {
-        //         "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
-        //     },
-        //     "tools": [
-        //         "*"
-        //     ]
-        // },
-        // "deepwiki": {
-        //     "url": "https://mcp.deepwiki.com/mcp",
-        //     "type": "remote",
-        //     "tools": [
-        //         "*"
-        //     ]
-        // }
     }
 }

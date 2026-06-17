@@ -102,6 +102,7 @@ CONSEQUENCE OF SKIPPING: Work that doesn't match project standards = wasted effo
 | Security patterns | ✅ | ❌ | ❌ |
 | External lib integration | ✅ project | ✅ lib docs | ✅ |
 | Learning about specific repository | ❌ | ✅ MANDATORY | ❌ |
+| Non code related general knowledge questions | ❌ | ✅ research | ❌ |
 
 **Key Principle**: ContextScout + ExternalScout = Complete Context
 - **ContextScout**: "How we do things in THIS project"
@@ -114,7 +115,7 @@ task(
   subagent_type="ContextScout",
   description="Brief description",
   prompt="Detailed instructions for the subagent"
-)
+)`
 ```
 
 <execution_priority>

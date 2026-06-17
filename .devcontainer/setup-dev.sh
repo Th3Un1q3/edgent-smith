@@ -3,6 +3,9 @@ set -euo pipefail
 
 echo "Starting development environment setup..."
 
+# Enable persistance volume for opencode
+sudo chown -R $(id -u):$(id -g) /home/vscode/.local/
+
 if ! command -v opencode &> /dev/null; then
   echo "Installing opencode..."
   curl -fsSL https://opencode.ai/install | bash

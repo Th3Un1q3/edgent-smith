@@ -1,8 +1,9 @@
 name: local
 registry:
-  tavily:  
+  tavily:
     type: remote
     description: "Provides seamless interaction with the tavily-search and tavily-extract tools, real-time web search capabilities through the tavily-search tool and Intelligent data extraction from web pages via the tavily-extract tool."  
+    title: "Tavily Search, Exract, Research MCP"
     remote:  
       url: "https://mcp.tavily.com/mcp?tavilyApiKey=${TAVILY_API_KEY}"  
       transport_type: http
@@ -11,9 +12,10 @@ registry:
         env: "TAVILY_API_TOKEN"               # name used in ${...} expansion  
         example: "your_tavily_api_token_here"
 
-  deepwiki:  
+  deepwiki:
     type: remote  
-    description: "Allows effectively explore github repositories to learn about libraries, frameworks, and tools."  
+    description: "Explore GitHub repositories to learn about libraries, frameworks, and tools."  
+    title: "DeepWiki - Repository insights and research MCP"
     remote:  
       url: "https://mcp.deepwiki.com/mcp"  
       transport_type: http
@@ -21,6 +23,7 @@ registry:
   context7:  
     type: remote  
     description: "Provides access to the Context7 API, allows access documentation for libraries, websites and software."  
+    title: "Context7 - Documentation lookup and research MCP"
     remote:  
       url: "https://mcp.context7.com/mcp"  
       transport_type: http

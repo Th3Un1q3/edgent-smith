@@ -5,6 +5,7 @@ services:
     image: mcr.microsoft.com/devcontainers/base:noble
     volumes:
       - ..:/workspace:cached
+      - opencode_data:/home/vscode/.local/share/opencode
     command: sleep infinity
     env_file:
       - ../.env
@@ -46,7 +47,10 @@ services:
       - edgent-dev
     secrets:  
       - mcp_creds
-
+    develop:
+      watch:
+        - path: ../mcp
+          action: rebuild
   ollama:
     image: ollama/ollama:latest
     ports:
@@ -80,6 +84,7 @@ networks:
 
 volumes:
   ollama_data:
+  opencode_data:
 
 secrets:  
   mcp_creds:  
