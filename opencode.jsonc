@@ -29,7 +29,7 @@
     "permission": {
         "bash": {
             "*": "allow",
-            "git *": "deny"
+            "git *": "ask"
         },
         "the_mcp_*": "deny",
         "the_mcp_mcp-find": "allow",
