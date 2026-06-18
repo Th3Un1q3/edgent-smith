@@ -31,6 +31,7 @@
         "bash": {
             "*": "allow",
             "git *": "ask",
+            "git diff *": "allow",
             "just approve *": "ask"
         },
         "the_mcp_*": "deny",
