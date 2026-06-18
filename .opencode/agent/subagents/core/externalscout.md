@@ -134,71 +134,13 @@ permission:
   </stage>
   
   <stage id="2" name="FetchDocumentation">
-    <action>Fetch live docs using the_mcp via code-mode flow</action>
+    <action>Fetch live docs using code-mode-mcp-orchestration skill</action>
     <process>
-      ![TODO]: refer to the skill rather than copy the whole Process.
-      1. **Code-Mode Activation**: Create/initialize a codemode environment by callting `the_mcp-code-mode` tool with following servers: ["deepwiki", "context7", "tavily"] and name "external-research-sandbox". Read the available tools in the servers you just connected to and understand what you can use for research.
-      2. **Build context-aware script**: Construct a JS script to:
-         - Use `globalThis["askQuestion"]` to ask direct questions about specific repository. Use when you know exact repository name.
-         - Use `globalThis["resolve-library-id"]` to get the correct ID.
-         - Use `globalThis["query-docs"]` (from context7) as the primary source for docs, using an enhanced query that includes tech stack and common pitfalls.
-         - Use `globalThis["tavily_research"]` or `globalThis["tavily_search"]` as the fallback if Context7 results are missing or insufficient.
-       3. **Execution**: Run the `the_mcp_mcp-exec` tool with the `external-research-sandbox` as the script that calls underlying tools.
-       4. **Error Handling**: If execution failed escalate as follows:
-         - correct script errors and retry (up to 2 attempts), split into smaller steps if needed, call `the_mcp_mcp-exec` again with updated script
-         - use different tools in the sandbox (e.g., if `query-docs` fails, try `tavily_search` to find repository directly)
-         - if all attempts fail, return error with official docs link and suggest checking cache
-       
-       **Example Logic(multi-step library docs)**:
-       ```javascript
-       const libInfo = globalThis["resolve-library-id"]({
-         libraryName: 'Next.js',
-         query: 'How to set up auth?'
-       });
-       
-       let libraryId = libInfo.match(/Selected Library ID:\s*([^\s\n]+)/)?.[1] || libInfo.match(/(\/[a-zA-Z0-9.\-\/]+)/)?.[1];
-       
-       if (!libraryId) return "ERROR: Could not parse ID: " + libInfo;
-       
-       const docs = globalThis["query-docs"]({
-         libraryId: libraryId,
-         query: "TanStack Query setup with Next.js App Router SSR hydration common mistakes"
-       });
-       
-       if (!docs || docs.error) {
-         return `
-           <tools_result>
-           <error>Context7 query failed: ${docs?.error || "No results"}</error>
-           </tools_result>
-           <libInfo>
-           ${libInfo}
-           </libInfo>
-           <suggestion>
-             ${libInfo.includes('repo') ? "Use codemode with deepwiki server, execute askQuestion tool to ask about the repository directly." : "Use codemode with tavily server, execute tavily_search to find relevant repositories and discussions."}
-           </suggestion>
-         `;
-       }
-       return docs;
-       ```
-       
-       **Example single-step general search**:
-       ```javascript
-          const searchResults = globalThis["tavily_search"]({
-            query: "Opencode plugins for structured workflow management"
-          });
-          
-          return searchResults.slice(0, 5000); // Return first 5000 chars to avoid overload, adjust as needed
-       ```
-       
-       **Example direct question about repository**:
-       ```javascript
-       const answer = globalThis["askQuestion"]({
-         repoName: "vercel/next.js",
-         question: "What are the common issues when using TanStack Query with Next.js App Router for SSR hydration, based on recent discussions in the Next.js repository?"
-       });
-       return answer;
-       ```
-       </process>
+      1. Load the `code-mode-mcp-orchestration` skill.
+      2. Identify the most relevant workflow from the skill's documentation for fetching external documentation or researching library information.
+      3. Follow the chosen workflow to retrieve the required information.
+      4. Handle any errors or failures by following the skill's guidelines.
+    </process>
        <checkpoint>Documentation fetched using the_mcp via code-mode</checkpoint>
   </stage>
   

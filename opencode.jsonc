@@ -24,12 +24,14 @@
     },
     "instructions": [
         "./.github/instructions/writing-style.instructions.md",
-        "./.github/instructions/mcp-tool-usage.instructions.md"
+        "./.github/instructions/mcp-tool-usage.instructions.md",
+        "./.github/instructions/human-approval.instructions.md"
     ],
     "permission": {
         "bash": {
             "*": "allow",
-            "git *": "ask"
+            "git *": "ask",
+            "just approve *": "ask"
         },
         "the_mcp_*": "deny",
         "the_mcp_mcp-find": "allow",

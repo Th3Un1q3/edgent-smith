@@ -2,63 +2,68 @@
 
 Follow this workflow to create and execute multi-tool JavaScript scripts using the `code_mode` environment.
 
-## Steps
+Make sure to perform servers discovery and code mode activation steps in the [Setup workflow](./setup.md) before following this workflow.
 
-1. **Tool Registration**: Ensure all required MCP servers are added to the session (see `workflows/setup-and-discover.md`).
-2. **Initialize Code-Mode**: Create the multi-tool scripting tool using `code_mode`.
-   - Provide a unique name and a list of active server names.
-   - *Example*: `code_mode(name: "web-research", servers: ["tavily", "context7"])`
-3. **Identify Tool Handles**: Note that tools appear on `globalThis` with a hyphenated name based on the server name and tool name.
-   - *Example*: Server `context7` tool `query-docs` becomes `globalThis["query-docs"]`.
-4. **Write Script**: Construct a synchronous JavaScript string.
-   - **Rule**: Do NOT use `async` or `await`.
-   - **Rule**: Variables do not persist between script calls.
-   - **Rule**: Use `globalThis` to access tools.
-5. **Execute Script**: Call the generated tool with the `{ "script": "..." }` JSON object.
+## Rules
+
+- Do NOT use `async` or `await`. All scripts must be synchronous.
+- Variables declared in one script execution do not persist to the next. Each `mcp_exec` call runs in a fresh environment.
+- Use `globalThis` to access tools having hyphenated names. For example, a tool named `tavily-search` would be accessed as `globalThis["tavily-search"](params)`, while a tool named `search` can be called directly as `search(params)`.
+
+## Errors Handling
+
+- ReferenceError for a tool name indicates the tool is not provided by any server, used to activate `code_mode`. Verify tool names match names returned when activating code mode, and that the correct servers are included in the `servers` list in the `code_mode` call.
+- Setup Error handlers on every tool call and processing stage, ensure to exit early, and provide information required to troubleshoot the issue. (if parsing failed, output raw response, and previous steps responses, to understand what was supplied to parsing, and what exactly the error was)
+- Perform multiple smaller mcp_exec calls with intermediate outputs if needed, rather than one big script, to simplify debugging and error handling.
+
 
 ## Examples
 
-**Scenario**: Find a library ID and fetch its documentation.
+**Scenario**: Defensive scripting with error handling and response validation.
 
 ```javascript
-// Step 1: Initialize (done in your session)
-code_mode(name: "doc-fetcher", servers: ["context7"])
+const parseJsonWithErrorHandling = (jsonString, toolName) => {
+  try {
+    return JSON.parse(jsonString);
+  } catch (error) {
+    throw new Error(`ERROR parsing JSON response from ${toolName}: ${error.message}. Raw response: ${jsonString}`);
+  }
+};
 
-// Step 2: Execute
-call code-mode-doc-fetcher({
-  script: `
-    const resolveLibId = globalThis["resolve-library-id"];
-    const queryDocs   = globalThis["query-docs"];
+const catchToolError = (toolName) => () => (error) => {
+  return `ERROR from ${toolName} tool call: ${error.message}`;
+};
 
-    const libInfo = resolveLibId({
-      libraryName: 'Next.js',
-      query: 'How to set up auth?'
-    });
+try {
+  const toolResponse = globalThis['hyphen-tool-name']({ query: "my  query" });
+} catch (error) {
+  return catchToolError('hyphen-tool-name')(error);
+}
 
-    let libraryId = null;
-    const idMatch = libInfo.match(/Selected Library ID:\s*([^\s\n]+)/);
-    if (idMatch) {
-      libraryId = idMatch[1];
-    } else {
-      const fallback = libInfo.match(/(\/[a-zA-Z0-9.\-\/]+)/);
-      if (fallback) libraryId = fallback[1];
-    }
+const parsedResponse = parseJsonWithErrorHandling(toolResponse, 'hyphen-tool-name');
 
-    if (!libraryId) return "ERROR: Could not parse ID: " + libInfo;
+if(!parsedResponse.expectedField) {
+  return "ERROR: Expected field 'expectedField' is missing in the tool response. Raw response: " + toolResponse;
+}
 
-    const docs = queryDocs({
-      libraryId: libraryId,
-      query: 'How to set up auth?'
-    });
+try {
+  const anotherToolResponse = anotherTool(parsedResponse.someField);
+} catch (error) {
+  return catchToolError('anotherTool')(error);
+}
 
-    return docs;
-  `
-});
+if(!anotherToolResponse) {
+  return "ERROR: anotherTool returned an empty response.";
+}
+
+const parsedAnotherToolResponse = parseJsonWithErrorHandling(anotherToolResponse, 'anotherTool');
+
+if(parsedAnotherToolResponse.length === 0) {
+  return "ERROR: anotherTool returned an empty array response. Raw response: " + anotherToolResponse;
+}
+
+const finalShortResult = parsedAnotherToolResponse.filter(item => item.is_active).map(item => item.result);
+
+return finalShortResult;
 ```
 
-## Clarification Triggers
-
-Ask the user before proceeding if:
-- The script is returning a `ReferenceError` for a tool name (ensure the tool is in the `servers` list in the `code_mode` call).
-- The user is trying to use `await` or `async` (remind them that scripts must be synchronous).
-- The user wants to persist variables between multiple script executions (explain that they must be combined into a single script).

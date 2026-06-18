@@ -30,23 +30,20 @@ services:
   mcp_gateway:
     image: docker/mcp-gateway:dind
     privileged: true
-    env_file:
-      - ../.env
     ports:
       - "8080:8080"
     volumes:
       - ../mcp/catalog.yaml:/mcp/catalog.yaml:ro
-      - ../mcp/docker-config.json:/root/.docker/config.json:ro  
+      - ../mcp/docker-config.json:/root/.docker/config.json:ro
+      - ../secrets/mcp_creds:/secrets/mcp_creds:ro
     command:
       - --transport=streaming
       - --catalog=/mcp/catalog.yaml  
       # - --enable-all-servers  
       - --port=8080
-      - --secrets=/run/secrets/mcp_creds
+      - --secrets=/secrets/mcp_creds
     networks:
       - edgent-dev
-    secrets:  
-      - mcp_creds
     develop:
       watch:
         - path: ../mcp
@@ -86,6 +83,3 @@ volumes:
   ollama_data:
   opencode_data:
 
-secrets:  
-  mcp_creds:  
-    file: ../secrets/mcp_creds

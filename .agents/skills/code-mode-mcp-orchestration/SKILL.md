@@ -1,7 +1,7 @@
 ---
 name: code-mode-mcp-orchestration
 description: >
- Allows to effectively retrieve information about libraries, frameworks, tools, facts, and perfor/m web searches. NEVER call any tool starting with "the_mcp" untill you have loaded this skill.
+  Effectively retrieve information about libraries, frameworks, tools, facts, and perform web searches. NEVER call any tool starting with "the_mcp" untill you have loaded this skill.
 license: MIT
 compatibility: Universal
 metadata:
@@ -12,6 +12,8 @@ metadata:
 # Code-Mode MCP Orchestration
 
 This skill provides a structured workflow for leveraging external MCP servers (like Tavily, DeepWiki, or Context7) via the `code-mode` multi-tool scripting environment. It covers the entire lifecycle from initial discovery to final execution.
+
+The code-mode is provided by docker mcp gateway. All the tools prefixed with "the_mcp" are hosted by the docker mcp gateway.
 
 ## When to Use This Skill
 
@@ -31,7 +33,7 @@ Do not use this skill for:
 
 1. **Discover Servers**: `mcp-find({"query": "mcp"})` $\rightarrow$ finds all servers matching the query.
 2. **Initialize Sandbox**: `code-mode({"name": "web-research", "servers": ["tavily"]})` creates an environment with all tools from the specified servers. Created environment can be used multiple times.
-3. **Execute Tools**: Call `mcp-exec({"name": "web-research"})` with the name "web-research"(from step 2) that and script:
+3. **Execute Tools**: Call `mcp-exec({"name": "code-mode_web-research"})` with the name "web-research"(from step 2) that and script:
 ```javascript
 // Map tools having hyphens in their
 
@@ -52,6 +54,12 @@ return {
 }
 ```
 
+## Principles
+
+- Use descriptive task-related name when activating code-mode sandbox.
+- Use minimal set of servers for every sandbox.
+- Combine tools in chains within the script, rather than activating multiple sandboxes, to save context and improve performance.
+- Prefer to handle errors within the script, and return error messages, rather than letting the whole script crash without explanation.
 
 ## Task Routing Table
 
@@ -59,7 +67,6 @@ Load only the file relevant to the current task.
 
 | I want to... | File |
 |---|---|
-| Load MCP tools relevant to the task, learn tools available and create environment with tools | [workflows/setup-and-discover.md](./workflows/setup-and-discover.md) |
-| Execute tools effectively | [workflows/scripting-workflow.md](./workflows/scripting-workflow.md) |
-| See a list of available MCP servers | [references/mcp-catalog.md](./references/mcp-catalog.md) |
-| Understand `code_mode` API and rules | [references/code-mode-api.md](./references/code-mode-api.md) |
+| Find mcp servers and load MCP tools relevant to the task, learn tools available and create environment with tools | [workflows/setup.md](./workflows/setup.md) |
+| Effectively script in code mode | [workflows/scripting-workflow.md](./workflows/scripting-workflow.md) |
+| Handle a complex task with no ready-made recipe | [workflows/refinement-discovery.md](./workflows/refinement-discovery.md) |

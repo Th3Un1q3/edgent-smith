@@ -86,6 +86,10 @@ alias experiment-loop := run-experiment-loop
 run-experiment-loop *ARGS:
   {{UV}} run python scripts/experiment.py local-loop {{ARGS}}
 
+# AI Approval gate
+approve prompt:
+  echo "Approved to perform {{prompt}}"
+
 # Transform vscode mcp config to copilot cli mcp config.
 dev-sync-mcp:
   scripts/transform_mcp_json.sh

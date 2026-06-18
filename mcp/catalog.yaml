@@ -27,9 +27,24 @@ registry:
     remote:  
       url: "https://mcp.context7.com/mcp"  
       transport_type: http
-    headers:
-      Authorization: "Bearer ${CONTEXT7_API_KEY}"
+      headers:
+        Authorization: "Bearer ${CONTEXT7_API_KEY}"
     secrets:
       - name: "context7.api_key"   # key used in .env file  
         env: "CONTEXT7_API_KEY"               # name used in ${...} expansion  
         example: "your_context7_api_key_here"
+
+  github:
+    type: remote
+    description: "Provides read-only access to GitHub repositories for information gathering(issues, pull requests, commits, files, etc.)."
+    title: "GitHub - Read-Only MCP"
+    remote:
+      url: "https://api.githubcopilot.com/mcp/x/all/readonly"
+      transport_type: http
+      headers:
+        Authorization: "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"
+    secrets:
+      - name: "github.token"   # key used in .env file
+        env: "GITHUB_PERSONAL_ACCESS_TOKEN"               # name used in ${...} expansion
+        example: "your_github_personal_access_token_here"
+
