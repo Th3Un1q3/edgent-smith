@@ -47,7 +47,7 @@ Recent git commits:
 1. **Analyze Intent**:
    - Based on the outputs above, identify the primary intent of the changes (e.g., new feature, bug fix, refactor, documentation, chore).
    - Group changes into logical categories.
-   - Check specific files diffs byif needed to clarify intent. `git diff --staged --patch-with-stat <file> | head -n 20`
+   - Check specific files diffs if needed to clarify intent. `git diff --staged --patch-with-stat <file> | head -n 20` (skip staged flag to see unstaged changes).
 
 2. **Propose Commit**:
    - Present a summary of the identified changes.
@@ -55,8 +55,8 @@ Recent git commits:
    - If multiple intents are detected, ask the user to pick the primary one or suggest a multi-part commit.
 
 3. **Execute Commit**:
-   - Once the user confirms the message:
-     - Run `git add . && git commit -am "{Proposed Message}"` to stage all changes and commit with the proposed message.
+   - Run `git add . && git commit -am "{Proposed Message}"` to stage all changes and commit with the proposed message.
+   - Output the final commit message and a summary of the changes included in the commit.
 
 ## Standards
 
@@ -82,6 +82,7 @@ Recent git commits:
 - **MVI**: Keep the summary brief and scannable.
 
 ## Example Output
+
 ```
 Changes detected:
 - Modified auth.py to include JWT verification
@@ -90,8 +91,6 @@ Changes detected:
 
 Proposed Commit: 
 feat(auth): implement JWT verification and update docs
-
-> [perform add and commit]
 ```
 
 ## Example of commit massages:

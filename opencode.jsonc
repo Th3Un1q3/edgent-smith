@@ -42,7 +42,8 @@
     },
     "plugin": [
         "opencode-snip@latest",
-        "@tarquinen/opencode-dcp@latest"
+        "@tarquinen/opencode-dcp@latest",
+        "@mohak34/opencode-notifier@latest"
     ],
     "mcp": {
         "the_mcp": {
