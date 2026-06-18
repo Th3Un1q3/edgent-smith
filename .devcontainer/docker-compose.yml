@@ -35,19 +35,20 @@ services:
     volumes:
       - ../mcp/catalog.yaml:/mcp/catalog.yaml:ro
       - ../mcp/docker-config.json:/root/.docker/config.json:ro
-      - ../secrets/mcp_creds:/secrets/mcp_creds:ro
+    secrets:
+      - mcp_creds
     command:
       - --transport=streaming
       - --catalog=/mcp/catalog.yaml  
       # - --enable-all-servers  
       - --port=8080
-      - --secrets=/secrets/mcp_creds
+      - --secrets=/run/secrets/mcp_creds
     networks:
       - edgent-dev
     develop:
       watch:
         - path: ../mcp
-          action: rebuild
+          action: restart
   ollama:
     image: ollama/ollama:latest
     ports:
@@ -83,3 +84,6 @@ volumes:
   ollama_data:
   opencode_data:
 
+secrets:
+  mcp_creds:
+    file: ../secrets/mcp_creds

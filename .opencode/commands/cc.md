@@ -43,9 +43,7 @@ Unstaged changes:
 
 3. **Execute Commit**:
    - Once the user confirms the message:
-     - Run `git add .`
-     - Run `git commit -m "{Proposed Message}"`
-
+     - Run `git add . && git commit -am "{Proposed Message}"` to stage all changes and commit with the proposed message.
 ## Standards
 - **Conventional Commits**: Use types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `build`, `ci`, `break`.
 - **Intent-Oriented**: The message should describe *why* the change was made, not just *what* was changed.
