@@ -31,7 +31,7 @@ Follow this workflow to explore new capabilities, identify optimal tool combinat
    - *Goal*: Create a functional, multi-step automated workflow.
 
 5. **Recipe Capture**
-   - Once the script works reliably, document the tool combination and the final script, place the recipie under `.agents/skills/code-mode-mcp-orchestration/recipes/` directory with a descriptive name.
+   - Once the script works reliably, document the tool combination and the final script, place the recipie under `.agents/skills/mcp-usage/recipes/` directory with a descriptive name.
    - Reference the recipe in the skill documentation, and link to it in the task routing table for future reuse.
    - *Goal*: Build a library of proven strategies for complex tasks, reducing future discovery time.
    - This "Refined Recipe" can be used as a template for similar future requests.

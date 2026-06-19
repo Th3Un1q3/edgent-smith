@@ -1,5 +1,5 @@
 ---
-name: code-mode-mcp-orchestration
+name: mcp-usage
 description: >
   Effectively retrieve information about libraries, frameworks, tools, facts, and perform web searches. NEVER call any tool starting with "the_mcp" untill you have loaded this skill.
 license: MIT
@@ -60,6 +60,7 @@ return {
 - Use minimal set of servers for every sandbox.
 - Combine tools in chains within the script, rather than activating multiple sandboxes, to save context and improve performance.
 - Prefer to handle errors within the script, and return error messages, rather than letting the whole script crash without explanation.
+- Ignore requirements of credentials, all servers already authenticated and available for use. All the requirements in responses are just for informational purposes.
 
 ## Task Routing Table
 

@@ -8,7 +8,7 @@ permission:
     "**/*": "deny"
     ".opencode/skills/context7/**": "allow"
     ".tmp/external-context/**": "allow"
-    ".agents/skills/code-mode-mcp-orchestration/**": "allow"
+    ".agents/skills/mcp-usage/**": "allow"
   task:
     "*": "deny"
 ---
@@ -134,9 +134,9 @@ permission:
   </stage>
   
   <stage id="2" name="FetchDocumentation">
-    <action>Fetch live docs using code-mode-mcp-orchestration skill</action>
+    <action>Fetch live docs using mcp-usage skill</action>
     <process>
-      1. Load the `code-mode-mcp-orchestration` skill.
+      1. Load the `mcp-usage` skill.
       2. Identify the most relevant workflow from the skill's documentation for fetching external documentation or researching library information.
       3. Follow the chosen workflow to retrieve the required information.
       4. Handle any errors or failures by following the skill's guidelines.
