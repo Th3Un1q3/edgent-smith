@@ -64,5 +64,10 @@ pi_cache/
 
 # CI eval artefacts
 eval_result.json
+
+# MCP configurations (may contain sensitive information)
 secrets/
+
+# Opencode artifacts
 .tmp/
+.logs/
