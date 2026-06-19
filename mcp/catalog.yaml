@@ -9,7 +9,7 @@ registry:
       transport_type: http
     secrets:  
       - name: "tavily.api_token"   # key used in .env file  
-        env: "TAVILY_API_TOKEN"               # name used in ${...} expansion  
+        env: "TAVILY_API_KEY"               # name used in ${...} expansion  
         example: "your_tavily_api_token_here"
 
   deepwiki:
@@ -17,7 +17,7 @@ registry:
     description: "Explore GitHub repositories to learn about libraries, frameworks, and tools."  
     title: "DeepWiki - Repository insights and research MCP"
     remote:  
-      url: "https://mcp.deepwiki.com/mcp"  
+      url: "https://mcp.deepwiki.com/mcp"
       transport_type: http
 
   context7:  
