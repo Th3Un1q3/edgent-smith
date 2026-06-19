@@ -71,3 +71,4 @@ Load only the file relevant to the current task.
 | Find mcp servers and load MCP tools relevant to the task, learn tools available and create environment with tools | [workflows/setup.md](./workflows/setup.md) |
 | Effectively script in code mode | [workflows/scripting-workflow.md](./workflows/scripting-workflow.md) |
 | Handle a complex task with no ready-made recipe | [workflows/refinement-discovery.md](./workflows/refinement-discovery.md) |
+| Recepie: Get GitHub repository insights | [workflows/github_repository_insights.md](./workflows/github_repository_insights.md) |
