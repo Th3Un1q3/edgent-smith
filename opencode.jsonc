@@ -41,9 +41,9 @@
         "webfetch": "deny"
     },
     "plugin": [
-        "opencode-snip@latest",
-        "@tarquinen/opencode-dcp@latest",
-        "@mohak34/opencode-notifier@latest",
+        // "opencode-snip@latest",
+        // "@tarquinen/opencode-dcp@latest",
+        // "@mohak34/opencode-notifier@latest",
         "@spoons-and-mirrors/subtask2@latest"
     ],
     "mcp": {
