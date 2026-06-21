@@ -11,6 +11,11 @@ if ! command -v opencode &> /dev/null; then
   curl -fsSL https://opencode.ai/install | bash
 fi
 
+# Install codegraph cli(required for MCP)
+
+curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh
+codegraph install --target=auto --location=local --yes
+
 echo "Running uv sync..."
 uv sync --dev --all-extras
 

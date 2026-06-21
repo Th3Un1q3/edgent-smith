@@ -11,7 +11,12 @@
                     "name": "lmstudio-advanced"
                 },
                 "google/gemma-4-12b-qat": {
-                    "name": "lmstudio-default"
+                    "name": "lmstudio-default",
+                    "limit": {
+                        "context": 256000,
+                        "output": 65536
+                    }  
+                    
                 },
                 "google/gemma-4-e4b": {
                     "name": "lmstudio-fast"
@@ -42,14 +47,24 @@
     },
     "plugin": [
         // "opencode-snip@latest",
-        // "@tarquinen/opencode-dcp@latest",
-        // "@mohak34/opencode-notifier@latest",
-        "@spoons-and-mirrors/subtask2@latest"
+        "@tarquinen/opencode-dcp@latest",
+        "@mohak34/opencode-notifier@latest",
+        "@spoons-and-mirrors/subtask2@latest",
+        "oh-my-opencode@latest"
     ],
     "mcp": {
         "the_mcp": {
             "type": "remote",
             "url": "http://mcp_gateway:8080/mcp"
+        },
+        "codegraph": {
+          "type": "local",
+          "command": [
+            "codegraph",
+            "serve",
+            "--mcp"
+          ],
+          "enabled": true
         },
     }
 }

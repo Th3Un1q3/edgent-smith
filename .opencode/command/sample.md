@@ -1,7 +1,6 @@
 ---
 description: "Skill resolution"
 agent: build
-subtask: true
 return: Create concise version of the workflow with only the relevant steps and details for the current task
 ---
 Find the skills relevant to the task.
