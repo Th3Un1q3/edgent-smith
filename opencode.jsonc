@@ -1,6 +1,6 @@
 {
     "$schema": "https://opencode.ai/config.json",
-    "model": "local/google/gemma-4-12b-qat",
+    "model": "local/qwen3.5-9b-mtp",
     "provider": {
         "local": {
             "options": {
@@ -8,15 +8,17 @@
             },
             "models": {
                 "google/gemma-4-26b-a4b-qat": {
+                    // "qwen/qwen3.6-35b-a3b": {
                     "name": "lmstudio-advanced"
                 },
-                "google/gemma-4-12b-qat": {
+                // "google/gemma-4-12b-qat": {
+                // "qwen/qwen3.5-9b": {
+                "qwen3.5-9b-mtp": {
                     "name": "lmstudio-default",
                     "limit": {
                         "context": 256000,
                         "output": 65536
-                    }  
-                    
+                    }
                 },
                 "google/gemma-4-e4b": {
                     "name": "lmstudio-fast"
@@ -42,15 +44,14 @@
         "the_mcp_*": "deny",
         "the_mcp_mcp-find": "allow",
         "the_mcp_code-mode": "allow",
-        "the_mcp_mcp-exec": "allow",
-        "webfetch": "deny"
+        "the_mcp_mcp-exec": "allow"
     },
     "plugin": [
         // "opencode-snip@latest",
         "@tarquinen/opencode-dcp@latest",
         "@mohak34/opencode-notifier@latest",
-        "@spoons-and-mirrors/subtask2@latest",
-        "oh-my-opencode@latest"
+        "@spoons-and-mirrors/subtask2@latest"
+        // "oh-my-opencode@latest"
     ],
     "mcp": {
         "the_mcp": {
@@ -58,13 +59,22 @@
             "url": "http://mcp_gateway:8080/mcp"
         },
         "codegraph": {
-          "type": "local",
-          "command": [
-            "codegraph",
-            "serve",
-            "--mcp"
-          ],
-          "enabled": true
+            "type": "local",
+            "command": [
+                "codegraph",
+                "serve",
+                "--mcp"
+            ],
+            "enabled": true
         },
+        // "codegraph": {
+        //     "type": "local",
+        //     "command": [
+        //         "codegraph",
+        //         "serve",
+        //         "--mcp"
+        //     ],
+        //     "enabled": true
+        // },
     }
 }

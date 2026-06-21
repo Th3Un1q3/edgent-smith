@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
+
+  "disabled_skills": [
+    "playwright",
+    "playwright-cli",
+    "agent-browser",
+    "dev-browser",
+    "git-master",
+    "frontend"
+  ],
+
+  "disabled_mcps": [
+    "websearch",
+    "context7",
+    "grep_app",
+    "lsp"
+  ],
+  "experimental": {
+    "disable_omo_env": true
+  }
+}

@@ -21,10 +21,10 @@
         "ms-python.python",
         "ms-python.mypy-type-checker",
         "charliermarsh.ruff",
-        "GitHub.copilot",
-        "GitHub.copilot-chat",
-        "ms-vscode.vscode-chat-customizations-evaluations",
-        "johnny-zhao.oai-compatible-copilot",
+        // "GitHub.copilot",
+        // "GitHub.copilot-chat",
+        // "ms-vscode.vscode-chat-customizations-evaluations",
+        // "johnny-zhao.oai-compatible-copilot",
         "tamasfe.even-better-toml"
       ],
       "settings": {

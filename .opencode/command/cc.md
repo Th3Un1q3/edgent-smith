@@ -1,7 +1,7 @@
 ---
 description: "Automatically generates and performs a conventional commit based on all local changes (staged and unstaged)."
 agent: build
-subtask: true
+# subtask: true
 return:
  - "Proceed"
 ---
