@@ -1,31 +1,14 @@
-<!-- Context: project-intelligence/nav | Priority: high | Version: 1.0 | Updated: 2025-01-12 -->
+<!-- Context: project-intelligence/navigation | Priority: critical | Version: 1.0 | Updated: 2026-06-22 -->
 
-# Project Intelligence
+# Project Intelligence Navigation
 
-> Start here for quick project understanding. These files bridge business and technical domains.
+| File | Description | Priority |
+|------|-------------|----------|
+| technical-domain.md | Tech stack, patterns, and standards | critical |
 
-## Structure
-
-```
-.opencode/context/project-intelligence/
-├── navigation.md              # This file - quick overview
-├── business-domain.md         # Business context and problem statement
-├── technical-domain.md        # Stack, architecture, technical decisions
-├── business-tech-bridge.md    # How business needs map to solutions
-├── decisions-log.md           # Major decisions with rationale
-└── living-notes.md            # Active issues, debt, open questions
-```
-
-## Quick Routes
-
-| What You Need | File | Description |
-|---------------|------|-------------|
-| Understand the "why" | `business-domain.md` | Problem, users, value proposition |
-| Understand the "how" | `technical-domain.md` | Stack, architecture, integrations |
-| See the connection | `business-tech-bridge.md` | Business → technical mapping |
-| Know the context | `decisions-log.md` | Why decisions were made |
-| Current state | `living-notes.md` | Active issues and open questions |
-| All of the above | Read all files in order | Full project intelligence |
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 Tip: Use /add-context --update to refine these patterns as the project evolves.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ## Usage
 

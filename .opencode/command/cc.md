@@ -45,11 +45,18 @@ Recent git commits:
 
 </output>
 
+<output cmd="just git_todos">
+
+!`just git_todos`
+
+</output>
+
 ## Workflow
 
 1. **Analyze Intent**:
    - Based on the outputs above, identify the primary intent of the changes (e.g., new feature, bug fix, refactor, documentation, chore).
    - Group changes into logical categories.
+   - Delegate tasks to fix todos if they are present in the output of `just git_todos` and are relevant to the current changes. For example, if there is a todo related to fixing a bug and the current changes include a bug fix, assign that todo to yourself and include it in the commit message.
    - Check specific files diffs if needed to clarify intent. `git diff --staged --patch-with-stat <file> | head -n 20` (skip staged flag to see unstaged changes).
 
 2. **Propose Commit**:

@@ -1,7 +1,7 @@
 ---
 name: mcp-usage
 description: >
-  Effectively retrieve information about libraries, frameworks, tools, facts, and perform web searches. NEVER call any tool starting with "the_mcp" untill you have loaded this skill.
+  Effectively retrieve information about libraries, frameworks, tools, facts, and perform web searches. NEVER call any tool starting with "gateway_" untill you have loaded this skill.
 license: MIT
 compatibility: Universal
 metadata:
@@ -13,7 +13,7 @@ metadata:
 
 This skill provides a structured workflow for leveraging external MCP servers (like Tavily, DeepWiki, or Context7) via the `code-mode` multi-tool scripting environment. It covers the entire lifecycle from initial discovery to final execution.
 
-The code-mode is provided by docker mcp gateway. All the tools prefixed with "the_mcp" are hosted by the docker mcp gateway.
+The code-mode is provided by docker mcp gateway. All the tools prefixed with "gateway_" are hosted by the docker mcp gateway.
 
 ## When to Use This Skill
 

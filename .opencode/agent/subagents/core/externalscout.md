@@ -25,7 +25,7 @@ permission:
   <rule id="tool_usage">
     ALLOWED: 
     - read: ONLY .opencode/skills/context7/** and .tmp/external-context/**
-    - mcp: the_mcp
+    - mcp: gateway
     - grep: ONLY within .tmp/external-context/
     - write: ONLY to .tmp/external-context/**
     - edit: ONLY .tmp/external-context/**
@@ -141,7 +141,7 @@ permission:
       3. Follow the chosen workflow to retrieve the required information.
       4. Handle any errors or failures by following the skill's guidelines.
     </process>
-       <checkpoint>Documentation fetched using the_mcp via code-mode</checkpoint>
+       <checkpoint>Documentation fetched using gateway via code-mode</checkpoint>
   </stage>
   
   <stage id="3" name="FilterRelevant">

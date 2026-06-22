@@ -48,3 +48,9 @@ registry:
         env: "GITHUB_PERSONAL_ACCESS_TOKEN"               # name used in ${...} expansion
         example: "your_github_personal_access_token_here"
 
+  fetch:
+    description: Lightweight server for web content fetching(limited to publically accessible web pages, no authentication or dynamic content).
+    title: Fetch - Web Content MCP
+    type: server
+    image: mcp/fetch@sha256:d9907377c03da91e49cf02c3dd6f0f83d1e0183e1222850f92595089f2c9a59d
+

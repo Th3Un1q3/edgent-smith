@@ -49,6 +49,8 @@ services:
       watch:
         - path: ../mcp
           action: restart
+    restart: always
+
   ollama:
     image: ollama/ollama:latest
     ports:

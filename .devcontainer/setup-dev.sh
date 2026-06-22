@@ -11,10 +11,18 @@ if ! command -v opencode &> /dev/null; then
   curl -fsSL https://opencode.ai/install | bash
 fi
 
+
+if ! command -v rtk &> /dev/null; then
+  echo "Installing rtk..."
+  curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+  rtk init -g --opencode
+fi
+
 # Install codegraph cli(required for MCP)
 
 curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh
 codegraph install --target=auto --location=local --yes
+
 
 echo "Running uv sync..."
 uv sync --dev --all-extras

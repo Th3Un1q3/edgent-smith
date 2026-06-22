@@ -129,3 +129,6 @@ ollama-status:
 # Clean local caches created by tools.
 clean:
   rm -rf .mypy_cache .ruff_cache
+
+git_todos:
+  sh scripts/git_todos.sh
