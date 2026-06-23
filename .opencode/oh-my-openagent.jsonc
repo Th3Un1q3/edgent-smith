@@ -1,6 +1,5 @@
 {
   "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
-
   "disabled_skills": [
     "playwright",
     "playwright-cli",
@@ -9,7 +8,6 @@
     "git-master",
     "frontend"
   ],
-
   "disabled_mcps": [
     "websearch",
     "context7",
@@ -18,5 +16,21 @@
   ],
   "experimental": {
     "disable_omo_env": true
-  }
+  },
+  "background_task": {
+    "defaultConcurrency": 1
+  },
+  // all sisyphus, hephaestus, prometheus, oracle, librarian, explore, multimodal-looker, metis, momus, atlas, sisyphus-junior.
+  "disabled_agents": [
+    "hephaestus",
+    "prometheus",
+    "oracle",
+    "librarian",
+    "explore",
+    "multimodal-looker",
+    "metis",
+    "momus",
+    "atlas",
+    "sisyphus-junior"
+  ]
 }
