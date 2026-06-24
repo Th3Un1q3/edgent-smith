@@ -90,3 +90,13 @@ In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the re
 
 If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
 <!-- CODEGRAPH_END -->
+
+## AGENT & WORKFLOW TAXONOMY
+
+### Agents
+- **pydantic-ai Agents (Runtime)**: Core execution agents implemented in `agents/` (e.g., `edge_agent`). They utilize the pydantic-ai framework for high-level reasoning and tool use.
+- **OpenCode Agents (Framework)**: Framework-level agents managed by the `.opencode/` framework. They provide specialized agentic capabilities, including custom commands and skills, integrated with developer environments.
+
+### Workflows
+- **GitHub Workflows (CI/CD)**: Automated CI automation and research triggers defined in `.github/workflows/`. These handle continuous integration, linting, testing, and automated experiment triggers on GitHub's infrastructure.
+- **Conductor Workflows (Orchestration)**: Complex, multi-stage orchestration workflows managed by the `scripts/conductor/` module. These coordinate specialized workers (Design, Discovery, Execution) to manage advanced agentic tasks and long-running processes.

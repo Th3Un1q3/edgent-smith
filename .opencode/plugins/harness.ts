@@ -23,6 +23,39 @@ type PluginRuntimeState = {
     sessions: Record<string, any>
 }
 
+const TOOL_FIXES = [
+    {
+        selector: {
+            tool_name_in: ["bash"],
+        },
+        fix: {
+            append_description_suffix: "Place description and command to separate arguments. Avoid placing description into the command property."
+        }
+    },
+    {
+        selector: {
+            tool_name_in: ["edit", "read", "bash", "write"],
+        },
+        fix: {
+            append_description_suffix: "Avoid using absolute paths(those starting with '/') until it's unavoidable. The '.' is resolved to the current working directory."
+        }
+    }
+]
+
+const findMatchingToolFixes = (toolName: string) => {
+    return TOOL_FIXES.filter(fix => fix.selector.tool_name_in.includes(toolName))
+}
+
+type ToolToBeFixed = {
+    description: string;
+    parameters: Record<string, any>;
+}
+
+const applyMatchingToolFixes = (output: ToolToBeFixed, toolFixes: Array<any>) => {
+    const initialDescription = output.description || ""
+    const descriptionSuffixes = toolFixes.map(fix => fix.fix.append_description_suffix).filter(Boolean)
+    return [initialDescription, ...descriptionSuffixes].join("\n")
+}
 
 
 export const harness: Plugin = async ({ project, client, $, directory, worktree }) => {
@@ -156,11 +189,8 @@ export const harness: Plugin = async ({ project, client, $, directory, worktree 
         },
 
         "tool.definition": async (input, output) => {
-            // TODO: consider lift this to be incliuded once.
-            if (["edit", "read", "bash", "write"].includes(input.toolID)) {
-                const descriptionSuffix = `Avoid using absolute paths(those starting with '/') until it's unavoidable. The '.' is resolved to ${directory || "unknown directory"}`
-                output.description = [output.description, descriptionSuffix].join("\n")
-            }
+            const toolFixes = findMatchingToolFixes(input.toolID);
+            output.description = applyMatchingToolFixes(output, toolFixes);
         },
 
         // Hook: Handle events  

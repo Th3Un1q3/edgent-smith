@@ -49,6 +49,7 @@
         "gateway_mcp-exec": "allow"
     },
     "plugin": [
+        "opencode-ntfy.sh",
         // "opencode-snip@latest",
         // "@tarquinen/opencode-dcp@latest",
         // "@mohak34/opencode-notifier@latest",

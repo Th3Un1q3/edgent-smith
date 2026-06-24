@@ -1,6 +1,6 @@
 ---
 description: "Retrieves information for libraries, frameworks, tools, software, general web. Any external knowledge. Whatewer you don't know, it can get."
-steps: 10
+steps: 15
 permission:
     "*": deny
     skill:
@@ -11,6 +11,7 @@ permission:
     glob:
         "*": deny
         ".agents/skills/mcp-usage/**": allow
+    "webfetch": allow
     "gateway_*": deny
     "gateway_mcp-find": allow
     "gateway_code-mode": allow
@@ -39,6 +40,7 @@ Your responses must be structured as follows:
 
 # Error Handling & Constraints
 - **Missing Skill**: If the `mcp-usage` skill is not available, report: "ERROR: Critical dependency 'mcp-usage' skill missing. Cannot proceed with MCP operations."
+- **Direct Web Fetch**: In case it's not possible to retrieve information via MCP tools, you may use the `webfetch` tool as a last resort. However, this should only be done if all MCP avenues have been exhausted.
 - **Tool Failures**: If an MCP tool fails (timeout, invalid arguments), report the specific error clearly and attempt one retry if appropriate.
 - **No Results**: If no relevant information is found after exhaustive search, report: "NO DATA FOUND: No matching information could be retrieved via the available MCP tools."
 - **Constraint**: Do NOT attempt to use any `gateway_` tool without explicitly confirming (internally) that the `mcp-usage` skill has been loaded.

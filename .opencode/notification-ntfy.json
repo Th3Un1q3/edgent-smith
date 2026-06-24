@@ -1,0 +1,6 @@
+{
+  "backend": {
+    "topic": "{env:NTFY_TOPIC}",
+    "token": "{env:NTFY_TOKEN}"
+  }
+}
