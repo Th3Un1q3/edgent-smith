@@ -20,3 +20,9 @@ Has great plugins, but bloats context as crazy. It extends tools descriptions, c
 As the model is often lazy the system requires a bit of pushes. Like make sure todos are done, or make sure to use skills. Or use correct filepaths.
 
 I had to create a plugin, to fix some of the issues.
+
+### Frequent tool failures
+
+Model suffers following tools description.
+
+![alt text](image.png)

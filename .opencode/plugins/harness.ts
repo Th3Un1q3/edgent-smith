@@ -41,6 +41,7 @@ export const harness: Plugin = async ({ project, client, $, directory, worktree 
         }
     }
 
+
     const clearCancellation = (sessionId: string) => {
         const state = pluginState.sessions[sessionId] || {};
 
@@ -150,12 +151,14 @@ export const harness: Plugin = async ({ project, client, $, directory, worktree 
         },
 
         "chat.message": async (input, output) => {
+            const { sessionID } = input;
+            clearCancellation(sessionID);
         },
 
         "tool.definition": async (input, output) => {
             // TODO: consider lift this to be incliuded once.
             if (["edit", "read", "bash", "write"].includes(input.toolID)) {
-                const descriptionSuffix = `Avoid using absolute paths until it's unavoidable. The '.' is resolved to ${directory || "unknown directory"}`
+                const descriptionSuffix = `Avoid using absolute paths(those starting with '/') until it's unavoidable. The '.' is resolved to ${directory || "unknown directory"}`
                 output.description = [output.description, descriptionSuffix].join("\n")
             }
         },

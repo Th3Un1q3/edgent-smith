@@ -15,7 +15,7 @@ permission:
     "**/*.secret": "deny"
     "node_modules/**": "deny"
     ".git/**": "deny"
-steps: 5
+steps: 7
 ---
 
 Perform the task you're assigned to.
