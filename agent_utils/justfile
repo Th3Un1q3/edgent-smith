@@ -1,0 +1,11 @@
+# Basic project tasks for this repo.
+# Use `just <recipe>` to run the common workflow commands.
+
+set shell := ["bash", "-euo", "pipefail", "-c"]
+set dotenv-load
+set dotenv-override
+set export
+
+# Notify via ntfy.sh using event and message arguments.
+notify event message:
+    curl -d "{{event}}: {{message}}" "https://ntfy.sh/$NTFY_TOPIC" -H "Authorization: Bearer $NTFY_TOKEN"

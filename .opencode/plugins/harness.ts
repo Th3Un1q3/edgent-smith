@@ -6,6 +6,36 @@ import type { Plugin } from "@opencode-ai/plugin"
 // TODO: catch todos if idle with not all closed push(timeout, loop breaker)
 // TODO: when log when tool failed with errors(learn and improve loop)
 
+
+
+/**
+ * New fixes hueristics:
+ * Often glob with no arguments, either go with "*" as fallback.
+ * 
+ * "reasoning_content": "\nI must provide `pattern`. I'll try to find the files.\n",
+      "tool_calls": [
+        {
+          "id": "262129824",
+          "type": "function",
+          "function": {
+            "name": "glob",
+            "arguments": "{}"
+          }
+        }
+
+* Bash tool appends description into command property, which is not ideal. It should be separate arguments in before call.
+        "tool_calls": [
+        {
+          "id": "614381491",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\":\"rg \\\"rub-puppet|rug-expert\\\"\\ndescription: Search for rug-generalist or rug-specialist in the codebase.\"}"
+          }
+        }
+      ]
+ */
+
 const PLUGIN_ID = "harness-plugin"
 
 const todoContinuationMessage = (todos: Array<{ content: string }>) => `There are incomplete todos:
@@ -30,6 +60,14 @@ const TOOL_FIXES = [
         },
         fix: {
             append_description_suffix: "Place description and command to separate arguments. Avoid placing description into the command property."
+        }
+    },
+    {
+        selector: {
+            tool_name_in: ["grep", "glob"],
+        },
+        fix: {
+            append_description_suffix: "Prefer specific pattern or use wildcard as fallback. Avoid using empty string as pattern. Ensure pattern is present!"
         }
     },
     {

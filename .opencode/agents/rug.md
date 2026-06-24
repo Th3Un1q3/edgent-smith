@@ -2,7 +2,7 @@
 name: RUG - Orchestrator
 description: "Repeat Until Good agent"
 mode: primary
-temperature: 1
+temperature: 0.8
 permission:
   "*": "deny"
   "task":

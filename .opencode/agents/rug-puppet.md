@@ -16,6 +16,7 @@ permission:
     "node_modules/**": "deny"
     ".git/**": "deny"
 steps: 7
+temperature: 0.1
 ---
 
 Perform the task you're assigned to.

@@ -10,6 +10,17 @@
                 "google/gemma-4-26b-a4b-qat": {
                     // "qwen/qwen3.6-35b-a3b": {
                     "name": "lmstudio-advanced",
+                    "temperature": true,
+                    "attachment": true,
+                    "modalities": {
+                        "input": [
+                            "text",
+                            "image"
+                        ],
+                        "output": [
+                            "text"
+                        ]
+                    },
                     "limit": {
                         "context": 256000,
                         "output": 65536
@@ -17,16 +28,22 @@
                 },
                 "qwen3.5-9b-mtp": {
                     "name": "lmstudio-default",
+                    "temperature": true,
+                    "attachment": true,
                     "limit": {
                         "context": 256000,
                         "output": 65536
                     }
                 },
                 "google/gemma-4-e4b": {
-                    "name": "lmstudio-fast"
+                    "name": "lmstudio-fast",
+                    "temperature": true,
+                    "attachment": true
                 },
                 "google/gemma-4-e2b": {
-                    "name": "lmstudio-ultra-fast"
+                    "name": "lmstudio-ultra-fast",
+                    "temperature": true,
+                    "attachment": true
                 }
             }
         }
@@ -49,7 +66,7 @@
         "gateway_mcp-exec": "allow"
     },
     "plugin": [
-        "opencode-ntfy.sh",
+        "@mohak34/opencode-notifier@latest",
         // "opencode-snip@latest",
         // "@tarquinen/opencode-dcp@latest",
         // "@mohak34/opencode-notifier@latest",

@@ -12,9 +12,10 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 /workspace/
 ├── .devcontainer/      # Python 3.13 + Ollama sidecar configuration
 ├── .github/            # CI (DevContainer), Custom Agents, Prompt Templates, & Instructions
-├── .opencode/          # OpenCode agent framework (agents, commands, skills)
-├── . agents/skills/    # Project-specific custom skills for pydantic-ai and other domains
+├── .opencode/          # OpenCode agent framework (agents, commands, skills, plugins)
+├── .agents/skills/    # Project-specific custom skills for pydantic-ai and other domains
 ├── agents/             # Core runtime agents (e.g., edge_agent.py) with inline tools
+├── agent_utils/        # Utility scripts and tools for common agent tasks (e.g., notifications)
 ├── cli/                # Click-backed modular CLI entry point & command routing
 │   ├── commands/       # Command logic modules
 │   └── services/       # Shared stateless service layer
@@ -85,8 +86,8 @@ just ci                    # Execute full DevContainer CI sequence
 
 In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
 
-- **MCP tools** (when available): `codegraph_explore` answers most code questions in one call — the relevant symbols' verbatim source plus the call paths between them. `codegraph_node` returns one symbol's source + callers, or reads a whole file with line numbers. If the tools are listed but deferred, load them by name via tool search.
-- **Shell** (always works): `codegraph explore "<symbol names or question>"` and `codegraph node <symbol-or-file>` print the same output.
+- **MCP tool** (when available): `codegraph_explore` answers most code questions in one call — the relevant symbols' verbatim source plus the call paths between them, including dynamic-dispatch hops grep can't follow. Name a file or symbol in the query to read its current line-numbered source. If it's listed but deferred, load it by name via tool search.
+- **Shell** (always works): `codegraph explore "<symbol names or question>"` prints the same output.
 
 If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
 <!-- CODEGRAPH_END -->

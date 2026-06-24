@@ -1,0 +1,72 @@
+{
+  "command": {
+    "enabled": true,
+    "path": "/bin/bash",
+    "args": [
+      "-c",
+      "cd /workspace && just agent_utils/notify \"[{event}]\" \"{message}\""
+    ]
+  },
+  "events": {
+    "permission": {
+      "sound": true,
+      "notification": true,
+      "command": true,
+      "bell": false
+    },
+    "complete": {
+      "sound": true,
+      "notification": true,
+      "command": true,
+      "bell": false
+    },
+    "subagent_complete": {
+      "sound": false,
+      "notification": false,
+      "command": false,
+      "bell": false
+    },
+    "error": {
+      "sound": true,
+      "notification": true,
+      "command": true,
+      "bell": false
+    },
+    "question": {
+      "sound": true,
+      "notification": true,
+      "command": true,
+      "bell": false
+    },
+    "user_cancelled": {
+      "sound": false,
+      "notification": false,
+      "command": false,
+      "bell": false
+    },
+    "plan_exit": {
+      "sound": true,
+      "notification": true,
+      "command": false,
+      "bell": false
+    },
+    "session_started": {
+      "sound": true,
+      "notification": false,
+      "command": false,
+      "bell": false
+    },
+    "user_message": {
+      "sound": true,
+      "notification": false,
+      "command": false,
+      "bell": false
+    },
+    "client_connected": {
+      "sound": true,
+      "notification": false,
+      "command": false,
+      "bell": false
+    }
+  }
+}

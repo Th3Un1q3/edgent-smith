@@ -15,7 +15,7 @@ fi
 if ! command -v rtk &> /dev/null; then
   echo "Installing rtk..."
   curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
-  rtk init -g --opencode
+  # rtk init -g --opencode # FIXME - it seems to break tools an permissions, disabiling it for now
 fi
 
 # Install codegraph cli(required for MCP)
