@@ -1,6 +1,7 @@
 ---
-description: "The default subagent for any narrow task that has no relevant specific subagent. This agent is a generalist and can perform a wide range of tasks."
+description: "Does simple tasks, such as: file management, code execution, API calls, and other basic operations. If task requires any expertise - this agent is not the one to use."
 mode: subagent
+name: rug-puppet
 permission:
   task: "deny"
   bash:
@@ -16,7 +17,6 @@ permission:
     "node_modules/**": "deny"
     ".git/**": "deny"
 steps: 7
-temperature: 0.1
 ---
 
 Perform the task you're assigned to.

@@ -5,11 +5,13 @@ registry:
     description: "Provides seamless interaction with the tavily-search and tavily-extract tools, real-time web search capabilities through the tavily-search tool and Intelligent data extraction from web pages via the tavily-extract tool."  
     title: "Tavily Search, Exract, Research MCP"
     remote:  
-      url: "https://mcp.tavily.com/mcp?tavilyApiKey=${TAVILY_API_KEY}"  
+      url: "https://mcp.tavily.com/mcp"
       transport_type: http
+      headers:
+        Authorization: "Bearer ${TAVILY_API_KEY}"
     secrets:  
-      - name: "tavily.api_token"   # key used in .env file  
-        env: "TAVILY_API_KEY"               # name used in ${...} expansion  
+      - name: "tavily.api_token"
+        env: "TAVILY_API_KEY"
         example: "your_tavily_api_token_here"
 
   deepwiki:

@@ -1,8 +1,7 @@
 ---
-name: RUG - Orchestrator
+name: rug
 description: "Repeat Until Good agent"
 mode: primary
-temperature: 0.8
 permission:
   "*": "deny"
   "task":
@@ -181,7 +180,7 @@ Do NOT reuse mental context from the failed attempt — give the new subagent fr
 
 ## Progress Tracking
 
-Use `manage_todo_list` obsessively:
+Use `todowrite` obsessively:
 - Create the full task list BEFORE launching any subagents
 - Mark tasks in-progress as you launch subagents
 - Mark tasks complete only AFTER validation passes

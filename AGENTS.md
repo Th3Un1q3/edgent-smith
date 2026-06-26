@@ -4,10 +4,37 @@
 **Commit:** a7ce51d
 **Branch:** main
 
+## World Model
+
+Use this world model to effectively navigate any task.
+
+```mermaid
+flowchart TB
+    subgraph devContainer["Dev Container"]
+        Agent["Agent(It's you!)"]
+        OpenCode["OpenCode"]
+        ProjectFiles["Project Files"]
+        commandLine["Command Line(cli utils)"]
+    end
+    subgraph mcpContainer["MCPGateway Container"]
+        MCPGateway["Docker MCP Gateway"]
+    end
+    subgraph dockerCompose["Docker Compose"]
+        devContainer
+        mcpContainer
+    end
+    Agent -- runs inside --> OpenCode
+    MCPGateway -- talks to --> OutsideWorld["Outside World(github, web, docs)"]
+    MCPGateway -. reads configuration from .-> ProjectFiles
+    OpenCode -- connects --> MCPGateway
+    OpenCode -- accesses --> ProjectFiles
+    OpenCode -- executes --> commandLine
+```
+
 ## OVERVIEW
 edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an issue-driven experiment loop and DevContainer-first development. It utilizes a multi-agent architecture involving GitHub Copilot custom agents, OpenCode subagents, and runtime edge agents.
 
-## STRUCTURE
+## PROJECT STRUCTURE
 ```text
 /workspace/
 ├── .devcontainer/      # Python 3.13 + Ollama sidecar configuration

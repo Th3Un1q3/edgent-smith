@@ -71,3 +71,5 @@ secrets/
 # Opencode artifacts
 .tmp/
 .logs/
+.opencode/plugins/sessions
+.opencode/opencode-notifier-state.json

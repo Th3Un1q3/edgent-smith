@@ -1,8 +1,8 @@
 ---
 description: "Retrieves information for libraries, frameworks, tools, software, general web. Any external knowledge. Whatewer you don't know, it can get."
 steps: 15
-temperature: 0.2
 mode: subagent
+name: rug-mcp
 permission:
     "*": deny
     skill:
