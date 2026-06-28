@@ -116,9 +116,13 @@ export const instructionsContextLoader: Plugin = async ({ client, project, direc
           relevant_instructions: relevantInstructionsReferences,
         })
 
-        const shouldInjectCompleteInstructions = tool !== 'read' // TODO: determine based on tool type and session state
+        // Some tools require complete instructions to be injected, some only the output
+        const shouldSkipCompleteInstructions = tool === 'read'
+        if (shouldSkipCompleteInstructions) {
+          return
+        }
 
-        if (shouldInjectCompleteInstructions) {
+        if (!shouldSkipCompleteInstructions) {
           const nonInjectedInstructions = readState(sessionID, (state) => {
             const loadedInstructions = state.loadedInstructions as Record<string, { injectedAt: string }> || {}
             return matchedInstructions.filter(instruction => {
@@ -132,7 +136,7 @@ export const instructionsContextLoader: Plugin = async ({ client, project, direc
             return
           }
 
-          // TODO: prevent sending if already sent in this session
+          // Prevent sending if already sent in this session
           await updateState(sessionID, (state) => {
             return {
               ...state,
