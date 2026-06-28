@@ -1,7 +1,7 @@
 ---
 name: tdd-enforcement
 description: "Use when: implementing any code change, feature, or bugfix. This instruction enforces strict Test-Driven Development (TDD) with no exceptions."
-applyTo: "**/*.*"
+applyTo: "**/*.{ts,js,py}"
 ---
 
 # TDD Enforcement: The Iron Law

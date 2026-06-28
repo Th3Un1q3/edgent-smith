@@ -7,12 +7,12 @@ import { OpencodeClient } from "@opencode-ai/sdk"
 
 const PLUGIN_ID = "harness-plugin"
 
-export function log(
+export async function log(
   client: OpencodeClient,
-  level: "debug" | "info" | "warn",
+  level: "debug" | "info" | "warn" | "error",
   message: string,
-): void {
-  void client.app.log({
+): Promise<void> {
+  await client.app.log({
     body: {
       service: PLUGIN_ID,
       level,

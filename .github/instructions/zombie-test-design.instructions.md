@@ -1,7 +1,7 @@
 ---
 name: zombie-test-design
 description: "Use when: designing new tests or defining the sequence of test cases for a feature. This instruction enforces the ZOMBIES mnemonic for incremental TDD."
-applyTo: "**/*.{py,js,ts,sh,go,java,cpp,rs}"
+applyTo: "tests/*.py"
 ---
 
 # ZOMBIES: Incremental Test Design
