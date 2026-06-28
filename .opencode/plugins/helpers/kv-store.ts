@@ -8,6 +8,7 @@ export enum SESSION_FIELDS {
   cancelledAt = "cancelledAt",
   lastMessageSentAt = "lastMessageSentAt",
   idleAt = "idleAt",
+  toolCalls = "toolCalls",
 }
 
 const SESSIONS_DIR = ".opencode/plugins/sessions"

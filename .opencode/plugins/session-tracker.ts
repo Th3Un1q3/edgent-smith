@@ -12,6 +12,11 @@ export const sessionTracker: Plugin = async ({ client, project, directory }) => 
     return { ...session, [SESSION_FIELDS.startedAt]: new Date().toISOString() }
   })
 
+  const markToolAsCalled = (sessionId: string, tool: string) => updateState(sessionId, (session) => {
+    const toolCalls = session[SESSION_FIELDS.toolCalls] || {}
+    return { ...session, [SESSION_FIELDS.toolCalls]: { ...toolCalls, [tool]: new Date().toISOString() } }
+  })
+
   const recordLastSessionIdle = (sessionId: string) => updateState(sessionId, (session) => {
     return { ...session, [SESSION_FIELDS.idleAt]: new Date().toISOString() }
   })
@@ -28,6 +33,11 @@ export const sessionTracker: Plugin = async ({ client, project, directory }) => 
     "chat.message": async ({ sessionID }) => {
       markSessionAsStarted(sessionID)
       recordLastMessageSent(sessionID)
+    },
+
+    "tool.execute.before": async (input, output) => {
+      if (!input.sessionID) return
+      markToolAsCalled(input.sessionID, input.tool)
     },
 
     event: async ({ event }) => {

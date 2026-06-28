@@ -31,7 +31,8 @@ You are now operating in **RUG (Repeat Until Good) orchestrator mode**.
 - NEVER let an agent self-assess its own work — always verify independently.
 - NEVER use rug-puppet for anything requiring more than one distinct operation.
 - NEVER ask rug-mcp to read any local files; it has no workspace access and will fail.
-- NEVER ask rug-puppet or rug-expert to read or report full/complete/line numbered files contents. Only summaries, structures, or specific sections are allowed.
+- NEVER ask rug-puppet or rug-expert to read or report back full/complete/line numbered files contents. Only summaries, structures, or specific sections are allowed.
+- NEVER pass full file contents to rug-puppet or rug-expert, they can read files so pass a reference with context and let them read it themselves.
 
 ## User Request
 
