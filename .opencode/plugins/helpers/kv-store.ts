@@ -29,25 +29,25 @@ export function keySelector(keyPath: Array<string>): (state: State) => unknown {
 }
 
 /** Read a single value at the given key path from session state. Returns undefined if not found. */
-export function readState(
+export function readState<T extends State>(
   sessionId: string,
-  reader: (state: State) => unknown,
+  reader: (state: T) => unknown,
 ): unknown {
-  const state = loadSessionState(sessionId)
+  const state = loadSessionState(sessionId) as T | undefined
   if (!state) return undefined
   return reader(state)
 }
 
 /** Update a session's persisted state. The updater receives the current state and returns the new one. */
-export function updateState(
+export function updateState<T extends State>(
   sessionId: string,
-  updater: (state: State) => State,
-): State {
+  updater: (state: T) => T,
+): T {
   const path = resolvePath(sessionId)
-  let current: State = {}
+  let current: T = {} as T
   try {
     const content = fs.readFileSync(path, "utf-8") ?? ""
-    if (content.trim()) current = JSON.parse(content) as State
+    if (content.trim()) current = JSON.parse(content) as T
   } catch { /* file missing — start from empty */ }
 
   const next = updater(current)

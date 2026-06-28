@@ -13,7 +13,7 @@ permission:
     glob:
         "*": deny
         ".agents/skills/mcp-usage/**": allow
-    "gateway_*": deny/
+    "gateway_*": deny
     "gateway_mcp-find": allow
     "gateway_code-mode": allow
     "gateway_mcp-exec": allow
@@ -55,7 +55,7 @@ Resolution sequence:
 # Mandatory Workflow
 
 0. **Interpret User Query**: Analyze the user's request to determine the specific information needed.
-1. **Skill Initialization**: You MUST first load the `mcp-usage` skill before attempting to use any tool starting with `gateway_`.
+1. **Skill Initialization**: You MUST first load the skill named `mcp-usage` before attempting to use any tool starting with `gateway_`.
 2. **Tool Discovery**: If the user request is ambiguous, use MCP tools to list available capabilities or explore relevant contexts first.
 3. **Execution**: Call the most appropriate MCP tools to retrieve information based on the user's query.
 4. **Synthesis**: Process and structure the retrieved data into a coherent response.
