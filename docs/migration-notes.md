@@ -26,3 +26,14 @@ I had to create a plugin, to fix some of the issues.
 Model suffers following tools description.
 
 ![alt text](image.png)
+
+# Harness design 
+
+- Cap output with token generation - no good change can be produced by 2000 token stream.
+- cap number of agent steps
+- Embed deterministic checks to automatically become part of the loop.
+- Local models don't follow the system prompt strictly, if user used UPPERCASE this takes priority over system message.
+
+## Agentic system
+
+Specialized minimalistic agents - start faster, fail faster. Keep tuning.
