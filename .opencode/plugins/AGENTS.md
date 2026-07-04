@@ -1,3 +1,29 @@
+## Plugin Directory & Export Requirements
+
+### Directory Structure
+
+| Path | Purpose | Naming Convention |
+|------|---------|-------------------|
+| `*.ts` (root) | Plugin entry points only | PascalCase or kebab-case plugins (`harness-plugin.ts`, `session-tracker.ts`) |
+| `helpers/*.ts` | Shared utility modules, helpers, and discovery logic | camelCase filenames representing their domain (`kv-store.ts`, `logger.ts`, `file-discovery.ts`) |
+| `AGENTS.md` | Discoverable instruction file matched by the `**/AGENTS.md` glob | Must be capitalized — lowercase `agents.md` is not discovered |
+| `helpers/` | Shared plugin utilities (logging, KV store, session helpers) | camelCase filenames representing their domain |
+| `types/` | TypeScript type definitions shared across modules | Descriptive singular or plural names (`instructions.ts`) |
+| `sessions/` | Runtime JSON state files (auto-generated) | Pattern: `ses_<timestamp>_<random>.json` — do not create manually |
+
+### Export Conventions
+
+- **No default exports** — every module uses only named exports.
+- **Plugin entry points(all .ts files in .opencode/plugins directory)** export a single async function that receives the OpenCode plugin context and returns a `PluginOutput` object with hooks (`tool.execute.before`, `tool.execute.after`, etc.), optional `event` subscriptions, and a `dispose` handler. Naming follows `{description}Tracker` or `{description}Loader` patterns (e.g., `sessionTracker`, `todoEnforcer`, `instructionsContextLoader`).
+- Helper modules (`.opencode/plugins/helpers/`) export their domain-specific utilities (logger singleton, KV store state manager, session helper functions) for cross-plugin reuse.
+- Type definitions in `.opencode/plugins/types/` are exported as interfaces and types only — no runtime logic lives there beyond what's needed for the type system.
+
+### Module Format
+
+All files use **pure ESM** with named exports only. No classes are used anywhere in the plugins directory. Runtime behavior is entirely function-based.
+
+## Plugin Architecture
+
 ### Hooks & Extension Points
 
 Plugins intercept behavior through two mechanisms: **event hooks** (keyed strings in the returned hooks object that fire at specific lifecycle points) and **extension points** (special keys like `tool`, `event`, `dispose` with different shapes). All event hook handlers follow an `(input, output) => void | Promise<void>` pattern where `output` is mutable.

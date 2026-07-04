@@ -1,12 +1,12 @@
 ---
-name: agent_utils
+name: agent-utils
 description: Utility functions for agent automation and notifications
 ---
 
 # Agent Utils Skill
 
 ## Overview
-The `agent_utils` skill provides a suite of utility functions designed to support agent automation, primarily focusing on real-time notifications and workflow assistance.
+The `agent-utils` skill provides a suite of utility functions designed to support agent automation, primarily focusing on real-time notifications and workflow assistance.
 
 ## Applicability
 
