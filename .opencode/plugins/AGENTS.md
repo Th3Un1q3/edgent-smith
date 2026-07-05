@@ -22,6 +22,87 @@
 
 All files use **pure ESM** with named exports only. No classes are used anywhere in the plugins directory. Runtime behavior is entirely function-based.
 
+## Development Workflow
+
+### Install dependencies
+
+Plugin dependencies are tracked in `/workspace/.opencode/package.json` and installed with npm:
+
+```bash
+cd .opencode && npm install
+```
+
+### Run tests
+
+Tests are configured and run under Node with Vitest. `npm test` from inside `.opencode/` executes the suite once and exits with the test results.
+
+Test configuration files:
+
+- `vitest.config.ts` — `.opencode/vitest.config.ts`
+- `tsconfig.json` — `.opencode/tsconfig.json`
+
+### Test layout
+
+Tests live in `.opencode/tests/` and mirror the layout of `.opencode/plugins/`. For example, `plugins/helpers/kv-store.ts` is tested by `tests/helpers/kv-store.test.ts`.
+
+Example current layout:
+
+```
+.opencode/
+├── plugins/helpers/kv-store.ts
+└── tests/helpers/kv-store.test.ts
+```
+
+### Available commands
+
+| Command | Purpose |
+|---------|---------|
+| `cd .opencode && npm install` | Install dependencies |
+| `cd .opencode && npm test` | Run tests once |
+| `cd .opencode && npm run test:watch` | Run tests in watch mode |
+| `cd .opencode && npm run typecheck` | Type-check without emitting files |
+
+### Bun-only APIs
+
+Some plugin files import `bun` or `bun:fs`. Tests run under Node/Vitest, so those Bun-only modules are aliased and mocked via `tests/__mocks__/`. Add new mocks there when testing files that import `bun:fs` or other Bun-only APIs.
+
+### Example `package.json` scripts
+
+```json
+{
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "build": "tsup"
+  }
+}
+```
+
+### Example `vitest.config.ts`
+
+```ts
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { defineConfig } from 'vitest/config'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      'bun:fs': path.resolve(__dirname, './tests/__mocks__/bun-fs.ts'),
+    },
+  },
+  test: {
+    environment: 'node',
+    globals: true,
+  },
+})
+```
+
+When testing code that imports `@opencode-ai/plugin`, alias the dependency to a local mock in `vitest.config.ts` or use `vi.mock` so tests stay isolated from the live plugin context.
+
 ## Plugin Architecture
 
 ### Hooks & Extension Points
