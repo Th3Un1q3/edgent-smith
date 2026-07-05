@@ -14,9 +14,10 @@
     "types": ["node", "vitest/globals"],
     "allowImportingTsExtensions": true,
     "paths": {
-      "bun:fs": ["./tests/__mocks__/bun-fs.ts"]
+      "bun:fs": ["./tests/__mocks__/bun-fs.ts"],
+      "bun": ["./tests/__mocks__/bun.ts"]
     }
   },
-  "include": ["plugins/helpers/kv-store.ts", "tests/**/*"],
+  "include": ["plugins/**/*.ts", "tests/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

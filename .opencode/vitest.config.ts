@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       'bun:fs': path.resolve(__dirname, './tests/__mocks__/bun-fs.ts'),
+      bun: path.resolve(__dirname, './tests/__mocks__/bun.ts'),
     },
   },
   test: {

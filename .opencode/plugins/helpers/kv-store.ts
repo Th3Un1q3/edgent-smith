@@ -11,10 +11,16 @@ export enum SESSION_FIELDS {
   toolCalls = "toolCalls",
 }
 
-const SESSIONS_DIR = ".opencode/plugins/sessions"
+let sessionsDir = ".opencode/plugins/sessions"
+
+export const setSessionsDir = (dir: string): void => {
+  sessionsDir = dir
+}
+
+export const getSessionsDir = (): string => sessionsDir
 
 function resolvePath(sessionId: string): string {
-  return `${SESSIONS_DIR}/${sessionId}.json`
+  return `${sessionsDir}/${sessionId}.json`
 }
 
 export function keySelector(keyPath: Array<string>): (state: State) => unknown {
