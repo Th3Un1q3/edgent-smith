@@ -14,10 +14,10 @@
     "types": ["node", "vitest/globals"],
     "allowImportingTsExtensions": true,
     "paths": {
-      "bun:fs": ["./tests/__mocks__/bun-fs.ts"],
-      "bun": ["./tests/__mocks__/bun.ts"]
+      "bun:fs": ["./plugins/tests/__mocks__/bun-fs.ts"],
+      "bun": ["./plugins/tests/__mocks__/bun.ts"]
     }
   },
-  "include": ["plugins/**/*.ts", "tests/**/*.ts"],
+  "include": ["plugins/**/*.ts", "plugins/tests/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

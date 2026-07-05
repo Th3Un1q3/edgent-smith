@@ -2,7 +2,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { loadCopilotInstructions } from '../../plugins/harness-plugin'
+import { loadCopilotInstructions } from '../../../plugins/harness-plugin'
 import { createOpencodeClientMock } from '../factories/opencode-client'
 
 let tempDir: string

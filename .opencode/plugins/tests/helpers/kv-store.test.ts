@@ -8,7 +8,7 @@ import {
   setSessionsDir,
   getSessionsDir,
   updateState,
-} from '../../plugins/helpers/kv-store'
+} from '../../../plugins/helpers/kv-store'
 
 describe('keySelector', () => {
   it('selects a nested value by key path', () => {

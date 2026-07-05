@@ -7,8 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   resolve: {
     alias: {
-      'bun:fs': path.resolve(__dirname, './tests/__mocks__/bun-fs.ts'),
-      bun: path.resolve(__dirname, './tests/__mocks__/bun.ts'),
+      'bun:fs': path.resolve(__dirname, './plugins/tests/__mocks__/bun-fs.ts'),
+      bun: path.resolve(__dirname, './plugins/tests/__mocks__/bun.ts'),
     },
   },
   test: {

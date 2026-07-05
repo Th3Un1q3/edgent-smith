@@ -1,5 +1,5 @@
 import { describe, it, expectTypeOf } from 'vitest'
-import type { ParsedCopilotInstruction } from '../../plugins/types/instructions.ts'
+import type { ParsedCopilotInstruction } from '../../../plugins/types/instructions.ts'
 import type {
   SteeringRuleBaseContext,
   FollowUpMessageOutcome,
@@ -9,7 +9,7 @@ import type {
   RuleOutcome,
   SteeringRule,
   OutcomeBuilder,
-} from '../../plugins/types/steering.ts'
+} from '../../../plugins/types/steering.ts'
 
 describe('plugin type exports', () => {
   it('ParsedCopilotInstruction has the expected shape', () => {

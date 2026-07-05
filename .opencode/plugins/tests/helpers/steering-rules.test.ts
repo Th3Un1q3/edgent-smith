@@ -3,12 +3,12 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createOpencodeClientMock } from '../factories/opencode-client'
-import { buildInstructionInjectionRule, buildRequireFirstToolSteeringRule, initCopilotSteeringRules, applySteeringRules, processRuleOutcomes } from '../../plugins/helpers/steering-rules'
-import { updateState, readState, setSessionsDir, getSessionsDir } from '../../plugins/helpers/kv-store'
-import * as sessionHelpers from '../../plugins/helpers/session-helpers'
-import type { ParsedCopilotInstruction } from '../../plugins/types/instructions'
-import type { SteeringRule, RuleOutcome, BlockToolExecutionOutcome } from '../../plugins/types/steering'
-import type { State } from '../../plugins/helpers/kv-store'
+import { buildInstructionInjectionRule, buildRequireFirstToolSteeringRule, initCopilotSteeringRules, applySteeringRules, processRuleOutcomes } from '../../../plugins/helpers/steering-rules'
+import { updateState, readState, setSessionsDir, getSessionsDir } from '../../../plugins/helpers/kv-store'
+import * as sessionHelpers from '../../../plugins/helpers/session-helpers'
+import type { ParsedCopilotInstruction } from '../../../plugins/types/instructions'
+import type { SteeringRule, RuleOutcome, BlockToolExecutionOutcome } from '../../../plugins/types/steering'
+import type { State } from '../../../plugins/helpers/kv-store'
 
 type ToolTrackingState = State & {
   loadedInstructions: Record<string, { injectedAt: string }>;
@@ -18,7 +18,7 @@ type ToolCallsState = State & {
   toolCalls: Record<string, string>;
 }
 
-vi.mock('../../plugins/helpers/session-helpers', async () => {
+vi.mock('../../../plugins/helpers/session-helpers', async () => {
   return {
     sendMessage: vi.fn(),
   }

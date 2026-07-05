@@ -43,14 +43,14 @@ Test configuration files:
 
 ### Test layout
 
-Tests live in `.opencode/tests/` and mirror the layout of `.opencode/plugins/`. For example, `plugins/helpers/kv-store.ts` is tested by `tests/helpers/kv-store.test.ts`.
+Tests live in `.opencode/plugins/tests/` and mirror the layout of `.opencode/plugins/`. For example, `plugins/helpers/kv-store.ts` is tested by `plugins/tests/helpers/kv-store.test.ts`.
 
 Example current layout:
 
 ```
 .opencode/
 ├── plugins/helpers/kv-store.ts
-└── tests/helpers/kv-store.test.ts
+└── plugins/tests/helpers/kv-store.test.ts
 ```
 
 ### Available commands
@@ -64,7 +64,7 @@ Example current layout:
 
 ### Bun-only APIs
 
-Some plugin files import `bun` or `bun:fs`. Tests run under Node/Vitest, so those Bun-only modules are aliased and mocked via `tests/__mocks__/`. Add new mocks there when testing files that import `bun:fs` or other Bun-only APIs.
+Some plugin files import `bun` or `bun:fs`. Tests run under Node/Vitest, so those Bun-only modules are aliased and mocked via `plugins/tests/__mocks__/`. Add new mocks there when testing files that import `bun:fs` or other Bun-only APIs.
 
 ### Example `package.json` scripts
 
@@ -91,7 +91,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   resolve: {
     alias: {
-      'bun:fs': path.resolve(__dirname, './tests/__mocks__/bun-fs.ts'),
+      'bun:fs': path.resolve(__dirname, './plugins/tests/__mocks__/bun-fs.ts'),
     },
   },
   test: {

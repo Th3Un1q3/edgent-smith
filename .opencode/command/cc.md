@@ -15,41 +15,7 @@ Automatically generates and performs a conventional commit based on all local ch
 
 ## Context
 
-To understand the intent of the current changes, analyze the following:
-
-### Recent History
-
-Recent git commits:
-
-<output cmd="git log -n 10 --pretty=format:'%s'">
-!`git log -n 10 --pretty=format:"%s"`
-</output>
-
-### Current Changes
-
-<output cmd="git status -u">
-
-!`git status -u`
-
-</output>
-
-<output cmd="git diff --staged --stat">
-
-!`git diff --staged --stat`
-
-</output>
-
-<output cmd="git diff --stat">
-
-!`git diff --stat`
-
-</output>
-
-<output cmd="just git_todos">
-
-!`just git_todos`
-
-</output>
+To understand the intent of the current changes, analyze: recent commits (`git log -n 10`), current diff status (`git status -u`), staged/unstaged file stats (`git diff --staged --stat`, `git diff --stat`), and any git todos (`just git_todos`).
 
 ## Workflow
 
@@ -59,13 +25,12 @@ Recent git commits:
    - Delegate tasks to fix todos if they are present in the output of `just git_todos` and are relevant to the current changes. For example, if there is a todo related to fixing a bug and the current changes include a bug fix, assign that todo to yourself and include it in the commit message.
    - Check specific files diffs if needed to clarify intent. `git diff --staged --patch-with-stat <file> | head -n 20` (skip staged flag to see unstaged changes).
 
-2. **Propose Commit**:
-   - Present a summary of the identified changes.
-   - Propose a conventional commit message in the format `type(scope): description`.
-   - If multiple intents are detected, ask the user to pick the primary one or suggest a multi-part commit.
+2. **Determine Commit Message**:
+   - Determine a conventional commit message in the format `type(scope): description`.
+   - If multiple intents are detected, choose the primary one or combine into a single appropriate commit message.
 
 3. **Execute Commit**:
-   - Run `git add . && git commit -am "{Proposed Message}"` to stage all changes and commit with the proposed message.
+   - Run `git add . && git commit -am "{Determined Message}"` to stage all changes and commit with the determined message.
    - Output the final commit message and a summary of the changes included in the commit.
 
 ## Standards
@@ -112,3 +77,43 @@ chore(config): update git permissions to ask
 # Good
 chore(opencode): allow agent to execute git commands with confirmation
 ```
+
+## Git Information
+
+Recent git commits:
+
+<output cmd="git log -n 10 --pretty=format:'%s'">
+!`git log -n 10 --pretty=format:"%s"`
+</output>
+
+Current diff status:
+
+<output cmd="git status -u">
+
+!`git status -u`
+
+</output>
+
+Staged file stats:
+
+<output cmd="git diff --staged --stat">
+
+!`git diff --staged --stat`
+
+</output>
+
+Unstaged file stats:
+
+<output cmd="git diff --stat">
+
+!`git diff --stat`
+
+</output>
+
+Git todos:
+
+<output cmd="just git_todos">
+
+!`just git_todos`
+
+</output>

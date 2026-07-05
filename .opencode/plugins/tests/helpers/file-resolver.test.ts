@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { match } from '../../plugins/helpers/file-resolver'
+import { match } from '../../../plugins/helpers/file-resolver'
 
 describe('file-resolver match', () => {
   it('returns true when an exact path matches the pattern', () => {
