@@ -1,5 +1,5 @@
 ---
-description: Opencode Plugins quality utilities.
+description: Instructs on how to run quality checks.
 applyTo: ".opencode/**/*.{ts,js,json}"
 appliesToAgents: rug-* # applies to entire agentic team
 ---

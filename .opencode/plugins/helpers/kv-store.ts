@@ -17,12 +17,12 @@ interface SessionStorageAdapter {
 }
 
 class FileSystemSessionStorageAdapter implements SessionStorageAdapter {
-  constructor(private basePath: string = ".opencode/plugins/sessions") { }
+  constructor(private basePath: string = ".opencode/plugins/sessions") {}
 
   read(sessionId: string): State | undefined {
     const path = `${this.basePath}/${sessionId}.json`
     try {
-      const content = fs.readFileSync(path, "utf-8") ?? ""
+      const content = fs.readFileSync(path, "utf8") ?? ""
       return content.trim() ? (JSON.parse(content) as State) : {}
     } catch {
       // File does not exist yet — lazily created on first write
@@ -34,12 +34,12 @@ class FileSystemSessionStorageAdapter implements SessionStorageAdapter {
     const path = `${this.basePath}/${sessionId}.json`
     const dir = path.slice(0, path.lastIndexOf("/"))
     try { fs.mkdirSync(dir, { recursive: true }) } catch { /* already exists */ }
-    fs.writeFileSync(path, JSON.stringify(state, null, 2), "utf-8")
+    fs.writeFileSync(path, JSON.stringify(state, null, 2), "utf8")
   }
 }
 
 class SessionStorage {
-  constructor(private storageAdapter: SessionStorageAdapter = new FileSystemSessionStorageAdapter()) { }
+  constructor(private storageAdapter: SessionStorageAdapter = new FileSystemSessionStorageAdapter()) {}
 
   readState<T extends State, R = unknown>(sessionId: string, reader: (state: T) => R): R | undefined {
     const state = this.storageAdapter.read(sessionId) as T | undefined

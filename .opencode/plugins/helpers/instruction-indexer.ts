@@ -1,5 +1,5 @@
 import Bun, { Glob } from "bun"
-import { CustomInstructionFrontMatter, InstructionMeta } from "../types/instructions.ts"
+import { CustomInstructionFrontMatter, InstructionMeta } from "../types/instructions"
 import { load } from "js-yaml"
 
 type IndexOptions = {
@@ -85,22 +85,22 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
 
       await logger(`Matching patterns for files [${filePaths.join(', ')}]: ${matchingPatterns.join(', ')}`)
 
-      const matchingInstructions = matchingPatterns.reduce((acc: InstructionMeta[], pattern) => {
+      const matchingInstructions = matchingPatterns.reduce((accumulator: InstructionMeta[], pattern) => {
         const instructions = index[pattern] || [];
-        return acc.concat(instructions);
+        return accumulator.concat(instructions);
       }, []);
 
-      await logger(`Matching instructions for files [${filePaths.join(', ')}]: ${matchingInstructions.map(i => i.path).join(', ')}`)
+      await logger(`Matching instructions for files [${filePaths.join(', ')}]: ${matchingInstructions.map(index_ => index_.path).join(', ')}`)
 
       const filteredInstructions = matchingInstructions.filter(instruction => {
         if (!instruction.excludePaths) {
           return true;
         }
         const excludeGlob = new Glob(instruction.excludePaths);
-        return !filePathsRelative.every(filePath => excludeGlob.match(filePath));
+        return filePathsRelative.some(filePath => !excludeGlob.match(filePath));
       });
 
-      await logger(`Filtered instructions for files [${filePaths.join(', ')}]: ${filteredInstructions.map(i => i.path).join(', ')}`)
+      await logger(`Filtered instructions for files [${filePaths.join(', ')}]: ${filteredInstructions.map(index_ => index_.path).join(', ')}`)
 
       return filteredInstructions;
     }

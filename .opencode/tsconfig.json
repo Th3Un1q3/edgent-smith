@@ -17,11 +17,7 @@
       "vitest/globals",
       "js-yaml"
     ],
-    "allowImportingTsExtensions": true,
-    "paths": {
-      // "bun:fs": ["./plugins/tests/__mocks__/bun-fs.ts"],
-      // "bun": ["./plugins/tests/__mocks__/bun.ts"]
-    }
+    "paths": {}
   },
   "include": [
     "plugins/**/*.ts",

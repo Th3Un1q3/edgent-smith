@@ -44,7 +44,7 @@ export const todoEnforcer: Plugin = async ({ client }) => {
       if (!isSessionIdle) return
 
       const remainingTodos = (await extractTodos(event.properties.sessionID)).filter((todo) => ["pending", "in_progress"].includes(todo.status));
-      if (!remainingTodos.length) {
+      if (remainingTodos.length === 0) {
         await log(client, "info", "No remaining todos — clearing cancellation state.")
         return
       }
@@ -60,12 +60,12 @@ export const todoEnforcer: Plugin = async ({ client }) => {
           if (!lastMessageSentAt) return true
 
           /**
-           * idle after cancellation -> no resume
-           * idle after message && no cancellation after message -> resume
-           */
+          idle after cancellation -> no resume
+          idle after message && no cancellation after message -> resume
+          */
 
-          const noCancellationAfterMessage = lastCancelledAt < lastMessageSentAt
-          return noCancellationAfterMessage
+          const isNoCancellationAfterMessage = lastCancelledAt < lastMessageSentAt
+          return isNoCancellationAfterMessage
         })
 
         if (!shouldFollowUp) {

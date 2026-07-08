@@ -1,6 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin"
-import { log } from "./helpers/logger.ts"
-import { SessionStorage, SESSION_FIELDS } from "./helpers/kv-store.ts"
+import { log } from "./helpers/logger"
+import { SessionStorage, SESSION_FIELDS } from "./helpers/kv-store"
 
 const PLUGIN_ID = "harness-plugin"
 

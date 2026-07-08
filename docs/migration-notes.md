@@ -26,3 +26,9 @@ I had to create a plugin, to fix some of the issues.
 Model suffers following tools description.
 
 ![alt text](image.png)
+
+### Quality
+
+Sometimes agent does something weired and may forget about it. Needs self review.
+
+![alt text](image-1.png)

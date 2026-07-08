@@ -7,19 +7,20 @@
     "lint": "eslint plugins --fix --cache"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.17.11",
+    "@opencode-ai/plugin": "1.17.15",
     "js-yaml": "5.2.0"
   },
   "devDependencies": {
+    "@types/js-yaml": "4.0.9",
     "@types/node": "^26.1.0",
     "@typescript-eslint/eslint-plugin": "^8.62.1",
     "@typescript-eslint/parser": "^8.62.1",
     "eslint": "^10.6.0",
+    "eslint-plugin-unicorn": "^71.1.0",
     "eslint-plugin-unused-imports": "^4.4.1",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.1",
-    "vitest": "^4.1.9",
-    "@types/js-yaml": "4.0.9"
+    "vitest": "^4.1.9"
   }
 }

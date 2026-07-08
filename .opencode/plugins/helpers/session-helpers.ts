@@ -1,8 +1,8 @@
 import { OpencodeClient } from "@opencode-ai/sdk"
-import { log } from "./logger.ts"
+import { log } from "./logger"
 
 
-type SendMessageImplementation = (args: {
+type SendMessageImplementation = (arguments_: {
   client: OpencodeClient,
   sessionId: string,
   message: string,

@@ -1,7 +1,7 @@
 /**
- * Unified logger wrapping client.app.log with consistent formatting.
- * All log messages are prefixed with the plugin ID for traceability across modules.
- */
+Unified logger wrapping client.app.log with consistent formatting.
+All log messages are prefixed with the plugin ID for traceability across modules.
+*/
 
 import { OpencodeClient } from "@opencode-ai/sdk"
 

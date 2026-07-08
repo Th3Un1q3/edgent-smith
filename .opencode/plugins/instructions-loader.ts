@@ -1,8 +1,8 @@
 import { Plugin } from "@opencode-ai/plugin"
-import { createIndex } from "./helpers/instruction-indexer.ts"
-import { sendMessage } from "./helpers/session-helpers.ts"
-import { log } from "./helpers/logger.ts"
-import { SessionStorage, State } from "./helpers/kv-store.ts"
+import { createIndex } from "./helpers/instruction-indexer"
+import { sendMessage } from "./helpers/session-helpers"
+import { log } from "./helpers/logger"
+import { SessionStorage, State } from "./helpers/kv-store"
 
 interface AgentSession extends State {
     agent?: string
@@ -15,11 +15,11 @@ type StateWithIdempotencyTokens = State & { idempotencyTokens?: Record<string, s
 export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) => {
     const sessionStorage = new SessionStorage() // TODO: implement dependency injection
 
-    const targetedTools = [
+    const targetedTools = new Set([
         'edit',
         'write',
         'read'
-    ]
+    ])
 
     const _indexCache: Record<string, Awaited<ReturnType<typeof createIndex>>> = {};
 
@@ -36,7 +36,7 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
 
     return {
         "tool.execute.before": async (input, output) => {
-            if (!targetedTools.includes(input.tool) || !input.sessionID || !output.args?.filePath) return
+            if (!targetedTools.has(input.tool) || !input.sessionID || !output.args?.filePath) return
 
             const index = await getIndex(input.sessionID)
             const instructions = await index.forFiles([output.args.filePath])
@@ -53,7 +53,7 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
 
             const nonSentInstructions = idempotencyTokens ? instructionsWithTokens.filter(instruction => !idempotencyTokens[instruction.idempotencyToken]) : instructionsWithTokens
 
-            if (!nonSentInstructions.length) {
+            if (nonSentInstructions.length === 0) {
                 await log(client, "info", `[${PLUGIN_ID}] No new instructions to send for session ${input.sessionID}.`)
                 return
             }
@@ -66,11 +66,7 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
             })
 
             sessionStorage.updateState<StateWithIdempotencyTokens>(input.sessionID, (state) => {
-                const newTokens = nonSentInstructions.reduce((acc, instruction) => ({
-                    ...acc,
-                    [instruction.idempotencyToken]: new Date().toISOString()
-                }), {} as Record<string, string>)
-                return { ...state, idempotencyTokens: { ...state.idempotencyTokens, ...newTokens } }
+                return { ...state, idempotencyTokens: { ...state.idempotencyTokens, ...Object.fromEntries(nonSentInstructions.map((instruction) => [instruction.idempotencyToken, new Date().toISOString()])) } };
             })
         }
     }
