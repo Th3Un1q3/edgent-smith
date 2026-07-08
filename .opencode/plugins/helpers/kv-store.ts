@@ -11,66 +11,48 @@ export enum SESSION_FIELDS {
   toolCalls = "toolCalls",
 }
 
-let sessionsDir = ".opencode/plugins/sessions"
-
-export const setSessionsDir = (dir: string): void => {
-  sessionsDir = dir
+interface SessionStorageAdapter {
+  read(sessionId: string): State | undefined
+  write(sessionId: string, state: State): void
 }
 
-export const getSessionsDir = (): string => sessionsDir
+class FileSystemSessionStorageAdapter implements SessionStorageAdapter {
+  constructor(private basePath: string = ".opencode/plugins/sessions") { }
 
-function resolvePath(sessionId: string): string {
-  return `${sessionsDir}/${sessionId}.json`
-}
-
-export function keySelector(keyPath: Array<string>): (state: State) => unknown {
-  return (state: State) => {
-    let current: unknown = state
-    for (const key of keyPath) {
-      if (typeof current !== "object" || current === null) return undefined
-      current = (current as Record<string, unknown>)[key]
+  read(sessionId: string): State | undefined {
+    const path = `${this.basePath}/${sessionId}.json`
+    try {
+      const content = fs.readFileSync(path, "utf-8") ?? ""
+      return content.trim() ? (JSON.parse(content) as State) : {}
+    } catch {
+      // File does not exist yet — lazily created on first write
+      return undefined
     }
-    return current
+  }
+
+  write(sessionId: string, state: State): void {
+    const path = `${this.basePath}/${sessionId}.json`
+    const dir = path.slice(0, path.lastIndexOf("/"))
+    try { fs.mkdirSync(dir, { recursive: true }) } catch { /* already exists */ }
+    fs.writeFileSync(path, JSON.stringify(state, null, 2), "utf-8")
   }
 }
 
-/** Read a single value at the given key path from session state. Returns undefined if not found. */
-export function readState<T extends State>(
-  sessionId: string,
-  reader: (state: T) => unknown,
-): unknown {
-  const state = loadSessionState(sessionId) as T | undefined
-  if (!state) return undefined
-  return reader(state)
-}
+class SessionStorage {
+  constructor(private storageAdapter: SessionStorageAdapter = new FileSystemSessionStorageAdapter()) { }
 
-/** Update a session's persisted state. The updater receives the current state and returns the new one. */
-export function updateState<T extends State>(
-  sessionId: string,
-  updater: (state: T) => T,
-): T {
-  const path = resolvePath(sessionId)
-  let current: T = {} as T
-  try {
-    const content = fs.readFileSync(path, "utf-8") ?? ""
-    if (content.trim()) current = JSON.parse(content) as T
-  } catch { /* file missing — start from empty */ }
+  readState<T extends State, R = unknown>(sessionId: string, reader: (state: T) => R): R | undefined {
+    const state = this.storageAdapter.read(sessionId) as T | undefined
+    if (!state) return undefined
+    return reader(state)
+  }
 
-  const next = updater(current)
-  const dir = path.slice(0, path.lastIndexOf("/"))
-  try { fs.mkdirSync(dir, { recursive: true }) } catch { /* already exists */ }
-  fs.writeFileSync(path, JSON.stringify(next, null, 2), "utf-8")
-  return next
-}
-
-
-function loadSessionState(sessionId: string): State | undefined {
-  const path = resolvePath(sessionId)
-  try {
-    const content = fs.readFileSync(path, "utf-8") ?? ""
-    return content.trim() ? (JSON.parse(content) as State) : {}
-  } catch {
-    // File does not exist yet — lazily created on first write
-    return undefined
+  updateState<T extends State, R = unknown>(sessionId: string, updater: (state: T) => R): R {
+    const current = (this.storageAdapter.read(sessionId) as T) || ({} as T)
+    const next = updater(current)
+        this.storageAdapter.write(sessionId, next as State)
+    return next
   }
 }
+
+export { SessionStorage, FileSystemSessionStorageAdapter }

@@ -1,0 +1,11 @@
+# Run tests for opencode plugins using Bun and Vitest. This command is intended to be run from the root of the opencode repository.
+test *ARGS:
+  bun run --bun test {{ARGS}}
+
+# Run linter for opencode plugins
+lint *ARGS:
+  bun run --bun lint {{ARGS}}
+
+# Run typecheck for opencode plugins
+typecheck *ARGS:
+  bun run --bun typecheck {{ARGS}}

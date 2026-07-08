@@ -93,23 +93,5 @@
             "type": "remote",
             "url": "http://mcp_gateway:8080/mcp"
         },
-        "codegraph": {
-            "type": "local",
-            "command": [
-                "codegraph",
-                "serve",
-                "--mcp"
-            ],
-            "enabled": true
-        },
-        // "codegraph": {
-        //     "type": "local",
-        //     "command": [
-        //         "codegraph",
-        //         "serve",
-        //         "--mcp"
-        //     ],
-        //     "enabled": true
-        // },
     }
 }

@@ -20,8 +20,8 @@ fi
 
 # Install codegraph cli(required for MCP)
 
-curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh
-codegraph install --target=auto --location=local --yes
+# curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh
+# codegraph install --target=auto --location=local --yes
 
 
 echo "Running uv sync..."

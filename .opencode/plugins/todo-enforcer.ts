@@ -2,7 +2,7 @@
 import { Plugin } from "@opencode-ai/plugin"
 import { log } from "./helpers/logger"
 import { sendMessage } from "./helpers/session-helpers"
-import { readState, updateState, SESSION_FIELDS } from "./helpers/kv-store"
+import { SessionStorage, SESSION_FIELDS } from "./helpers/kv-store"
 
 
 const PLUGIN_ID = "todo-enforcer"
@@ -26,7 +26,8 @@ Proceed with the following steps:
 `
 }
 
-export const todoEnforcer: Plugin = async ({ client, project, $, directory, worktree }) => {
+export const todoEnforcer: Plugin = async ({ client }) => {
+  const sessionStorage = new SessionStorage() // TODO: implement dependency injection
   await log(client, "info", `${PLUGIN_ID} initialized`)
 
   const extractTodos = async (sessionId: string): Promise<Array<Todo>> => {
@@ -50,10 +51,9 @@ export const todoEnforcer: Plugin = async ({ client, project, $, directory, work
 
 
       setTimeout(async () => {
-        const shouldFollowUp = readState(event.properties.sessionID, (state) => {
+        const shouldFollowUp = sessionStorage.readState(event.properties.sessionID, (state) => {
           const lastCancelledAt = state[SESSION_FIELDS.cancelledAt] ? new Date(state[SESSION_FIELDS.cancelledAt] as string) : null
           const lastMessageSentAt = state[SESSION_FIELDS.lastMessageSentAt] ? new Date(state[SESSION_FIELDS.lastMessageSentAt] as string) : null
-          const now = new Date()
 
           if (!lastCancelledAt) return true
 
@@ -79,7 +79,7 @@ export const todoEnforcer: Plugin = async ({ client, project, $, directory, work
           message: buildTodoContinuationMessage(remainingTodos),
         })
 
-        updateState(event.properties.sessionID, (s) => ({ ...s, todoFollowupSentAt: (new Date()).toISOString() }))
+        sessionStorage.updateState(event.properties.sessionID, (s) => ({ ...s, todoFollowupSentAt: (new Date()).toISOString() }))
       }, 1000)
     },
 

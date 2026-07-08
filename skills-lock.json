@@ -61,11 +61,11 @@
       "skillPath": "refactoring-patterns/SKILL.md",
       "computedHash": "a9ec981a43d8e2fee19062a1422be552dc017ca45db04b95783fb52e5befdd26"
     },
-    "test-driven-development": {
-      "source": "obra/superpowers",
+    "skill-creator": {
+      "source": "anthropics/skills",
       "sourceType": "github",
-      "skillPath": "skills/test-driven-development/SKILL.md",
-      "computedHash": "126f1ebf6ccd414f42544f6e83d8cc5adb089e1108eaffb7c400701e37eecd9f"
+      "skillPath": "skills/skill-creator/SKILL.md",
+      "computedHash": "5ea13a6d9f0d4bb694405d79acd00cadec0d21bb138c4dd10fcf3c500cb835c2"
     },
     "vitest": {
       "source": "supabase/supabase",

@@ -9,7 +9,7 @@ const PLUGIN_ID = "harness-plugin"
 
 export async function log(
   client: OpencodeClient,
-  level: "debug" | "info" | "warn" | "error",
+  level: "debug" | "info" | "warn" | "error" = "info",
   message: string,
 ): Promise<void> {
   await client.app.log({

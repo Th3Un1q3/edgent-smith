@@ -1,0 +1,18 @@
+---
+description: Opencode Plugins quality utilities.
+applyTo: ".opencode/**/*.{ts,js,json}"
+appliesToAgents: rug-* # applies to entire agentic team
+---
+
+# Ensure function and correctness of Opencode plugins
+
+Always ensure the following when developing Opencode plugins:
+
+From the '.opencode' directory, run the following commands to ensure that the plugin is working correctly:
+
+```
+just test
+just lint
+just typecheck
+```
+

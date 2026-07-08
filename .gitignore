@@ -73,3 +73,4 @@ secrets/
 .logs/
 .opencode/plugins/sessions
 .opencode/opencode-notifier-state.json
+.opencode/.eslintcache

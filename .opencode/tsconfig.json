@@ -5,19 +5,31 @@
     "moduleResolution": "bundler",
     "strict": true,
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "declaration": true,
     "outDir": "./dist",
     "rootDir": ".",
-    "types": ["node", "vitest/globals"],
+    "types": [
+      "node",
+      "vitest/globals",
+      "js-yaml"
+    ],
     "allowImportingTsExtensions": true,
     "paths": {
-      "bun:fs": ["./plugins/tests/__mocks__/bun-fs.ts"],
-      "bun": ["./plugins/tests/__mocks__/bun.ts"]
+      // "bun:fs": ["./plugins/tests/__mocks__/bun-fs.ts"],
+      // "bun": ["./plugins/tests/__mocks__/bun.ts"]
     }
   },
-  "include": ["plugins/**/*.ts", "plugins/tests/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "plugins/**/*.ts",
+    "plugins/**/*.d.ts",
+    "plugins/tests/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

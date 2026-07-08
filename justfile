@@ -62,6 +62,7 @@ promote-baseline baseline_id:
 pull-ollama-model:
   bash scripts/pull_ollama_model.sh
 
+# Run opencode
 oc *ARGS:
   opencode {{ARGS}}
 
