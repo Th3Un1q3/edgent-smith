@@ -12,7 +12,9 @@
 | `sessions/` | Runtime JSON state files (1000+ files, auto-generated) | Pattern: `ses_<timestamp>_<random>.json` — do not create manually |
 
 
-### Bash commands for Quality Assurance
+### Quality Gates
+
+All these quality gates need to pass to conclude that the plugin is valid and ready for use.
 
 Tests: `cd /workspace/.opencode && just test`
 Linter: `cd /workspace/.opencode && just lint`

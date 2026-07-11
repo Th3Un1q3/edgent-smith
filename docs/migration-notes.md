@@ -15,7 +15,19 @@ devcontainers allow to avoid uninstalling by simply rebuilding clean state.
 
 Has great plugins, but bloats context as crazy. It extends tools descriptions, confuses agents, and causes it go all the wrong paths.
 
-## Tweeks
+## Model Failures
+
+### Loops
+
+Thinking the same thing over and over, and not doing anything. It is a common failure of the model.
+
+Solution:
+- Limit generation context.
+- Configure repetition penalty
+
+![alt text](image-3.png)
+
+## Tweaks
 
 As the model is often lazy the system requires a bit of pushes. Like make sure todos are done, or make sure to use skills. Or use correct filepaths.
 
@@ -32,3 +44,9 @@ Model suffers following tools description.
 Sometimes agent does something weired and may forget about it. Needs self review.
 
 ![alt text](image-1.png)
+
+Oh yeah that looks like ligit code to me:
+
+![alt text](image-2.png)
+
+Could not write a single test file for 10 hours.
