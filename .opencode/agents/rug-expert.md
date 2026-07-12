@@ -1,7 +1,6 @@
 ---
-description: "Expert subagent, good at: planning, critique, validation, writing, design, architecture, learning. Applies known skills to complete assigned tasks."
-mode: subagent
 name: rug-expert
+mode: subagent
 steps: 20
 ---
 

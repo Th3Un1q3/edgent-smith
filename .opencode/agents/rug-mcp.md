@@ -1,6 +1,5 @@
 ---
-description: "Retrieves information for libraries, frameworks, tools, software, general web. Any external knowledge. Whatewer you don't know, it can get."
-steps: 20
+steps: 12
 mode: subagent
 name: rug-mcp
 permission:

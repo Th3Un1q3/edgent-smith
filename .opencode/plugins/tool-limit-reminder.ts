@@ -24,9 +24,9 @@ export const toolLimitReminder: Plugin = async ({ client }) => {
 
   const TOOL_LIMITS: Record<string, number> = {
     "rug-swe": 20,
-    "rug-mcp": 6,
+    "rug-mcp": 8,
     "rug-expert": 15,
-    "rug-puppet": 6
+    "rug-puppet": 3
   }
 
   const PADDING_TILL_ERROR = 2

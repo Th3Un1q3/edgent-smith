@@ -65,15 +65,14 @@
             }
         }
     },
-    "instructions": [
-        "./.github/instructions/writing-style.instructions.md",
-    ],
     "permission": {
         "bash": {
             "*": "allow",
             "git *": "ask",
+            "rtk git *": "ask",
+            "rtk rewrite git *": "ask",
             "git diff *": "allow",
-            "just approve *": "ask"
+            "git status *": "allow"
         },
         "gateway_*": "deny",
         "gateway_mcp-find": "allow",
@@ -82,11 +81,6 @@
     },
     "plugin": [
         "@mohak34/opencode-notifier@latest",
-        // "opencode-snip@latest",
-        // "@tarquinen/opencode-dcp@latest",
-        // "@mohak34/opencode-notifier@latest",
-        // "@spoons-and-mirrors/subtask2@latest",
-        // "oh-my-opencode@latest" // Has ni
     ],
     "mcp": {
         "gateway": {

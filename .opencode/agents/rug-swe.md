@@ -1,7 +1,6 @@
 ---
 name: rug-swe
-description: "Senior software engineer subagent for implementation tasks: feature development, debugging, refactoring, and testing. Tell what to do, not how."
-# mode: subagent
+mode: subagent
 steps: 30
 permissions:
   "task": "deny"

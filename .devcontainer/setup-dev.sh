@@ -11,11 +11,10 @@ if ! command -v opencode &> /dev/null; then
   curl -fsSL https://opencode.ai/install | bash
 fi
 
-
 if ! command -v rtk &> /dev/null; then
   echo "Installing rtk..."
   curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
-  # rtk init -g --opencode # FIXME - it seems to break tools an permissions, disabiling it for now
+  rtk init -g --opencode
 fi
 
 # Install codegraph cli(required for MCP)

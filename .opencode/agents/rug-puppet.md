@@ -1,7 +1,6 @@
 ---
-description: "Does simple tasks, such as: file management, code execution, API calls, and other basic operations. If task requires any expertise - this agent is not the one to use."
-mode: subagent
 name: rug-puppet
+mode: subagent
 permission:
   task: "deny"
   bash:
