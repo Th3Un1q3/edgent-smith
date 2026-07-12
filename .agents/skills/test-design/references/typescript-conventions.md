@@ -72,6 +72,39 @@ describe("toUpperCase()", () => {
 })
 ```
 
+Using describe.each for situation when similar tests need to be executed in different contexts. This is useful when you want to test the same functionality with different configurations or setups.
+
+```ts
+describe('agentIndex()', () => {
+  const subject = (agentConfig) => agentIndex({ agent: agentConfig.agent })
+
+  beforeEach(() => {
+    registerAgent('someRootLevelDefaultAgent')
+  })
+
+  const agents = [
+    { agent: "default", skipDays: 10, expectStorage: expect.anything() },
+    { agent: "copilot", skipDays: 30, expectStorage: expect.not.anything() },
+  ]
+  describe.each(agents)('when agent is $agent', (agentConfig) => {
+    beforeEach(async () => {
+      // This before each block allows to setup multiple similar environments and keep setup code separate from test code
+      registerAgent(agentConfig.agent)
+      simulateTimeTravel(agentConfig.skipDays) // Simulate time travel to test caching behavior
+    })
+
+    it('returns the cache value for the agent', () => {
+      const result = subject(agentConfig)
+      expect(result).toEqual(agentConfig.expectStorage)
+    })
+
+    it('returns correct registeredDays', () => {
+      const result = subject(agentConfig)
+      expect(result.registeredDays).toEqual(agentConfig.skipDays)
+  })
+})
+```
+
 ## Principle 3: No Conditionals Inside Test Bodies
 
 Test bodies are straight-line only. If you reach for `if`, `else`, ternaries, or `switch`, split the scenario into separate table rows or separate `it()` cases.
@@ -193,6 +226,8 @@ describe("auth", () => {
 })
 ```
 
+Never initiate repetitive spies or mocks inside individual tests. Always configure them in the nearest ancestor's `beforeEach` so that they are reset between tests. This ensures that each test runs in isolation and does not depend on the state left by previous tests. 
+
 ### Pattern Selection Guide (Principle 4)
 
 | Scenarios | Pattern | Nesting depth |
@@ -203,6 +238,67 @@ describe("auth", () => {
 | Complex shared state across tests | Extract helper function called from `beforeEach` | N/A |
 
 **DO NOT nest when:** each test needs fundamentally different mock implementations (not just return values) or child would need >2 overrides. Use separate it blocks with inline config instead — 3+ levels of nesting is more fragile than a flat structure.
+
+
+## Principle 5: Minimalistic Assertions leveraging built-in matchers
+
+Always use built-in matchers to communicate intent. Avoid custom counters or manual tracking of calls, as they obscure the intent of the test and make it harder to understand what is being verified. Use matchers like `toHaveBeenCalledTimes` and `toHaveBeenCalledWith` to clearly express the expected behavior of mocks.
+
+```typescript
+// BAD: use custom counters instead of built-in matchers
+it('should be called once', async () => {
+  const counter = 0
+  mockFn.mockImplementation(() => counter++)
+  await performAction()
+  expect(counter).toBe(1)
+  const name = mockFn.mock.calls[0][0].name
+  expect(name).toBe("expectedArg")
+})
+
+// GOOD: use built-in matchers to communicate intent
+it('should be called once', async () => {
+  // Confirm that there is no chace that the mock was called before the action by some other test or setup code
+  expect(mockFn).not.toHaveBeenCalled()
+  await performAction()
+  expect(mockFn).toHaveBeenCalledTimes(1)
+  expect(mockFn).toHaveBeenCalledWith(expect.objectContaining({ name: "expectedArg" }))
+})
+```
+
+Use native matchers to track errors and async errors. Avoid custom error counters or manual tracking of errors, as they can lead to confusion and make it harder to understand what is being verified. Use matchers like `toThrow` and `rejects.toThrow` to clearly express the expected behavior of functions that may throw errors.
+
+```typescript
+// BAD: use custom error counters instead of built-in matchers
+it('should throw an error', async () => {
+  let errorMessage = ""
+  try {
+    await performAction()
+  } catch (error) {
+    errorMessage = (error as Error).message
+  }
+  expect(errorMessage).toBe("expected error message")
+})
+
+// BAD: manual try/catch with assertions inside the catch block
+it('should throw an error', () => {
+  try {
+    performSyncAction()
+    fail("Expected error was not thrown")
+  } catch (error) {
+    expect((error as Error).message).toBe("expected error message")
+  }
+})
+
+// GOOD: use built-in matchers to communicate intent
+it('should throw an error', async () => {
+  await expect(performAction()).rejects.toThrow("expected error message")
+})
+
+// GOOD: use built-in matchers for synchronous functions
+it('should throw an error', () => {
+  expect(() => performSyncAction()).toThrow("expected error message")
+})
+```
 
 ### Fixture-Driven Tests (Integration / Shared-State Setup)
 

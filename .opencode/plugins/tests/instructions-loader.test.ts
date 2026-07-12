@@ -168,9 +168,9 @@ describe("instructionsLoaderPlugin", () => {
             const getSpy = vi.spyOn(copilotClient.session, "get")
             getSpy.mockImplementation(async (args) => {
                 if (args.path.id === "sess-copilot") {
-                    return Promise.resolve({ data: { agent: "copilot" } })
+                    return { data: { agent: "copilot" } };
                 }
-                return Promise.resolve({ data: {} })
+                return { data: {} };
             })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({

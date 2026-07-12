@@ -10,9 +10,6 @@ permission:
     read:
         "*": deny
         ".agents/skills/mcp-usage/**": allow
-    glob:
-        "*": deny
-        ".agents/skills/mcp-usage/**": allow
     "gateway_*": deny
     "gateway_mcp-find": allow
     "gateway_code-mode": allow
