@@ -21,6 +21,8 @@ Extract test code when any of these conditions hold:
 - The file exceeds its limit by **any amount** — there is no "close enough" exception
 - A single `describe` block contains more than **8 distinct mock configurations** — this indicates the production API couples too many concerns into one testable unit
 - Test setup code (mock configuration) exceeds **30% of total file lines** — this signals that either the production module has too many dependencies or the mocks are over-specified
+- An extracted shared factory's return shape must exactly match every consumer's property access chain. Audit all consumers before extracting — a mismatched `.session.get` vs `.client.session.get` nesting breaks runtime tests silently until the full suite runs.
+- Extracted helpers must have minimal, direct APIs. If an extracted helper requires passing mock factories, complex configuration objects, or nested dependency graphs as arguments, it is too coupled and should stay inline. A good helper takes data (e.g., `makeHelper(metas)`) — not infrastructure (e.g., `makeHelper({ indexerFactory: ..., maxChars: ... })`).
 
 ### Anti-Pattern: The Monolith Test File
 
@@ -158,3 +160,6 @@ See [TypeScript Conventions](./typescript-conventions.md#mock-lifecycle-and-tear
 Each `describe`/`context` block names the module or class being tested, not a scenario. Each inner test (or table row) covers one distinct input-output relationship. Do not name describe blocks after test scenarios ("when login succeeds") — name them after what is being tested ("auth service").
 
 **Rationale:** Describes named after units form a stable navigation structure; describes named after scenarios drift as the code changes and force renaming tests that still cover the same unit.
+
+## Principle 7: Run Quality Gates After Every Discrete Edit, Not Just at the End
+Post-hoc validation of large refactoring batches is insufficient. When modifying test files — especially during consolidation or shared helper extraction — run quality gates (test suite + linting) after each discrete edit, not only after all changes are applied. A single-pass approach to multi-file refactoring makes it impossible to isolate which change introduced a failure, turning debugging into a binary search across dozens of edits. Validate continuously: small scope → gate → confirm → next scope → repeat.

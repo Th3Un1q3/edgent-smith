@@ -7,7 +7,9 @@
     "lint": "eslint plugins --fix --cache"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.17.15",
+    "@opencode-ai/plugin": "1.17.18",
+    "@vitest/coverage-v8": "^4.1.10",
+    "c8": "^11.0.0",
     "js-yaml": "5.2.0"
   },
   "devDependencies": {

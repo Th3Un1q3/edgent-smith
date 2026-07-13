@@ -90,49 +90,44 @@ describe('createIndex().forFiles', () => {
     ]))
   });
 
-  describe('when instruction has (excludePaths: "**.test.ts") property', () => {
-    it('does not return instruction if all the files are excluded by the excludePaths property', async () => {
-      const result = await subject.forFiles(['src/dir/some-file.test.ts']);
+  it('does not return instruction if files are excluded by the excludePaths property', async () => {
+    const result = await subject.forFiles(['src/dir/some-file.test.ts']);
 
-      const instructionFileName = 'excluded-paths.instructions.md'
+    const instructionFileName = 'excluded-paths.instructions.md'
 
-      expect(result).toEqual(expect.not.arrayContaining([
+    expect(result).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        path: expect.stringContaining(instructionFileName)
+      })
+    ]))
+  });
+
+
+  it("does not return instructions that have global frontmatter (applyTo: \"**\")", async () => {
+    const result = await subject.forFiles(['src/dir/some-file.ts']);
+
+    const instructionsWithGlobalFrontmatter = ['global-frontmatter.instructions.md', 'global-frontmatter-normalized.instructions.md'];
+
+    expect(result).toEqual(expect.not.arrayContaining(
+      instructionsWithGlobalFrontmatter.map(instructionFileName =>
         expect.objectContaining({
           path: expect.stringContaining(instructionFileName)
         })
-      ]))
-    });
+      )
+    ));
   });
 
-  describe("when instructions have global frontmatter", () => {
-    it('does not return instructions that have global frontmatter (applyTo: "**")', async () => {
-      const result = await subject.forFiles(['src/dir/some-file.ts']);
+  it('returns the instruction only once when multiple files match the same instruction', async () => {
+    const instructionFileName = 'multiple-glob-patterns.instructions.md';
 
-      const instructionsWithGlobalFrontmatter = ['global-frontmatter.instructions.md', 'global-frontmatter-normalized.instructions.md'];
+    const result = await subject.forFiles(['dir/file1.ts', 'dir/file1.js']);
 
-      expect(result).toEqual(expect.not.arrayContaining(
-        instructionsWithGlobalFrontmatter.map(instructionFileName =>
-          expect.objectContaining({
-            path: expect.stringContaining(instructionFileName)
-          })
-        )
-      ));
-    });
-  })
+    const matchingInstructions = result.filter(instruction =>
+      instruction.path.includes(instructionFileName)
+    );
 
-  describe('when multiple files match the same instruction', () => {
-    it('returns the instruction only once', async () => {
-      const instructionFileName = 'multiple-glob-patterns.instructions.md';
-
-      const result = await subject.forFiles(['dir/file1.ts', 'dir/file1.js']);
-
-      const matchingInstructions = result.filter(instruction =>
-        instruction.path.includes(instructionFileName)
-      );
-
-      expect(matchingInstructions.length).toBe(1);
-    });
-  })
+    expect(matchingInstructions.length).toBe(1);
+  });
 
   describe('when instructions have (appliesToAgents: "{agent1,agent2,team-*}") property', () => {
     beforeEach(async () => {
@@ -178,5 +173,39 @@ describe('createIndex().forFiles', () => {
         ]));
       });
     })
+  })
+
+  describe('loadBody()', () => {
+    it("throws when the instruction file does not exist", async () => {
+      await expect(
+        subject.loadBody("/nonexistent/path/instruction.md")
+      ).rejects.toThrow(
+        "Instruction file not found: /nonexistent/path/instruction.md"
+      )
+    })
+  })
+
+  it("skips empty-frontmatter fixtures silently during indexing", async () => {
+    const result = await subject.forFiles(['src/dir/some-file.ts'])
+
+    expect(result).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({
+          path: expect.stringContaining('empty-frontmatter.instructions.md')
+        })
+      ])
+    )
+  })
+
+  it("skips malformed-yaml fixtures silently during indexing", async () => {
+    const result = await subject.forFiles(['src/dir/some-file.ts'])
+
+    expect(result).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({
+          path: expect.stringContaining('malformed-fronmatter.instructions.md')
+        })
+      ])
+    )
   })
 })

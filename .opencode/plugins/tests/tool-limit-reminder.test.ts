@@ -1,31 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import type { Mock } from "vitest"
 
-vi.mock("../helpers/logger", () => ({ log: vi.fn() }))
-vi.mock("../helpers/session-helpers", () => ({ sendMessage: vi.fn() }))
+// Synchronous mock factories — no dynamic imports to avoid circular dependency issues.
+import { defaultCreateClient, makeLoggerMockFactory, makeSessionHelpersMockFactory } from "./helpers/mock-utils"
+
+vi.mock("../helpers/logger", () => makeLoggerMockFactory())
+vi.mock("../helpers/session-helpers", () => makeSessionHelpersMockFactory())
 
 import { toolLimitReminder } from "../tool-limit-reminder"
 import { log } from "../helpers/logger"
 import { sendMessage } from "../helpers/session-helpers"
 
-const logMock = vi.mocked(log) as Mock<typeof log>
-const sendMessageMock = vi.mocked(sendMessage) as Mock<typeof sendMessage>
+const logMock = vi.mocked(log)
+const sendMessageMock = vi.mocked(sendMessage)
 
-function createClient(agentName: string, defaultAgent?: string) {
-  return {
-    client: {
-      session: {
-        get: vi.fn().mockResolvedValue({ data: { agent: defaultAgent ?? agentName } }),
-      },
-    },
-    project: vi.fn(),
-    directory: "/workspace",
-    worktree: "/workspace/.git",
-    experimental_workspace: { register: vi.fn() },
-    serverUrl: new URL("http://localhost"),
-    $: vi.fn(),
-  } as never
-}
 
 interface ToolLimitReminderPlugin {
   dispose?: () => Promise<void>
@@ -35,35 +22,31 @@ interface ToolLimitReminderPlugin {
 describe("toolLimitReminder plugin", () => {
 
   // Zero — missing sessionID logs warn and returns without any other side effects
-  describe("missing sessionID", () => {
-    it("logs warning when sessionID is absent in input", async () => {
-      const plugin = (await toolLimitReminder(createClient("rug-swe"))) as ToolLimitReminderPlugin
-      const hook = plugin["tool.execute.before"]
+  it("logs warning when sessionID is absent in input", async () => {
+    const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe"))) as ToolLimitReminderPlugin
+    const hook = plugin["tool.execute.before"]
 
-      await hook({})
+    await hook({})
 
-      expect(logMock).toHaveBeenCalledWith(
-        expect.anything(),
-        "warn",
-        expect.stringContaining("missing sessionID"),
-      )
-    })
+    expect(logMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "warn",
+      expect.stringContaining("missing sessionID"),
+    )
   })
 
   // One — unlisted agent skips limit check entirely (logs info, no counter increment)
-  describe("unlisted agent", () => {
-    it("skips limit check for unlisted agents and logs info", async () => {
-      const plugin = (await toolLimitReminder(createClient("build"))) as ToolLimitReminderPlugin
-      const hook = plugin["tool.execute.before"]
+  it("skips limit check for unlisted agents and logs info", async () => {
+    const plugin = (await toolLimitReminder(defaultCreateClient("build"))) as ToolLimitReminderPlugin
+    const hook = plugin["tool.execute.before"]
 
-      await hook({ sessionID: "sess-1" })
+    await hook({ sessionID: "sess-1" })
 
-      expect(logMock).toHaveBeenCalledWith(
-        expect.anything(),
-        "info",
-        expect.stringContaining("not listed in TOOL_LIMITS"),
-      )
-    })
+    expect(logMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "info",
+      expect.stringContaining("not listed in TOOL_LIMITS"),
+    )
   })
 
   // Many — known agents increment counter on first call without steering or error (green path)
@@ -75,7 +58,7 @@ describe("toolLimitReminder plugin", () => {
     let plugin: ToolLimitReminderPlugin | undefined
 
     beforeEach(async () => {
-      plugin = await toolLimitReminder(createClient("build", agent)) as ToolLimitReminderPlugin
+      plugin = await toolLimitReminder(defaultCreateClient({ data: { agent } })) as ToolLimitReminderPlugin
     })
 
     it("increments counter on first call without steering or error", async () => {
@@ -93,15 +76,11 @@ describe("toolLimitReminder plugin", () => {
     })
   })
 
-  // Boundary — approaching threshold (one below limit): warn logged, no error or steering
-  describe("approaching threshold for rug-mcp", () => {
-    let plugin: ToolLimitReminderPlugin | undefined
+  // Boundary — threshold behavior for rug-mcp (limit=8)
+  describe("threshold behavior for rug-mcp", () => {
 
-    beforeEach(async () => {
-      plugin = await toolLimitReminder(createClient("build", "rug-mcp")) as ToolLimitReminderPlugin
-    })
-
-    it("step 6 does not throw", async () => {
+    it("approaching threshold does not throw (step 6)", async () => {
+      const plugin = (await toolLimitReminder(defaultCreateClient("build", "rug-mcp"))) as ToolLimitReminderPlugin | undefined
       const hook = plugin!["tool.execute.before"]
 
       for (let i = 0; i < 5; i++) {
@@ -115,6 +94,7 @@ describe("toolLimitReminder plugin", () => {
     })
 
     it("approaching threshold logs a warning for rug-mcp at step 6", async () => {
+      const plugin = (await toolLimitReminder(defaultCreateClient("build", "rug-mcp"))) as ToolLimitReminderPlugin | undefined
       const hook = plugin!["tool.execute.before"]
 
       // Call 5 times then once more to reach the boundary
@@ -131,17 +111,9 @@ describe("toolLimitReminder plugin", () => {
         expect.stringContaining("reached tool call limit"),
       )
     })
-  })
 
-  // Interface — reaching exact threshold sends steering message with expected content
-  describe("reaching exact threshold for rug-mcp", () => {
-    let plugin: ToolLimitReminderPlugin | undefined
-
-    beforeEach(async () => {
-      plugin = await toolLimitReminder(createClient("build", "rug-mcp")) as ToolLimitReminderPlugin
-    })
-
-    it("sends steering message (limit=8)", async () => {
+    it("sends steering message (limit=8) when reaching exact threshold", async () => {
+      const plugin = (await toolLimitReminder(defaultCreateClient("build", "rug-mcp"))) as ToolLimitReminderPlugin | undefined
       const hook = plugin!["tool.execute.before"]
 
       for (let i = 0; i < 9; i++) {
@@ -163,17 +135,9 @@ describe("toolLimitReminder plugin", () => {
         expect.stringContaining("reached tool call limit"),
       )
     })
-  })
 
-  // padding calls for rug-mcp return without error
-  describe("padding calls for rug-mcp", () => {
-    let plugin: ToolLimitReminderPlugin | undefined
-
-    beforeEach(async () => {
-      plugin = await toolLimitReminder(createClient("build", "rug-mcp")) as ToolLimitReminderPlugin
-    })
-
-    it("return without error within padding tolerance (limit=8)", async () => {
+    it("returns without error within padding tolerance (limit=8)", async () => {
+      const plugin = (await toolLimitReminder(defaultCreateClient({ data: { agent: "rug-mcp" } })) as ToolLimitReminderPlugin | undefined)
       // Call hook 9 times — currentCount reaches 8 which is limit(8) + PADDING_TILL_ERROR(2) = 10, still within tolerance
       for (let i = 0; i < 10; i++) {
         await expect(
@@ -187,17 +151,9 @@ describe("toolLimitReminder plugin", () => {
         expect.stringContaining("reached tool call limit"),
       )
     })
-  })
-
-  // hard-limit throws error message when exceeded
-  describe("hard-limit for rug-mcp", () => {
-    let plugin: ToolLimitReminderPlugin | undefined
-
-    beforeEach(async () => {
-      plugin = await toolLimitReminder(createClient("build", "rug-mcp")) as ToolLimitReminderPlugin
-    })
 
     it("throws DO NOT call any more tools error when exceeding limit+padding", async () => {
+      const plugin = (await toolLimitReminder(defaultCreateClient("build", "rug-mcp"))) as ToolLimitReminderPlugin | undefined
       const hook = plugin!["tool.execute.before"]
       // Use a single sessionID so the counter accumulates across all calls.
       // With rug-mcp (limit=6, PADDING_TILL_ERROR=2), currentCount must reach 9
@@ -227,28 +183,21 @@ describe("toolLimitReminder plugin", () => {
   })
 
   // Simple — green path for below-threshold calls logs warn and info without extra behavior
-  describe("below-threshold green path", () => {
-    let plugin: ToolLimitReminderPlugin | undefined
+  it("logs warn + info and returns normally for below-threshold calls", async () => {
+    const plugin = (await toolLimitReminder(defaultCreateClient("build", "rug-swe"))) as ToolLimitReminderPlugin | undefined
+    const hook = plugin!["tool.execute.before"]
 
-    beforeEach(async () => {
-      plugin = await toolLimitReminder(createClient("build", "rug-swe")) as ToolLimitReminderPlugin
-    })
+    expect(sendMessageMock).not.toHaveBeenCalled()
 
-    it("logs warn + info and returns normally for below-threshold calls", async () => {
-      const hook = plugin!["tool.execute.before"]
+    await expect(
+      hook({ sessionID: "sess-simple" }),
+    ).resolves.toBeUndefined()
 
-      expect(sendMessageMock).not.toHaveBeenCalled()
-
-      await expect(
-        hook({ sessionID: "sess-simple" }),
-      ).resolves.toBeUndefined()
-
-      expect(logMock).toHaveBeenCalledWith(
-        expect.anything(),
-        "warn",
-        expect.stringContaining("reached tool call limit"),
-      )
-      expect(sendMessageMock).not.toHaveBeenCalled()
-    })
+    expect(logMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "warn",
+      expect.stringContaining("reached tool call limit"),
+    )
+    expect(sendMessageMock).not.toHaveBeenCalled()
   })
 })

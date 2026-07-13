@@ -74,3 +74,13 @@ secrets/
 .opencode/plugins/sessions
 .opencode/opencode-notifier-state.json
 .opencode/.eslintcache
+.opencode/coverage/base.css
+.opencode/coverage/block-navigation.js
+.opencode/coverage/clover.xml
+.opencode/coverage/coverage-final.json
+.opencode/coverage/favicon.png
+.opencode/coverage/index.html
+.opencode/coverage/prettify.css
+.opencode/coverage/prettify.js
+.opencode/coverage/sort-arrow-sprite.png
+.opencode/coverage/sorter.js

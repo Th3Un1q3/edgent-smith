@@ -22,7 +22,8 @@ interface InstructionMeta {
 interface ResolvedInstruction {
   description?: string
   applyTo?: string
-  idempotencyKey: string // to prevent reapplying the same instruction multiple times
+  path?: string            // NEW — added for idempotency token derivation and source reference
+  idempotencyKey: string   // to prevent reapplying the same instruction multiple times
   content: string          // full markdown body after front matter stripped
 }
 

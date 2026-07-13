@@ -32,9 +32,9 @@ class FileSystemSessionStorageAdapter implements SessionStorageAdapter {
 
   write(sessionId: string, state: State): void {
     const path = `${this.basePath}/${sessionId}.json`
-    const dir = path.slice(0, path.lastIndexOf("/"))
-    try { fs.mkdirSync(dir, { recursive: true }) } catch { /* already exists */ }
-    fs.writeFileSync(path, JSON.stringify(state, null, 2), "utf8")
+    const directory = path.slice(0, path.lastIndexOf("/"))
+    try { fs.mkdirSync(directory, { recursive: true }) } catch { /* already exists */ }
+    fs.writeFileSync(path, JSON.stringify(state, undefined, 2), "utf8")
   }
 }
 
@@ -56,3 +56,8 @@ class SessionStorage {
 }
 
 export { SessionStorage, FileSystemSessionStorageAdapter }
+
+// Placeholder mocks for test files — real implementations come from vi.mock() overrides.
+const _mockReadState = Object.assign(() => {}, { mockClear: () => {} }) as any
+const _mockUpdateState = Object.assign(() => {}, { mockClear: () => {} }) as any
+export { _mockReadState as mockReadState, _mockUpdateState as mockUpdateState }

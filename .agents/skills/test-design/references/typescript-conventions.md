@@ -239,6 +239,7 @@ Never initiate repetitive spies or mocks inside individual tests. Always configu
 
 **DO NOT nest when:** each test needs fundamentally different mock implementations (not just return values) or child would need >2 overrides. Use separate it blocks with inline config instead — 3+ levels of nesting is more fragile than a flat structure.
 
+- **Never share singleton mock instances across test files.** Each factory call must create fresh mocks via inline `vi.fn()`. Module-level shared mocks (e.g., a `_logFn` defined at file scope and reused) leak state between independent test suites. If you need deterministic behavior, configure the mock in `beforeEach`, not at module evaluation time.
 
 ## Principle 5: Minimalistic Assertions leveraging built-in matchers
 
@@ -415,9 +416,24 @@ describe('myFunction', () => {
 
 ```
 
+## Anti-Pattern: Dynamic Imports in vi.mock() Callbacks
+Never use `import("...").then()` or other async loading inside `vi.mock()` mock resolvers. Vitest hoists `vi.mock()` to parse time — the resolver function must be synchronous and available immediately. Dynamic imports that resolve later cause "cannot access before initialization" errors due to module evaluation ordering conflicts. Instead, import factory functions at the top of the test file with a standard synchronous import, then call them directly in the mock resolver:
+
+```ts
+// BAD — dynamic import inside vi.mock:
+vi.mock("dep", () => import("./factories").then(f => f.makeMock()))
+
+// GOOD — synchronous factory imported at top:
+import { makeMock } from "./factories"
+vi.mock("dep", () => makeMock())
+```
+
+
 ## Anti-Pattern: Excessive Type Assertions (`as any`)
 
 Every `as any` in a test file is a red flag that should be counted and addressed during code review. Production-quality tests should use typed mocks (`Mock<T>` from vitest or `vi.fn<T>()`) instead of type assertions to preserve compile-time safety on mock signatures. An `as any` silences type errors from mock configuration mistakes, masks incorrect property access, prevents IDE autocomplete, and compounds maintenance debt over time.
+
+For Bun runtime compatibility, prefer `ReturnType<typeof vi.fn>()` over complex generic mock types like `Mock<(a: TypeA) => TypeB>`. Bun's OXC parser rejects deeply nested generics and parenthesized type expressions in certain contexts. `ReturnType<typeof vi.fn>` is universally parsable across all environments and conveys the same information without parsing errors.
 
 ### Detection Rule (Code Review)
 

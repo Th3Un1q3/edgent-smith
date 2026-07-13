@@ -12,7 +12,7 @@ metadata:
 
 Teaches the RUG (Repeat Until Good) orchestrator pattern for decomposing user requests into discrete, independently-completable agent subagent tasks and routing them to specialized agents based on scope, expertise, and limitations.
 
-## How to Use
+## Mandatory Steps for Delegating Tasks
 
 1. Identify the user request and desired outcome.
 2. Look through the list of workflows to see if there is a ready-made recipe for the task in [Well-Known Workflows](#well-known-workflows). If so, follow the workflow steps.

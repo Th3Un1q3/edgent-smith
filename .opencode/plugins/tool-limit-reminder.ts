@@ -107,5 +107,5 @@ Output the summary:
         noReply: true
       })
     },
-  } as Record<string, (...args: unknown[]) => void>
+  } as Record<string, (...arguments_: unknown[]) => void>
 }

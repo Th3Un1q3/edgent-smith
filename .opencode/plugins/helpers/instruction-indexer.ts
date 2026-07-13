@@ -2,6 +2,15 @@ import Bun, { Glob } from "bun"
 import { CustomInstructionFrontMatter, InstructionMeta } from "../types/instructions"
 import { load } from "js-yaml"
 
+const loadBody = async (filePath: string): Promise<string> => {
+  const file = Bun.file(filePath)
+  if (!await file.exists()) throw new Error(`Instruction file not found: ${filePath}`)
+  const content = await file.text()
+  // Strip YAML frontmatter — extract body after closing ---
+  const bodyMatch = content.match(/^---[\s\S]*?---\s*\n?\s*/)
+  return bodyMatch ? content.slice(bodyMatch[0].length).trim() : ""
+}
+
 type IndexOptions = {
   type: "custom" | "copilot"
   instructionsGlob: string
@@ -45,6 +54,7 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
 
       await logger(`Checking instruction file: ${filePath}, appliesToAgents: ${appliesToAgentsGlob}, agent: ${options.agent}`)
 
+      // eslint-disable-next-line unicorn/prefer-regexp-test
       if (!appliesToAgentsGlob.match(options.agent)) {
         await logger(`Skipping instruction file: ${filePath}, appliesToAgents: ${parsedFrontmatter.appliesToAgents || '**'}, agent: ${options.agent}`)
         continue
@@ -52,12 +62,13 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
 
       if (parsedFrontmatter.excludeAgents) {
         const excludedAgentsGlob = new Glob(parsedFrontmatter.excludeAgents)
+        // eslint-disable-next-line unicorn/prefer-regexp-test
         if (excludedAgentsGlob.match(options.agent)) {
           continue
         }
       }
 
-      index[applyTo] = index[applyTo] || []
+      index[applyTo] ||= []
 
       index[applyTo].push({
         description: parsedFrontmatter.description || `Instruction applies to files matching the pattern "${applyTo}, instruction file: ${filePath}"`,
@@ -70,40 +81,44 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
     }
   }
 
+  const forFiles = async (filePaths: string[]): Promise<InstructionMeta[]> => {
+    const filePathsRelative = filePaths.map(filePath => filePath.startsWith(options.currentWorkingDirectory) ? filePath.slice(options.currentWorkingDirectory.length + 1) : filePath)
+
+    const patterns: string[] = Object.keys(index);
+
+    await logger(`Index patterns: ${patterns.join(', ')}`)
+
+    const matchingPatterns = patterns.filter(pattern => {
+      const glob = new Glob(pattern);
+      return filePathsRelative.some(filePath => glob.match(filePath));
+    });
+
+    await logger(`Matching patterns for files [${filePaths.join(', ')}]: ${matchingPatterns.join(', ')}`)
+
+    const matchingInstructions = matchingPatterns.reduce((accumulator: InstructionMeta[], pattern) => {
+      const instructions = index[pattern] || [];
+      return [...accumulator, ...instructions];
+    }, []);
+
+    await logger(`Matching instructions for files [${filePaths.join(', ')}]: ${matchingInstructions.map(index_ => index_.path).join(', ')}`)
+
+    const filteredInstructions = matchingInstructions.filter(instruction => {
+      if (!instruction.excludePaths) {
+        return true;
+      }
+      const excludeGlob = new Glob(instruction.excludePaths);
+      // eslint-disable-next-line unicorn/prefer-regexp-test
+      return filePathsRelative.some(filePath => !excludeGlob.match(filePath));
+    });
+
+    await logger(`Filtered instructions for files [${filePaths.join(', ')}]: ${filteredInstructions.map(index_ => index_.path).join(', ')}`)
+
+    return filteredInstructions;
+  }
+
   return {
-    forFiles: async (filePaths: string[]): Promise<InstructionMeta[]> => {
-      const filePathsRelative = filePaths.map(filePath => filePath.startsWith(options.currentWorkingDirectory) ? filePath.slice(options.currentWorkingDirectory.length + 1) : filePath)
-
-      const patterns: string[] = Object.keys(index);
-
-      await logger(`Index patterns: ${patterns.join(', ')}`)
-
-      const matchingPatterns = patterns.filter(pattern => {
-        const glob = new Glob(pattern);
-        return filePathsRelative.some(filePath => glob.match(filePath));
-      });
-
-      await logger(`Matching patterns for files [${filePaths.join(', ')}]: ${matchingPatterns.join(', ')}`)
-
-      const matchingInstructions = matchingPatterns.reduce((accumulator: InstructionMeta[], pattern) => {
-        const instructions = index[pattern] || [];
-        return accumulator.concat(instructions);
-      }, []);
-
-      await logger(`Matching instructions for files [${filePaths.join(', ')}]: ${matchingInstructions.map(index_ => index_.path).join(', ')}`)
-
-      const filteredInstructions = matchingInstructions.filter(instruction => {
-        if (!instruction.excludePaths) {
-          return true;
-        }
-        const excludeGlob = new Glob(instruction.excludePaths);
-        return filePathsRelative.some(filePath => !excludeGlob.match(filePath));
-      });
-
-      await logger(`Filtered instructions for files [${filePaths.join(', ')}]: ${filteredInstructions.map(index_ => index_.path).join(', ')}`)
-
-      return filteredInstructions;
-    }
+    forFiles,
+    loadBody: loadBody.bind(undefined),
   }
 }
 

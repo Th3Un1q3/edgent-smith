@@ -20,8 +20,8 @@
                         ]
                     },
                     "limit": {
-                        "context": 256000,
-                        "output": 65536
+                        "context": 65536,
+                        "output": 2048
                     }
                 },
                 "google/gemma-4-26b-a4b-qat": {
@@ -66,6 +66,7 @@
         }
     },
     "permission": {
+        "list_mcp_resources": "deny",
         "bash": {
             "*": "allow",
             "git *": "ask",

@@ -3,6 +3,7 @@ import { createIndex } from "./helpers/instruction-indexer"
 import { sendMessage } from "./helpers/session-helpers"
 import { log } from "./helpers/logger"
 import { SessionStorage, State } from "./helpers/kv-store"
+import { InstructionContextHelper } from "./helpers/instruction-context-helper"
 
 interface AgentSession extends State {
     agent?: string
@@ -10,7 +11,7 @@ interface AgentSession extends State {
 
 const PLUGIN_ID = "instructions-loader"
 
-type StateWithIdempotencyTokens = State & { idempotencyTokens?: Record<string, string> }
+export type StateWithIdempotencyTokens = State & { idempotencyTokens?: Record<string, string> }
 
 export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) => {
     const sessionStorage = new SessionStorage() // TODO: implement dependency injection
@@ -21,25 +22,36 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
         'read'
     ])
 
-    const _indexCache: Record<string, Awaited<ReturnType<typeof createIndex>>> = {};
+    const _helperCache: Record<string, InstructionContextHelper> = {};
 
-    const getIndex = async (sessionID: string) => {
+    const getHelper = async (sessionID: string) => {
         const session = await client.session.get({ path: { id: sessionID } })
         const agent = ((session?.data as AgentSession)?.agent) || "build"
 
-        if (_indexCache[agent]) return _indexCache[agent]
+        if (_helperCache[agent]) return _helperCache[agent]
 
+        // Create helper with factory that returns indexer's forFiles + loadBody
         const index = await createIndex({ agent, instructionsGlob: ".opencode/instructions/*.instructions.md", currentWorkingDirectory: directory, type: "custom", log: (message) => log(client, "info", `[${PLUGIN_ID}] ${message}`) })
-        _indexCache[agent] = index
-        return index
+
+        const helper = new InstructionContextHelper({
+            indexerFactory: () => Promise.resolve({
+                forFiles: index.forFiles.bind(index),
+                loadBody: index.loadBody.bind(index),
+            }),
+            maxChars: 8192,
+            blockOverheadChars: 200,
+        })
+
+        _helperCache[agent] = helper
+        return helper
     }
 
     return {
         "tool.execute.before": async (input, output) => {
             if (!targetedTools.has(input.tool) || !input.sessionID || !output.args?.filePath) return
 
-            const index = await getIndex(input.sessionID)
-            const instructions = await index.forFiles([output.args.filePath])
+            const helper = await getHelper(input.sessionID)
+            const instructions = await helper.resolveInstructions([output.args.filePath])
 
             const instructionsWithTokens = instructions.map(instructionMeta => ({
                 ...instructionMeta,
@@ -58,16 +70,35 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
                 return
             }
 
+            const formattedBlocks = nonSentInstructions.map(inst => {
+              return [
+                `=== INSTRUCTION: ${inst.description} ===`,
+                `Source: ${inst.path}`,
+                "---",
+                "",
+                inst.content ?? "",
+                "",
+                "".padEnd(28, "="),
+              ].join("\n")
+            }).filter(Boolean).join("\n\n")
+
             await sendMessage({
                 client,
                 sessionId: input.sessionID,
-                message: "Consider reviewing the following instructions:\n" + nonSentInstructions.map(instruction => `**Instruction:** ${instruction.description}\n**File:** ${instruction.path}`).join("\n\n"),
+                message: `Consider reviewing the following instructions:\n\n${formattedBlocks}`,
                 noReply: true
             })
 
             sessionStorage.updateState<StateWithIdempotencyTokens>(input.sessionID, (state) => {
-                return { ...state, idempotencyTokens: { ...state.idempotencyTokens, ...Object.fromEntries(nonSentInstructions.map((instruction) => [instruction.idempotencyToken, new Date().toISOString()])) } };
-            })
+                const existing = state.idempotencyTokens ?? {};
+                return {
+                    ...state,
+                    idempotencyTokens: {
+                        ...existing,
+                        ...Object.fromEntries(nonSentInstructions.map((instruction) => [instruction.idempotencyToken, new Date().toISOString()])),
+                    },
+                };
+            });
         }
     }
 }
