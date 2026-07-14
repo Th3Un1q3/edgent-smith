@@ -39,6 +39,9 @@ class FileSystemSessionStorageAdapter implements SessionStorageAdapter {
 }
 
 class SessionStorage {
+  static reset(_state: Record<string, State> = {}) {
+    throw new Error("Method not implemented.")
+  }
   constructor(private storageAdapter: SessionStorageAdapter = new FileSystemSessionStorageAdapter()) {}
 
   readState<T extends State, R = unknown>(sessionId: string, reader: (state: T) => R): R | undefined {
@@ -50,14 +53,9 @@ class SessionStorage {
   updateState<T extends State, R = unknown>(sessionId: string, updater: (state: T) => R): R {
     const current = (this.storageAdapter.read(sessionId) as T) || ({} as T)
     const next = updater(current)
-        this.storageAdapter.write(sessionId, next as State)
+    this.storageAdapter.write(sessionId, next as State)
     return next
   }
 }
 
 export { SessionStorage, FileSystemSessionStorageAdapter }
-
-// Placeholder mocks for test files — real implementations come from vi.mock() overrides.
-const _mockReadState = Object.assign(() => {}, { mockClear: () => {} }) as any
-const _mockUpdateState = Object.assign(() => {}, { mockClear: () => {} }) as any
-export { _mockReadState as mockReadState, _mockUpdateState as mockUpdateState }

@@ -23,10 +23,22 @@ export const toolLimitReminder: Plugin = async ({ client }) => {
   await log(client, "info", "[tool-limit-reminder] init")
 
   const TOOL_LIMITS: Record<string, number> = {
+    // 
+    /**
+     * TODO: use (await client.app.agents()).map()
+     * 
+     * returns array with objects like:
+     * {
+     *   name: "rug-swe",
+     *     maxSteps?: number;
+     * }
+     * 
+     * Take the number and multiply by 0.8 with floor to get the threshold for warning. If no maxSteps is provided, assume unlimited.
+     */
     "rug-swe": 20,
     "rug-mcp": 8,
     "rug-expert": 15,
-    "rug-puppet": 3
+    "rug-puppet": 5,
   }
 
   const PADDING_TILL_ERROR = 2

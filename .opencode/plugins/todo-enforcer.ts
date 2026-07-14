@@ -56,11 +56,16 @@ export const todoEnforcer: Plugin = async ({ client }) => {
   }
 
   return {
-    "tool.execute.before": async (input) => {
+    "tool.execute.before": async (input, output) => {
       if (!input.sessionID) return
       if (input.tool === TODO_TOOL_NAME) return
 
-      const currentAgent = (await client.session.get({ path: { id: input.sessionID } })).data?.agent as string
+      if (input.tool === "task" && output.args && output.args.command && output.args.command === "rug-brief") {
+        await log(client, "info", `[todo-enforcer] task tool called for session ${input.sessionID} — ${JSON.stringify(output.args)}`)
+        return
+      }
+
+      const currentAgent = ((await client.session.get({ path: { id: input.sessionID } }) as unknown as { data?: Record<string, string> })).data?.agent as string
 
       if (!AGENTS_REQUIRED_TO_START_WITH_TODOS.has(currentAgent)) return
 
@@ -77,13 +82,21 @@ export const todoEnforcer: Plugin = async ({ client }) => {
 
       if (hasUsedTodos) return
 
-      throw new Error(`Tool: ${input.tool} is suspended until \`${TODO_TOOL_NAME}\` tool is called with todos.`)
+      const sampleTodo = [{
+        content: `#plan express the plan in todos; assignee: @${currentAgent}`,
+        status: "pending",
+        priority: "high",
+        id: "1"
+      }]
+
+      throw new Error(`Error calling ${input.tool}. All tools are suspended until \`${TODO_TOOL_NAME}\` is called with updated todo list. Sample todo list: ${JSON.stringify(sampleTodo)}`);
     },
     event: async ({ event }) => {
       const isSessionIdle = event.type === "session.idle" && event.properties.sessionID
       if (!isSessionIdle) return
 
-      const remainingTodos = (await extractTodos(event.properties.sessionID)).filter((todo) => ["pending", "in_progress"].includes(todo.status));
+      const todos = await extractTodos(event.properties.sessionID)
+      const remainingTodos = todos.filter((todo) => ["pending", "in_progress"].includes(todo.status));
       if (remainingTodos.length === 0) {
         await log(client, "info", "No remaining todos — clearing cancellation state.")
         return
@@ -118,7 +131,7 @@ export const todoEnforcer: Plugin = async ({ client }) => {
         })
 
         sessionStorage.updateState(event.properties.sessionID, (s) => ({ ...s, todoFollowupSentAt: (new Date()).toISOString() }))
-      }, 1000)
+      }, 500)
     },
 
     dispose: async () => { await log(client, "info", `${PLUGIN_ID} disposed`) },

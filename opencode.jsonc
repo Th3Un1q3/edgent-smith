@@ -21,13 +21,28 @@
                     },
                     "limit": {
                         "context": 65536,
-                        "output": 2048
+                        "output": 65536
                     }
                 },
                 "google/gemma-4-26b-a4b-qat": {
-                    // "qwen/qwen3.6-35b-a3b": {
-                    "name": "lmstudio-advanced",
-                    "temperature": true,
+                    "name": "l-gemma-4-26b-a4b-qat",
+                    "attachment": true,
+                    "modalities": {
+                        "input": [
+                            "text",
+                            "image"
+                        ],
+                        "output": [
+                            "text"
+                        ]
+                    },
+                    "limit": {
+                        "context": 256000,
+                        "output": 65536
+                    }
+                },
+                "gemma-4-12b-it-mlx": {
+                    "name": "l-gemma-4-12b-it-mlx",
                     "attachment": true,
                     "modalities": {
                         "input": [
@@ -44,7 +59,7 @@
                     }
                 },
                 "qwen3.5-9b-mtp": {
-                    "name": "lmstudio-default",
+                    "name": "l-qwen3.5-9b-mtp",
                     "temperature": true,
                     "attachment": true,
                     "limit": {
@@ -53,12 +68,12 @@
                     }
                 },
                 "google/gemma-4-e4b": {
-                    "name": "lmstudio-fast",
+                    "name": "l-gemma-4-e4b",
                     "temperature": true,
                     "attachment": true
                 },
                 "google/gemma-4-e2b": {
-                    "name": "lmstudio-ultra-fast",
+                    "name": "l-gemma-4-e2b",
                     "temperature": true,
                     "attachment": true
                 }

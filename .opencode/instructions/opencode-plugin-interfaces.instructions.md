@@ -1,6 +1,6 @@
 ---
 description: Explains how to structure opencode plugin
-applyTo: '.opencode/plugins/*.ts'
+applyTo: ".opencode/plugins/*.ts"
 ---
 
 ## Plugin Conventions

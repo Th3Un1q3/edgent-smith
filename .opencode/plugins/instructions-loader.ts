@@ -28,7 +28,7 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
         const session = await client.session.get({ path: { id: sessionID } })
         const agent = ((session?.data as AgentSession)?.agent) || "build"
 
-        if (_helperCache[agent]) return _helperCache[agent]
+        if (Object.hasOwn(_helperCache, agent)) return _helperCache[agent]
 
         // Create helper with factory that returns indexer's forFiles + loadBody
         const index = await createIndex({ agent, instructionsGlob: ".opencode/instructions/*.instructions.md", currentWorkingDirectory: directory, type: "custom", log: (message) => log(client, "info", `[${PLUGIN_ID}] ${message}`) })
@@ -59,11 +59,11 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
             }));
 
             const idempotencyTokens = sessionStorage.readState<StateWithIdempotencyTokens, Record<string, string>>(input.sessionID, (state) => {
-                if (!state.idempotencyTokens) return {}
+                if (!state.idempotencyTokens || Object.keys(state.idempotencyTokens).length === 0) return {}
                 return state.idempotencyTokens
-            });
+            }) ?? {};
 
-            const nonSentInstructions = idempotencyTokens ? instructionsWithTokens.filter(instruction => !idempotencyTokens[instruction.idempotencyToken]) : instructionsWithTokens
+            const nonSentInstructions = instructionsWithTokens.filter(instruction => !Object.hasOwn(idempotencyTokens, instruction.idempotencyToken))
 
             if (nonSentInstructions.length === 0) {
                 await log(client, "info", `[${PLUGIN_ID}] No new instructions to send for session ${input.sessionID}.`)
@@ -71,21 +71,21 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
             }
 
             const formattedBlocks = nonSentInstructions.map(inst => {
-              return [
-                `=== INSTRUCTION: ${inst.description} ===`,
-                `Source: ${inst.path}`,
-                "---",
-                "",
-                inst.content ?? "",
-                "",
-                "".padEnd(28, "="),
-              ].join("\n")
+                return [
+                    `=== INSTRUCTION: ${inst.description} ===`,
+                    `Source: ${inst.path}`,
+                    "---",
+                    "",
+                    inst.content ?? "",
+                    "",
+                    "".padEnd(28, "="),
+                ].join("\n")
             }).filter(Boolean).join("\n\n")
 
             await sendMessage({
                 client,
                 sessionId: input.sessionID,
-                message: `Consider reviewing the following instructions:\n\n${formattedBlocks}`,
+                message: `<steering reason="Relevant files touched">\n\n${formattedBlocks}</steering>`,
                 noReply: true
             })
 

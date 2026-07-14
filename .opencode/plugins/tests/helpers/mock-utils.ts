@@ -1,5 +1,18 @@
 import { vi } from "vitest"
 
+// ── Type definitions for client mock ────────────────────────────────────────
+
+export interface ClientMock {
+  session: { get(path: unknown): Promise<{ data?: Record<string, unknown> }>; todo?(path: { id: string }): Promise<{ data?: Array<{ content: unknown; status: unknown }> }> };
+  client: { session: { get(path: unknown): Promise<{ data?: Record<string, unknown> }> } };
+  project: (...args: unknown[]) => unknown
+  directory: string
+  worktree: string
+  experimental_workspace: { register: ReturnType<typeof vi.fn> }
+  serverUrl: URL
+  $: ReturnType<typeof vi.fn>
+}
+
 /** Default client factory for tests that need a minimal session.get mock. */
 export function defaultCreateClient(
   opts?: string | { agent?: string; data?: Record<string, unknown> },
@@ -23,7 +36,7 @@ export function defaultCreateClient(
     experimental_workspace: { register: vi.fn() },
     serverUrl: new URL("http://localhost"),
     "$": vi.fn(),
-  } as never
+  } as unknown as ClientMock
 }
 
 /** Creates a Promise-based indexer factory from a mock indexer object. */
@@ -71,31 +84,13 @@ export function createIndex(opts?: Partial<typeof DEFAULT_CREATE_INDEX_OPTS>) {
 /** Shared mock functions for kv-store — used by both vi.mock factories and test assertions. */
 export const _mockReadState = Object.assign(
   () => undefined,
-  { mockClear: () => {} },
+  { mockClear: () => { } },
 ) as ReturnType<typeof vi.fn>
 
 export const _mockUpdateState = Object.assign(
-  () => {},
-  { mockClear: () => {} },
+  () => { },
+  { mockClear: () => { } },
 ) as ReturnType<typeof vi.fn>
-
-// ── Synchronous vi.mock() factory functions (no dynamic imports) ────────
-
-/** Factory for kv-store vi.mock — creates fresh mocks inline, returns both the module object and direct mock references. */
-export function makeKvStoreMockFactory(): {
-  _mockReadState: ReturnType<typeof vi.fn>
-  _mockUpdateState: ReturnType<typeof vi.fn>
-} {
-  const _mockReadState = vi.fn().mockReturnValue(undefined)
-  const _mockUpdateState = vi.fn()
-
-  class MockSessionStorage {
-    readState = _mockReadState
-    updateState = _mockUpdateState
-  }
-
-  return { SessionStorage: MockSessionStorage, _mockReadState, _mockUpdateState }
-}
 
 /** Factory for logger vi.mock — creates a fresh log mock inline to avoid cross-test sharing. */
 export function makeLoggerMockFactory(): { log: ReturnType<typeof vi.fn> } {

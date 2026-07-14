@@ -49,6 +49,20 @@ eval-local:
 eval-ci:
   {{EVAL}} --baseline-id auto_research
 
+# Tail opencode logs
+oc-log:
+  tail -f ~/.local/share/opencode/log/opencode.log 
+
+# Outputs complete agent cards
+list-agent-cards:
+    #!/usr/bin/env bash
+
+    find .agents/skills/task-delegation/agent-cards/*.agent-card.md -exec sh -c 'echo "Full path: $1"; echo "Agent card:"; head -n 200 "$1"' _ {} \;
+
+# Lists available agent skills
+list-skills:
+  find .agents/skills/*/SKILL.md -exec sh -c 'echo "Full path: $1"; echo "Frontmatter:"; head -n 10 "$1"' _ {} \;
+
 # Output candidate vs baseline status for the requested baseline ID.
 baseline-status baseline_id:
   @bash scripts/baseline_status.sh "{{baseline_id}}"

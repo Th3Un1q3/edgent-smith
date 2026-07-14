@@ -9,7 +9,7 @@ export const sessionTracker: Plugin = async ({ client }) => {
   await log(client, "info", `${PLUGIN_ID} initialized`)
 
   const markSessionAsStarted = (sessionId: string) => sessionStorage.updateState(sessionId, (session) => {
-    if (session[SESSION_FIELDS.startedAt]) return session
+    if (Object.hasOwn(session, SESSION_FIELDS.startedAt)) return session
     return { ...session, [SESSION_FIELDS.startedAt]: new Date().toISOString() }
   })
 

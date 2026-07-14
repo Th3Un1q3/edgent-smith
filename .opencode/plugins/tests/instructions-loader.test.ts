@@ -1,22 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mock factories — synchronous imports avoid circular dependency issues.
-import { defaultCreateClient, makeKvStoreMockFactory } from "./helpers/mock-utils"
+import { defaultCreateClient, type ClientMock } from "./helpers/mock-utils"
+import { makeKvStoreMockFactory } from "./__utils__/kv-store.mock"
 
 // Step 1: declare mocks at file top (vitest hoists these automatically)
 vi.mock("../helpers/instruction-indexer")
 vi.mock("../helpers/session-helpers")
 vi.mock("../helpers/logger")
 vi.mock(
-  "../helpers/kv-store",
-  () => makeKvStoreMockFactory(),
+    "../helpers/kv-store",
+    () => makeKvStoreMockFactory(),
 )
 
 // Step 2: import stubs — must come AFTER vi.mock() calls
 import { instructionsLoaderPlugin, type StateWithIdempotencyTokens } from "../instructions-loader"
 import * as instructionIndexer from "../helpers/instruction-indexer"
 import * as sessionHelpers from "../helpers/session-helpers"
-import { _mockReadState as mockReadState, _mockUpdateState as mockUpdateState } from "../helpers/kv-store"
+
+import { SessionStorage } from "../helpers/kv-store"
 
 // Helper to build mock instructions with the correct shape.
 const makeInstructions = (path: string, description: string) => [
@@ -32,10 +34,8 @@ describe("instructionsLoaderPlugin", () => {
     const directory = "/workspace"
 
     beforeEach(() => {
+        SessionStorage.reset()
         client = defaultCreateClient()
-        // // Reset the mock call count between tests to track how many times createIndex is invoked.
-        // vi.mocked(instructionIndexer.createIndex).mockClear()
-        // vi.mocked(sessionHelpers.sendMessage).mockClear()
     })
 
     describe("tool.execute.before hook", () => {
@@ -129,8 +129,7 @@ describe("instructionsLoaderPlugin", () => {
             )
 
             expect(vi.mocked(instructionIndexer.createIndex)).toHaveBeenCalledTimes(1)
-            const [opts] = vi.mocked(instructionIndexer.createIndex).mock.calls[0] as Parameters<typeof instructionIndexer.createIndex>
-            expect(opts.agent).toBe("build")
+            expect(vi.mocked(instructionIndexer.createIndex)).toHaveBeenCalledWith(expect.objectContaining({ agent: "build" }))
         })
 
         it("reuses the cached index for repeated calls with the same default agent", async () => {
@@ -161,8 +160,8 @@ describe("instructionsLoaderPlugin", () => {
             // Client that returns agent: "copilot" for sess-copilot, undefined for others
             const copilotClient = defaultCreateClient()
             const getSpy = vi.spyOn(copilotClient.session, "get")
-            getSpy.mockImplementation(async (args) => {
-                if (args.path.id === "sess-copilot") {
+            getSpy.mockImplementation(async (_path: unknown) => {
+                if ((_path as any)?.path?.id === "sess-copilot") {
                     return { data: { agent: "copilot" } };
                 }
                 return { data: {} };
@@ -227,11 +226,7 @@ describe("instructionsLoaderPlugin", () => {
 
     describe("idempotency edge cases", () => {
         it("skips instructions already sent in a previous call", async () => {
-            // readState returns stored tokens — the instruction's token matches, so it gets filtered out
-            vi.mocked(mockReadState).mockImplementation((sessionId: string, reader: (state: StateWithIdempotencyTokens) => Record<string, string>) => {
-                const state = { idempotencyTokens: { "instruction_load:/some/file.ts": "2026-01-01T00:00:00Z" } }
-                return reader(state as StateWithIdempotencyTokens)
-            })
+            SessionStorage.reset({ "sess-1": { idempotencyTokens: { "instruction_load:/some/file.ts": "2026-01-01T00:00:00Z" } } })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => makeInstructions("/some/file.ts", "Test instruction"),
@@ -249,11 +244,7 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("sends only new instructions when some were previously sent", async () => {
-            // readState returns stored tokens — /old/file.ts is filtered, /new/file.ts is sent
-            vi.mocked(mockReadState).mockImplementation((sessionId: string, reader: (state: StateWithIdempotencyTokens) => Record<string, string>) => {
-                const state = { idempotencyTokens: { "instruction_load:/old/file.ts": "2026-01-01T00:00:00Z" } }
-                return reader(state as StateWithIdempotencyTokens)
-            })
+            SessionStorage.reset({ "sess-1": { idempotencyTokens: { "instruction_load:/old/file.ts": "2026-01-01T00:00:00Z" } } })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => [
@@ -274,28 +265,29 @@ describe("instructionsLoaderPlugin", () => {
             const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as Parameters<typeof sessionHelpers.sendMessage>[0]).message
             expect(message).toContain("=== INSTRUCTION: New instruction ===")
             expect(message).not.toContain("Old instruction")
-            expect(mockUpdateState).toHaveBeenCalledTimes(1)
-            const updateArgs = mockUpdateState.mock.calls[0]
-            const updaterFn = (updateArgs[1] as unknown as (state: StateWithIdempotencyTokens, ..._rest: any[]) => any)
-            const tokenInput = { idempotencyTokens: { "instruction_load:/old/file.ts": "2026-01-01T00:00:00Z" } as any } as StateWithIdempotencyTokens
-
-            expect(
-                Object.keys(updaterFn(tokenInput).idempotencyTokens ?? {}).length
-            ).toBe(2)
         })
 
         it("updates sessionStorage with new tokens after sending", async () => {
-            vi.mocked(mockReadState).mockImplementation((sessionId: string, reader: (state: StateWithIdempotencyTokens) => Record<string, string>) => {
-                const state = { idempotencyTokens: { "instruction_load:/some/file.ts": "2026-01-01T00:00:00Z" } }
-                return reader(state as StateWithIdempotencyTokens)
-            })
+            const sessionId = "sess-1"
+
+            SessionStorage.reset({ [sessionId]: { idempotencyTokens: { "instruction_load:/some/file.ts": "2026-01-01T00:00:00Z" } } })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => makeInstructions("/new/file.ts", "New instruction"),
                 loadBody: async (path: string) => `Content of ${path}`,
             } as any)
 
+
+
             const plugin = await instructionsLoaderPlugin({ client, directory } as any)
+
+            const idempotencyTokensBefore = (new SessionStorage()).readState<StateWithIdempotencyTokens, Record<string, string>>(sessionId, (state) => {
+                return state.idempotencyTokens ?? {}
+            })
+
+            expect(idempotencyTokensBefore).not.toHaveProperty("instruction_load:/new/file.ts")
+            expect(idempotencyTokensBefore).toHaveProperty("instruction_load:/some/file.ts")
+
             const hookFn = plugin["tool.execute.before"]!
             await hookFn(
                 { tool: "write", sessionID: "sess-1", callID: "call-update" },
@@ -303,20 +295,24 @@ describe("instructionsLoaderPlugin", () => {
             )
 
             expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
-            expect(mockUpdateState).toHaveBeenCalledTimes(1)
-            const updateArgs = mockUpdateState.mock.calls[0]
-            const updater = updateArgs[1] as (state: StateWithIdempotencyTokens, ..._rest: unknown[]) => any
-            // The updater receives the read state and merges new tokens into it
-            const testState = { idempotencyTokens: { "instruction_load:/some/file.ts": "2026-01-01T00:00:00Z" } } as StateWithIdempotencyTokens
-            expect(Object.keys(updater(testState).idempotencyTokens ?? {}).length).toBe(2)
+
+            const idempotencyTokens = (new SessionStorage()).readState<StateWithIdempotencyTokens, Record<string, string>>("sess-1", (state) => {
+                return state.idempotencyTokens ?? {}
+            })
+
+            expect(idempotencyTokens).toHaveProperty("instruction_load:/some/file.ts")
+            expect(idempotencyTokens).toHaveProperty("instruction_load:/new/file.ts")
+            expect(Object.keys(idempotencyTokens ?? {}).length).toBe(2)
+            expect(idempotencyTokens?.["instruction_load:/new/file.ts"]).toBeDefined()
+            expect(idempotencyTokens?.["instruction_load:/some/file.ts"]).toBeDefined()
+            expect(idempotencyTokens?.["instruction_load:/new/file.ts"]).toEqual(expect.any(String))
+            expect(idempotencyTokens?.["instruction_load:/some/file.ts"]).toEqual(expect.any(String))
         })
 
         it("handles undefined stored idempotencyTokens gracefully", async () => {
+            const sessionId = "sess-1"
+            SessionStorage.reset({ [sessionId]: { idempotencyTokens: undefined } })
             // readState returns an object where idempotencyTokens is explicitly undefined
-            vi.mocked(mockReadState).mockImplementation((sessionId: string, reader: (state: StateWithIdempotencyTokens) => Record<string, string>) => {
-                const state = { idempotencyTokens: undefined }
-                return reader(state as unknown as StateWithIdempotencyTokens)
-            })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => [
@@ -339,19 +335,16 @@ describe("instructionsLoaderPlugin", () => {
             expect(message).toContain("Instruction A")
             expect(message).toContain("Instruction B")
             expect(message).toContain("Instruction C")
-            // updateState should be called with all 3 tokens merged
-            const updateArgs = mockUpdateState.mock.calls[0]
-            const updater = updateArgs[1] as (state: StateWithIdempotencyTokens) => StateWithIdempotencyTokens
-            const updaterResult = updater({ idempotencyTokens: undefined } as StateWithIdempotencyTokens)
-            expect(updaterResult.idempotencyTokens).toBeDefined()
-            expect(Object.keys(updaterResult.idempotencyTokens ?? {}).length).toBe(3)
+
+            expect((new SessionStorage()).readState<StateWithIdempotencyTokens, Record<string, string>>(sessionId, (state) => state.idempotencyTokens ?? {})).toEqual({
+                "instruction_load:/a.ts": expect.any(String),
+                "instruction_load:/b.ts": expect.any(String),
+                "instruction_load:/c.ts": expect.any(String),
+            })
         })
 
         it("formats instruction blocks with === INSTRUCTION: header", async () => {
-            vi.mocked(mockReadState).mockImplementation((sessionId: string, reader: (state: StateWithIdempotencyTokens) => Record<string, string>) => {
-                // No stored tokens — all instructions should be sent
-                return reader({} as StateWithIdempotencyTokens)
-            })
+            SessionStorage.reset({ "sess-1": { idempotencyTokens: {} } })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => [
@@ -374,11 +367,7 @@ describe("instructionsLoaderPlugin", () => {
             // Verify the formatted block pattern: === INSTRUCTION: <desc> === and --- separator
             expect(message).toContain("=== INSTRUCTION:")
             expect(message).toContain("---")
-            expect(mockUpdateState).toHaveBeenCalledTimes(1)
-            const updateArgs = mockUpdateState.mock.calls[0]
-            const updater = updateArgs[1] as (state: StateWithIdempotencyTokens, ..._rest: unknown[]) => any
-            const result = updater({} as StateWithIdempotencyTokens)
-            expect(Object.keys(result.idempotencyTokens ?? {})).toHaveLength(3)
+
         })
     })
 })

@@ -10,6 +10,7 @@
 | `helpers/` | Shared plugin utilities (logging, KV store, session helpers) | camelCase filenames representing their domain |
 | `types/` | TypeScript type definitions shared across modules | Descriptive singular or plural names (`instructions.ts`) |
 | `sessions/` | Runtime JSON state files (1000+ files, auto-generated) | Pattern: `ses_<timestamp>_<random>.json` — do not create manually |
+| `tests/` | Unit and integration tests for the plugin | Structure and file names map 1:1 to source files. eg. source file `todo-enforcer.ts` -> test file `tests/todo-enforcer.test.ts`. Same naming and folder structure with `tests/` directory and `.test.ts` suffix |
 
 
 ### Quality Gates

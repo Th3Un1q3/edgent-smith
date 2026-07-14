@@ -42,10 +42,11 @@ export class InstructionContextHelper {
     if (filePaths.length === 0) return []
 
     const effectiveMaxChars = options?.maxChars ?? this.maxChars
-    const effectiveOverhead = options?.blockOverheadChars ?? this.blockOverheadChars
 
     // Zero budget → nothing fits
     if (effectiveMaxChars <= 0) return []
+
+    const effectiveOverhead = options?.blockOverheadChars ?? this.blockOverheadChars
 
     const indexer = await this.indexerFactory()
     const metas = await indexer.forFiles(filePaths)

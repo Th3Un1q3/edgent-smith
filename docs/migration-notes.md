@@ -17,6 +17,10 @@ Has great plugins, but bloats context as crazy. It extends tools descriptions, c
 
 ## Model Failures
 
+### Consequetive failures calling the same tool
+
+![alt text](image-4.png)
+
 ### Loops
 
 Thinking the same thing over and over, and not doing anything. It is a common failure of the model.
