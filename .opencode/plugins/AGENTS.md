@@ -22,3 +22,12 @@ Linter: `cd /workspace/.opencode && just lint`
 Typecheck: `cd /workspace/.opencode && just typecheck`
 
 All commands support additional parameters eg. to run a single test file: `cd /workspace/.opencode && just test -- tests/helpers/instruction-indexer.test.ts`
+
+### Technical Stack
+
+Plugins ecosystem uses:
+- TypeScript - language
+- Vitest - test runner
+- Bun - runtime
+- eslint - linter
+- tsc - typescript compiler

@@ -7,6 +7,11 @@
       "skillPath": "skills/building-pydantic-ai-agents/SKILL.md",
       "computedHash": "f30a3037bbb153cccc88d996ea8e74865cbdd788c416139d2b080ae78732354a"
     },
+    "bun": {
+      "source": "bun.sh",
+      "sourceType": "well-known",
+      "computedHash": "6b197f43982068ded2a5889dd89e1e7c9f5711d739de60bf65b5e4f1222d39ea"
+    },
     "devcontainers-best-practices": {
       "source": "afonsograca/devcontainers-best-practices",
       "sourceType": "github",

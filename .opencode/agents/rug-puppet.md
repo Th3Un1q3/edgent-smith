@@ -3,6 +3,8 @@ name: rug-puppet
 mode: subagent
 permission:
   task: "deny"
+  skill: "deny"
+  "gateway": "deny"
   bash:
     "*": "allow"
     "rm *": "ask"

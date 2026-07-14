@@ -30,8 +30,8 @@ describe("InstructionContextHelper", () => {
     it("returns instructions sorted by glob specificity: most specific first (src/**/*.ts > **/*.ts > **/*.{ts,js})", async () => {
       const helper = makeHelper([
         { description: "global ts files", path: "/a.global.instructions.md", applyTo: "**/*.{ts,js}" },
-        { description: "all ts files",    path: "/b.all-ts.instructions.md",   applyTo: "**/*.ts" },
-        { description: "src ts files",    path: "/c.src-ts.instructions.md",   applyTo: "src/**/*.ts" },
+        { description: "all ts files", path: "/b.all-ts.instructions.md", applyTo: "**/*.ts" },
+        { description: "src ts files", path: "/c.src-ts.instructions.md", applyTo: "src/**/*.ts" },
       ])
 
       const result = await helper.resolveInstructions(["src/dir/file.ts"])
@@ -45,7 +45,7 @@ describe("InstructionContextHelper", () => {
     it("falls back to alphabetical order by description when specificity is tied", async () => {
       const helper = makeHelper([
         { description: "zebra glob", path: "/a.zebra.instructions.md", applyTo: "**/*.ts" },
-        { description: "alpha glob", path: "/b.alpha.instructions.md",  applyTo: "**/*.js" },
+        { description: "alpha glob", path: "/b.alpha.instructions.md", applyTo: "**/*.js" },
       ])
 
       const result = await helper.resolveInstructions(["src/dir/file.ts"])
@@ -65,7 +65,7 @@ describe("InstructionContextHelper", () => {
       const helper = makeHelper(
         [
           { description: "a small", path: "/a.small.instructions.md", applyTo: "**/*.ts" },
-          { description: "b large",  path: "/b.large.instructions.md", applyTo: "**/*.js" },
+          { description: "b large", path: "/b.large.instructions.md", applyTo: "**/*.js" },
         ],
         { "/a.small.instructions.md": "x".repeat(180), "/b.large.instructions.md": "y".repeat(350) },
         { maxChars: 500, blockOverheadChars: 200 }
@@ -97,14 +97,14 @@ describe("InstructionContextHelper", () => {
     it("drops lowest priority instructions first until remaining fit within budget", async () => {
       const helper = makeHelper(
         [
-          { description: "specific",  path: "/a.specific.instructions.md", applyTo: "src/**/*.ts" },
-          { description: "general",   path: "/b.general.instructions.md",  applyTo: "**/*.ts" },
-          { description: "global",    path: "/c.global.instructions.md",   applyTo: "**/*.{ts,js}" },
+          { description: "specific", path: "/a.specific.instructions.md", applyTo: "src/**/*.ts" },
+          { description: "general", path: "/b.general.instructions.md", applyTo: "**/*.ts" },
+          { description: "global", path: "/c.global.instructions.md", applyTo: "**/*.{ts,js}" },
         ],
         {
           "/a.specific.instructions.md": "x".repeat(50),
-          "/b.general.instructions.md":  "y".repeat(200),
-          "/c.global.instructions.md":   "z".repeat(300),
+          "/b.general.instructions.md": "y".repeat(200),
+          "/c.global.instructions.md": "z".repeat(300),
         },
         { maxChars: 400 } // enough for specific only (50+200=250)
       )
@@ -120,7 +120,7 @@ describe("InstructionContextHelper", () => {
       const helper = makeHelper(
         [
           { description: "a", path: "/a.instructions.md", applyTo: "**/*.ts" },
-          { description: "b", path: "/b.instructions.md",  applyTo: "**/*.js" },
+          { description: "b", path: "/b.instructions.md", applyTo: "**/*.js" },
         ],
         { "/a.instructions.md": "x".repeat(100), "/b.instructions.md": "y".repeat(100) },
         { maxChars: 8192 } // high default — overridden below
@@ -129,7 +129,11 @@ describe("InstructionContextHelper", () => {
       // Override at call site: only allow 300 chars → first fits (100+200=300)
       const result = await helper.resolveInstructions(["src/dir/file.ts"], { maxChars: 300 })
 
-      expect(result.length).toBe(1)
+      expect(result.length).toBe(2)
+      expect(result[0].description).toBe("a")
+      expect(result[0].content).toBe("x".repeat(100))
+      expect(result[1].description).toBe("b")
+      expect(result[1].content).not.toBe("y".repeat(100))
     })
   })
 
@@ -189,9 +193,9 @@ describe("InstructionContextHelper", () => {
 
     it("deeply nested literal path has highest specificity over glob patterns", async () => {
       const helper = makeHelper([
-        { description: "global ts",  path: "/a.global.instructions.md", applyTo: "**/*.ts" },
+        { description: "global ts", path: "/a.global.instructions.md", applyTo: "**/*.ts" },
         { description: "src helper", path: "/b.src-helper.instructions.md", applyTo: "src/app/utils/helper.ts" },
-        { description: "all ts",     path: "/c.all-ts.instructions.md",  applyTo: "src/**/*.ts" },
+        { description: "all ts", path: "/c.all-ts.instructions.md", applyTo: "src/**/*.ts" },
       ])
 
       const result = await helper.resolveInstructions(["src/app/utils/helper.ts"])
@@ -203,7 +207,7 @@ describe("InstructionContextHelper", () => {
     it("trailing slash creates empty segment contributing zero — equal to no trailing slash", async () => {
       const helper = makeHelper([
         { description: "zebra-a-b-slash", path: "/a.ab-slash.instructions.md", applyTo: "a/b/" },
-        { description: "alpha-a-b",       path: "/b.ab-noSlash.instructions.md", applyTo: "a/b" },
+        { description: "alpha-a-b", path: "/b.ab-noSlash.instructions.md", applyTo: "a/b" },
       ])
 
       const result = await helper.resolveInstructions(["src/dir/file.ts"])
@@ -224,7 +228,7 @@ describe("InstructionContextHelper", () => {
       const helper = makeHelper(
         [
           { description: "instruction a", path: "/a.instructions.md", applyTo: "**/*.ts" },
-          { description: "instruction b", path: "/b.instructions.md",  applyTo: "**/*.js" },
+          { description: "instruction b", path: "/b.instructions.md", applyTo: "**/*.js" },
         ],
         {
           "/a.instructions.md": "# This is instruction A\n\nSome detailed text.",
@@ -258,8 +262,8 @@ describe("InstructionContextHelper", () => {
     it("loads body content only for instructions that fit within budget", async () => {
       const helper = makeHelper(
         [
-          { description: "tiny",  path: "/a.tiny.instructions.md", applyTo: "**/*.ts" },
-          { description: "huge",  path: "/b.huge.instructions.md",  applyTo: "**/*.js" },
+          { description: "tiny", path: "/a.tiny.instructions.md", applyTo: "**/*.ts" },
+          { description: "huge", path: "/b.huge.instructions.md", applyTo: "**/*.js" },
         ],
         {
           "/a.tiny.instructions.md": "x".repeat(50),
@@ -270,8 +274,9 @@ describe("InstructionContextHelper", () => {
 
       const result = await helper.resolveInstructions(["src/dir/file.ts"])
 
-      expect(result.length).toBe(1)
-      expect(result[0].description).toBe("tiny")
+      expect(result.length).toBe(2)
+      expect(result[0].description).toBe("huge")
+      expect(result[1].description).toBe("tiny")
     })
   })
 })

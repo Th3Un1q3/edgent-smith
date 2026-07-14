@@ -69,7 +69,16 @@ export class InstructionContextHelper {
       const content = await indexer.loadBody(meta.path)
       const totalChars = content.length + effectiveOverhead
 
-      if (accumulated + totalChars > effectiveMaxChars) continue
+      if (accumulated + totalChars > effectiveMaxChars) {
+        result.push({
+          description: meta.description,
+          applyTo: meta.applyTo,
+          idempotencyKey: `instruction_load:${meta.path}`,
+          content: `[Instruction content omitted due to size constraints.]`,
+          path: meta.path,
+        })
+        continue
+      }
 
       accumulated += totalChars
 
@@ -86,4 +95,4 @@ export class InstructionContextHelper {
   }
 }
 
-export {type InstructionMeta, type ResolvedInstruction} from "../types/instructions"
+export { type InstructionMeta, type ResolvedInstruction } from "../types/instructions"
