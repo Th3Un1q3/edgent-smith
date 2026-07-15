@@ -88,6 +88,9 @@ The system is architected around high-centrality components in the following mod
 - **Dual Experiment Registry**: Distinct handling of CLI-managed experiments (`experiments/index.json`) versus script-run state files (`experiments/<issue>.state.json`).
 
 ## COMMANDS
+
+just is the primary task runner for the project. There are multiple justfiles in the project scoped to different directories. Search for `find justfile **/justfile .*/justfile -maxdepth 3` to find them all and use `just --list` to see available recipes. The following are the most commonly used commands(for the root justfile):
+
 ```bash
 # Core Workflows
 just test                # Run the full unit test suite
@@ -95,18 +98,10 @@ just lint                 # Static analysis and formatting checks
 just format               # Code auto-formatting (Ruff)
 just typecheck            # Python type checking (Mypy/Pyright)
 
-# CLI & Agent Operations
-just edge-agent "prompt"  # Execute core runtime agent with prompt
-just autoresearch <cmd>   # Use the Click-backed experiment manager
-
-# Evaluations
-just eval                 # Run model evaluation against baselines
-just eval-local           # Local debug evaluations (Ollama/OpenRouter)
-
-# Maintenance & CI
-just fix                  # Trigger automatic code remediation workflow
-just ci                    # Execute full DevContainer CI sequence
+just --list                # List all available justfile recipes from directory where justfile is located
 ```
+
+Use justfile that is located closer to the target directory for more specific commands. For example, `justfile` in `agent_utils/` contains recipes for executing agentic helpers.
 
 ## AGENT & WORKFLOW TAXONOMY
 

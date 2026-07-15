@@ -1,8 +1,11 @@
+ 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 // Mock factories — synchronous imports avoid circular dependency issues.
-import { defaultCreateClient, type ClientMock } from "./helpers/mock-utils"
-import { makeKvStoreMockFactory } from "./__utils__/kv-store.mock"
+import { defaultCreateClient, type ClientMock } from "./helpers/mock-utilities"
+import { makeKvStoreMockFactory } from "./__utils/kv-store.mock"
 
 // Step 1: declare mocks at file top (vitest hoists these automatically)
 vi.mock("../helpers/instruction-indexer")
@@ -20,14 +23,11 @@ import * as sessionHelpers from "../helpers/session-helpers"
 
 import { SessionStorage } from "../helpers/kv-store"
 
+
 // Helper to build mock instructions with the correct shape.
 const makeInstructions = (path: string, description: string) => [
     { path, description, applyTo: "**/*.{ts}" },
 ] as ReturnType<Awaited<ReturnType<typeof instructionIndexer.createIndex>>["forFiles"]> extends () => Promise<infer T> ? T : never
-
-// Input types for the hook — mirrors Plugin "tool.execute.before" signature.
-type HookInput = { tool: string; sessionID?: string; callID?: string }
-type HookOutput = { args?: Record<string, unknown> } | {}
 
 describe("instructionsLoaderPlugin", () => {
     let client: ClientMock
@@ -49,9 +49,9 @@ describe("instructionsLoaderPlugin", () => {
                 loadBody: async (path: string) => `Content of ${path}`,
             } as any)
 
-            const plugin = await instructionsLoaderPlugin({ client, directory } as any)
-            const hookFn = plugin["tool.execute.before"]!
-            await hookFn(
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
                 { tool, sessionID: "sess-1", callID: "call-1" },
                 { args: { filePath: "/some/file.ts" } },
             )
@@ -65,9 +65,9 @@ describe("instructionsLoaderPlugin", () => {
                 loadBody: async (path: string) => `Content of ${path}`,
             } as any)
 
-            const plugin = await instructionsLoaderPlugin({ client, directory } as any)
-            const hookFn = plugin["tool.execute.before"]!
-            await hookFn(
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
                 { tool: "ls", sessionID: "sess-1", callID: "call-ls" },
                 { args: { filePath: "/some/file.ts" } },
             )
@@ -76,10 +76,15 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("skips when no sessionID is provided", async () => {
-            const plugin = await instructionsLoaderPlugin({ client, directory } as any)
-            const hookFn = plugin["tool.execute.before"]!
-            await hookFn(
-                { tool: "write" } as any, // no sessionID — testing the guard clause
+            vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
+                forFiles: async () => makeInstructions("/some/file.ts", "Test instruction"),
+                loadBody: async (path: string) => `Content of ${path}`,
+            } as any)
+
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
+                ({ tool: "write", callID: "call-1" } as any), // missing sessionID to test the guard clause
                 { args: { filePath: "/some/file.ts" } },
             )
 
@@ -87,11 +92,11 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("skips when output.args.filePath is missing", async () => {
-            const plugin = await instructionsLoaderPlugin({ client, directory } as any)
-            const hookFn = plugin["tool.execute.before"]!
-            await hookFn(
-                { tool: "write", sessionID: "sess-1" } as any, // input type requires callID but we test edge cases
-                {} as any, // no args — testing the guard clause
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
+                { tool: "write", sessionID: "sess-1", callID: "call-1" }, // missing args.filePath — testing the guard clause
+                {} as Parameters<typeof hookFunction>[1], // no args — testing the guard clause
             )
 
             expect(sessionHelpers.sendMessage).not.toHaveBeenCalled()
@@ -101,11 +106,11 @@ describe("instructionsLoaderPlugin", () => {
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => [],
                 loadBody: async (path: string) => `Content of ${path}`,
-            })
+            } as any)
 
-            const plugin = await instructionsLoaderPlugin({ client, directory } as any)
-            const hookFn = plugin["tool.execute.before"]!
-            await hookFn(
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
                 { tool: "write", sessionID: "sess-1", callID: "call-unknown" },
                 { args: { filePath: "/unknown/file.ts" } },
             )
@@ -119,11 +124,11 @@ describe("instructionsLoaderPlugin", () => {
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => makeInstructions("/some/file.ts", "Test"),
                 loadBody: async (path: string) => `Content of ${path}`,
-            })
+            } as any)
 
-            const plugin = await instructionsLoaderPlugin({ client, directory } as any)
-            const hookFn = plugin["tool.execute.before"]!
-            await hookFn(
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
                 { tool: "write", sessionID: "sess-no-agent", callID: "call-build-default" },
                 { args: { filePath: "/some/file.ts" } },
             )
@@ -136,19 +141,19 @@ describe("instructionsLoaderPlugin", () => {
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => makeInstructions("/some/file.ts", "Test"),
                 loadBody: async (path: string) => `Content of ${path}`,
-            })
+            } as any)
 
-            const plugin = await instructionsLoaderPlugin({ client, directory } as any)
-            const hookFn = plugin["tool.execute.before"]!
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
             // First call — creates index for default agent
-            await hookFn(
+            await hookFunction(
                 { tool: "write", sessionID: "sess-a", callID: "call-first" },
                 { args: { filePath: "/some/file.ts" } },
             )
             vi.mocked(sessionHelpers.sendMessage).mockClear()
 
             // Second call with a different session but same default agent — should reuse cached index
-            await hookFn(
+            await hookFunction(
                 { tool: "write", sessionID: "sess-b", callID: "call-second" },
                 { args: { filePath: "/some/file.ts" } },
             )
@@ -161,7 +166,7 @@ describe("instructionsLoaderPlugin", () => {
             const copilotClient = defaultCreateClient()
             const getSpy = vi.spyOn(copilotClient.session, "get")
             getSpy.mockImplementation(async (_path: unknown) => {
-                if ((_path as any)?.path?.id === "sess-copilot") {
+                if ((_path as { path?: { id?: string } })?.path?.id === "sess-copilot") {
                     return { data: { agent: "copilot" } };
                 }
                 return { data: {} };
@@ -170,20 +175,20 @@ describe("instructionsLoaderPlugin", () => {
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => makeInstructions("/some/file.ts", "Test"),
                 loadBody: async (path: string) => `Content of ${path}`,
-            })
+            } as any)
 
-            const plugin = await instructionsLoaderPlugin({ client: copilotClient, directory } as any)
-            const hookFn = plugin["tool.execute.before"]!
+            const plugin = await instructionsLoaderPlugin(({ client: copilotClient, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
 
             // First call — default agent (build)
-            await hookFn(
+            await hookFunction(
                 { tool: "write", sessionID: "sess-no-agent", callID: "call-build" },
                 { args: { filePath: "/some/file.ts" } },
             )
             vi.mocked(sessionHelpers.sendMessage).mockClear()
 
             // Second call — different agent (copilot) should trigger new index creation
-            await hookFn(
+            await hookFunction(
                 { tool: "write", sessionID: "sess-copilot", callID: "call-copilot" },
                 { args: { filePath: "/some/file.ts" } },
             )
@@ -193,9 +198,9 @@ describe("instructionsLoaderPlugin", () => {
 
         it("never creates more indexes than unique agents across multiple sessions", async () => {
             const indexedAgents = new Set<string>()
-            vi.mocked(instructionIndexer.createIndex).mockImplementation(async (opts) => {
-                indexedAgents.add(opts.agent)
-                return { forFiles: async () => [], loadBody: async (_path: string) => "" } as any
+            vi.mocked(instructionIndexer.createIndex).mockImplementation(async (options) => {
+                indexedAgents.add(options.agent)
+                return ({ forFiles: async () => [], loadBody: async (_path: string) => "" }) as any
             })
 
             // Simulate 5 different sessions, alternating between agents
@@ -211,9 +216,9 @@ describe("instructionsLoaderPlugin", () => {
                 const client = defaultCreateClient()
                 vi.spyOn(client.session, "get").mockResolvedValue({ data: session })
 
-                const plugin = await instructionsLoaderPlugin({ client, directory } as any)
-                const hookFn = plugin["tool.execute.before"]!
-                await hookFn(
+                const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+                const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+                await hookFunction(
                     { tool: "write", sessionID: `sess-${session.agent}`, callID: `call-${session.agent}` },
                     { args: { filePath: "/some/file.ts" } },
                 )
@@ -233,9 +238,9 @@ describe("instructionsLoaderPlugin", () => {
                 loadBody: async (path: string) => `Content of ${path}`,
             } as any)
 
-            const plugin = await instructionsLoaderPlugin({ client, directory } as any)
-            const hookFn = plugin["tool.execute.before"]!
-            await hookFn(
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
                 { tool: "write", sessionID: "sess-1", callID: "call-1" },
                 { args: { filePath: "/some/file.ts" } },
             )
@@ -250,13 +255,13 @@ describe("instructionsLoaderPlugin", () => {
                 forFiles: async () => [
                     { path: "/old/file.ts", description: "Old instruction", applyTo: "**/*.{ts}" },
                     { path: "/new/file.ts", description: "New instruction", applyTo: "**/*.{ts}" },
-                ] as unknown as ReturnType<Awaited<ReturnType<typeof instructionIndexer.createIndex>>["forFiles"]>,
+                ] as any,
                 loadBody: async (path: string) => `Content of ${path}`,
             } as any)
 
-            const plugin = await instructionsLoaderPlugin({ client, directory } as any)
-            const hookFn = plugin["tool.execute.before"]!
-            await hookFn(
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
                 { tool: "write", sessionID: "sess-1", callID: "call-mixed" },
                 { args: { filePath: "/some/file.ts" } },
             )
@@ -279,7 +284,7 @@ describe("instructionsLoaderPlugin", () => {
 
 
 
-            const plugin = await instructionsLoaderPlugin({ client, directory } as any)
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
 
             const idempotencyTokensBefore = (new SessionStorage()).readState<StateWithIdempotencyTokens, Record<string, string>>(sessionId, (state) => {
                 return state.idempotencyTokens ?? {}
@@ -288,8 +293,8 @@ describe("instructionsLoaderPlugin", () => {
             expect(idempotencyTokensBefore).not.toHaveProperty("instruction_load:/new/file.ts")
             expect(idempotencyTokensBefore).toHaveProperty("instruction_load:/some/file.ts")
 
-            const hookFn = plugin["tool.execute.before"]!
-            await hookFn(
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
                 { tool: "write", sessionID: "sess-1", callID: "call-update" },
                 { args: { filePath: "/new/file.ts" } },
             )
@@ -319,13 +324,13 @@ describe("instructionsLoaderPlugin", () => {
                     { path: "/a.ts", description: "Instruction A", applyTo: "**/*.{ts}" },
                     { path: "/b.ts", description: "Instruction B", applyTo: "**/*.{ts}" },
                     { path: "/c.ts", description: "Instruction C", applyTo: "**/*.{ts}" },
-                ] as unknown as ReturnType<Awaited<ReturnType<typeof instructionIndexer.createIndex>>["forFiles"]>,
+                ] as any,
                 loadBody: async (path: string) => `Content of ${path}`,
             } as any)
 
-            const plugin = await instructionsLoaderPlugin({ client, directory } as any)
-            const hookFn = plugin["tool.execute.before"]!
-            await hookFn(
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
                 { tool: "write", sessionID: "sess-1", callID: "call-undefined" },
                 { args: { filePath: "/a.ts" } },
             )
@@ -351,13 +356,13 @@ describe("instructionsLoaderPlugin", () => {
                     { path: "/a.ts", description: "Alpha Rule", applyTo: "**/*.{ts}" },
                     { path: "/b.ts", description: "Beta Rule", applyTo: "**/*.{ts}" },
                     { path: "/c.ts", description: "Gamma Rule", applyTo: "**/*.{ts}" },
-                ] as unknown as ReturnType<Awaited<ReturnType<typeof instructionIndexer.createIndex>>["forFiles"]>,
+                ] as any,
                 loadBody: async (path: string) => `Content of ${path}`,
             } as any)
 
-            const plugin = await instructionsLoaderPlugin({ client, directory } as any)
-            const hookFn = plugin["tool.execute.before"]!
-            await hookFn(
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
                 { tool: "write", sessionID: "sess-1", callID: "call-format" },
                 { args: { filePath: "/a.ts" } },
             )

@@ -37,16 +37,16 @@ export class InstructionContextHelper {
 
   async resolveInstructions(
     filePaths: string[],
-    options?: { maxChars?: number; blockOverheadChars?: number },
+    perCall?: { maxChars?: number; blockOverheadChars?: number },
   ): Promise<ResolvedInstruction[]> {
     if (filePaths.length === 0) return []
 
-    const effectiveMaxChars = options?.maxChars ?? this.maxChars
+    const effectiveMaxChars = perCall?.maxChars ?? this.maxChars
 
     // Zero budget → nothing fits
     if (effectiveMaxChars <= 0) return []
 
-    const effectiveOverhead = options?.blockOverheadChars ?? this.blockOverheadChars
+    const effectiveOverhead = perCall?.blockOverheadChars ?? this.blockOverheadChars
 
     const indexer = await this.indexerFactory()
     const metas = await indexer.forFiles(filePaths)
@@ -70,13 +70,6 @@ export class InstructionContextHelper {
       const totalChars = content.length + effectiveOverhead
 
       if (accumulated + totalChars > effectiveMaxChars) {
-        result.push({
-          description: meta.description,
-          applyTo: meta.applyTo,
-          idempotencyKey: `instruction_load:${meta.path}`,
-          content: `[Instruction content omitted due to size constraints.]`,
-          path: meta.path,
-        })
         continue
       }
 

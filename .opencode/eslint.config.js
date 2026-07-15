@@ -1,5 +1,6 @@
 import unicorn from "eslint-plugin-unicorn"
 import tseslint from "typescript-eslint"
+import vitest from "@vitest/eslint-plugin"
 
 export default [
   ...tseslint.configs.recommended.map((c) => ({
@@ -33,6 +34,17 @@ export default [
   },
 
   {
-    ignores: ["**/*.d.ts", "**/node_modules/", "**/tests/", "**/__mocks__/"],
+    ignores: ["**/*.d.ts", "**/node_modules/", "**/__mocks__/"],
   },
+
+  {
+    files: ['tests/**'], // or any other pattern
+    plugins: {
+      vitest,
+    },
+    rules: {
+      ...vitest.configs.recommended.rules, // you can also use vitest.configs.all.rules to enable all rules
+      'vitest/max-nested-describe': ['error', { max: 3 }], // you can also modify rules' behavior using option like this
+    },
+  }
 ]

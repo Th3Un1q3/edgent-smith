@@ -19,26 +19,44 @@ interface ToolExecuteBeforeInput {
   callID?: string
 }
 
+interface AgentInfo {
+  name: string
+  // Documentation says `maxSteps` but the actual API returns `steps`. Use `steps` here to avoid confusion.
+  steps?: number
+}
+
 export const toolLimitReminder: Plugin = async ({ client }) => {
   await log(client, "info", "[tool-limit-reminder] init")
 
-  const TOOL_LIMITS: Record<string, number> = {
-    // 
-    /**
-     * TODO: use (await client.app.agents()).map()
-     * 
-     * returns array with objects like:
-     * {
-     *   name: "rug-swe",
-     *     maxSteps?: number;
-     * }
-     * 
-     * Take the number and multiply by 0.8 with floor to get the threshold for warning. If no maxSteps is provided, assume unlimited.
-     */
-    "rug-swe": 20,
-    "rug-mcp": 8,
-    "rug-expert": 15,
-    "rug-puppet": 5,
+  /**
+   * Per-agent tool call limits — dynamically resolved from client.app.agents().
+   * Threshold = Math.floor(maxSteps * 0.8) for agents that have maxSteps.
+   * Agents without maxSteps (or not in the agent list) are unlimited.
+   */
+
+   let _toolLimitsCache: Record<string, number> | undefined;
+
+  const getToolLimits = async (): Promise<Record<string, number>> => {
+    if (_toolLimitsCache) {
+      return _toolLimitsCache;
+    }
+
+    const _agentListRaw = await client.app.agents()
+
+    await log(client, "info", `[tool-limit-reminder] fetched agent list: ${JSON.stringify(_agentListRaw.data?.map((a: AgentInfo) => ({ name: a.name, maxSteps: a.steps })))}`)
+
+    const agentsList = _agentListRaw.data ?? []
+
+    const toolLimits: Record<string, number> = Object.fromEntries(
+      agentsList
+        .filter((a) => typeof (a as { steps?: number }).steps === "number")
+        .map((a: AgentInfo) => {
+          const s = a.steps as number
+          return [a.name, Math.floor(s * 0.8)]
+        })
+    ) as Record<string, number>
+    _toolLimitsCache = toolLimits
+    return toolLimits
   }
 
   const PADDING_TILL_ERROR = 2
@@ -67,6 +85,8 @@ export const toolLimitReminder: Plugin = async ({ client }) => {
       const agentName = sessionInfo?.data?.agent ?? 'build' // Default agent if not specified
 
       await log(client, "info", `[tool-limit-reminder] sessionID: ${sessionID}, agent: ${agentName}`)
+
+      const TOOL_LIMITS = await getToolLimits()
 
       if (!TOOL_LIMITS.hasOwnProperty(agentName)) {
 

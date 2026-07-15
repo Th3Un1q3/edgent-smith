@@ -1,17 +1,15 @@
 
 
 import { describe, it, expect, vi } from "vitest"
-import { makeKvStoreMockFactory } from "./__utils__/kv-store.mock"
-import { defaultCreateClient, } from "./helpers/mock-utils"
-
-import { pluginContextBuilder } from "./__utils__/plugin-builder"
+import { makeKvStoreMockFactory } from "./__utils/kv-store.mock"
+import { pluginContextBuilder } from "./__utils/plugin-builder"
 
 import { log } from "../helpers/logger"
 import { sendMessage } from "../helpers/session-helpers"
-import { SessionStorage, type State } from "../helpers/kv-store"
+import { SessionStorage } from "../helpers/kv-store"
 
 import { todoEnforcer } from "../todo-enforcer"
-import { opencodeClientFactory } from "./__utils__/factories/client-factory"
+import { opencodeClientFactory } from "./__utils/factories/client-factory"
 
 vi.mock(
   "../helpers/kv-store",
@@ -27,24 +25,6 @@ interface TodoEnforcerPlugin {
   dispose?: () => Promise<void>
   "event"?: (input: Record<string, unknown>) => Promise<void>
   "tool.execute.before": (input: { sessionID?: string; tool: string }) => Promise<void>
-}
-
-/** Create a client mock that also includes `.client.session.todo` returning the given todos array. */
-function defaultCreateClientWithTodo(todos: Array<Record<string, unknown>>) {
-  const todoMock = vi.fn().mockResolvedValue({ data: todos }) as ReturnType<typeof vi.fn>
-
-  // Build the nested session object with both get and todo on the same object reference.
-  const clientSession = Object.assign(
-    Object.create(null),
-    { get: vi.fn().mockResolvedValue({ data: { agent: "rug" } }), todo: todoMock },
-  )
-
-  // Build the full client mock. The Plugin destructures `{ client }` from the argument,
-  // so we must provide `.client.session`. Use `as never` to bypass type-checking on property access.
-  const base: Record<string, unknown> & { client?: Record<string, unknown> } = defaultCreateClient("rug") as any
-  return Object.assign(base, {
-    client: Object.assign({}, (base.client || {}), { session: clientSession }),
-  }) as never
 }
 
 describe("todoEnforcer", () => {
@@ -132,7 +112,7 @@ describe("todoEnforcer", () => {
       })
 
       it("sends follow-up when shouldFollowUp is true", async () => {
-        vi.mocked(log).mockImplementation((_client, ...params) => Promise.resolve(console.log(...params)))
+        vi.mocked(log).mockImplementation((_client, ...parameters) => Promise.resolve(console.log(...parameters)))
         SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
 
         const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }

@@ -6,6 +6,9 @@
         "prune": false,
         "reserved": 10000
     },
+    "instructions": [
+        ".opencode/instructions/steering-handling.md"
+    ],
     "provider": {
         "local": {
             "options": {
@@ -25,8 +28,8 @@
                         ]
                     },
                     "limit": {
-                        "context": 65536,
-                        "output": 65536
+                        "context": 89845,
+                        "output": 89845
                     }
                 },
                 "google/gemma-4-26b-a4b-qat": {
@@ -92,8 +95,12 @@
             "git *": "ask",
             "rtk git *": "ask",
             "rtk rewrite git *": "ask",
+            "rtk git diff *": "allow",
+            "rtk git status *": "allow",
+            "rtk git show *": "allow",
             "git diff *": "allow",
-            "git status *": "allow"
+            "git status *": "allow",
+            "git show *": "allow"
         },
         "gateway_*": "deny",
         "gateway_mcp-find": "allow",

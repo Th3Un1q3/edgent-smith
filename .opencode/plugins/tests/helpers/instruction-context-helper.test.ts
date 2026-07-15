@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 
 // Import the module-under-test (stub provides interfaces; throws on call in TDD red phase)
 import { InstructionContextHelper } from "../../helpers/instruction-context-helper"
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-import { makeMockIndexer, createIndexerFactory } from "./mock-utils"
+import { makeMockIndexer, createIndexerFactory } from "./mock-utilities"
 
 /** Build a helper instance with a mock indexer and optional config. */
 function makeHelper(
@@ -129,11 +129,9 @@ describe("InstructionContextHelper", () => {
       // Override at call site: only allow 300 chars → first fits (100+200=300)
       const result = await helper.resolveInstructions(["src/dir/file.ts"], { maxChars: 300 })
 
-      expect(result.length).toBe(2)
+      expect(result.length).toBe(1)
       expect(result[0].description).toBe("a")
       expect(result[0].content).toBe("x".repeat(100))
-      expect(result[1].description).toBe("b")
-      expect(result[1].content).not.toBe("y".repeat(100))
     })
   })
 
@@ -234,7 +232,7 @@ describe("InstructionContextHelper", () => {
           "/a.instructions.md": "# This is instruction A\n\nSome detailed text.",
           "/b.instructions.md": "# This is instruction B\n\nMore details here.",
         },
-        { maxChars: 16384 } // generous budget — all instructions included
+        { maxChars: 16_384 } // generous budget — all instructions included
       )
 
       const result = await helper.resolveInstructions(["src/dir/file.ts"])
@@ -274,9 +272,9 @@ describe("InstructionContextHelper", () => {
 
       const result = await helper.resolveInstructions(["src/dir/file.ts"])
 
-      expect(result.length).toBe(2)
-      expect(result[0].description).toBe("huge")
-      expect(result[1].description).toBe("tiny")
+      expect(result.length).toBe(1)
+      expect(result[0].description).toBe("tiny")
+      expect(result[0].content).toBe("x".repeat(50))
     })
   })
 })

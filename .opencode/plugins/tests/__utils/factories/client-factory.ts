@@ -1,9 +1,10 @@
 import { vi } from "vitest"
-import type { OpencodeClient, Todo } from "@opencode-ai/sdk"
+import type { Todo } from "@opencode-ai/sdk"
 
 type OpencodeClientFactoryParameters = {
     agentName?: string
     todoList?: Todo[]
+    agentList?: Array<{ name: string; steps?: number }>
 }
 
 /**
@@ -12,10 +13,8 @@ type OpencodeClientFactoryParameters = {
  * @param todoList - An array of todo items to be returned by the mock client's session.todo method. Defaults to an empty array.
  * @returns A mock OpencodeClient with predefined methods and behaviors.
  */
-const opencodeClientFactory = ({
-    agentName = "build",
-    todoList = [] as Todo[],
-} = {}) => {
+const opencodeClientFactory = (parameters?: OpencodeClientFactoryParameters) => {
+    const { agentName = "build", todoList = [] as Todo[], agentList } = parameters ?? {}
     return {
         session: {
             get: vi.fn().mockResolvedValue({ data: { agent: agentName } }),
@@ -26,7 +25,7 @@ const opencodeClientFactory = ({
             /**
              * methods not implemented */
             log: vi.fn(),
-            agents: vi.fn().mockResolvedValue({ data: [{ name: agentName }] }),
+            agents: vi.fn().mockResolvedValue({ data: agentList ?? [{ name: agentName }] }),
         }
     }
 }

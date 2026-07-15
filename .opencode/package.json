@@ -7,7 +7,7 @@
     "lint": "eslint plugins --fix --cache"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.17.18",
+    "@opencode-ai/plugin": "1.18.1",
     "@vitest/coverage-v8": "^4.1.10",
     "c8": "^11.0.0",
     "js-yaml": "5.2.0"
@@ -17,6 +17,7 @@
     "@types/node": "^26.1.0",
     "@typescript-eslint/eslint-plugin": "^8.62.1",
     "@typescript-eslint/parser": "^8.62.1",
+    "@vitest/eslint-plugin": "1.6.23",
     "eslint": "^10.6.0",
     "eslint-plugin-unicorn": "^71.1.0",
     "eslint-plugin-unused-imports": "^4.4.1",

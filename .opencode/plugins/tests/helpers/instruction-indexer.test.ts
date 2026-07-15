@@ -29,11 +29,11 @@ describe('createIndex().forFiles', () => {
 
     const subjectInstruction = result.find(instruction => instruction.path.includes('multiple-glob-patterns.instructions.md'))
 
-    const defaultInstructionDescription = expect.stringContaining('multiple-glob-patterns.instructions.md')
-
     if (!subjectInstruction) {
       throw new Error("Expected instruction not found in the result.")
     }
+
+    const defaultInstructionDescription = expect.stringContaining('multiple-glob-patterns.instructions.md')
 
     expect(subjectInstruction).toBeDefined()
     expect(subjectInstruction.description).toEqual(defaultInstructionDescription)
@@ -46,11 +46,11 @@ describe('createIndex().forFiles', () => {
 
     const instructionFileName = 'only-specific-agents.instructions.md'
 
-    expect(result).toEqual(expect.not.arrayContaining([
-      expect.objectContaining({
-        path: expect.stringContaining(instructionFileName)
-      })
-    ]))
+    const instructionMatcher = expect.objectContaining({
+      path: expect.stringContaining(instructionFileName),
+    });
+
+    expect(result).toEqual(expect.not.arrayContaining([instructionMatcher]))
   });
 
 
@@ -59,47 +59,50 @@ describe('createIndex().forFiles', () => {
 
     const instructionWithoutFrontmatterFileName = 'global-instruction-smpl.instructions.md'
 
-    expect(result).toEqual(expect.not.arrayContaining([
-      expect.objectContaining({
-        path: expect.stringContaining(instructionWithoutFrontmatterFileName)
-      })
-    ]))
+    const instructionMatcher = expect.objectContaining({
+      path: expect.stringContaining(instructionWithoutFrontmatterFileName),
+    });
+
+    expect(result).toEqual(expect.not.arrayContaining([instructionMatcher]))
   });
+
 
   it('returns instructions that matched by file extension', async () => {
     const result = await subject.forFiles(['src/dir/some-file.ts']);
 
     const instructionFileName = 'multiple-glob-patterns.instructions.md'
 
-    expect(result).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        path: expect.stringContaining(instructionFileName)
-      })
-    ]))
+    const instructionMatcher = expect.objectContaining({
+      path: expect.stringContaining(instructionFileName),
+    });
+
+    expect(result).toEqual(expect.arrayContaining([instructionMatcher]))
   });
+
 
   it('returns instructions matching by directory and subdirectory', async () => {
     const result = await subject.forFiles(['subfolder1/file']);
 
     const instructionFileName = 'multiple-subfolders.instructions.md'
 
-    expect(result).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        path: expect.stringContaining(instructionFileName)
-      })
-    ]))
+    const instructionMatcher = expect.objectContaining({
+      path: expect.stringContaining(instructionFileName),
+    });
+
+    expect(result).toEqual(expect.arrayContaining([instructionMatcher]))
   });
+
 
   it('does not return instruction if files are excluded by the excludePaths property', async () => {
     const result = await subject.forFiles(['src/dir/some-file.test.ts']);
 
     const instructionFileName = 'excluded-paths.instructions.md'
 
-    expect(result).toEqual(expect.not.arrayContaining([
-      expect.objectContaining({
-        path: expect.stringContaining(instructionFileName)
-      })
-    ]))
+    const instructionMatcher = expect.objectContaining({
+      path: expect.stringContaining(instructionFileName),
+    });
+
+    expect(result).toEqual(expect.not.arrayContaining([instructionMatcher]))
   });
 
 
@@ -144,11 +147,11 @@ describe('createIndex().forFiles', () => {
 
       const instructionFileName = 'multiple-glob-patterns.instructions.md'
 
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({
-          path: expect.stringContaining(instructionFileName)
-        })
-      ]))
+      const instructionMatcher = expect.objectContaining({
+        path: expect.stringContaining(instructionFileName),
+      });
+
+      expect(result).toEqual(expect.arrayContaining([instructionMatcher]))
     })
 
     describe('when agent name is excluded by (excludeAgents: "team-excluded-member") property', () => {
@@ -166,11 +169,11 @@ describe('createIndex().forFiles', () => {
 
         const instructionFileName = 'excluded-agents.instructions.md';
 
-        expect(result).toEqual(expect.not.arrayContaining([
-          expect.objectContaining({
-            path: expect.stringContaining(instructionFileName)
-          })
-        ]));
+        const instructionMatcher = expect.objectContaining({
+          path: expect.stringContaining(instructionFileName),
+        });
+
+        expect(result).toEqual(expect.not.arrayContaining([instructionMatcher]))
       });
     })
   })
@@ -188,24 +191,25 @@ describe('createIndex().forFiles', () => {
   it("skips empty-frontmatter fixtures silently during indexing", async () => {
     const result = await subject.forFiles(['src/dir/some-file.ts'])
 
+    const instructionMatcher = expect.objectContaining({
+      path: expect.stringContaining('empty-frontmatter.instructions.md'),
+    });
+
     expect(result).toEqual(
-      expect.not.arrayContaining([
-        expect.objectContaining({
-          path: expect.stringContaining('empty-frontmatter.instructions.md')
-        })
-      ])
+      expect.not.arrayContaining([instructionMatcher])
     )
   })
+
 
   it("skips malformed-yaml fixtures silently during indexing", async () => {
     const result = await subject.forFiles(['src/dir/some-file.ts'])
 
+    const instructionMatcher = expect.objectContaining({
+      path: expect.stringContaining('malformed-fronmatter.instructions.md'),
+    });
+
     expect(result).toEqual(
-      expect.not.arrayContaining([
-        expect.objectContaining({
-          path: expect.stringContaining('malformed-fronmatter.instructions.md')
-        })
-      ])
+      expect.not.arrayContaining([instructionMatcher])
     )
   })
 })
