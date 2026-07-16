@@ -38,8 +38,6 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
                 forFiles: index.forFiles.bind(index),
                 loadBody: index.loadBody.bind(index),
             }),
-            maxChars: 8192,
-            blockOverheadChars: 200,
         })
 
         _helperCache[agent] = helper
@@ -53,24 +51,56 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
             const helper = await getHelper(input.sessionID)
             const instructions = await helper.resolveInstructions([output.args.filePath])
 
-            const instructionsWithTokens = instructions.map(instructionMeta => ({
-                ...instructionMeta,
-                idempotencyToken: `instruction_load:${instructionMeta.path}`
-            }));
-
+            // Read session state for existing tokens (now with :full/:ref suffixes)
             const idempotencyTokens = sessionStorage.readState<StateWithIdempotencyTokens, Record<string, string>>(input.sessionID, (state) => {
                 if (!state.idempotencyTokens || Object.keys(state.idempotencyTokens).length === 0) return {}
                 return state.idempotencyTokens
             }) ?? {};
 
-            const nonSentInstructions = instructionsWithTokens.filter(instruction => !Object.hasOwn(idempotencyTokens, instruction.idempotencyToken))
+            // Count remaining full-content slots — only :full suffix consumes budget
+            const fullCount = Object.keys(idempotencyTokens).filter(k => k.endsWith(":full")).length
+            const remainingSlots = Math.max(0, 5 - fullCount)
+
+            // Idempotency check handles all three token formats: base key, :full, and :ref
+            const isAlreadyInjected = (path: string) => {
+                const baseKey = `instruction_load:${path}`
+                return Object.hasOwn(idempotencyTokens, baseKey) ||
+                       Object.hasOwn(idempotencyTokens, `${baseKey}:full`) ||
+                       Object.hasOwn(idempotencyTokens, `${baseKey}:ref`)
+            }
+
+            // path is always set by resolveInstructions() but typed as optional in ResolvedInstruction
+            const nonSentInstructions = instructions.filter(instruction => {
+                const safePath = instruction.path ?? instruction.description;
+                if (!safePath) return true; // skip if neither path nor description exists
+                return !isAlreadyInjected(safePath);
+            })
 
             if (nonSentInstructions.length === 0) {
                 await log(client, "info", `[${PLUGIN_ID}] No new instructions to send for session ${input.sessionID}.`)
                 return
             }
 
-            const formattedBlocks = nonSentInstructions.map(inst => {
+            // Separate full vs reference based on remaining slots
+            let slotsRemaining = remainingSlots
+            const instructionsWithFlag = nonSentInstructions.map((inst) => {
+                const isReference = slotsRemaining <= 0
+                if (!isReference) slotsRemaining--
+                return { ...inst, isReference }
+            })
+
+            // Formatter: reference-only injections have empty body (description + path only)
+            const formattedBlocks = instructionsWithFlag.map(inst => {
+                if (inst.isReference) {
+                    return [
+                        `=== INSTRUCTION: ${inst.description} ===`,
+                        `Source: ${inst.path}`,
+                        "---",
+                        "",
+                        "",
+                        "".padEnd(28, "="),
+                    ].join("\n")
+                }
                 return [
                     `=== INSTRUCTION: ${inst.description} ===`,
                     `Source: ${inst.path}`,
@@ -89,13 +119,21 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
                 noReply: true
             })
 
+            // Record tokens with appropriate suffixes
+            const newTokens = Object.fromEntries(
+                instructionsWithFlag.map(inst => [
+                    `instruction_load:${inst.path}:${inst.isReference ? 'ref' : 'full'}`,
+                    new Date().toISOString()
+                ])
+            )
+
             sessionStorage.updateState<StateWithIdempotencyTokens>(input.sessionID, (state) => {
                 const existing = state.idempotencyTokens ?? {};
                 return {
                     ...state,
                     idempotencyTokens: {
                         ...existing,
-                        ...Object.fromEntries(nonSentInstructions.map((instruction) => [instruction.idempotencyToken, new Date().toISOString()])),
+                        ...newTokens,
                     },
                 };
             });

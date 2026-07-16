@@ -18,13 +18,14 @@ interface InstructionMeta {
   excludePaths?: string    // exclude filter (glob patterns)
 }
 
-// On demand complete instruction with content
+// On demand complete instruction with content.
+// When `content` is undefined, the instruction is reference-only (description + path only).
 interface ResolvedInstruction {
   description?: string
   applyTo?: string
   path?: string            // NEW — added for idempotency token derivation and source reference
   idempotencyKey: string   // to prevent reapplying the same instruction multiple times
-  content: string          // full markdown body after front matter stripped
+  content?: string | undefined          // full markdown body after front matter stripped (undefined = reference-only)
 }
 
 

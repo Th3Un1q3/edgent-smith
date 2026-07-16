@@ -175,6 +175,14 @@ If validation fails, launch a NEW work subagent with:
 
 Do NOT reuse mental context from the failed attempt — give the new subagent fresh, complete instructions.
 
+## Handling Silent Failures
+
+When a task returns no output, it's either due to scope creep or a technical failure. 
+
+2 steps recovery:
+1. Follow up subagent by running the task with the task_id from the empty return. Prompt the subagent not to continue task but to return a detailed report of what it did and remains to be done. This will help you identify what went wrong.
+2. If the first resume fails, launch a new subagent to re-run the task from scratch with the original prompt. Warn it that some part of the task may have been completed, but it should not assume anything was done. It must re-run the task from scratch and return a detailed report of what it did and remains to be done.
+
 ## Progress Tracking(Required)
 
 Use `todowrite` obsessively:

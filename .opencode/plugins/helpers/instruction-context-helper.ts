@@ -3,13 +3,12 @@ import { InstructionMeta, ResolvedInstruction } from "../types/instructions"
 // Re-export for convenience (tests import these from this module)
 
 
+/** Options passed to the helper constructor. */
 export interface InstructionContextHelperOptions {
   indexerFactory: () => Promise<{
     forFiles(filePaths: string[]): Promise<InstructionMeta[]>
     loadBody(path: string): Promise<string>
   }>
-  maxChars?: number
-  blockOverheadChars?: number
 }
 
 /** Count non-wildcard literal segments in a glob pattern. */
@@ -26,27 +25,14 @@ export class InstructionContextHelper {
     forFiles(filePaths: string[]): Promise<InstructionMeta[]>
     loadBody(path: string): Promise<string>
   }>
-  private maxChars: number
-  private blockOverheadChars: number
 
   constructor(options: InstructionContextHelperOptions) {
     this.indexerFactory = options.indexerFactory
-    this.maxChars = options.maxChars ?? 8192
-    this.blockOverheadChars = options.blockOverheadChars ?? 200
   }
 
-  async resolveInstructions(
-    filePaths: string[],
-    perCall?: { maxChars?: number; blockOverheadChars?: number },
-  ): Promise<ResolvedInstruction[]> {
+  /** Resolve ALL matching instructions with full bodies loaded for every one of them. */
+  async resolveInstructions(filePaths: string[]): Promise<ResolvedInstruction[]> {
     if (filePaths.length === 0) return []
-
-    const effectiveMaxChars = perCall?.maxChars ?? this.maxChars
-
-    // Zero budget → nothing fits
-    if (effectiveMaxChars <= 0) return []
-
-    const effectiveOverhead = perCall?.blockOverheadChars ?? this.blockOverheadChars
 
     const indexer = await this.indexerFactory()
     const metas = await indexer.forFiles(filePaths)
@@ -62,18 +48,9 @@ export class InstructionContextHelper {
     })
 
     const result: ResolvedInstruction[] = []
-    let accumulated = 0
 
     for (const meta of sorted) {
-      // Load body to get accurate size before capping decision
       const content = await indexer.loadBody(meta.path)
-      const totalChars = content.length + effectiveOverhead
-
-      if (accumulated + totalChars > effectiveMaxChars) {
-        continue
-      }
-
-      accumulated += totalChars
 
       result.push({
         description: meta.description,

@@ -1,21 +1,19 @@
 import { describe, expect, it } from "vitest"
 
 // Import the module-under-test (stub provides interfaces; throws on call in TDD red phase)
-import { InstructionContextHelper } from "../../helpers/instruction-context-helper"
+import { InstructionContextHelper, ResolvedInstruction } from "../../helpers/instruction-context-helper"
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 import { makeMockIndexer, createIndexerFactory } from "./mock-utilities"
 
-/** Build a helper instance with a mock indexer and optional config. */
+/** Build a helper instance with a mock indexer. */
 function makeHelper(
   metas: Array<{ description: string; path: string; applyTo: string }>,
   bodyMap?: Record<string, string>,
-  options?: { maxChars?: number; blockOverheadChars?: number },
 ) {
   return new InstructionContextHelper({
     indexerFactory: createIndexerFactory(makeMockIndexer(metas, bodyMap)),
-    ...options,
   })
 }
 
@@ -57,83 +55,62 @@ describe("InstructionContextHelper", () => {
   })
 
   // ════════════════════════════════════════════════════════════
-  // Context estimation and capping
+  // All matching instructions are returned — no content-size filtering
   // ════════════════════════════════════════════════════════════
 
-  describe("context estimation and capping", () => {
-    it("caps output when total chars exceed maxChars budget (body chars + blockOverhead per instruction)", async () => {
+  describe("returns ALL matching instructions regardless of content size", () => {
+    // Pre-computed constant to avoid eslint conflicts (unicorn/prefer-code-point vs no-non-null-assertion)
+    const A_CODE_POINT = 97;
+
+    it.each([
+      { name: "tiny bodies (10 chars each)", sizes: [10, 20, 30] },
+      { name: "medium bodies (500 chars each)", sizes: [500, 600, 700] },
+      { name: "large bodies (10k chars each)", sizes: [10_000, 20_000, 30_000] },
+      { name: "huge bodies (500k chars total)", sizes: [200_000, 300_000] },
+    ])("returns all instructions with $name", async ({ sizes }) => {
       const helper = makeHelper(
-        [
-          { description: "a small", path: "/a.small.instructions.md", applyTo: "**/*.ts" },
-          { description: "b large", path: "/b.large.instructions.md", applyTo: "**/*.js" },
-        ],
-        { "/a.small.instructions.md": "x".repeat(180), "/b.large.instructions.md": "y".repeat(350) },
-        { maxChars: 500, blockOverheadChars: 200 }
-      )
-
-      // a.small: 180 + 200 = 380 (fits)
-      // b.large: 350 + 200 = 550 → total would be 930 > 500 → dropped
-      const result = await helper.resolveInstructions(["src/dir/file.ts"])
-
-      expect(result.length).toBe(1)
-      expect(result[0].description).toBe("a small")
-    })
-
-    it("includes all instructions when none exceed maxChars budget", async () => {
-      const helper = makeHelper(
-        [
-          { description: "instruction a", path: "/a.instructions.md", applyTo: "**/*.ts" },
-          { description: "instruction b", path: "/b.instructions.md", applyTo: "**/*.js" },
-        ],
-        { "/a.instructions.md": "short body A", "/b.instructions.md": "short body B" },
-        { maxChars: 8192 } // generous budget
+        sizes.map((size, index) => ({
+          description: `instruction ${String.fromCodePoint(A_CODE_POINT + index)}`,
+          path: `/inst-${index}.instructions.md`,
+          applyTo: "**/*.ts",
+        })),
+        Object.fromEntries(sizes.map((size, index) => [`/inst-${index}.instructions.md`, "x".repeat(size)]))
       )
 
       const result = await helper.resolveInstructions(["src/dir/file.ts"])
 
-      expect(result.length).toBe(2)
+      expect(result.length).toBe(sizes.length)
     })
 
-    it("drops lowest priority instructions first until remaining fit within budget", async () => {
-      const helper = makeHelper(
-        [
-          { description: "specific", path: "/a.specific.instructions.md", applyTo: "src/**/*.ts" },
-          { description: "general", path: "/b.general.instructions.md", applyTo: "**/*.ts" },
-          { description: "global", path: "/c.global.instructions.md", applyTo: "**/*.{ts,js}" },
-        ],
-        {
-          "/a.specific.instructions.md": "x".repeat(50),
-          "/b.general.instructions.md": "y".repeat(200),
-          "/c.global.instructions.md": "z".repeat(300),
-        },
-        { maxChars: 400 } // enough for specific only (50+200=250)
-      )
+    it("returns all 50 instructions when given 50 inputs", async () => {
+      const instructions: Array<{ description: string; path: string; applyTo: string }> = []
+      const bodyMap: Record<string, string> = {}
+      for (let index = 0; index < 50; index++) {
+        instructions.push({ description: `inst-${index}`, path: `/inst-${index}.md`, applyTo: "**/*.ts" })
+        bodyMap[`/inst-${index}.md`] = "x".repeat(10_000) // each one large
+      }
 
+      const helper = makeHelper(instructions, bodyMap)
       const result = await helper.resolveInstructions(["src/dir/file.ts"])
 
-      // Only the most specific fits; next two would exceed budget cumulatively
-      expect(result.length).toBe(1)
-      expect(result[0].description).toBe("specific")
+      expect(result.length).toBe(50)
     })
 
-    it("respects runtime override of maxChars via resolveInstructions options", async () => {
-      const helper = makeHelper(
-        [
-          { description: "a", path: "/a.instructions.md", applyTo: "**/*.ts" },
-          { description: "b", path: "/b.instructions.md", applyTo: "**/*.js" },
-        ],
-        { "/a.instructions.md": "x".repeat(100), "/b.instructions.md": "y".repeat(100) },
-        { maxChars: 8192 } // high default — overridden below
-      )
+    it("has no perCall parameter — resolveInstructions accepts only filePaths", async () => {
+      const helper = makeHelper([
+        { description: "a", path: "/a.instructions.md", applyTo: "**/*.ts" },
+      ])
 
-      // Override at call site: only allow 300 chars → first fits (100+200=300)
-      const result = await helper.resolveInstructions(["src/dir/file.ts"], { maxChars: 300 })
+      // Should NOT accept a second argument for size constraints
+      const result = await helper.resolveInstructions(["src/dir/file.ts"])
 
       expect(result.length).toBe(1)
-      expect(result[0].description).toBe("a")
-      expect(result[0].content).toBe("x".repeat(100))
     })
   })
+
+  // ════════════════════════════════════════════════════════════
+  // Context estimation and capping (REMOVED — size filtering eliminated in Phase 2)
+  // ════════════════════════════════════════════════════════════
 
   // ════════════════════════════════════════════════════════════
   // Empty / edge cases
@@ -151,19 +128,6 @@ describe("InstructionContextHelper", () => {
     it("returns empty array when no instructions match the files", async () => {
       const helper = makeHelper([])
 
-      const result = await helper.resolveInstructions(["src/dir/file.ts"])
-
-      expect(result).toEqual([])
-    })
-
-    it("returns empty array when maxChars is zero", async () => {
-      const helper = makeHelper(
-        [{ description: "a tiny instruction", path: "/a.instructions.md", applyTo: "**/*.ts" }],
-        { "/a.instructions.md": "hi" },
-        { maxChars: 0 }
-      )
-
-      // Even highest-priority instruction has body + overhead > 0 → nothing fits
       const result = await helper.resolveInstructions(["src/dir/file.ts"])
 
       expect(result).toEqual([])
@@ -217,6 +181,9 @@ describe("InstructionContextHelper", () => {
     })
   })
 
+  // NOTE: max-5 limit tests moved to plugin-level test file (instructions-loader.test.ts)
+  // because session-aware budgeting is owned by the plugin factory, not the helper.
+
   // ════════════════════════════════════════════════════════════
   // Body loading on demand
   // ════════════════════════════════════════════════════════════
@@ -231,8 +198,7 @@ describe("InstructionContextHelper", () => {
         {
           "/a.instructions.md": "# This is instruction A\n\nSome detailed text.",
           "/b.instructions.md": "# This is instruction B\n\nMore details here.",
-        },
-        { maxChars: 16_384 } // generous budget — all instructions included
+        }
       )
 
       const result = await helper.resolveInstructions(["src/dir/file.ts"])
@@ -257,7 +223,7 @@ describe("InstructionContextHelper", () => {
       )
     })
 
-    it("loads body content only for instructions that fit within budget", async () => {
+    it("returns all instructions regardless of body size", async () => {
       const helper = makeHelper(
         [
           { description: "tiny", path: "/a.tiny.instructions.md", applyTo: "**/*.ts" },
@@ -266,15 +232,16 @@ describe("InstructionContextHelper", () => {
         {
           "/a.tiny.instructions.md": "x".repeat(50),
           "/b.huge.instructions.md": "y".repeat(5000),
-        },
-        { maxChars: 500 } // only tiny (50+200=250) fits; huge would be 5000+200=5200 → exceeds
+        }
       )
 
       const result = await helper.resolveInstructions(["src/dir/file.ts"])
 
-      expect(result.length).toBe(1)
-      expect(result[0].description).toBe("tiny")
-      expect(result[0].content).toBe("x".repeat(50))
+      // No size filtering — all inputs return N results regardless of content length
+      expect(result.length).toBe(2)
+      const byDesc = Object.fromEntries(result.map(r => [r.description, r])) as Record<string, ResolvedInstruction>
+      expect(byDesc["tiny"].content).toBe("x".repeat(50))
+      expect(byDesc["huge"].content).toBe("y".repeat(5000))
     })
   })
 })

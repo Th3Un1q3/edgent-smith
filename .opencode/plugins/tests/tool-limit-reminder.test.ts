@@ -175,7 +175,7 @@ describe("toolLimitReminder plugin", () => {
       // Should throw before incrementing the counter further.
       await expect(
         hook({ sessionID: sharedSession }),
-      ).rejects.toThrow("DO NOT call any more tools")
+      ).rejects.toThrow("STOP YOUR WORK.")
 
       expect(logMock).toHaveBeenCalledWith(
         expect.anything(),

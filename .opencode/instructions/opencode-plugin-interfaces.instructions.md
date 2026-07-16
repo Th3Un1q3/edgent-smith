@@ -1,5 +1,5 @@
 ---
-description: Explains how to structure opencode plugin
+description: Explains how to structure opencode plugin. Required when designing an opencode plugin.
 applyTo: ".opencode/plugins/*.ts"
 ---
 

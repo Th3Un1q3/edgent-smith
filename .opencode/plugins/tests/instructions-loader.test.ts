@@ -29,6 +29,32 @@ const makeInstructions = (path: string, description: string) => [
     { path, description, applyTo: "**/*.{ts}" },
 ] as ReturnType<Awaited<ReturnType<typeof instructionIndexer.createIndex>>["forFiles"]> extends () => Promise<infer T> ? T : never
 
+/** Build 6 instructions for session-aware budget tests. */
+const makeFiveInstructions = () => [
+    { path: "/a.ts", description: "Inst A", applyTo: "**/*.{ts}" },
+    { path: "/b.ts", description: "Inst B", applyTo: "**/*.{ts}" },
+    { path: "/c.ts", description: "Inst C", applyTo: "**/*.{ts}" },
+    { path: "/d.ts", description: "Inst D", applyTo: "**/*.{ts}" },
+    { path: "/e.ts", description: "Inst E", applyTo: "**/*.{ts}" },
+    { path: "/f.ts", description: "Inst F", applyTo: "**/*.{ts}" },
+] as any
+
+/** Helper to read the message and extract which instructions were injected with content. */
+function getInjectedDescriptions(message: string): Array<{ desc: string; hasContent: boolean }> {
+    const blocks = message.split("=== INSTRUCTION:")
+    return blocks.slice(1).map(block => {
+        const descLine = block.split("\n", 1)[0]
+        const desc = descLine.replace(/ ===/, "")
+        // Check if there's content after the --- separator (reference-only has empty body)
+        const afterDesc = block.slice(Math.max(0, descLine.length + 1))
+        const afterSeparator = afterDesc.indexOf("---")
+        const bodyAfterSeparator = afterSeparator === -1 ? "" : afterDesc.slice(Math.max(0, afterSeparator + 3))
+        // Content is non-empty only if there's actual text on lines that aren't metadata or the closing divider
+        const hasContent = bodyAfterSeparator.split("\n").some(line => line.trim().length > 0 && !line.startsWith("Source") && !line.startsWith("===") && !line.startsWith("---"))
+        return { desc, hasContent }
+    })
+}
+
 describe("instructionsLoaderPlugin", () => {
     let client: ClientMock
     const directory = "/workspace"
@@ -305,12 +331,13 @@ describe("instructionsLoaderPlugin", () => {
                 return state.idempotencyTokens ?? {}
             })
 
+            // Legacy token preserved unchanged; new instruction recorded with :full suffix
             expect(idempotencyTokens).toHaveProperty("instruction_load:/some/file.ts")
-            expect(idempotencyTokens).toHaveProperty("instruction_load:/new/file.ts")
+            expect(idempotencyTokens).toHaveProperty("instruction_load:/new/file.ts:full")
             expect(Object.keys(idempotencyTokens ?? {}).length).toBe(2)
-            expect(idempotencyTokens?.["instruction_load:/new/file.ts"]).toBeDefined()
+            expect(idempotencyTokens?.["instruction_load:/new/file.ts:full"]).toBeDefined()
             expect(idempotencyTokens?.["instruction_load:/some/file.ts"]).toBeDefined()
-            expect(idempotencyTokens?.["instruction_load:/new/file.ts"]).toEqual(expect.any(String))
+            expect(idempotencyTokens?.["instruction_load:/new/file.ts:full"]).toEqual(expect.any(String))
             expect(idempotencyTokens?.["instruction_load:/some/file.ts"]).toEqual(expect.any(String))
         })
 
@@ -342,9 +369,9 @@ describe("instructionsLoaderPlugin", () => {
             expect(message).toContain("Instruction C")
 
             expect((new SessionStorage()).readState<StateWithIdempotencyTokens, Record<string, string>>(sessionId, (state) => state.idempotencyTokens ?? {})).toEqual({
-                "instruction_load:/a.ts": expect.any(String),
-                "instruction_load:/b.ts": expect.any(String),
-                "instruction_load:/c.ts": expect.any(String),
+                "instruction_load:/a.ts:full": expect.any(String),
+                "instruction_load:/b.ts:full": expect.any(String),
+                "instruction_load:/c.ts:full": expect.any(String),
             })
         })
 
@@ -373,6 +400,272 @@ describe("instructionsLoaderPlugin", () => {
             expect(message).toContain("=== INSTRUCTION:")
             expect(message).toContain("---")
 
+        })
+    })
+
+    // ════════════════════════════════════════════════════════════
+    // Session-aware 5-slot budget (Phase 3)
+    // ════════════════════════════════════════════════════════════
+
+    describe("session-aware 5-slot budget", () => {
+        it.each([
+            { name: "write", tool: "write" },
+            { name: "edit", tool: "edit" },
+            { name: "read", tool: "read" },
+        ])("injects up to 5 full-content instructions in empty session for '$name'", async ({ tool }) => {
+            SessionStorage.reset({ "sess-empty": {} })
+
+            vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
+                forFiles: async () => makeFiveInstructions(),
+                loadBody: async (path: string) => `Content of ${path}`,
+            } as any)
+
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
+                { tool, sessionID: "sess-empty", callID: "call-1" },
+                { args: { filePath: "/a.ts" } },
+            )
+
+            expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
+            const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as Parameters<typeof sessionHelpers.sendMessage>[0]).message
+            const injected = getInjectedDescriptions(message)
+            // 5 instructions with content + 6th reference-only
+            expect(injected.length).toBe(6)
+        })
+
+        it("injects new instruction with full content when fewer than 5 tokens exist", async () => {
+            SessionStorage.reset({ "sess-partial": { idempotencyTokens: {
+                "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
+                "instruction_load:/prev2.ts:ref": "2026-01-01T00:00:00Z",
+            } } })
+
+            vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
+                forFiles: async () => [
+                    { path: "/a.ts", description: "Inst A", applyTo: "**/*.{ts}" },
+                    { path: "/b.ts", description: "Inst B", applyTo: "**/*.{ts}" },
+                ] as any,
+                loadBody: async (path: string) => `Content of ${path}`,
+            } as any)
+
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
+                { tool: "write", sessionID: "sess-partial", callID: "call-1" },
+                { args: { filePath: "/a.ts" } },
+            )
+
+            expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
+            const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as Parameters<typeof sessionHelpers.sendMessage>[0]).message
+            const injected = getInjectedDescriptions(message)
+            // Both should have content (2 existing full tokens → 3 remaining slots, 2 new instructions fit)
+            expect(injected.length).toBe(2)
+            expect(injected.every(index => index.hasContent)).toBe(true)
+
+            // Verify tokens stored with suffixes
+            const updatedTokens = (new SessionStorage()).readState<StateWithIdempotencyTokens, Record<string, string>>(
+                "sess-partial", (s) => s.idempotencyTokens ?? {}
+            )
+            expect(updatedTokens).toHaveProperty("instruction_load:/a.ts:full")
+            expect(updatedTokens).toHaveProperty("instruction_load:/b.ts:full")
+        })
+
+        it("injects new instruction as reference-only when 5 full tokens already present", async () => {
+            SessionStorage.reset({ "sess-full": { idempotencyTokens: {
+                "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
+                "instruction_load:/prev2.ts:full": "2026-01-01T00:00:00Z",
+                "instruction_load:/prev3.ts:full": "2026-01-01T00:00:00Z",
+                "instruction_load:/prev4.ts:full": "2026-01-01T00:00:00Z",
+                "instruction_load:/prev5.ts:full": "2026-01-01T00:00:00Z",
+            } } })
+
+            vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
+                forFiles: async () => [
+                    { path: "/a.ts", description: "Inst A", applyTo: "**/*.{ts}" },
+                    { path: "/b.ts", description: "Inst B", applyTo: "**/*.{ts}" },
+                ] as any,
+                loadBody: async (path: string) => `Content of ${path}`,
+            } as any)
+
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
+                { tool: "write", sessionID: "sess-full", callID: "call-1" },
+                { args: { filePath: "/a.ts" } },
+            )
+
+            expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
+            const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as Parameters<typeof sessionHelpers.sendMessage>[0]).message
+            const injected = getInjectedDescriptions(message)
+            // Both should be reference-only (no content)
+            expect(injected.length).toBe(2)
+            expect(injected.every(index => !index.hasContent)).toBe(true)
+
+            // Verify tokens stored with :ref suffix
+            const updatedTokens = (new SessionStorage()).readState<StateWithIdempotencyTokens, Record<string, string>>(
+                "sess-full", (s) => s.idempotencyTokens ?? {}
+            )
+            expect(updatedTokens).toHaveProperty("instruction_load:/a.ts:ref")
+            expect(updatedTokens).toHaveProperty("instruction_load:/b.ts:ref")
+        })
+
+        it("legacy tokens without suffix prevent re-injection but do not consume budget slots", async () => {
+            SessionStorage.reset({ "sess-legacy": { idempotencyTokens: {
+                "instruction_load:/prev1.ts": "2026-01-01T00:00:00Z", // legacy — no suffix
+                "instruction_load:/prev2.ts": "2026-01-01T00:00:00Z", // legacy — no suffix
+            } } })
+
+            vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
+                forFiles: async () => [
+                    { path: "/a.ts", description: "Inst A", applyTo: "**/*.{ts}" },
+                    { path: "/b.ts", description: "Inst B", applyTo: "**/*.{ts}" },
+                    { path: "/c.ts", description: "Inst C", applyTo: "**/*.{ts}" },
+                    { path: "/d.ts", description: "Inst D", applyTo: "**/*.{ts}" },
+                    { path: "/e.ts", description: "Inst E", applyTo: "**/*.{ts}" },
+                ] as any,
+                loadBody: async (path: string) => `Content of ${path}`,
+            } as any)
+
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
+                { tool: "write", sessionID: "sess-legacy", callID: "call-1" },
+                { args: { filePath: "/a.ts" } },
+            )
+
+            expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
+            const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as Parameters<typeof sessionHelpers.sendMessage>[0]).message
+            // All 5 instructions should be injected with content because legacy tokens don't count toward the budget
+            const injected = getInjectedDescriptions(message)
+            expect(injected.length).toBe(5)
+
+            // Verify they got :full suffixes (legacy token blocked re-injection, but slot was still available for new ones)
+            const updatedTokens = (new SessionStorage()).readState<StateWithIdempotencyTokens, Record<string, string>>(
+                "sess-legacy", (s) => s.idempotencyTokens ?? {}
+            )
+            expect(updatedTokens).toHaveProperty("instruction_load:/a.ts:full")
+            // Legacy tokens should still be present unchanged
+            expect(updatedTokens).toHaveProperty("instruction_load:/prev1.ts")
+            expect(updatedTokens).toHaveProperty("instruction_load:/prev2.ts")
+        })
+
+        it("exactly hits the cap boundary at slot 5", async () => {
+            SessionStorage.reset({ "sess-boundary": { idempotencyTokens: {
+                "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
+                "instruction_load:/prev2.ts:ref": "2026-01-01T00:00:00Z", // ref doesn't consume slot
+            } } })
+
+            vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
+                forFiles: async () => [
+                    { path: "/a.ts", description: "Inst A", applyTo: "**/*.{ts}" },
+                    { path: "/b.ts", description: "Inst B", applyTo: "**/*.{ts}" },
+                    { path: "/c.ts", description: "Inst C", applyTo: "**/*.{ts}" },
+                ] as any,
+                loadBody: async (path: string) => `Content of ${path}`,
+            } as any)
+
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
+                { tool: "write", sessionID: "sess-boundary", callID: "call-1" },
+                { args: { filePath: "/a.ts" } },
+            )
+
+            expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
+            const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as Parameters<typeof sessionHelpers.sendMessage>[0]).message
+            const injected = getInjectedDescriptions(message)
+            // 4 remaining slots: 2 full + ref doesn't count → 3 new instructions, first 3 get content, last gets ref
+            expect(injected.length).toBe(3)
+        })
+
+        it("session survives restart with pre-populated state", async () => {
+            const sessionID = "sess-survive"
+
+            // Populate initial state simulating previous session runs
+            SessionStorage.reset({ [sessionID]: { idempotencyTokens: {
+                "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
+                "instruction_load:/prev2.ts:full": "2026-01-01T00:00:00Z",
+                "instruction_load:/prev3.ts:full": "2026-01-01T00:00:00Z",
+            } } })
+
+            vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
+                forFiles: async () => [
+                    { path: "/a.ts", description: "Inst A", applyTo: "**/*.{ts}" },
+                ] as any,
+                loadBody: async (path: string) => `Content of ${path}`,
+            } as any)
+
+            const plugin1 = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction1 = plugin1?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction1(
+                { tool: "write", sessionID, callID: "call-1" },
+                { args: { filePath: "/a.ts" } },
+            )
+
+            // Verify 2 remaining slots (5 - 3 full = 2), so this first instruction gets content
+            const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as Parameters<typeof sessionHelpers.sendMessage>[0]).message
+            expect(message).toContain("Inst A")
+
+            vi.mocked(sessionHelpers.sendMessage).mockClear()
+
+            // Simulate session restart — new plugin instance reading same state
+            SessionStorage.reset({ [sessionID]: { idempotencyTokens: {
+                "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
+                "instruction_load:/prev2.ts:full": "2026-01-01T00:00:00Z",
+                "instruction_load:/prev3.ts:full": "2026-01-01T00:00:00Z",
+                // Token from previous call in this session
+                "instruction_load:/a.ts:full": "2026-07-01T00:00:00Z",
+            } } })
+
+            const plugin2 = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction2 = plugin2?.["tool.execute.before"] ?? (() => Promise.resolve())
+
+            vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
+                forFiles: async () => [
+                    { path: "/b.ts", description: "Inst B", applyTo: "**/*.{ts}" },
+                ] as any,
+                loadBody: async (path: string) => `Content of ${path}`,
+            } as any)
+
+            await hookFunction2(
+                { tool: "write", sessionID, callID: "call-2" },
+                { args: { filePath: "/b.ts" } },
+            )
+
+            // Now at 4 full tokens + ref from prev3 → only 1 more slot for /b.ts → gets content
+            expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
+        })
+
+        it("new session starts fresh", async () => {
+            SessionStorage.reset({ "sess-new": {} })
+
+            vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
+                forFiles: async () => [
+                    { path: "/a.ts", description: "Inst A", applyTo: "**/*.{ts}" },
+                    { path: "/b.ts", description: "Inst B", applyTo: "**/*.{ts}" },
+                ] as any,
+                loadBody: async (path: string) => `Content of ${path}`,
+            } as any)
+
+            const plugin = await instructionsLoaderPlugin(({ client, directory }) as any)
+            const hookFunction = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+            await hookFunction(
+                { tool: "write", sessionID: "sess-new", callID: "call-1" },
+                { args: { filePath: "/a.ts" } },
+            )
+
+            expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
+            const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as Parameters<typeof sessionHelpers.sendMessage>[0]).message
+            const injected = getInjectedDescriptions(message)
+            // Fresh session — both should have content
+            expect(injected.length).toBe(2)
+
+            // Verify tokens stored with :full suffixes in fresh session
+            const updatedTokens = (new SessionStorage()).readState<StateWithIdempotencyTokens, Record<string, string>>(
+                "sess-new", (s) => s.idempotencyTokens ?? {}
+            )
+            expect(updatedTokens).toHaveProperty("instruction_load:/a.ts:full")
+            expect(updatedTokens).toHaveProperty("instruction_load:/b.ts:full")
         })
     })
 })

@@ -34,7 +34,7 @@ export const toolLimitReminder: Plugin = async ({ client }) => {
    * Agents without maxSteps (or not in the agent list) are unlimited.
    */
 
-   let _toolLimitsCache: Record<string, number> | undefined;
+  let _toolLimitsCache: Record<string, number> | undefined;
 
   const getToolLimits = async (): Promise<Record<string, number>> => {
     if (_toolLimitsCache) {
@@ -109,7 +109,7 @@ export const toolLimitReminder: Plugin = async ({ client }) => {
 
       if (currentCount > agentReminderThreshold + PADDING_TILL_ERROR) {
         await log(client, "error", `[tool-limit-reminder] tool call limit exceeded for session ${sessionID}. Current count: ${currentCount + 1}, Limit: ${agentReminderThreshold}`)
-        throw new Error(`DO NOT call any more tools, scope creep detected. Perform handoff!`)
+        throw new Error(`Error calling tools. Reason: tools are blocked. STOP YOUR WORK. All tool calls have been exhausted for this iteration. Follow the instructions in the previous message to summarize your work and stop.`)
       }
 
       if (currentCount !== agentReminderThreshold) {
@@ -128,8 +128,9 @@ Ignoring this instruction will result in progress lost.
 Output the summary:
 - What you have done so far
 - What problems you encountered
-- What worked and what did not work.
-- What is left to do.
+- What worked and what did not work
+- What is left to do
+- What you could've done if you got more time
 </steering>`
 
       await sendMessage({
