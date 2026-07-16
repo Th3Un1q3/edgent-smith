@@ -1,5 +1,5 @@
 import { vi } from "vitest"
-import { defaultCreateClient } from "../helpers/mock-utilities"
+import { defaultCreateClient } from "@tests/helpers/mock-utilities"
 
 export type PluginEnvironmentBuilderParameters = {
     clientFactory?: (options?: string | { agent?: string; data?: Record<string, unknown> }, agentOverride?: string) => ReturnType<typeof defaultCreateClient>

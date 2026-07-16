@@ -1,27 +1,27 @@
- 
+
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // Mock factories — synchronous imports avoid circular dependency issues.
-import { defaultCreateClient, type ClientMock } from "./helpers/mock-utilities"
-import { makeKvStoreMockFactory } from "./__utils/kv-store.mock"
+import { defaultCreateClient, type ClientMock } from "@tests/helpers/mock-utilities"
+import { makeKvStoreMockFactory } from "@tests/__utils/kv-store.mock"
 
 // Step 1: declare mocks at file top (vitest hoists these automatically)
-vi.mock("../helpers/instruction-indexer")
-vi.mock("../helpers/session-helpers")
-vi.mock("../helpers/logger")
+vi.mock("@plugins/helpers/instruction-indexer", () => ({ createIndex: vi.fn() }))
+vi.mock("@plugins/helpers/session-helpers")
+vi.mock("@plugins/helpers/logger")
 vi.mock(
-    "../helpers/kv-store",
+    "@plugins/helpers/kv-store",
     () => makeKvStoreMockFactory(),
 )
 
 // Step 2: import stubs — must come AFTER vi.mock() calls
-import { instructionsLoaderPlugin, type StateWithIdempotencyTokens } from "../instructions-loader"
-import * as instructionIndexer from "../helpers/instruction-indexer"
-import * as sessionHelpers from "../helpers/session-helpers"
+import { instructionsLoaderPlugin, type StateWithIdempotencyTokens } from "@plugins/instructions-loader"
+import * as instructionIndexer from "@plugins/helpers/instruction-indexer"
+import * as sessionHelpers from "@plugins/helpers/session-helpers"
 
-import { SessionStorage } from "../helpers/kv-store"
+import { SessionStorage } from "@plugins/helpers/kv-store"
 
 
 // Helper to build mock instructions with the correct shape.
@@ -435,10 +435,14 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("injects new instruction with full content when fewer than 5 tokens exist", async () => {
-            SessionStorage.reset({ "sess-partial": { idempotencyTokens: {
-                "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
-                "instruction_load:/prev2.ts:ref": "2026-01-01T00:00:00Z",
-            } } })
+            SessionStorage.reset({
+                "sess-partial": {
+                    idempotencyTokens: {
+                        "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
+                        "instruction_load:/prev2.ts:ref": "2026-01-01T00:00:00Z",
+                    }
+                }
+            })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => [
@@ -471,13 +475,17 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("injects new instruction as reference-only when 5 full tokens already present", async () => {
-            SessionStorage.reset({ "sess-full": { idempotencyTokens: {
-                "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
-                "instruction_load:/prev2.ts:full": "2026-01-01T00:00:00Z",
-                "instruction_load:/prev3.ts:full": "2026-01-01T00:00:00Z",
-                "instruction_load:/prev4.ts:full": "2026-01-01T00:00:00Z",
-                "instruction_load:/prev5.ts:full": "2026-01-01T00:00:00Z",
-            } } })
+            SessionStorage.reset({
+                "sess-full": {
+                    idempotencyTokens: {
+                        "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
+                        "instruction_load:/prev2.ts:full": "2026-01-01T00:00:00Z",
+                        "instruction_load:/prev3.ts:full": "2026-01-01T00:00:00Z",
+                        "instruction_load:/prev4.ts:full": "2026-01-01T00:00:00Z",
+                        "instruction_load:/prev5.ts:full": "2026-01-01T00:00:00Z",
+                    }
+                }
+            })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => [
@@ -510,10 +518,14 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("legacy tokens without suffix prevent re-injection but do not consume budget slots", async () => {
-            SessionStorage.reset({ "sess-legacy": { idempotencyTokens: {
-                "instruction_load:/prev1.ts": "2026-01-01T00:00:00Z", // legacy — no suffix
-                "instruction_load:/prev2.ts": "2026-01-01T00:00:00Z", // legacy — no suffix
-            } } })
+            SessionStorage.reset({
+                "sess-legacy": {
+                    idempotencyTokens: {
+                        "instruction_load:/prev1.ts": "2026-01-01T00:00:00Z", // legacy — no suffix
+                        "instruction_load:/prev2.ts": "2026-01-01T00:00:00Z", // legacy — no suffix
+                    }
+                }
+            })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => [
@@ -550,10 +562,14 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("exactly hits the cap boundary at slot 5", async () => {
-            SessionStorage.reset({ "sess-boundary": { idempotencyTokens: {
-                "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
-                "instruction_load:/prev2.ts:ref": "2026-01-01T00:00:00Z", // ref doesn't consume slot
-            } } })
+            SessionStorage.reset({
+                "sess-boundary": {
+                    idempotencyTokens: {
+                        "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
+                        "instruction_load:/prev2.ts:ref": "2026-01-01T00:00:00Z", // ref doesn't consume slot
+                    }
+                }
+            })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => [
@@ -582,11 +598,15 @@ describe("instructionsLoaderPlugin", () => {
             const sessionID = "sess-survive"
 
             // Populate initial state simulating previous session runs
-            SessionStorage.reset({ [sessionID]: { idempotencyTokens: {
-                "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
-                "instruction_load:/prev2.ts:full": "2026-01-01T00:00:00Z",
-                "instruction_load:/prev3.ts:full": "2026-01-01T00:00:00Z",
-            } } })
+            SessionStorage.reset({
+                [sessionID]: {
+                    idempotencyTokens: {
+                        "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
+                        "instruction_load:/prev2.ts:full": "2026-01-01T00:00:00Z",
+                        "instruction_load:/prev3.ts:full": "2026-01-01T00:00:00Z",
+                    }
+                }
+            })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => [
@@ -609,13 +629,17 @@ describe("instructionsLoaderPlugin", () => {
             vi.mocked(sessionHelpers.sendMessage).mockClear()
 
             // Simulate session restart — new plugin instance reading same state
-            SessionStorage.reset({ [sessionID]: { idempotencyTokens: {
-                "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
-                "instruction_load:/prev2.ts:full": "2026-01-01T00:00:00Z",
-                "instruction_load:/prev3.ts:full": "2026-01-01T00:00:00Z",
-                // Token from previous call in this session
-                "instruction_load:/a.ts:full": "2026-07-01T00:00:00Z",
-            } } })
+            SessionStorage.reset({
+                [sessionID]: {
+                    idempotencyTokens: {
+                        "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
+                        "instruction_load:/prev2.ts:full": "2026-01-01T00:00:00Z",
+                        "instruction_load:/prev3.ts:full": "2026-01-01T00:00:00Z",
+                        // Token from previous call in this session
+                        "instruction_load:/a.ts:full": "2026-07-01T00:00:00Z",
+                    }
+                }
+            })
 
             const plugin2 = await instructionsLoaderPlugin(({ client, directory }) as any)
             const hookFunction2 = plugin2?.["tool.execute.before"] ?? (() => Promise.resolve())

@@ -1,24 +1,24 @@
 
 
 import { describe, it, expect, vi } from "vitest"
-import { makeKvStoreMockFactory } from "./__utils/kv-store.mock"
-import { pluginContextBuilder } from "./__utils/plugin-builder"
+import { makeKvStoreMockFactory } from "@tests/__utils/kv-store.mock"
+import { pluginContextBuilder } from "@tests/__utils/plugin-builder"
 
-import { log } from "../helpers/logger"
-import { sendMessage } from "../helpers/session-helpers"
-import { SessionStorage } from "../helpers/kv-store"
+import { log } from "@plugins/helpers/logger"
+import { sendMessage } from "@plugins/helpers/session-helpers"
+import { SessionStorage } from "@plugins/helpers/kv-store"
 
-import { todoEnforcer } from "../todo-enforcer"
-import { opencodeClientFactory } from "./__utils/factories/client-factory"
+import { todoEnforcer } from "@plugins/todo-enforcer"
+import { opencodeClientFactory } from "@tests/__utils/factories/client-factory"
 
 vi.mock(
-  "../helpers/kv-store",
+  "@plugins/helpers/kv-store",
   () => makeKvStoreMockFactory(),
 )
 
-vi.mock("../helpers/logger")
+vi.mock("@plugins/helpers/logger")
 
-vi.mock("../helpers/session-helpers")
+vi.mock("@plugins/helpers/session-helpers")
 
 
 interface TodoEnforcerPlugin {

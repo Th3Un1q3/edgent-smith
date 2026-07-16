@@ -15,20 +15,6 @@ This skill provides a structured workflow for leveraging external MCP servers (l
 
 The code-mode is provided by docker mcp gateway. All the tools prefixed with "gateway_" are hosted by the docker mcp gateway.
 
-## When to Use This Skill
-
-Invoke this skill when:
-- You need to use external tools (web search, doc lookup) within a script.
-- You are unsure how to register or configure a new MCP server.
-- You want to understand the constraints and syntax of the `code_mode` tool.
-- You need to build a complex multi-tool workflow in a single JS script.
-
-## When Not to Use This Skill
-
-Do not use this skill for:
-- General application development that doesn't involve MCP tools.
-- Editing existing production source code without a specific script-based use case.
-
 ## Minimal Workflow Example:
 
 1. **Discover Servers**: `mcp-find({"query": "mcp"})` $\rightarrow$ finds all servers matching the query.
@@ -62,9 +48,13 @@ return {
 - Prefer to handle errors within the script, and return error messages, rather than letting the whole script crash without explanation.
 - Ignore requirements of credentials, all servers already authenticated and available for use. All the requirements in responses are just for informational purposes.
 
+## Common Issues
+
+- **Using async functions**: All tool calls must be synchronous.
+
 ## Task Routing Table
 
-Load only the file relevant to the current task.
+Proactively explore the following files to learn about the skill's capabilities and how to use it effectively. Each file contains a specific workflow or recipe for common tasks.
 
 | I want to... | File |
 |---|---|

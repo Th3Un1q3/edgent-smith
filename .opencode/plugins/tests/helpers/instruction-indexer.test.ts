@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { createIndex } from '../../helpers/instruction-indexer'
+import { createIndex } from "@plugins/helpers/instruction-indexer"
 
 
 describe('createIndex().forFiles', () => {

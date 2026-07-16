@@ -39,7 +39,7 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 /workspace/
 ├── .devcontainer/      # Python 3.13 + Ollama sidecar configuration
 ├── .github/            # CI (DevContainer), Custom Agents, Prompt Templates, & Instructions
-├── .opencode/          # OpenCode agent framework (agents, commands, skills, plugins)
+├── .opencode/          # OpenCode agent framework (agents, commands, skills, plugins - has scoped typescript ecosystem)
 ├── .agents/skills/    # Project-specific custom skills for pydantic-ai and other domains
 ├── agents/             # Core runtime agents (e.g., edge_agent.py) with inline tools
 ├── agent_utils/        # Utility scripts and tools for common agent tasks (e.g., notifications)
@@ -60,7 +60,6 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 | CLI Commands | `cli/commands/` | All user-facing command logic and routing via Click. |
 | Evaluation Setup | `evals/` | Runner configuration, smoke tests, and baseline data. |
 | Workflow Config | `.github/workflows/` | CI automation and auto-research experiment triggers. |
-| Instruction Files | `.github/instructions/` | Detailed standards for TDD, writing style, CLI design, etc. |
 
 ## CODE MAP (Core)
 The system is architected around high-centrality components in the following modules:

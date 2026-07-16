@@ -2,7 +2,7 @@ vi.mock("@opencode-ai/plugin", () => ({
   Plugin: {} as Record<string, unknown>,
 }));
 
-import { rugTeamPlugin } from "../rug-team";
+import { rugTeamPlugin } from "@plugins/rug-team";
 import type { PluginInput } from "@opencode-ai/plugin";
 
 // ── Type Definitions ───────────────────────────────────────────────────────

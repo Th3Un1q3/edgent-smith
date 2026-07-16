@@ -2,14 +2,14 @@ import { describe, it, expect, beforeEach, vi } from "vitest"
 import type { PluginInput } from "@opencode-ai/plugin"
 
 // Synchronous mock factories — no dynamic imports to avoid circular dependency issues.
-import { defaultCreateClient, makeLoggerMockFactory, makeSessionHelpersMockFactory } from "./helpers/mock-utilities"
+import { defaultCreateClient, makeLoggerMockFactory, makeSessionHelpersMockFactory } from "@tests/helpers/mock-utilities"
 
-vi.mock("../helpers/logger", () => makeLoggerMockFactory())
-vi.mock("../helpers/session-helpers", () => makeSessionHelpersMockFactory())
+vi.mock("@plugins/helpers/logger", () => makeLoggerMockFactory())
+vi.mock("@plugins/helpers/session-helpers", () => makeSessionHelpersMockFactory())
 
-import { toolLimitReminder } from "../tool-limit-reminder"
-import { log } from "../helpers/logger"
-import { sendMessage } from "../helpers/session-helpers"
+import { toolLimitReminder } from "@plugins/tool-limit-reminder"
+import { log } from "@plugins/helpers/logger"
+import { sendMessage } from "@plugins/helpers/session-helpers"
 
 const logMock = vi.mocked(log)
 const sendMessageMock = vi.mocked(sendMessage)

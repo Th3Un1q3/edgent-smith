@@ -1,4 +1,4 @@
-import type { State } from "../../helpers/kv-store"
+import type { State } from "@plugins/helpers/kv-store"
 
 /** Static members of the `MockSessionStorage` class returned as `SessionStorage`. */
 export interface MockSessionStorageStatic {

@@ -73,3 +73,4 @@ Load relevant skills before implementing a solution. Some favorites:
 - vitest - Design vite tests for unit and integration testing in typescript.
 - refactor - Refactor code for clarity, maintainability, and performance. Use existing patterns and helpers. Avoid changing behavior unless explicitly asked.
 - python-testing-patterns - Avoid common pitfalls when writing tests in Python. Use mocks only when unavoidable. Test real code, not mock behavior.
+- ponytail - Use to prevent overcomplicated code. When designing a new feature it helps preventing overengineering. When refactoring it helps simplify code and remove unnecessary abstractions.

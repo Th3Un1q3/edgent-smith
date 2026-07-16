@@ -11,17 +11,6 @@ limits: >
   Cannot access live external documentation. When research requires up-to-date library docs, framework APIs, or current version information, delegate to rug-mcp first. Do not attempt web searches directly.
 ---
 
-## Frontmatter Reference
-
-| Field | Value |
-|-------|-------|
-| **name** | rug-expert |
-| **description** | Complex multi-step work, planning, validation, and deep analysis. Use for architecture design, refactoring plans, quality assurance, requirements analysis, and any task requiring judgment across multiple dimensions. |
-| **tasks** | Planning and producing implementation plans with discrete steps; Architecture design and system-level reasoning; Validation, critique, and quality assurance of work products; Analyzing codebases to identify patterns, dependencies, and risks; Producing structured reports with acceptance criteria |
-| **limits** | Cannot access live external documentation. When research requires up-to-date library docs, framework APIs, or current version information, delegate to rug-mcp first. Do not attempt web searches directly. |
-
----
-
 # Agent Card: rug-expert
 
 ## Overview

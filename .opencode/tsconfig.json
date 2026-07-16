@@ -17,7 +17,14 @@
       "vitest/globals",
       "js-yaml"
     ],
-    "paths": {}
+    "paths": {
+      "@plugins/*": [
+        "./plugins/*"
+      ],
+      "@tests/*": [
+        "./plugins/tests/*"
+      ]
+    }
   },
   "include": [
     "plugins/**/*.ts",

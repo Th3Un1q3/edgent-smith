@@ -84,7 +84,7 @@ const DEFAULT_CREATE_INDEX_OPTS = {
 /** Creates a real indexer fixture for tests that need actual file-based behavior. */
 export async function createIndex(options?: Partial<typeof DEFAULT_CREATE_INDEX_OPTS>) {
   try {
-    const m = await import("../../helpers/instruction-indexer")
+    const m = await import("@plugins/helpers/instruction-indexer")
     return m.createIndex({ ...DEFAULT_CREATE_INDEX_OPTS, ...options } as Parameters<typeof m.createIndex>[0])
   } catch (error) {
     throw new Error(`Failed to load instruction indexer: ${error}`)

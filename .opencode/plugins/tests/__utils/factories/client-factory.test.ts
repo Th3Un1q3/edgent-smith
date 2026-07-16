@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import type { Todo } from "@opencode-ai/sdk"
-import { opencodeClientFactory } from "./client-factory"
+import { opencodeClientFactory } from "@tests/__utils/factories/client-factory"
 
 describe("opencodeClientFactory", () => {
     describe("default behavior", () => {

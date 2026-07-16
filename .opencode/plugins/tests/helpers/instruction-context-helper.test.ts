@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest"
 
 // Import the module-under-test (stub provides interfaces; throws on call in TDD red phase)
-import { InstructionContextHelper, ResolvedInstruction } from "../../helpers/instruction-context-helper"
+import { InstructionContextHelper, ResolvedInstruction } from "@plugins/helpers/instruction-context-helper"
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-import { makeMockIndexer, createIndexerFactory } from "./mock-utilities"
+import { makeMockIndexer, createIndexerFactory } from "@tests/helpers/mock-utilities"
 
 /** Build a helper instance with a mock indexer. */
 function makeHelper(
