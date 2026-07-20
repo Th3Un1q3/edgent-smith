@@ -65,8 +65,8 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
             const isAlreadyInjected = (path: string) => {
                 const baseKey = `instruction_load:${path}`
                 return Object.hasOwn(idempotencyTokens, baseKey) ||
-                       Object.hasOwn(idempotencyTokens, `${baseKey}:full`) ||
-                       Object.hasOwn(idempotencyTokens, `${baseKey}:ref`)
+                    Object.hasOwn(idempotencyTokens, `${baseKey}:full`) ||
+                    Object.hasOwn(idempotencyTokens, `${baseKey}:ref`)
             }
 
             // path is always set by resolveInstructions() but typed as optional in ResolvedInstruction
@@ -115,7 +115,7 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
             await sendMessage({
                 client,
                 sessionId: input.sessionID,
-                message: `<steering reason="Relevant files touched">\n\n${formattedBlocks}</steering>`,
+                message: `<steering reason="Relevant files touched">\n${formattedBlocks}\n</steering>`,
                 noReply: true
             })
 

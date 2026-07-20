@@ -17,9 +17,9 @@ description: "Create a conventional commit with user approval"
 If the output above is empty, there are no untracked/unstaged changes. Check for staged changes:
 
 
-<output command="git diff --cached --unified --stat 2>/dev/null || echo '(nothing staged)'">
+<output command="git diff --stat 2>/dev/null || echo '(nothing staged)'">
 
-!`git diff --cached --unified --stat 2>/dev/null || echo '(nothing staged)'`
+!`git diff --stat 2>/dev/null || echo '(nothing staged)'`
 
 </output>
 
@@ -55,9 +55,6 @@ If the output above is empty, there are no untracked/unstaged changes. Check for
    - Choose scope if applicable (e.g., `feat(auth): ...`).
    - Construct a concise, imperative message (prefix(scope): description format).
 
-5. **Execute the commit**
-   - Use the `bash` tool to run: `git commit -m "<approved-message>"`
-   - Confirm success with: `git log --oneline -1`
-
-6. **If not approved**
-   - Tell the user the commit was skipped and offer to revise the message or try again.
+4. **Stage all changes and execute the commit**
+    - Once steps 1-3 are complete, use the `bash` tool to run: `git commit -m "<approved-message>"`
+    - Confirm success with: `git log --oneline -1`
