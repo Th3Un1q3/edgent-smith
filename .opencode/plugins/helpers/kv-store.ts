@@ -9,6 +9,7 @@ export enum SESSION_FIELDS {
   lastMessageSentAt = "lastMessageSentAt",
   idleAt = "idleAt",
   toolCalls = "toolCalls",
+  agent = "agent"
 }
 
 interface SessionStorageAdapter {
@@ -17,7 +18,7 @@ interface SessionStorageAdapter {
 }
 
 class FileSystemSessionStorageAdapter implements SessionStorageAdapter {
-  constructor(private basePath: string = ".opencode/plugins/sessions") {}
+  constructor(private basePath: string = ".opencode/plugins/sessions") { }
 
   read(sessionId: string): State | undefined {
     const path = `${this.basePath}/${sessionId}.json`
@@ -42,7 +43,7 @@ class SessionStorage {
   static reset(_state: Record<string, State> = {}) {
     throw new Error("Method not implemented.")
   }
-  constructor(private storageAdapter: SessionStorageAdapter = new FileSystemSessionStorageAdapter()) {}
+  constructor(private storageAdapter: SessionStorageAdapter = new FileSystemSessionStorageAdapter()) { }
 
   readState<T extends State, R = unknown>(sessionId: string, reader: (state: T) => R): R | undefined {
     const state = this.storageAdapter.read(sessionId) as T | undefined

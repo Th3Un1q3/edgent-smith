@@ -8,9 +8,9 @@ export const sessionTracker: Plugin = async ({ client }) => {
   const sessionStorage = new SessionStorage()
   await log(client, "info", `${PLUGIN_ID} initialized`)
 
-  const markSessionAsStarted = (sessionId: string) => sessionStorage.updateState(sessionId, (session) => {
+  const markSessionAsStarted = (sessionId: string, agent: string) => sessionStorage.updateState(sessionId, (session) => {
     if (Object.hasOwn(session, SESSION_FIELDS.startedAt)) return session
-    return { ...session, [SESSION_FIELDS.startedAt]: new Date().toISOString() }
+    return { ...session, [SESSION_FIELDS.startedAt]: new Date().toISOString(), [SESSION_FIELDS.agent]: agent }
   })
 
   const markToolAsCalled = (sessionId: string, tool: string) => sessionStorage.updateState(sessionId, (session) => {
@@ -31,8 +31,8 @@ export const sessionTracker: Plugin = async ({ client }) => {
   })
 
   return {
-    "chat.message": async ({ sessionID }) => {
-      markSessionAsStarted(sessionID)
+    "chat.message": async ({ sessionID, agent }) => {
+      markSessionAsStarted(sessionID, agent)
       recordLastMessageSent(sessionID)
     },
 

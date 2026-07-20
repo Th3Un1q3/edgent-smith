@@ -89,6 +89,9 @@
         }
     },
     "permission": {
+        "external_directory": {
+            "/tmp/*": "allow"
+        },
         "list_mcp_resources": "deny",
         "bash": {
             "*": "allow",

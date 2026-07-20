@@ -209,11 +209,19 @@ Every todo item description MUST use pattern `#{task_type}: {task_description} @
 - #develop #tdd-green: Make first failing test pass @rug-swe
 - #develop #tdd-refactor: Refactor test case for readability and reusability @rug-swe
 - #develop confirm tests pass: Run all tests and confirm they pass @rug-puppet
-- #review review tests match test quality standards. Review test file using test-design skill @rug-swe
+- #review review tests match test quality standards. Review test file using `test-design` skill @rug-swe
 - #cleanup: Remove any temporary files created during testing @rug-swe
 - #quality-gates: Run static analysis and code quality checks @rug-expert
 - #steering: Identify the best next step to take based on current progress and results @rug-expert
 - #plan: Update todo list with new tasks based on current progress and results @rug
+```
+
+## Skill enforcement(recommended)
+
+If you're aware about a skill that is relevant to the task, you should explicitly tell the subagent to use it. For example:
+
+```markdown
+Before you start work, load following skills: [skill name 1], [skill name 2], ... and use them to complete the task.
 ```
 
 ## Common Failure Modes (AVOID THESE)

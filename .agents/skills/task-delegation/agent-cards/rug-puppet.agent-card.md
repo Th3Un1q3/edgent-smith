@@ -8,7 +8,7 @@ tasks: |
   - Creating or modifying simple configuration files
   - File management tasks (copy, move, rename, list directories)
 limits: >
-  Not designed for multi-step workflows or complex reasoning. Each delegation must be a single atomic operation — if the task requires reading then analyzing, searching then comparing, or any sequence of dependent operations, decompose into separate rug-puppet calls or escalate to rug-expert/rug-swe. Never pass full file contents to rug-puppet; it can read files itself when given context and a reference with scope.
+  Not designed for multi-step workflows or complex reasoning. Each delegation must be a single atomic operation — if the task requires reading then analyzing, searching then comparing, or any sequence of dependent operations, decompose into separate rug-puppet calls or escalate to rug-expert/rug-swe. Never pass full file contents to rug-puppet; it can read files itself when given context and a reference with scope. It can't load skills.
 ---
 
 # Agent Card: rug-puppet

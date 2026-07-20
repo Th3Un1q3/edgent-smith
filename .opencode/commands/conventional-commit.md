@@ -7,11 +7,21 @@ description: "Create a conventional commit with user approval"
 
 ## Context
 
-`` !git status --short 2>/dev/null || echo '(no git repo or no changes)' ``
+
+<output command="git status --short 2>/dev/null || echo '(no git repo or no changes)'">
+
+!`git status --short 2>/dev/null || echo '(no git repo or no changes)'`
+
+</output>
 
 If the output above is empty, there are no untracked/unstaged changes. Check for staged changes:
 
-`` !git diff --cached --stat 2>/dev/null || echo '(nothing staged)' ``
+
+<output command="git diff --cached --unified --stat 2>/dev/null || echo '(nothing staged)'">
+
+!`git diff --cached --unified --stat 2>/dev/null || echo '(nothing staged)'`
+
+</output>
 
 ## Workflow
 
@@ -42,13 +52,10 @@ If the output above is empty, there are no untracked/unstaged changes. Check for
      | `style:`    | Formatting/linting (no logic change)      | `style: fix indentation`   |
      | `ci:`       | CI/CD pipeline changes                    | `ci: update workflow`      |
      | `perf:`     | Performance improvements                  | `perf: cache query result` |
-   - Construct a concise, imperative message (scope: description format).
+   - Choose scope if applicable (e.g., `feat(auth): ...`).
+   - Construct a concise, imperative message (prefix(scope): description format).
 
-4. **Ask for user approval**
-   - Use the `question` tool to present the proposed commit message and ask for approval.
-   - Structure: Present the full proposed message with the type prefix, then ask "Approve this commit?" with Yes/No options.
-
-5. **If approved — execute the commit**
+5. **Execute the commit**
    - Use the `bash` tool to run: `git commit -m "<approved-message>"`
    - Confirm success with: `git log --oneline -1`
 

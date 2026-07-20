@@ -1,6 +1,7 @@
 ---
 description: "Guidelines for writing clear, concise, and factual responses in markdown files."
 applyTo: "**/*.md"
+excludeAgents: "rug-mcp"
 ---
 
 # Communication Style Instructions

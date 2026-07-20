@@ -109,7 +109,7 @@ export const toolLimitReminder: Plugin = async ({ client }) => {
 
       if (currentCount > agentReminderThreshold + PADDING_TILL_ERROR) {
         await log(client, "error", `[tool-limit-reminder] tool call limit exceeded for session ${sessionID}. Current count: ${currentCount + 1}, Limit: ${agentReminderThreshold}`)
-        throw new Error(`Error calling tools. Reason: tools are blocked. STOP YOUR WORK. All tool calls have been exhausted for this iteration. Follow the instructions in the previous message to summarize your work and stop.`)
+        throw new Error(`Error calling tools. Reason: tools are blocked. STOP YOUR WORK. DON'T change, read, write files, execute commands in this session. Follow the instructions in the previous message to summarize your work and stop.`)
       }
 
       if (currentCount !== agentReminderThreshold) {

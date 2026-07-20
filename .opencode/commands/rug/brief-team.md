@@ -46,19 +46,22 @@ Create briefing document for the team lead on which subagents to assign, how to 
 
 ## References
 
+Subagents can't delegate tasks to other subagents. Yet they can use the skill to perform planning. Then the team lead will decide what to do with the plan.
 <skill name="task-delegation" location=".agents/skills/task-delegation/SKILL.md" />
 !`cat .agents/skills/task-delegation/SKILL.md`
 </skill>
 
 <agent-cards>
 
-!`just list-agent-cards`
+!`just agent_utils/list-agent-cards`
 
 </agent-cards>
 
+Catalog of all skills represented in the system.
+
 <available_skills>
 
-!`just list-skills`
+!`just agent_utils/list-skills`
 
 </available_skills>
 

@@ -9,3 +9,21 @@ set export
 # Notify via ntfy.sh using event and message arguments.
 notify event message:
     curl -d "{{event}}: {{message}}" "https://ntfy.sh/$NTFY_TOPIC" -H "Authorization: Bearer $NTFY_TOKEN"
+
+# List skills available in opencode
+list-skills:
+    opencode debug skill > /tmp/opencode_skills.json 2>/dev/null && \
+    jq -r '.[] | "\(.name):\t\(.description)"' /tmp/opencode_skills.json 2>&1 && \
+    rm -f /tmp/opencode_skills.json
+
+
+# Outputs complete agent cards
+list-agent-cards:
+    #!/usr/bin/env bash
+
+    find /workspace/.agents/skills/task-delegation/agent-cards/*.agent-card.md -exec sh -c 'echo "Full path: $1"; echo "Agent card:"; head -n 200 "$1"' _ {} \;
+
+# Export a single OpenCode session to /workspace/.tmp/session-review/{session_id}.json
+export-opencode-session session_id:
+    mkdir -p /workspace/.tmp/session-review/{{session_id}} && \
+    opencode export {{session_id}} > "/workspace/.tmp/session-review/{{session_id}}/session.json"

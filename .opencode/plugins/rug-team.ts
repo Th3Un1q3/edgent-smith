@@ -11,16 +11,16 @@ const rugTeamPlugin: Plugin = async ({ client }) => {
             const parts = _output.parts || []
 
             dirtySessions[sessionID] = true
-            await client.session.command({
-                body: {
-                    command: "rug-brief",
-                    arguments: parts.filter(part => part.type === "text").map(part => part.text).join("\n"),
-                    agent
-                },
-                path: {
-                    id: sessionID,
-                },
-            })
+            // await client.session.command({
+            //     body: {
+            //         command: "rug-brief",
+            //         arguments: parts.filter(part => part.type === "text").map(part => part.text).join("\n"),
+            //         agent
+            //     },
+            //     path: {
+            //         id: sessionID,
+            //     },
+            // })
 
         },
     }
