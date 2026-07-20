@@ -52,6 +52,7 @@ export function makeKvStoreMockFactory(): {
         lastMessageSentAt: "lastMessageSentAt",
         idleAt: "idleAt",
         toolCalls: "toolCalls",
+        needsReview: "needsReview",
     }
 
     return { SessionStorage: MockSessionStorage, _mockReadState, _mockUpdateState, SESSION_FIELDS }

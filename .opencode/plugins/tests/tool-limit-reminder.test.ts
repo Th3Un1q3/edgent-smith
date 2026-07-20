@@ -3,8 +3,10 @@ import type { PluginInput } from "@opencode-ai/plugin"
 
 // Synchronous mock factories — no dynamic imports to avoid circular dependency issues.
 import { defaultCreateClient, makeLoggerMockFactory, makeSessionHelpersMockFactory } from "@tests/helpers/mock-utilities"
+import { makeKvStoreMockFactory } from "@tests/__utils/kv-store.mock"
 
 vi.mock("@plugins/helpers/logger", () => makeLoggerMockFactory())
+vi.mock("@plugins/helpers/kv-store", () => makeKvStoreMockFactory())
 vi.mock("@plugins/helpers/session-helpers", () => makeSessionHelpersMockFactory())
 
 import { toolLimitReminder } from "@plugins/tool-limit-reminder"

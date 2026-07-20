@@ -2,6 +2,8 @@ import { log } from "./helpers/logger"
 import { sendMessage } from "./helpers/session-helpers"
 import type { Plugin } from "@opencode-ai/plugin"
 
+import { SessionStorage, SESSION_FIELDS } from "./helpers/kv-store"
+
 /**
  * Per-agent tool call limits.
  * NOTE: Since no reliable public API exists to resolve the active agent
@@ -25,7 +27,7 @@ interface AgentInfo {
   steps?: number
 }
 
-export const toolLimitReminder: Plugin = async ({ client }) => {
+export const toolLimitReminder: Plugin = async ({ client, $ }) => {
   await log(client, "info", "[tool-limit-reminder] init")
 
   /**
@@ -68,7 +70,61 @@ export const toolLimitReminder: Plugin = async ({ client }) => {
    */
   const sessionCounters = new Map<string, number>()
 
+  // Session storage for cross-plugin state persistence (needsReview flag)
+  const sessionStorage = new SessionStorage()
+
+
+  /**
+    * Triggers an asynchronous export of the session using the shell helper.
+    * Runs `just agent_utils/export-opencode-session <sessionId>` from workspace root.
+    */
+  const triggerExport = async (sessionId: string) => {
+    try {
+      const result = await ($`just agent_utils/export-opencode-session ${sessionId}`).nothrow().quiet().json()
+      void log(client, "info", `[tool-limit-reminder] export completed for session ${sessionId}: ${JSON.stringify(result)}`)
+    } catch (error: unknown) {
+      const errorString = (error as Error)?.message ?? String(error)
+      void log(client, "error", `[tool-limit-reminder] failed to trigger export for session ${sessionId}: ${errorString}`)
+    }
+  }
+
   return {
+    "event": async ({ event }: { event: { type: string; properties?: Record<string, unknown> } }) => {
+      if (event.type !== "session.idle" || !event.properties?.sessionID) {
+        return
+      }
+
+      sessionCounters.delete(event.properties.sessionID as string)
+      await log(client, "info", `[tool-limit-reminder] session ${event.properties.sessionID} idle — cleared tool call counter`)
+
+      const idleSessionId = event.properties.sessionID as string
+
+      // Check if this session was flagged for review
+      const hasReviewFlag = sessionStorage.readState(
+        idleSessionId,
+        (state) => state[SESSION_FIELDS.needsReview] === true
+      )
+
+      if (!hasReviewFlag) {
+        return  // Session not flagged; no export needed
+      }
+
+      await log(client, "info", `[tool-limit-reminder] session ${idleSessionId} idle with needsReview flag — triggering export`)
+
+      try {
+        triggerExport(idleSessionId)
+        // Clear the review flag after triggering (so we don't re-export on subsequent idle events)
+        sessionStorage.updateState(idleSessionId, (state) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { [SESSION_FIELDS.needsReview]: _, ...next } = state as Record<string, unknown>
+          return next
+        })
+      } catch (error) {
+        await log(client, "error", `[tool-limit-reminder] failed to trigger export for session ${idleSessionId}: ${(error as Error).message}`)
+      }
+
+
+    },
     dispose: async () => {
       void log(client, "info", "[tool-limit-reminder] dispose")
     },
@@ -106,6 +162,11 @@ export const toolLimitReminder: Plugin = async ({ client }) => {
 
 
       await log(client, "warn", `[tool-limit-reminder] reached tool call limit of ${agentReminderThreshold}`)
+
+      if (currentCount > agentReminderThreshold) {
+        await log(client, "info", `[tool-limit-reminder] flagging session ${sessionID} for review`)
+        sessionStorage.updateState(sessionID, (state) => ({ ...state, [SESSION_FIELDS.needsReview]: true }))
+      }
 
       if (currentCount > agentReminderThreshold + PADDING_TILL_ERROR) {
         await log(client, "error", `[tool-limit-reminder] tool call limit exceeded for session ${sessionID}. Current count: ${currentCount + 1}, Limit: ${agentReminderThreshold}`)

@@ -6,7 +6,7 @@ permission:
   "*": "deny"
   "task":
     "*": "deny"
-    "rug-*": "allow"
+    "rug-swe": "allow"
   "todowrite": "allow"
   "question": "allow"
 ---
@@ -223,6 +223,27 @@ If you're aware about a skill that is relevant to the task, you should explicitl
 ```markdown
 Before you start work, load following skills: [skill name 1], [skill name 2], ... and use them to complete the task.
 ```
+
+## Task Rightsizing
+
+It's better that subagent fails fast or finishes fast, this allows not to waste context and time.
+
+### Good
+
+- Explore documentation of a single library and summarize it
+- Write a single documentation file
+- Identify dependencies of a single function and summarize them
+- Update one pair of test and source file to scaffold a new feature
+- Implement one test case for a single function
+- Find best practice to do X
+- Plan refactoring of X
+
+### Bad
+
+- Implement complete test suite for a new feature - this will cause subagent to oneshot entire test suite, then it's difficult to understand what particular change broke what, and it will be difficult to validate the work
+- Implement a new feature with multiple functions and classes - this is a common failure mode, as the subagent will try to do too much and fail or return incomplete work
+- Output verbatim content of a file - simply slow and bloats context. If you need to read a file, launch a subagent to read it and summarize it.
+- Breaking down load and use skill by 2 subtasks - it's important that skill is loaded and used in the same task as there is not context sharing between tasks. You don't need implementation details to be returned to you, you just need the result of the skill usage.
 
 ## Common Failure Modes (AVOID THESE)
 

@@ -7,5 +7,8 @@ lint *ARGS:
   bun run --bun lint {{ARGS}}
 
 # Run typecheck for opencode plugins
+# Directory args (ending with /) are stripped because forwarding them as file paths to tsc
+# causes it to ignore tsconfig.json, producing TS5112. The include patterns in tsconfig.json
+# already cover all files that a directory arg would target. Flags like --skipLibCheck are preserved.
 typecheck *ARGS:
-  bun run --bun typecheck {{ARGS}}
+  @_filtered=""; for _a in {{ARGS}}; do if [ "${_a%/}" != "$_a" ]; then continue; fi; _filtered="${_filtered} ${_a}"; done; bun run --bun typecheck $_filtered

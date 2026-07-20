@@ -1,6 +1,6 @@
 ---
 description: Best practices for writing justfiles to ensure maintainability, clarity, and consistency across projects.
-applyTo: "justfile,**/justfile"
+applyTo: "{.*,**}/justfile"
 ---
 
 # Best Practices for just tasks

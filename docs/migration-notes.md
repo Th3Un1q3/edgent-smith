@@ -43,6 +43,14 @@ Model suffers following tools description.
 
 ![alt text](image.png)
 
+### Orchestration failures
+
+Frequestly orchestrator forgets which task to deligate who.
+
+Orchestrator had to figure out what is optimal task size for every subagent. In this case less moving parts is better.
+
+Solution: Only use one capable subagent with active skills delegation.
+
 ### Quality
 
 Sometimes agent does something weired and may forget about it. Needs self review.

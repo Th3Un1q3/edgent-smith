@@ -43,14 +43,29 @@ const makeFiveInstructions = () => [
 function getInjectedDescriptions(message: string): Array<{ desc: string; hasContent: boolean }> {
     const blocks = message.split("=== INSTRUCTION:")
     return blocks.slice(1).map(block => {
-        const descLine = block.split("\n", 1)[0]
+        // Trim leading/trailing whitespace from each split block to remove delimiter artifacts
+        const trimmedBlock = block.trim()
+        if (trimmedBlock.length === 0) return undefined as any
+        const descLine = trimmedBlock.split("\n", 1)[0]
         const desc = descLine.replace(/ ===/, "")
         // Check if there's content after the --- separator (reference-only has empty body)
-        const afterDesc = block.slice(Math.max(0, descLine.length + 1))
+        const afterDesc = trimmedBlock.slice(Math.max(0, descLine.length + 1))
         const afterSeparator = afterDesc.indexOf("---")
         const bodyAfterSeparator = afterSeparator === -1 ? "" : afterDesc.slice(Math.max(0, afterSeparator + 3))
         // Content is non-empty only if there's actual text on lines that aren't metadata or the closing divider
-        const hasContent = bodyAfterSeparator.split("\n").some(line => line.trim().length > 0 && !line.startsWith("Source") && !line.startsWith("===") && !line.startsWith("---"))
+        const hasContent = bodyAfterSeparator.split("\n").some(line => {
+            const trimmed = line.trim()
+            return (
+                trimmed.length > 0 &&
+                !trimmed.startsWith("Source") &&
+                !trimmed.startsWith("===") &&
+                !trimmed.startsWith("---") &&
+                trimmed !== "=".repeat(28) &&
+                // Ignore any closing tags or message wrappers that bleed into the split block
+                !trimmed.startsWith("</") &&
+                !trimmed.startsWith("<")
+            )
+        })
         return { desc, hasContent }
     })
 }

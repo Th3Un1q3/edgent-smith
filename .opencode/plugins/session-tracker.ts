@@ -32,6 +32,7 @@ export const sessionTracker: Plugin = async ({ client }) => {
 
   return {
     "chat.message": async ({ sessionID, agent }) => {
+      if (!sessionID || !agent) return
       markSessionAsStarted(sessionID, agent)
       recordLastMessageSent(sessionID)
     },
