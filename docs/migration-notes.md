@@ -43,6 +43,17 @@ Model suffers following tools description.
 
 ![alt text](image.png)
 
+# Harness design 
+
+- Cap output with token generation - no good change can be produced by 2000 token stream.
+- cap number of agent steps
+- Embed deterministic checks to automatically become part of the loop.
+- Local models don't follow the system prompt strictly, if user used UPPERCASE this takes priority over system message.
+
+## Agentic system
+
+Specialized minimalistic agents - start faster, fail faster. Keep tuning.
+
 ### Orchestration failures
 
 Frequestly orchestrator forgets which task to deligate who.
