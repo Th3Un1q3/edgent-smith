@@ -28,5 +28,6 @@ export default defineConfig({
     mockReset: true,
     environment: 'node',
     globals: true,
+    exclude: ['**/node_modules/**', '**/.stryker-tmp/**'],
   },
 })

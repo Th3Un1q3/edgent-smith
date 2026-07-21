@@ -1,6 +1,6 @@
 
 
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { makeKvStoreMockFactory } from "@tests/__utils/kv-store.mock"
 import { pluginContextBuilder } from "@tests/__utils/plugin-builder"
 
@@ -11,13 +11,8 @@ import { SessionStorage } from "@plugins/helpers/kv-store"
 import { todoEnforcer } from "@plugins/todo-enforcer"
 import { opencodeClientFactory } from "@tests/__utils/factories/client-factory"
 
-vi.mock(
-  "@plugins/helpers/kv-store",
-  () => makeKvStoreMockFactory(),
-)
-
+vi.mock("@plugins/helpers/kv-store", () => makeKvStoreMockFactory())
 vi.mock("@plugins/helpers/logger")
-
 vi.mock("@plugins/helpers/session-helpers")
 
 
@@ -29,6 +24,7 @@ interface TodoEnforcerPlugin {
 
 describe("todoEnforcer", () => {
   let pluginContext: ReturnType<typeof pluginContextBuilder>
+
   beforeEach(() => {
     SessionStorage.reset()
     pluginContext = pluginContextBuilder({
@@ -42,7 +38,6 @@ describe("todoEnforcer", () => {
   describe("tool.execute.before", () => {
     it("blocks non-todowrite tools for rug agent that has not used todos yet", async () => {
       const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
-
       const beforeHook = plugin["tool.execute.before"] as (input: { sessionID?: string; tool: string }) => Promise<void>
 
       await expect(
@@ -50,19 +45,16 @@ describe("todoEnforcer", () => {
       ).rejects.toThrow(/Error calling question\. All tools are suspended until `todowrite` is called with updated todo list\./)
     })
 
-    describe("guard condition: todowrite pass-through", () => {
-      it("passes todowrite through unconditionally regardless of agent or todo state", async () => {
-        const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
+    it("passes todowrite through unconditionally regardless of agent or todo state", async () => {
+      const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
+      const beforeHook = plugin["tool.execute.before"] as (input: { sessionID?: string; tool: string }) => Promise<void>
 
-        const beforeHook = plugin["tool.execute.before"] as (input: { sessionID?: string; tool: string }) => Promise<void>
-
-        await expect(
-          beforeHook({ sessionID: "ses_test", tool: "todowrite" }),
-        ).resolves.toBeUndefined()
-      })
+      await expect(
+        beforeHook({ sessionID: "ses_test", tool: "todowrite" }),
+      ).resolves.toBeUndefined()
     })
 
-    describe("guard condition: non-rug agent bypass", () => {
+    describe("non-rug agent bypass", () => {
       beforeEach(() => {
         pluginContext = pluginContextBuilder({
           clientFactory: () => opencodeClientFactory({
@@ -72,10 +64,8 @@ describe("todoEnforcer", () => {
         })
       })
 
-
       it("allows non-rug agents to use any tool without enforcement when readState returns false", async () => {
         const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
-
         const beforeHook = plugin["tool.execute.before"] as (input: { sessionID?: string; tool: string }) => Promise<void>
 
         await expect(
@@ -84,10 +74,9 @@ describe("todoEnforcer", () => {
       })
     })
 
-    describe("guard condition: missing sessionID skips enforcement", () => {
+    describe("missing sessionID skips enforcement", () => {
       it("returns early without error when sessionID is undefined even for rug agent with non-todowrite tool", async () => {
         const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
-
         const beforeHook = plugin["tool.execute.before"] as (input: { sessionID?: string; tool: string }) => Promise<void>
 
         await expect(
@@ -130,8 +119,7 @@ describe("todoEnforcer", () => {
         await plugin["event"]?.(eventInput)
         vi.advanceTimersByTime(1001)
         expect(log).toHaveBeenCalledWith(
-          expect.any(Object),
-          "info",
+          expect.any(Object), "info",
           expect.stringContaining("Session was cancelled after last message — skipping followup."),
         )
 
@@ -151,29 +139,24 @@ describe("todoEnforcer", () => {
         }))
       })
 
-      describe('when there are no todos remaining', () => {
-        beforeEach(() => {
-          SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
-          pluginContext = pluginContextBuilder({
-            clientFactory: () => opencodeClientFactory({
-              agentName: "rug",
-              todoList: [],
-            }) as never,
-          })
+      it("returns early when no remaining todos", async () => {
+        SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
+        pluginContext = pluginContextBuilder({
+          clientFactory: () => opencodeClientFactory({
+            agentName: "rug",
+            todoList: [],
+          }) as never,
         })
-
-        it("returns early when no remaining todos", async () => {
-          const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
-          const plugin = await todoEnforcer(pluginContext as never) as unknown as TodoEnforcerPlugin
-          await plugin["event"]?.(eventInput)
-          expect(log).toHaveBeenCalledWith(
-            expect.any(Object),
-            "info",
-            expect.stringContaining("No remaining todos"),
-          )
-          vi.advanceTimersByTime(1001)
-          expect(sendMessage).not.toHaveBeenCalled()
-        })
+        vi.useFakeTimers()
+        const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
+        const plugin = await todoEnforcer(pluginContext as never) as unknown as TodoEnforcerPlugin
+        await plugin["event"]?.(eventInput)
+        expect(log).toHaveBeenCalledWith(
+          expect.any(Object), "info",
+          expect.stringContaining("No remaining todos"),
+        )
+        vi.advanceTimersByTime(1001)
+        expect(sendMessage).not.toHaveBeenCalled()
       })
     })
 
@@ -182,8 +165,7 @@ describe("todoEnforcer", () => {
         const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
         await plugin?.dispose?.()
         expect(log).toHaveBeenCalledWith(
-          expect.any(Object),
-          "info",
+          expect.any(Object), "info",
           expect.stringContaining("todo-enforcer disposed"),
         )
       })

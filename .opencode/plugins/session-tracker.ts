@@ -43,6 +43,8 @@ export const sessionTracker: Plugin = async ({ client }) => {
     },
 
     event: async ({ event }) => {
+      if (typeof event.properties !== "object") throw new TypeError("event.properties is not an object")
+
       if (event.type === "session.error" && event.properties.sessionID && event.properties.error?.name === "MessageAbortedError") {
         recordMessageCancelled(event.properties.sessionID)
       }
