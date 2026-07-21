@@ -5,7 +5,7 @@ import vitest from "@vitest/eslint-plugin"
 export default [
   ...tseslint.configs.recommended.map((c) => ({
     ...c,
-    files: ["**/*.ts", "**/*.mts"],
+    files: ["**/*.ts"],
   })),
   // Unicorn flat config — recommended only (all preset too aggressive for this codebase)
   { ...unicorn.configs["flat/recommended"], files: ["**/plugins/**/*.ts", "**/helpers/**/*.ts", "**/types/**/*.ts"] },

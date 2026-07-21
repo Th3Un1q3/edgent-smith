@@ -103,7 +103,8 @@
             "rtk git show *": "allow",
             "git diff *": "allow",
             "git status *": "allow",
-            "git show *": "allow"
+            "git show *": "allow",
+            "git log *": "allow",
         },
         "gateway_*": "deny",
         "gateway_mcp-find": "allow",
