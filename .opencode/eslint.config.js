@@ -14,7 +14,7 @@ export default [
     rules: {
       "@typescript-eslint/no-unused-vars": [
         "error",
-        { argsIgnorePattern: "^_" },
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
       "@typescript-eslint/no-empty-interface": ["error", { allowSingleExtends: true }],
       "@typescript-eslint/no-non-null-assertion": "warn",
@@ -32,6 +32,9 @@ export default [
       // reduce/.concat() valid patterns here for array merging (instruction-indexer)
       "unicorn/no-array-reduce": "off",
 
+      // .sort() with spread copy is safe and idiomatic
+      "unicorn/no-array-sort": "off",
+
       // Bun Glob.scan() on for-await header is the idiomatic pattern
       "unicorn/no-unreadable-for-of-expression": "off",
     },
@@ -41,12 +44,34 @@ export default [
     ignores: ["**/*.d.ts", "**/node_modules/", "**/__mocks__/"],
   },
   {
+    files: ["**/plugins/**/*.ts", "**/helpers/**/*.ts", "**/types/**/*.ts", "**/tests/**/*.test.ts", "**/tool/**/*.ts"],
+    // Inline rule to forbid eslint-disable comments (eslint-plugin-eslint-comments incompatible with ESLint 10)
+    plugins: { "ban-disable": { rules: {
+      "no-eslint-disable": {
+        meta: { type: "problem", messages: { noDisable: "eslint-disable comments are forbidden. Fix the underlying issue or update the ESLint config." } },
+        create(ctx) {
+          return {
+            Program(node) {
+              for (const c of ctx.sourceCode.getAllComments()) {
+                if (/^\s*eslint-disable/.test(c.value)) ctx.report({ node, loc: c.loc, messageId: "noDisable" })
+              }
+            }
+          }
+        }
+      }
+    }}},
+    rules: { "ban-disable/no-eslint-disable": "error" },
+  },
+  {
     files: ['**/plugins/tests/**/*.ts'],
     plugins: {
       vitest,
     },
     rules: {
-      'max-lines': ['error', { max: 450, skipBlankLines: true, skipComments: true }],
+      "@typescript-eslint/no-explicit-any": "off",
+      "max-lines": "off",
+      "unicorn/consistent-function-scoping": "off",
+      "unicorn/no-null": "off",
       ...vitest.configs.recommended.rules, // you can also use vitest.configs.all.rules to enable all rules
       'vitest/max-nested-describe': ['error', { max: 3 }], // you can also modify rules' behavior using option like this
     },

@@ -39,7 +39,6 @@ export class InstructionContextHelper {
     if (metas.length === 0) return []
 
     // Sort: descending specificity, then ascending description for deterministic tiebreak
-    // eslint-disable-next-line unicorn/no-array-sort -- .toSorted() unavailable before ES2023 target
     const sorted = [...metas].sort((a: InstructionMeta, b: InstructionMeta) => {
       const sa = calcSpecificity(a.applyTo)
       const sb = calcSpecificity(b.applyTo)

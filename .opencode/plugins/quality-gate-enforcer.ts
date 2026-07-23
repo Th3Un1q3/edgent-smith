@@ -37,28 +37,27 @@ function readGateStatuses(
   )
 }
 
+async function sendTransitionMessage(
+  outcomes: GateRunOutcome[],
+  sessionID: string | undefined,
+  client: OpencodeClient,
+): Promise<void> {
+  if (outcomes.length === 0) return
+  const message = formatGateBatchResults(outcomes)
+  void log(client, "info", `[quality-gate-enforcer] Sending transition message for ${outcomes.length} gate(s)`)
+  if (sessionID) {
+    await sendMessage({ client, sessionId: sessionID, message, noReply: true })
+  } else {
+    void log(client, "info", message)
+  }
+}
+
 export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
   const resolvedDirectory = directory ?? "/workspace"
   const qualityGatesConfig = await loadQualityGates(resolvedDirectory, client)
   const gates = qualityGatesConfig.gates
   const sessionStorage = new SessionStorage()
   const targetedTools = new Set(["edit", "write"])
-
-  // eslint-disable-next-line unicorn/consistent-function-scoping -- must be inner closure: sendMessage is mocked in tests
-  async function sendTransitionMessage(
-    outcomes: GateRunOutcome[],
-    sessionID: string | undefined,
-    client: OpencodeClient,
-  ): Promise<void> {
-    if (outcomes.length === 0) return
-    const message = formatGateBatchResults(outcomes)
-    void log(client, "info", `[quality-gate-enforcer] Sending transition message for ${outcomes.length} gate(s)`)
-    if (sessionID) {
-      await sendMessage({ client, sessionId: sessionID, message, noReply: true })
-    } else {
-      void log(client, "info", message)
-    }
-  }
 
   return {
     "tool.execute.after": async (input, _output) => {

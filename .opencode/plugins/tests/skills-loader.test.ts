@@ -11,10 +11,14 @@ vi.mock("bun", () => {
     return { default: { file: mockFile }, Glob: vi.fn() }
 })
 vi.mock("@plugins/helpers/logger")
+vi.mock("node:fs/promises", () => ({
+    readdir: vi.fn(),
+}))
 
 // Import stubs AFTER vi.mock() calls
 import Bun from "bun"
 import { log } from "@plugins/helpers/logger"
+import { readdir } from "node:fs/promises"
 
 // Future implementation — module-not-found is expected RED state
 import { skillsLoaderPlugin } from "@plugins/skills-loader"
@@ -90,6 +94,7 @@ describe("skillsLoaderPlugin", () => {
 
     beforeEach(async () => {
         client = createMockClient()
+        vi.mocked(readdir).mockRejectedValue(new Error("readdir not configured for test"))
         plugin = await skillsLoaderPlugin({ client, directory: "/workspace" } as unknown as PluginInput)
     })
 
@@ -133,7 +138,6 @@ describe("skillsLoaderPlugin", () => {
     // ── when no skills to inject ─────────────────────────────────
 
     describe("when no skills to inject", () => {
-        // eslint-disable-next-line unicorn/consistent-function-scoping -- scoped helper alongside executeBeforeHook
         async function act(output: { args: Record<string, unknown> }): Promise<void> {
             const hook = executeBeforeHook()
             const input = { tool: "task", sessionID: "sess-1", callID: "call-no-skills" }
@@ -176,7 +180,6 @@ describe("skillsLoaderPlugin", () => {
     it("returns early without throwing when output.args is undefined", async () => {
         const hook = executeBeforeHook()
         const input = { tool: "task", sessionID: "sess-1", callID: "call-no-args" }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- intentionally testing runtime behavior when args is missing
         const output: any = {}
 
         await expect(hook(input, output)).resolves.toBeUndefined()
@@ -259,7 +262,7 @@ describe("skillsLoaderPlugin", () => {
         await hook(input, output)
 
         const prompt = (output.args.prompt ?? "")
-        const re = /<skill name="([^"]+)">/g
+        const re = /<skill name="([^"]+)"[^>]*>/g
         const skillNames: string[] = Array.from(prompt.matchAll(re), match => match[1]);
 
         // Oldest first: skill-a (100), skill-b (200), skill-c (300)
@@ -283,21 +286,24 @@ describe("skillsLoaderPlugin", () => {
         await hook(input, output)
 
         expect(output.args.skills).toBeUndefined()
+        // Resolved skills injected with full content
         expect(output.args.prompt).toContain("Skill A")
         expect(output.args.prompt).toContain("Skill C")
-        expect(output.args.prompt).not.toContain("Skill B")
+        // Unresolved skill injected as reference (not full body content)
+        expect(output.args.prompt).toContain('skill name="skill-b"')
+        expect(output.args.prompt).toContain("reference=\"true\"")
 
-        // Warning logged for missing skill
+        // Info logged for missing skill (not warn)
         expect(log).toHaveBeenCalledWith(
             expect.any(Object),
-            "warn",
-            expect.stringContaining("skill-b"),
+            "info",
+            expect.stringContaining("Load the skill \"skill-b\" by the name."),
         )
     })
 
-    // ── TEST 7: all skills missing → prompt unchanged, warn ──────
+    // ── TEST 7: all skills missing → references injected ────
 
-    it("does not inject when all skills are missing", async () => {
+    it("injects references when all skills are missing", async () => {
         // No skills registered → default missing for all
 
         const hook = executeBeforeHook()
@@ -307,14 +313,20 @@ describe("skillsLoaderPlugin", () => {
 
         await hook(input, output)
 
-        expect(output.args.prompt).toBe("prompt")
+        // Reference block injected for unresolved skill
+        expect(output.args.prompt).toContain("<task_skills>")
+        expect(output.args.prompt).toContain('skill name="no-such-skill"')
+        expect(output.args.prompt).toContain("reference=\"true\"")
+        expect(output.args.prompt).toContain('Load the skill "no-such-skill" by the name.')
+        // Original prompt still wrapped
+        expect(output.args.prompt).toContain("<user_request>\nprompt\n</user_request>")
         expect(output.args.skills).toBeUndefined()
 
-        // Warning logged
+        // Info logged (not warn)
         expect(log).toHaveBeenCalledWith(
             expect.any(Object),
-            "warn",
-            expect.stringContaining("no-such-skill"),
+            "info",
+            expect.stringContaining("Load the skill \"no-such-skill\" by the name."),
         )
     })
 
@@ -361,12 +373,125 @@ describe("skillsLoaderPlugin", () => {
         expect(output.args.prompt).toContain("<user_request>\n\n</user_request>")
     })
 
+    // ── path attribute and skill_index block ─────────────────────
+
+    describe("skill path and index", () => {
+        beforeEach(() => {
+            // Override readdir to return real file listings based on directory path
+            vi.mocked(readdir).mockImplementation(async (path) => {
+                const directoryPath = String(path)
+                if (directoryPath.endsWith(".agents/skills/skill-a")) {
+                    return ["SKILL.md", "workflows/create.md", "references/options.md"] as any
+                }
+                if (directoryPath.endsWith(".agents/skills/skill-b")) {
+                    return ["SKILL.md", "extra.md"] as any
+                }
+                throw new Error("ENOENT")
+            })
+        })
+
+        it("includes path attribute on resolved skill tags", async () => {
+            registerSkillFiles({
+                "skill-a": makeSkillFile({ name: "skill-a", content: "# Skill A\nBody.", mtimeMs: 100 }),
+            })
+
+            const hook = executeBeforeHook()
+            const input = { tool: "task", sessionID: "sess-1", callID: "call-path" }
+            const output = { args: { prompt: "prompt", skills: ["skill-a"] } }
+
+            await hook(input, output)
+
+            expect(output.args.prompt).toContain('path=".agents/skills/skill-a/SKILL.md"')
+            expect(output.args.prompt).toContain("<skill_index>")
+        })
+
+        it("includes skill_index with all files from the skill directory", async () => {
+            registerSkillFiles({
+                "skill-a": makeSkillFile({ name: "skill-a", content: "# Skill A\nBody.", mtimeMs: 100 }),
+            })
+
+            const hook = executeBeforeHook()
+            const input = { tool: "task", sessionID: "sess-1", callID: "call-index" }
+            const output = { args: { prompt: "prompt", skills: ["skill-a"] } }
+
+            await hook(input, output)
+
+            expect(output.args.prompt).toContain(".agents/skills/skill-a/SKILL.md")
+            expect(output.args.prompt).toContain(".agents/skills/skill-a/workflows/create.md")
+            expect(output.args.prompt).toContain(".agents/skills/skill-a/references/options.md")
+        })
+
+        it("places skill_index before skill content", async () => {
+            registerSkillFiles({
+                "skill-a": makeSkillFile({ name: "skill-a", content: "UNIQUE_CONTENT_XYZ", mtimeMs: 100 }),
+            })
+
+            const hook = executeBeforeHook()
+            const input = { tool: "task", sessionID: "sess-1", callID: "call-order-block" }
+            const output = { args: { prompt: "prompt", skills: ["skill-a"] } }
+
+            await hook(input, output)
+
+            const skillBlock = output.args.prompt as string
+            const indexPos = skillBlock.indexOf("<skill_index>")
+            const contentPos = skillBlock.indexOf("UNIQUE_CONTENT_XYZ")
+            expect(indexPos).toBeGreaterThan(-1)
+            expect(contentPos).toBeGreaterThan(-1)
+            expect(indexPos).toBeLessThan(contentPos)
+        })
+
+        it("does not add path or skill_index to unresolved skills", async () => {
+            registerSkillFiles({
+                "skill-a": makeSkillFile({ name: "skill-a", content: "# Skill A", mtimeMs: 100 }),
+                // skill-b not registered → default missing
+            })
+
+            const hook = executeBeforeHook()
+            const input = { tool: "task", sessionID: "sess-1", callID: "call-unresolved" }
+            const output = { args: { prompt: "prompt", skills: ["skill-a", "skill-b"] } }
+
+            await hook(input, output)
+
+            // Resolved skill has path attribute
+            const resolvedTag = (output.args.prompt as string).match(/<skill name="skill-a"[^>]*>/)?.[0]
+            expect(resolvedTag).toBeDefined()
+            expect(resolvedTag).toContain("path=")
+
+            // Unresolved skill does NOT have path attribute
+            const unresolvedTag = (output.args.prompt as string).match(/<skill name="skill-b"[^>]*>/)?.[0]
+            expect(unresolvedTag).toBeDefined()
+            expect(unresolvedTag).not.toContain("path=")
+        })
+
+        it("falls back gracefully when readdir fails", async () => {
+            // Make readdir reject
+            vi.mocked(readdir).mockRejectedValue(new Error("ENOENT"))
+
+            registerSkillFiles({
+                "skill-a": makeSkillFile({ name: "skill-a", content: "# Skill A", mtimeMs: 100 }),
+            })
+
+            const hook = executeBeforeHook()
+            const input = { tool: "task", sessionID: "sess-1", callID: "call-fail" }
+            const output = { args: { prompt: "prompt", skills: ["skill-a"] } }
+
+            await hook(input, output)
+
+            // Skill is still injected despite readdir failure
+            expect(output.args.prompt).toContain("Skill A")
+            // Path attribute still present
+            expect(output.args.prompt).toContain('path=".agents/skills/skill-a/SKILL.md"')
+            // Fallback index lists the SKILL.md file
+            expect(output.args.prompt).toContain("<skill_index>")
+            expect(output.args.prompt).toContain(".agents/skills/skill-a/SKILL.md")
+        })
+    })
+
     // ── tool.definition hook tests ─────────────────────────────────
     //
     // The hook modifies output.jsonSchema (plain JSON Schema format that the LLM sees).
 
     describe("tool.definition", () => {
-        // eslint-disable-next-line unicorn/consistent-function-scoping -- scoped to tool.definition describe for clarity alongside executeBeforeHook
         function toolDefinitionHook() {
             return plugin?.["tool.definition"] ?? (() => Promise.resolve())
         }

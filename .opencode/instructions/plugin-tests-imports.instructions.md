@@ -109,11 +109,14 @@ function findMatchingGates(gates: GateConfig[], filePath: string): GateConfig[] 
 }
 ```
 
-### If Lint Complains
+### Linting in Test Files
 
-If a linter rule (e.g., `unicorn/consistent-function-scoping`) tells you to move an inner function to the outer scope, add an eslint-disable comment with an explanation:
+Test files use relaxed ESLint rules configured in `eslint.config.js`. Rules that conflict with common test patterns are turned OFF for test files, so you should never need an eslint-disable comment.
 
-```typescript
-// eslint-disable-next-line unicorn/consistent-function-scoping -- must be inner closure: sendMessage is mocked in tests
-async function sendTransitionMessage(...) { ... }
-```
+Rules relaxed for test files:
+
+- `unicorn/consistent-function-scoping` — inner closures are required for vitest mock isolation (see "Mock-Aware Function Scoping" above)
+- `@typescript-eslint/no-explicit-any` — `any` is often needed for mock types
+- `unicorn/no-null` — vitest assertions and mock APIs use `null`
+
+Do NOT use `eslint-disable` or `eslint-disable-next-line` comments. Fix the underlying issue or update the ESLint configuration in `eslint.config.js` to turn the rule off for test file globs instead.

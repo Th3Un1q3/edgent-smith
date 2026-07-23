@@ -163,7 +163,6 @@ describe('gate-config loader', () => {
   })
 
   it('null gate in gates array is invalid', async () => {
-    // eslint-disable-next-line unicorn/no-null
     mockBunFile({ gates: [null] })
 
     const result = await loadQualityGates('/tmp/test', mockClient)

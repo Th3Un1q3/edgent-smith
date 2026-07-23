@@ -1,5 +1,6 @@
 import { Plugin } from "@opencode-ai/plugin"
 import Bun from "bun"
+import { readdir } from "node:fs/promises"
 import { log } from "./helpers/logger"
 
 export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
@@ -59,15 +60,19 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
                 return
             }
 
-            // Load skill files
+            // Load skill files — track both resolved and unresolved
             const resolved: { name: string; content: string; mtimeMs: number }[] = []
+            const unresolved: string[] = []
+
             for (const name of skills) {
-                const filePath = `${directory}/.agents/skills/${name}/SKILL.md`
+                const skillPath = `.agents/skills/${name}/SKILL.md`
+                const filePath = `${directory}/${skillPath}`
                 const file = Bun.file(filePath)
                 // Check file exists; mock may return undefined after reset
 
                 if (!file || !(await file.exists())) {
-                    await log(client, "warn", `Skill "${name}" not found`)
+                    await log(client, "info", `Load the skill "${name}" by the name.`)
+                    unresolved.push(name)
                     continue
                 }
                 const content = await file.text()
@@ -76,20 +81,51 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
                 resolved.push({ name, content, mtimeMs })
             }
 
-            // If no skills loaded, don't inject but still clean up
-            if (resolved.length === 0) {
+            // If nothing to inject (no resolved or unresolved), clean up and return
+            if (resolved.length === 0 && unresolved.length === 0) {
                 delete output.args.skills
                 return
             }
 
-            // Sort by mtimeMs ascending (oldest/most-stable first)
+            // Sort resolved by mtimeMs ascending (oldest/most-stable first)
             resolved.sort((a, b) => a.mtimeMs - b.mtimeMs)
 
-            // Build XML block — content injected verbatim after the opening tag
+            // Build skill_index block for a resolved skill.
+            // Lists all files in the skill directory; falls back to SKILL.md only on readdir failure.
+            // Captures `directory` from the enclosing closure to satisfy consistent scoping.
+            async function buildSkillIndex(name: string): Promise<string> {
+                const skillDirectory = `${directory}/.agents/skills/${name}`
+                try {
+                    const entries = await readdir(skillDirectory)
+                    // readdir without withFileTypes returns string[]; filter for safety
+                    const files = entries.filter((entry): entry is string => typeof entry === "string")
+                    files.sort((a, b) => a.localeCompare(b))
+                    const lines = files.map((f) => `.agents/skills/${name}/${f}`)
+                    return `<skill_index>\n${lines.join("\n")}\n</skill_index>`
+                } catch {
+                    return `<skill_index>\n.agents/skills/${name}/SKILL.md\n</skill_index>`
+                }
+            }
+
+            // Build resolved skill blocks with path attribute and skill_index
+            const resolvedBlocks: string[] = []
+            for (const s of resolved) {
+                const index = await buildSkillIndex(s.name)
+                const path = `.agents/skills/${s.name}/SKILL.md`
+                resolvedBlocks.push(
+                    `<skill name="${s.name}" path="${path}">\n${index}\n${s.content}\n</skill>`
+                )
+            }
+
+            // Build unresolved skill blocks as reference tags
+            const unresolvedBlocks = unresolved.map(
+                (name) => `<skill name="${name}" reference="true">Load the skill "${name}" by the name.</skill>`
+            )
+
+            const allBlocks = [...resolvedBlocks, ...unresolvedBlocks]
+
             const skillsBlock = `<task_skills>
-${resolved.map(s => `<skill name="${s.name}">
-${s.content}
-</skill>`).join("\n")}
+${allBlocks.join("\n")}
 </task_skills>`
 
             // Inject into prompt — prepend with newline separator to existing prompt, wrapped to avoid accidental injection

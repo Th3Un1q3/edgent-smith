@@ -115,7 +115,6 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
         triggerExport(idleSessionId)
         // Clear the review flag after triggering (so we don't re-export on subsequent idle events)
         sessionStorage.updateState(idleSessionId, (state) => {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { [SESSION_FIELDS.needsReview]: _, ...next } = state as Record<string, unknown>
           return next
         })

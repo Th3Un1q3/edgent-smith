@@ -2,8 +2,8 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable max-lines */
+ 
+ 
 
 // Mock factories — synchronous imports avoid circular dependency issues.
 import { defaultCreateClient, type ClientMock } from "@tests/helpers/mock-utilities"

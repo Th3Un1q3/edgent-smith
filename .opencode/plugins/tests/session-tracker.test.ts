@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 import { makeKvStoreMockFactory } from "@tests/__utils/kv-store.mock"
@@ -14,7 +13,7 @@ import { opencodeClientFactory } from "@tests/__utils/factories/client-factory"
 vi.mock("@plugins/helpers/kv-store", () => makeKvStoreMockFactory())
 
 const _mockUpdateState = new SessionStorage().updateState as any
-/* eslint-disable-next-line @typescript-eslint/no-unused-vars */ /* capture readState reference for validity check */
+  /* capture readState reference for validity check */
 const _ = new SessionStorage().readState
 const getSessionStorageInstance = () => new SessionStorage()
 
@@ -312,7 +311,7 @@ describe("sessionTracker", () => {
     it.each([
       { desc: "handles undefined error object on session.error", props: () => ({ type: "session.error" as const, properties: { sessionID: "ses_err_undef", error: undefined } }), expectCalled: false },
       { desc: "handles error but no name property", props: () => ({ type: "session.error" as const, properties: { sessionID: "ses_err_no_name", error: {} } }), expectCalled: false },
-      { desc: "handles nullish sessionID in idle", props: () => ({ type: "session.idle" as const, /* eslint-disable-line unicorn/no-null */ properties: { sessionID: null } }), expectCalled: false },
+      { desc: "handles nullish sessionID in idle", props: () => ({ type: "session.idle" as const,   properties: { sessionID: null } }), expectCalled: false },
     ])("$desc", async ({ props }) => {
       const plugin = await mkPlugin() as SessionTrackerPlugin
       const eventHandler = (plugin as any)["event"]

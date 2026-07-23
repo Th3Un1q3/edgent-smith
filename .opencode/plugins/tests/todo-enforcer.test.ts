@@ -276,7 +276,7 @@ describe("todoEnforcer", () => {
         vi.useFakeTimers()
         const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
         const plugin = await todoEnforcer(pluginContext as never) as unknown as TodoEnforcerPlugin
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const client = (pluginContext as any).client as { session: { todo: ReturnType<typeof vi.fn> } }
         await plugin["event"]?.(eventInput)
         vi.advanceTimersByTime(1001)
