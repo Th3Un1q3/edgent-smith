@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import { makeKvStoreMockFactory } from "@tests/__utils/kv-store.mock"
 import { opencodeClientFactory } from "@tests/__utils/factories/client-factory"
 
@@ -26,7 +26,6 @@ const _kvInstance = new (SessionStorage as unknown as new () => {
   readState: ReturnType<typeof vi.fn>
   updateState: ReturnType<typeof vi.fn>
 })()
-const mockReadState = _kvInstance.readState
 const mockUpdateState = _kvInstance.updateState
 
 import type { QualityGatesConfig } from "@plugins/types/quality-gate"
@@ -39,7 +38,6 @@ const fixtureConfig: QualityGatesConfig = {
     { name: "lint", patterns: ["**/*.ts"], commands: ["just lint"] },
     { name: "test", patterns: ["**/*.test.ts"], commands: ["just test"] },
   ],
-  debounceMs: 100,
 }
 
 const successResult: CommandResult = { exitCode: 0, stdout: "ok", stderr: "" }
@@ -49,9 +47,6 @@ const failureResult: CommandResult = {
   stderr: "error line 2",
 }
 
-const ADVANCE_TIMER_MS = (fixtureConfig.debounceMs ?? 100) + 50 // 150ms — kept for legacy non-timer-dependent assertions
-const KNOWN_GATE_FLUSH_MS = 10_200 // maxQuietMs (10_000) + buffer for known-gate adaptive timer
-
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe("qualityGateEnforcer", () => {
@@ -60,8 +55,6 @@ describe("qualityGateEnforcer", () => {
   let plugin: Record<string, unknown>
 
   beforeEach(async () => {
-    vi.useFakeTimers()
-
     mockClient = opencodeClientFactory() as ReturnType<typeof opencodeClientFactory>
     mockContext = {
       client: mockClient,
@@ -73,25 +66,20 @@ describe("qualityGateEnforcer", () => {
       $: vi.fn(),
     }
 
-    SessionStorage.reset() // re-apply mock implementations after vitest's mockReset
+    SessionStorage.reset() // re-apply mock implementations
     vi.mocked(loadQualityGates).mockResolvedValue(fixtureConfig)
     vi.mocked(sendMessage).mockResolvedValue(undefined)
 
-    // Call the plugin function — stub returns {} (empty hooks)
     plugin = await (qualityGateEnforcer as unknown as (context: unknown) => Promise<Record<string, unknown>>)(mockContext)
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
   })
 
   // ── Plugin structure ───────────────────────────────────────────────────
 
   describe("plugin structure", () => {
-    it("exports qualityGateEnforcer with setup, tool.execute.after, and dispose", () => {
-      expect(typeof plugin.setup).toBe("function")
+    it("exports qualityGateEnforcer with tool.execute.after hook only", () => {
       expect(typeof plugin["tool.execute.after"]).toBe("function")
-      expect(typeof plugin.dispose).toBe("function")
+      expect(plugin.setup).toBeUndefined()
+      expect(plugin.dispose).toBeUndefined()
     })
 
     it("does not return early empty object", () => {
@@ -103,8 +91,12 @@ describe("qualityGateEnforcer", () => {
 
   describe("tool filtering", () => {
     it("ignores non-edit/write tools", async () => {
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)({ tool: "read", sessionID: "ses_1" }, {})
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "read", sessionID: "ses_1" },
+        {},
+      )
       expect(runGate).not.toHaveBeenCalled()
+      expect(sendMessage).not.toHaveBeenCalled()
     })
 
     it("ignores missing filePath", async () => {
@@ -124,112 +116,117 @@ describe("qualityGateEnforcer", () => {
     })
   })
 
-  // ── Dirty marking ──────────────────────────────────────────────────────
+  // ── Gate execution ────────────────────────────────────────────────────
 
-  describe("dirty marking", () => {
-    it("marks matched gates dirty in KV on edit", async () => {
+  describe("gate execution", () => {
+    it("runs matching gate immediately after edit", async () => {
+      vi.mocked(runGate).mockResolvedValue(successResult)
+
       await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_mark", args: { filePath: "/workspace/src/main.ts" } },
+        { tool: "edit", sessionID: "ses_exec", args: { filePath: "/workspace/src/main.ts" } },
         { title: "", output: "", metadata: {} },
       )
-      // Should have marked 'lint' dirty in KV
-      expect(mockUpdateState).toHaveBeenCalled()
+
+      expect(runGate).toHaveBeenCalled()
+      expect(sendMessage).toHaveBeenCalled()
     })
 
-    it("does not mark non-matching paths", async () => {
+    it("does not run gates for files matching no patterns", async () => {
       await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
         { tool: "edit", sessionID: "ses_nomatch", args: { filePath: "/workspace/README.md" } },
         { title: "", output: "", metadata: {} },
       )
-      expect(mockUpdateState).not.toHaveBeenCalled()
+
+      expect(runGate).not.toHaveBeenCalled()
+      expect(sendMessage).not.toHaveBeenCalled()
     })
 
-    it("evaluates unknown-status gates immediately without waiting for timer", async () => {
-      // No prior state — gate is unknown
+    it("only runs gates whose patterns match the file", async () => {
       vi.mocked(runGate).mockResolvedValue(successResult)
+
       await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_imm1", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-      // Drain microtasks from flush() → onBatch → evaluateDirtyGates → sendTransitionMessage
-      await vi.advanceTimersByTimeAsync(0)
-
-      // Should have flushed immediately — runGate and sendMessage called without timer advancement
-      expect(runGate).toHaveBeenCalled()
-      expect(sendMessage).toHaveBeenCalled()
-    })
-  })
-
-  // ── Batch execution ────────────────────────────────────────────────────
-
-  describe("batch execution", () => {
-    it("runs all dirty gates after quiet period", async () => {
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_batch1", args: { filePath: "/workspace/src/main.ts" } },
+        { tool: "edit", sessionID: "ses_selective", args: { filePath: "/workspace/src/main.ts" } },
         { title: "", output: "", metadata: {} },
       )
 
-      // Advance past debounceMs (100) to trigger batcher
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
-
-      // lint should have been run
-      expect(runGate).toHaveBeenCalled()
-      // One consolidated message
-      expect(sendMessage).toHaveBeenCalledTimes(1)
-    })
-
-    it("only runs dirty gates, not all configured gates", async () => {
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_batch2", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-      // Only 'lint' should be dirty (main.ts matches **/*.ts but not **/*.test.ts)
-
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
-
-      // runGate should be called exactly once (for lint only), not for test
+      // Only lint matches (main.ts matches **/*.ts but not **/*.test.ts)
       expect(runGate).toHaveBeenCalledTimes(1)
     })
 
-    it("sends exactly one consolidated message after quiet", async () => {
+    it("runs all gates for a file matching multiple patterns", async () => {
+      vi.mocked(runGate).mockResolvedValue(successResult)
+
       await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_batch3", args: { filePath: "/workspace/src/main.ts" } },
+        { tool: "write", sessionID: "ses_multi", args: { filePath: "/workspace/src/util.test.ts" } },
         { title: "", output: "", metadata: {} },
       )
 
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
-
-      expect(sendMessage).toHaveBeenCalledTimes(1)
-      expect(sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: expect.any(String) as string,
-          sessionId: "ses_batch3",
-          noReply: true,
-        }),
-      )
-    })
-
-    it("runs multiple gates matched by one file", async () => {
-      // A .test.ts file matches both **/*.ts AND **/*.test.ts
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "write", sessionID: "ses_batch4", args: { filePath: "/workspace/src/util.test.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
-
-      // Both gates should have been run
+      // .test.ts matches both **/*.ts and **/*.test.ts
       expect(runGate).toHaveBeenCalledTimes(2)
-      // Single consolidated message
+      // Single consolidated message for all transitions
       expect(sendMessage).toHaveBeenCalledTimes(1)
     })
   })
 
-  // ── KV state transitions ──────────────────────────────────────────────
+  // ── Status transitions ────────────────────────────────────────────────
 
-  describe("KV state transitions", () => {
-    it("updates KV to pass on exit 0 after quiet", async () => {
-      // mock runGate to return success BEFORE edit triggers immediate flush
+  describe("status transitions", () => {
+    it("sends message on status change from unknown to pass", async () => {
+      vi.mocked(runGate).mockResolvedValue(successResult)
+
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_trans1", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: "", metadata: {} },
+      )
+
+      // unknown → pass should trigger a message
+      expect(sendMessage).toHaveBeenCalledTimes(1)
+    })
+
+    it("does not send message when status is unchanged (pass→pass)", async () => {
+      // First edit: unknown → pass (sends message)
+      vi.mocked(runGate).mockResolvedValue(successResult)
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_unchanged", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: "", metadata: {} },
+      )
+
+      // Second edit: gate still passes → status unchanged → no message
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_unchanged", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: "", metadata: {} },
+      )
+
+      // runGate called both times
+      expect(runGate).toHaveBeenCalledTimes(2)
+      // sendMessage only called for the first transition
+      expect(sendMessage).toHaveBeenCalledTimes(1)
+    })
+
+    it("sends message again on new transition from pass to fail", async () => {
+      // First edit: unknown → pass (sends message)
+      vi.mocked(runGate).mockResolvedValue(successResult)
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_trans2", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: "", metadata: {} },
+      )
+
+      // Second edit: now gate fails → pass → fail (sends new message)
+      vi.mocked(runGate).mockResolvedValue(failureResult)
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_trans2", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: "", metadata: {} },
+      )
+
+      // One message per transition (two total)
+      expect(sendMessage).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  // ── KV state updates ──────────────────────────────────────────────────
+
+  describe("KV state updates", () => {
+    it("stores pass status on exit 0", async () => {
       vi.mocked(runGate).mockResolvedValue(successResult)
 
       await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
@@ -237,13 +234,12 @@ describe("qualityGateEnforcer", () => {
         { title: "", output: "", metadata: {} },
       )
 
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
-
-      // updateState should have been called with status 'pass'
       expect(mockUpdateState).toHaveBeenCalled()
-      // calls[0] is the dirty-marking update; calls[1] is the batch-handler's result update
-      const updaterFunction = mockUpdateState.mock.calls[1][1] as (state: Record<string, unknown>) => Record<string, unknown>
-      const result = updaterFunction({})
+      // Two calls: first marks dirty=true, last writes final status with dirty=false
+      const lastCall = mockUpdateState.mock.calls.at(-1)
+      if (!lastCall) throw new Error("Expected at least one mockUpdateState call")
+      const lastUpdater = lastCall[1] as (state: Record<string, unknown>) => Record<string, unknown>
+      const result = lastUpdater({})
       expect(result).toEqual({
         qualityGateStatuses: {
           lint: { dirty: false, status: "pass" },
@@ -251,7 +247,7 @@ describe("qualityGateEnforcer", () => {
       })
     })
 
-    it("updates KV to fail on non-zero exit", async () => {
+    it("stores fail status on non-zero exit", async () => {
       vi.mocked(runGate).mockResolvedValue(failureResult)
 
       await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
@@ -259,12 +255,11 @@ describe("qualityGateEnforcer", () => {
         { title: "", output: "", metadata: {} },
       )
 
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
-
       expect(mockUpdateState).toHaveBeenCalled()
-      // calls[0] is the dirty-marking update; calls[1] is the batch-handler's result update
-      const updaterFunction = mockUpdateState.mock.calls[1][1] as (state: Record<string, unknown>) => Record<string, unknown>
-      const result = updaterFunction({})
+      const lastCall = mockUpdateState.mock.calls.at(-1)
+      if (!lastCall) throw new Error("Expected at least one mockUpdateState call")
+      const lastUpdater = lastCall[1] as (state: Record<string, unknown>) => Record<string, unknown>
+      const result = lastUpdater({})
       expect(result).toEqual({
         qualityGateStatuses: {
           lint: { dirty: false, status: "fail" },
@@ -272,219 +267,78 @@ describe("qualityGateEnforcer", () => {
       })
     })
 
-    it("resets dirty flag on new edit after terminal state", async () => {
-      // First edit → gates pass → KV status becomes 'pass', dirty=false
+    const input = {
+      tool: "edit",
+      sessionID: "ses_dirty",
+      args: { filePath: "/workspace/src/main.ts" },
+    }
+
+    it("marks gates dirty before running, clears after completion", async () => {
       vi.mocked(runGate).mockResolvedValue(successResult)
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_kv3", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
 
-      // Mock readState to return fail status (simulating stored KV state)
-      mockReadState.mockReturnValue({
-        qualityGateStatuses: {
-          lint: { dirty: false, status: "fail" },
-        },
-      })
-
-      // Second edit on same file → should reset dirty to true for re-check
       await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_kv3", args: { filePath: "/workspace/src/main.ts" } },
+        input,
         { title: "", output: "", metadata: {} },
       )
 
-      // Should have called updateState again to set dirty=true
-      expect(mockUpdateState).toHaveBeenCalled()
+      // Get all update calls for this session
+      const calls = (mockUpdateState as ReturnType<typeof vi.fn>).mock.calls.filter(
+        (call: unknown[]) => call[0] === input.sessionID,
+      )
+      expect(calls.length).toBeGreaterThanOrEqual(2)
+
+      // First call should set dirty: true
+      const first = calls[0]
+      if (!first) throw new Error("Expected first mockUpdateState call for session")
+      const firstUpdater = first[1] as (state: Record<string, unknown>) => Record<string, unknown>
+      const firstState = firstUpdater({}) as { qualityGateStatuses: Record<string, { dirty: boolean; status: string }> }
+      expect(firstState.qualityGateStatuses.lint).toEqual({ dirty: true, status: "unknown" })
+
+      // Last call should set dirty: false with new status
+      const last = calls.at(-1)
+      if (!last) throw new Error("Expected last mockUpdateState call for session")
+      const lastUpdater = last[1] as (state: Record<string, unknown>) => Record<string, unknown>
+      const lastState = lastUpdater({}) as { qualityGateStatuses: Record<string, { dirty: boolean; status: string }> }
+      expect(lastState.qualityGateStatuses.lint).toEqual({ dirty: false, status: "pass" })
     })
   })
 
-  // ── Diagnostic logging ─────────────────────────────────────────────────
+  // ── Session handling ─────────────────────────────────────────────────
 
-  describe("diagnostic logging", () => {
-    it("logs 'Sending transition message' before sendMessage in sendTransitionMessage", async () => {
-      mockReadState.mockReturnValue(undefined) // unknown status
-      vi.mocked(runGate).mockResolvedValue(successResult)
-
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_diag1", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
-
-      // Verify log was called with "Sending transition message" before sendMessage
-      // Find the call to app.log that contains the expected message
-      const logCalls = (mockClient.app.log as ReturnType<typeof vi.fn>).mock.calls as Array<[unknown]>
-      const sendingCall = logCalls.find((call) => {
-        const body = (call[0] as { body?: { message?: string } })?.body
-        return typeof body?.message === "string" &&
-          body.message.includes("Sending transition message for 1 gate(s) to session ses_diag1")
-      })
-      expect(sendingCall).toBeDefined()
-      expect(sendMessage).toHaveBeenCalledTimes(1)
-    })
-
-    it("logs 'Transition message sent' after successful sendMessage", async () => {
-      mockReadState.mockReturnValue(undefined) // unknown status
-      vi.mocked(runGate).mockResolvedValue(successResult)
-
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_diag2", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
-
-      const logCalls = (mockClient.app.log as ReturnType<typeof vi.fn>).mock.calls as Array<[unknown]>
-      const sentCall = logCalls.find((call) => {
-        const body = (call[0] as { body?: { message?: string } })?.body
-        return typeof body?.message === "string" &&
-          body.message.includes("Transition message sent to session ses_diag2")
-      })
-      expect(sentCall).toBeDefined()
-    })
-
-    it("logs 'onBatch fired' when batch callback triggers", async () => {
-      mockReadState.mockReturnValue(undefined) // unknown status
-      vi.mocked(runGate).mockResolvedValue(successResult)
-
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_diag3", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
-
-      const logCalls = (mockClient.app.log as ReturnType<typeof vi.fn>).mock.calls as Array<[unknown]>
-      const onBatchCall = logCalls.find((call) => {
-        const body = (call[0] as { body?: { message?: string } })?.body
-        return typeof body?.message === "string" &&
-          body.message.includes("onBatch fired with 1 dirty gate(s): lint")
-      })
-      expect(onBatchCall).toBeDefined()
-    })
-  })
-
-  // ── Status transition messages ─────────────────────────────────────────
-
-  describe("status transition messages", () => {
-    it("sends message on status change (unknown→pass)", async () => {
-      mockReadState.mockReturnValue(undefined) // unknown status
-      vi.mocked(runGate).mockResolvedValue(successResult)
-
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_msg1", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
-
-      // Transition unknown→pass should send a message
-      expect(sendMessage).toHaveBeenCalledTimes(1)
-    })
-
-    it("does NOT send message when status unchanged (pass→pass)", async () => {
-      // First run: unknown→pass (sends message)
-      vi.mocked(runGate).mockResolvedValue(successResult)
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_msg2", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
-
-      // Clear calls so far
-      vi.clearAllMocks()
-
-      // Re-set mocks after clearAllMocks (mockReset: true reset implementations)
-      vi.mocked(runGate).mockResolvedValue(successResult)
-
-      // Mock readState to return pass (already passed)
-      mockReadState.mockReturnValue({
-        qualityGateStatuses: {
-          lint: { dirty: false, status: "pass" },
-        },
-      })
-
-      // Second run: pass→pass — uses adaptive timer for known gates
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_msg2", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-      await vi.advanceTimersByTimeAsync(KNOWN_GATE_FLUSH_MS)
-
-      expect(sendMessage).not.toHaveBeenCalled()
-    })
-
-    it("sends message again on new transition (pass→fail)", async () => {
-      // First run: unknown→pass
-      vi.mocked(runGate).mockResolvedValue(successResult)
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_msg3", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
-
-      vi.clearAllMocks()
-
-      // Re-set runGate mock after clearAllMocks (mockReset: true reset implementations)
-      vi.mocked(runGate).mockResolvedValue(failureResult)
-
-      // Mock readState to return pass
-      mockReadState.mockReturnValue({
-        qualityGateStatuses: {
-          lint: { dirty: false, status: "pass" },
-        },
-      })
-
-      // Second run: pass→fail (transition, should send message)
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_msg3", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-      await vi.advanceTimersByTimeAsync(KNOWN_GATE_FLUSH_MS)
-
-      // Message should be sent for this new transition
-      expect(sendMessage).toHaveBeenCalledTimes(1)
-    })
-  })
-
-  // ── Missing session ────────────────────────────────────────────────────
-
-  describe("missing session", () => {
+  describe("session handling", () => {
     it("falls back to client.app.log when no sessionID", async () => {
+      vi.mocked(runGate).mockResolvedValue(successResult)
+
       await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
         { tool: "edit", sessionID: undefined, args: { filePath: "/workspace/src/main.ts" } },
         { title: "", output: "", metadata: {} },
       )
 
-      // Should have logged via client.app.log instead of sendMessage
+      // Should have logged via client.app.log
       expect(mockClient.app.log).toHaveBeenCalled()
+      // Should not have called sendMessage since there's no session
       expect(sendMessage).not.toHaveBeenCalled()
     })
   })
 
-  // ── Lifecycle ─────────────────────────────────────────────────────────
+  // ── Diagnostic logging ────────────────────────────────────────────────
 
-  describe("lifecycle", () => {
-    it("dispose cancels pending timer for known-status gate", async () => {
-      // Seed the in-memory state so updateState sees lint as "pass" (known gate).
-      // mockReadState does NOT control classification — updateState reads from its
-      // own globalInMemoryState, so we must seed via SessionStorage.reset().
-      SessionStorage.reset({
-        ses_life: { qualityGateStatuses: { lint: { dirty: false, status: "pass" } } },
-      })
+  describe("diagnostic logging", () => {
+    it("logs transition message before sending", async () => {
+      vi.mocked(runGate).mockResolvedValue(successResult)
 
       await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_life", args: { filePath: "/workspace/src/main.ts" } },
+        { tool: "edit", sessionID: "ses_diag", args: { filePath: "/workspace/src/main.ts" } },
         { title: "", output: "", metadata: {} },
       )
 
-      // Dispose should cancel the pending batcher timer
-      expect(typeof plugin.dispose).toBe("function")
-      await (plugin.dispose as (...arguments_: unknown[]) => unknown)()
-
-      // Advance time — nothing should fire because timer was cancelled
-      await vi.advanceTimersByTimeAsync(KNOWN_GATE_FLUSH_MS)
-
-      expect(runGate).not.toHaveBeenCalled()
-      expect(sendMessage).not.toHaveBeenCalled()
+      const logCalls = (mockClient.app.log as ReturnType<typeof vi.fn>).mock.calls as Array<[unknown]>
+      const sendingCall = logCalls.find((call) => {
+        const body = (call[0] as { body?: { message?: string } })?.body
+        return typeof body?.message === "string" &&
+          body.message.includes("Sending transition message for 1 gate(s)")
+      })
+      expect(sendingCall).toBeDefined()
     })
   })
 
@@ -492,11 +346,7 @@ describe("qualityGateEnforcer", () => {
 
   describe("edge cases", () => {
     it("empty gates config does nothing", async () => {
-      // Re-mock loadQualityGates to return empty config
-      vi.mocked(loadQualityGates).mockResolvedValue({
-        gates: [],
-        debounceMs: 100,
-      })
+      vi.mocked(loadQualityGates).mockResolvedValue({ gates: [] })
 
       // Re-create plugin with empty config
       plugin = await (qualityGateEnforcer as unknown as (context: unknown) => Promise<Record<string, unknown>>)(mockContext)
@@ -506,19 +356,13 @@ describe("qualityGateEnforcer", () => {
         { title: "", output: "", metadata: {} },
       )
 
-      await vi.advanceTimersByTimeAsync(ADVANCE_TIMER_MS)
-
       expect(runGate).not.toHaveBeenCalled()
       expect(sendMessage).not.toHaveBeenCalled()
     })
 
     it("normalizes absolute paths to workspace-relative for glob matching", async () => {
-      // Override config with a relative pattern that only matches AFTER normalization.
-      // ".opencode/plugins/**/*.ts" won't match absolute "/workspace/.opencode/plugins/foo.ts"
-      // but WILL match the normalized ".opencode/plugins/foo.ts".
       vi.mocked(loadQualityGates).mockResolvedValue({
         gates: [{ name: "opencode-typecheck", patterns: [".opencode/plugins/**/*.ts"], commands: ["just typecheck"] }],
-        debounceMs: 100,
       })
       plugin = await (qualityGateEnforcer as unknown as (context: unknown) => Promise<Record<string, unknown>>)(mockContext)
 
@@ -527,27 +371,21 @@ describe("qualityGateEnforcer", () => {
         { tool: "edit", sessionID: "ses_norm1", args: { filePath: "/workspace/.opencode/plugins/foo.ts" } },
         { title: "", output: "", metadata: {} },
       )
-      // After normalization, ".opencode/plugins/foo.ts" should match ".opencode/plugins/**/*.ts"
+
+      // After normalization: ".opencode/plugins/foo.ts" matches ".opencode/plugins/**/*.ts"
       expect(runGate).toHaveBeenCalled()
     })
 
-    it("does not match absolute paths when pattern is relative (before normalization would fail)", async () => {
-      // This verifies the root cause: with the relative pattern alone, the absolute
-      // path "/workspace/src/main.ts" would NOT match the relative pattern "src/**/*.ts".
-      // After normalization "src/main.ts" DOES match.
-      vi.mocked(loadQualityGates).mockResolvedValue({
-        gates: [{ name: "typecheck", patterns: ["src/**/*.ts"], commands: ["just typecheck"] }],
-        debounceMs: 100,
-      })
-      plugin = await (qualityGateEnforcer as unknown as (context: unknown) => Promise<Record<string, unknown>>)(mockContext)
+    it("treats gate command errors as failures", async () => {
+      vi.mocked(runGate).mockRejectedValue(new Error("command not found"))
 
-      vi.mocked(runGate).mockResolvedValue(successResult)
       await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_norm2", args: { filePath: "/workspace/src/main.ts" } },
+        { tool: "edit", sessionID: "ses_err", args: { filePath: "/workspace/src/main.ts" } },
         { title: "", output: "", metadata: {} },
       )
-      // After normalization: "src/main.ts" matches "src/**/*.ts"
-      expect(runGate).toHaveBeenCalled()
+
+      // Should be treated as a failure, triggering a status transition message
+      expect(sendMessage).toHaveBeenCalledTimes(1)
     })
   })
 })
