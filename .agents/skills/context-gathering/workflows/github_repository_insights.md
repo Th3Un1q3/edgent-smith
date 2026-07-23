@@ -1,6 +1,6 @@
 ## GitHub Repository Insights
 
-These recepies rely on the [mcp-usage skill](../SKILL.md). It's important that you load the skill first to interpret these recepies correctly.
+These recipes rely on the [context-gathering skill](../SKILL.md). Load the skill first to interpret these recipes correctly.
 
 ### Objective: Perform Q&A query about the repository code/docs/function.
 

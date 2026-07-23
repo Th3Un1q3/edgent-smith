@@ -1,6 +1,6 @@
-# Workflow: Setup and Discover MCP Servers
+# Workflow: Setting Up Context-Gathering Tools
 
-Follow this workflow to identify, register, and configure MCP servers for use in your current session.
+Follow this workflow to identify, register, and configure context-gathering tools for your current session.
 
 ## Steps
 

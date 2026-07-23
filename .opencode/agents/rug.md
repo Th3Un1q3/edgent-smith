@@ -205,10 +205,10 @@ Every todo item description MUST use pattern `#{task_type}: {task_description} (
 # Example Todo List
 - #preparation: Explore relevant well-known workflows and agent cards
 - #preparation: Update todo with rightsized tasks
-- #discovery: Find latest version of library X (mcp-usage)
+- #discovery: Find latest version of library X (context-gathering)
 - #execute: install library X with latest version (installing-libraries)
 - #validation: Confirm installation of library X
-- #discovery: learn how to use library X(mcp-usage)
+- #discovery: learn how to use library X (context-gathering)
 - #design: create a plan for feature Y using library X
 - #develop #tdd-yellow: Write scaffold test for feature Y outlining desired design (test-design, test-driven-development)
 - #develop #tdd-red: Write first failing test case for feature Y (test-design, test-driven-development)
