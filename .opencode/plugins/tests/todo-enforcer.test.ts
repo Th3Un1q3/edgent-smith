@@ -101,7 +101,7 @@ describe("todoEnforcer", () => {
       })
 
       it("sends follow-up when shouldFollowUp is true", async () => {
-        vi.mocked(log).mockImplementation((_client, ...parameters) => Promise.resolve(console.log(...parameters)))
+        vi.mocked(log).mockImplementation(async () => {})
         SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
 
         const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
@@ -134,6 +134,9 @@ describe("todoEnforcer", () => {
         await plugin["event"]?.(eventInput)
         vi.advanceTimersByTime(1001)
         await vi.waitFor(() => expect(sendMessage).toHaveBeenCalled())
+        expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+          message: expect.stringContaining('<steering priority="high" reason="incomplete todos remain" type="todo">'),
+        }))
         expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
           message: expect.stringContaining("content of todo item"),
         }))

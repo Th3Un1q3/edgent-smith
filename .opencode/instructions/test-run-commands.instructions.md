@@ -18,4 +18,4 @@ just typecheck
 just mutation
 ```
 
-NEVER call underlying implementation commands directly (eg. `pytest`, `npm test`, `tsc`) — always use the above commands to ensure that the plugin is tested, linted, and typechecked in the same way as it will be in production.
+NEVER call underlying implementation commands directly (eg. `pytest`, `npm test`, `vitest`, `bun`, `tsc`) — always use the above commands to ensure that the plugin is tested, linted, and typechecked in the same way as it will be in production.

@@ -28,12 +28,29 @@
                         ]
                     },
                     "limit": {
-                        "context": 89845,
-                        "output": 89845
+                        "context": 128000,
+                        "output": 32768
                     }
                 },
-                "google/gemma-4-26b-a4b-qat": {
-                    "name": "l-gemma-4-26b-a4b-qat",
+                "unsloth/gemma-4-26b-a4b-it-qat": {
+                    "name": "l-gemma-4-26b-a4b-ud",
+                    "attachment": true,
+                    "modalities": {
+                        "input": [
+                            "text",
+                            "image"
+                        ],
+                        "output": [
+                            "text"
+                        ]
+                    },
+                    "limit": {
+                        "context": 128000,
+                        "output": 32768
+                    }
+                },
+                "qwen3.6-14b-a3b-fablevibes": {
+                    "name": "l-qwen3.6-14b-a3b-fablevibes",
                     "attachment": true,
                     "modalities": {
                         "input": [

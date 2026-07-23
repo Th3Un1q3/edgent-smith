@@ -1,0 +1,42 @@
+{
+  "gates": [
+    {
+      "name": "opencode-typecheck",
+      "patterns": [
+        ".opencode/plugins/**/*.ts"
+      ],
+      "commands": [
+        "cd /workspace/.opencode && just typecheck"
+      ]
+    },
+    {
+      "name": "opencode-lint",
+      "patterns": [
+        ".opencode/plugins/**/*.ts"
+      ],
+      "commands": [
+        "cd /workspace/.opencode && just lint"
+      ]
+    },
+    {
+      "name": "opencode-test",
+      "patterns": [
+        ".opencode/plugins/**/*.ts"
+      ],
+      "commands": [
+        "cd /workspace/.opencode && just test"
+      ]
+    },
+    {
+      "name": "justfile-fmt",
+      "patterns": [
+        "justfile",
+        "**/justfile"
+      ],
+      "commands": [
+        "for f in $(find /workspace -name justfile -not -path '*/node_modules/*' -not -path '*/.git/*'); do cd \"$(dirname \"$f\")\" && just --unstable --fmt --check || exit 1; done"
+      ]
+    }
+  ],
+  "debounceMs": 300
+}

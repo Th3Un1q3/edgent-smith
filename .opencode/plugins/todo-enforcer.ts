@@ -29,7 +29,8 @@ const todoLineToPrettyString = (todo: Todo) => `${TODO_STATUS_SYMBOLS[todo.statu
 
 /** Build the todo continuation message for pending/in-progress todos. */
 function buildTodoContinuationMessage(todos: Array<Todo>): string {
-  return `There are incomplete todos:
+  return `<steering priority="high" reason="incomplete todos remain" type="todo">
+There are incomplete todos:
 ${todos.map((todo) => todoLineToPrettyString(todo)).join("\n")}
 
 Proceed with the following steps:
@@ -40,11 +41,12 @@ Proceed with the following steps:
 5. If any todo requires user input, use the question tool to ask for it.
 
 <reference>pending - [ ], in-progress - [•], completed - [✓], cancelled - [-]</reference>
+</steering>
 `
 }
 
 export const todoEnforcer: Plugin = async ({ client }) => {
-  const sessionStorage = new SessionStorage() // TODO: implement dependency injection
+  const sessionStorage = new SessionStorage()
   await log(client, "info", `${PLUGIN_ID} initialized`)
 
   const extractTodos = async (sessionId: string): Promise<Array<Todo>> => {

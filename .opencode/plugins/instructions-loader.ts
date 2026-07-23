@@ -14,7 +14,7 @@ const PLUGIN_ID = "instructions-loader"
 export type StateWithIdempotencyTokens = State & { idempotencyTokens?: Record<string, string> }
 
 export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) => {
-    const sessionStorage = new SessionStorage() // TODO: implement dependency injection
+    const sessionStorage = new SessionStorage()
 
     const targetedTools = new Set([
         'edit',
@@ -89,33 +89,34 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
                 return { ...inst, isReference }
             })
 
-            // Formatter: reference-only injections have empty body (description + path only)
             const formattedBlocks = instructionsWithFlag.map(inst => {
                 if (inst.isReference) {
+                    const meta = inst.content
+                        ? ` lines="${inst.content.split('\n').length}" bytes="${new TextEncoder().encode(inst.content).length}"`
+                        : ''
                     return [
-                        `=== INSTRUCTION: ${inst.description} ===`,
-                        `Source: ${inst.path}`,
-                        "---",
-                        "",
-                        "",
-                        "".padEnd(28, "="),
+                        `<instruction>`,
+                        `  <description>${inst.description}</description>`,
+                        `  <path>${inst.path}</path>`,
+                        `  <meta${meta}/>`,
+                        `</instruction>`,
                     ].join("\n")
                 }
                 return [
-                    `=== INSTRUCTION: ${inst.description} ===`,
-                    `Source: ${inst.path}`,
-                    "---",
-                    "",
-                    inst.content ?? "",
-                    "",
-                    "".padEnd(28, "="),
+                    `<instruction>`,
+                    `  <description>${inst.description}</description>`,
+                    `  <path>${inst.path}</path>`,
+                    `  <content>`,
+                    inst.content ?? '',
+                    `  </content>`,
+                    `</instruction>`,
                 ].join("\n")
-            }).filter(Boolean).join("\n\n")
+            }).join("\n\n")
 
             await sendMessage({
                 client,
                 sessionId: input.sessionID,
-                message: `<steering reason="Relevant files touched">\n${formattedBlocks}\n</steering>`,
+                message: `<steering priority="high" reason="relevant files touched" type="instructions">\n${formattedBlocks}\n</steering>`,
                 noReply: true
             })
 

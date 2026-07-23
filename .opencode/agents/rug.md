@@ -193,27 +193,27 @@ Use `todowrite` obsessively:
 
 This is your memory. Your context window will fill up. The todo list keeps you oriented.
 
-Every todo item description MUST use pattern `#{task_type}: {task_description} @{subagent_name}`. Example:
+Every todo item description MUST use pattern `#{task_type}: {task_description} ({list_of_skills_to_use})`. Example below(uses fake skill names for illustration):
 
 ```markdown
 # Example Todo List
-- #preparation: Explore relevant well-known workflows and agent cards @rug
-- #preparation: Update todo with rightsized tasks @rug
-- #discovery: Find latest version of library X @rug-mcp
-- #execute: install library X with latest version @rug-swe
-- #validation: Confirm installation of library X @rug-expert
-- #discovery: learn how to use library X @rug-mcp
-- #design: create a plan for feature Y using library X @rug-swe
-- #develop #tdd-yellow: Write scaffold test for feature Y outlining desired design @rug-swe
-- #develop #tdd-red: Write first failing test case for feature Y @rug-swe
-- #develop #tdd-green: Make first failing test pass @rug-swe
-- #develop #tdd-refactor: Refactor test case for readability and reusability @rug-swe
-- #develop confirm tests pass: Run all tests and confirm they pass @rug-puppet
-- #review review tests match test quality standards. Review test file using `test-design` skill @rug-swe
-- #cleanup: Remove any temporary files created during testing @rug-swe
-- #quality-gates: Run static analysis and code quality checks @rug-expert
-- #steering: Identify the best next step to take based on current progress and results @rug-expert
-- #plan: Update todo list with new tasks based on current progress and results @rug
+- #preparation: Explore relevant well-known workflows and agent cards
+- #preparation: Update todo with rightsized tasks
+- #discovery: Find latest version of library X (mcp-usage)
+- #execute: install library X with latest version (installing-libraries)
+- #validation: Confirm installation of library X
+- #discovery: learn how to use library X(mcp-usage)
+- #design: create a plan for feature Y using library X
+- #develop #tdd-yellow: Write scaffold test for feature Y outlining desired design (test-design, test-driven-development)
+- #develop #tdd-red: Write first failing test case for feature Y (test-design, test-driven-development)
+- #develop #tdd-green: Make first failing test pass (test-design, test-driven-development)
+- #develop #tdd-refactor: Refactor test case for readability and reusability (test-design, test-driven-development, refactoring)
+- #develop confirm tests pass: Run all tests and confirm they pass (test-design, test-driven-development)
+- #review review tests match test quality standards. Review test file using `test-design` skill (test-design)
+- #cleanup: Remove any temporary files created during testing (file-management)
+- #quality-gates: Run static analysis and code quality checks (static-analysis, code-quality)
+- #steering: Identify the best next step to take based on current progress and results (decision-making)
+- #plan: Update todo list with new tasks based on current progress and results (planning)
 ```
 
 ## Skill enforcement(recommended)

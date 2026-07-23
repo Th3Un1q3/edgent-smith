@@ -19,6 +19,10 @@ export default [
       "@typescript-eslint/no-empty-interface": ["error", { allowSingleExtends: true }],
       "@typescript-eslint/no-non-null-assertion": "warn",
       "@typescript-eslint/explicit-function-return-type": "off",
+
+      // Disallow all console methods — use @plugins/helpers/logger instead
+      "no-console": "error",
+
       "unicorn/filename-case": [
         'error',
         {

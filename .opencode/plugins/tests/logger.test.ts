@@ -76,5 +76,13 @@ describe("logger", () => {
         body: { service: "harness-plugin", level: "info", message: "[harness-plugin] " },
       })
     })
+
+    it("requires a valid client — throws when client is null or undefined", async () => {
+      // When the client is not provided, the log function should not silently no-op.
+      // Instead, it should throw because accessing .app.log on undefined would fail.
+      await expect(
+        log(undefined as unknown as OpencodeClient, "warn", "no client available"),
+      ).rejects.toThrow()
+    })
   })
 })

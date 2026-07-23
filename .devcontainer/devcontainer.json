@@ -14,6 +14,9 @@
     },
     "ghcr.io/devcontainer-community/devcontainer-features/astral.sh-uv:1": {},
     "ghcr.io/jsburckhardt/devcontainer-features/just:1": {},
+    "ghcr.io/devcontainers-extra/features/bun:1": {
+      "version": "latest"
+    }
   },
   "customizations": {
     "vscode": {
@@ -21,10 +24,6 @@
         "ms-python.python",
         "ms-python.mypy-type-checker",
         "charliermarsh.ruff",
-        // "GitHub.copilot",
-        // "GitHub.copilot-chat",
-        // "ms-vscode.vscode-chat-customizations-evaluations",
-        // "johnny-zhao.oai-compatible-copilot",
         "tamasfe.even-better-toml"
       ],
       "settings": {
@@ -36,6 +35,10 @@
         }
       }
     }
+  },
+  "containerEnv": {
+    "BUN_INSTALL": "/home/vscode/.bun",
+    "PATH": "/home/vscode/.bun/bin:${localEnv:PATH}"
   },
   "initializeCommand": "echo \"Here could go a host command\"",
   "postCreateCommand": "bash .devcontainer/setup-dev.sh",

@@ -1,6 +1,7 @@
 import Bun, { Glob } from "bun"
 import { CustomInstructionFrontMatter, InstructionMeta } from "../types/instructions"
 import { load } from "js-yaml"
+import { isGlobMatch } from "./glob-match"
 
 const loadBody = async (filePath: string): Promise<string> => {
   const file = Bun.file(filePath)
@@ -50,23 +51,16 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
         continue
       }
 
-      const appliesToAgentsGlob = new Glob(parsedFrontmatter.appliesToAgents || '**')
+      await logger(`Checking instruction file: ${filePath}, appliesToAgents: ${parsedFrontmatter.appliesToAgents || '**'}, agent: ${options.agent}`)
 
-      await logger(`Checking instruction file: ${filePath}, appliesToAgents: ${appliesToAgentsGlob}, agent: ${options.agent}`)
-
-      // eslint-disable-next-line unicorn/prefer-regexp-test
-      if (!appliesToAgentsGlob.match(options.agent)) {
+      if (!isGlobMatch(parsedFrontmatter.appliesToAgents || '**', options.agent)) {
         await logger(`Skipping instruction file: ${filePath}, appliesToAgents: ${parsedFrontmatter.appliesToAgents || '**'}, agent: ${options.agent}`)
         continue
       }
 
-      if (parsedFrontmatter.excludeAgents) {
-        const excludedAgentsGlob = new Glob(parsedFrontmatter.excludeAgents)
-        // eslint-disable-next-line unicorn/prefer-regexp-test
-        if (excludedAgentsGlob.match(options.agent)) {
+      if (parsedFrontmatter.excludeAgents && isGlobMatch(parsedFrontmatter.excludeAgents, options.agent)) {
           continue
         }
-      }
 
       index[applyTo] ||= []
 
@@ -89,8 +83,7 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
     await logger(`Index patterns: ${patterns.join(', ')}`)
 
     const matchingPatterns = patterns.filter(pattern => {
-      const glob = new Glob(pattern);
-      return filePathsRelative.some(filePath => glob.match(filePath));
+      return filePathsRelative.some(filePath => isGlobMatch(pattern, filePath));
     });
 
     await logger(`Matching patterns for files [${filePaths.join(', ')}]: ${matchingPatterns.join(', ')}`)
@@ -103,12 +96,11 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
     await logger(`Matching instructions for files [${filePaths.join(', ')}]: ${matchingInstructions.map(index_ => index_.path).join(', ')}`)
 
     const filteredInstructions = matchingInstructions.filter(instruction => {
-      if (!instruction.excludePaths) {
+      const excludePaths = instruction.excludePaths
+      if (!excludePaths) {
         return true;
       }
-      const excludeGlob = new Glob(instruction.excludePaths);
-      // eslint-disable-next-line unicorn/prefer-regexp-test
-      return filePathsRelative.some(filePath => !excludeGlob.match(filePath));
+      return filePathsRelative.some(filePath => !isGlobMatch(excludePaths, filePath));
     });
 
     await logger(`Filtered instructions for files [${filePaths.join(', ')}]: ${filteredInstructions.map(index_ => index_.path).join(', ')}`)

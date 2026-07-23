@@ -2,8 +2,8 @@ name: local
 registry:
   tavily:
     type: remote
-    description: "Provides seamless interaction with the tavily-search and tavily-extract tools, real-time web search capabilities through the tavily-search tool and Intelligent data extraction from web pages via the tavily-extract tool."  
-    title: "Tavily Search, Exract, Research MCP"
+    description: "Web search engine and content extraction. Provides tavily-search for real-time web queries (news, research, general knowledge) and tavily-extract for fetching and parsing webpage content."  
+    title: "Tavily - Web Search & Content Extraction MCP"
     remote:  
       url: "https://mcp.tavily.com/mcp"
       transport_type: http
@@ -16,16 +16,24 @@ registry:
 
   deepwiki:
     type: remote  
-    description: "Explore GitHub repositories to learn about libraries, frameworks, and tools."  
-    title: "DeepWiki - Repository insights and research MCP"
+    description: "Search and explore software documentation and developer resources. Queries a curated index of wikis, documentation sites, and knowledge bases for technical reference information."  
+    title: "DeepWiki - Documentation & Knowledge Search MCP"
     remote:  
       url: "https://mcp.deepwiki.com/mcp"
       transport_type: http
 
+  serena:
+    type: remote
+    description: "IDE-like code intelligence for large codebases. Provides symbol search, cross-references, file tree browsing, dependency graphs, and semantic code navigation."
+    title: "Serena - Symbol Search & Code Intelligence MCP"
+    remote:
+      url: "http://serena:9121/mcp"
+      transport_type: http
+
   context7:  
     type: remote  
-    description: "Provides access to the Context7 API, allows access documentation for libraries, websites and software."  
-    title: "Context7 - Documentation lookup and research MCP"
+    description: "Structured documentation lookup for programming languages, frameworks, and libraries. Retrieves official docs, APIs, changelogs, and usage examples from authoritative sources."
+    title: "Context7 - Official Docs & API Reference Lookup MCP"
     remote:  
       url: "https://mcp.context7.com/mcp"  
       transport_type: http
@@ -38,8 +46,8 @@ registry:
 
   github:
     type: remote
-    description: "Provides read-only access to GitHub repositories for information gathering(issues, pull requests, commits, files, etc.)."
-    title: "GitHub - Read-Only MCP"
+    description: "Read-only GitHub API access. Browse repositories, search code and issues, view pull requests, commits, branches, diffs, file contents, and repository metadata."
+    title: "GitHub - Read-Only Code & Issue Browser MCP"
     remote:
       url: "https://api.githubcopilot.com/mcp/x/all/readonly"
       transport_type: http
@@ -51,8 +59,8 @@ registry:
         example: "your_github_personal_access_token_here"
 
   fetch:
-    description: Lightweight server for web content fetching(limited to publically accessible web pages, no authentication or dynamic content).
-    title: Fetch - Web Content MCP
+    description: "HTTP fetch tool for retrieving and parsing publicly available web page content. Handles HTML rendering, text extraction, and resource loading."
+    title: "Fetch - Public Web Page Content Fetcher MCP"
     type: server
     image: mcp/fetch@sha256:d9907377c03da91e49cf02c3dd6f0f83d1e0183e1222850f92595089f2c9a59d
 

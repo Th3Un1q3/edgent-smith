@@ -1,7 +1,7 @@
 ---
 name: mcp-usage
 description: >
-  Effectively retrieve information about libraries, frameworks, tools, facts, and perform web searches. NEVER call any tool starting with "gateway_" untill you have loaded this skill.
+  Retrieve information about libraries, frameworks, tools, facts, and perform web searches. Find files, symbols, and references in codebases. Use the MCP servers to fetch and parse web content, search documentation, and explore GitHub repositories.
 license: MIT
 compatibility: Universal
 metadata:
@@ -17,9 +17,9 @@ The code-mode is provided by docker mcp gateway. All the tools prefixed with "ga
 
 ## Minimal Workflow Example:
 
-1. **Discover Servers**: `mcp-find({"query": "mcp"})` $\rightarrow$ finds all servers matching the query.
+1. **Discover Servers**: `mcp-find({"query": "mcp, code, fetch, web"})` $\rightarrow$ finds all servers matching the query. Returns a list of matching servers.
 2. **Initialize Sandbox**: `code-mode({"name": "web-research", "servers": ["tavily"]})` creates an environment with all tools from the specified servers. Created environment can be used multiple times.
-3. **Execute Tools**: Call `mcp-exec({"name": "code-mode_web-research"})` with the name "web-research"(from step 2) that and script:
+3. **Execute Tools**: Call `mcp-exec({"name": "code-mode_web-research", "arguments": {"script": "# <synchronous js script>\nreturn \"hello word!\""}})` with the name "web-research"(from step 2) that and script:
 ```javascript
 // Map tools having hyphens in their
 
@@ -62,3 +62,5 @@ Proactively explore the following files to learn about the skill's capabilities 
 | Effectively script in code mode | [workflows/scripting-workflow.md](./workflows/scripting-workflow.md) |
 | Handle a complex task with no ready-made recipe | [workflows/refinement-discovery.md](./workflows/refinement-discovery.md) |
 | Recepie: Get GitHub repository insights | [workflows/github_repository_insights.md](./workflows/github_repository_insights.md) |
+| Explore your local codebase with tested recipes (symbol references, file analysis, pattern search) and known pitfalls | [recipes/codebase-exploration.md](./recipes/codebase-exploration.md) |
+

@@ -25,10 +25,10 @@ All files use **pure ESM** with named exports only. No classes are used anywhere
 
 ### Install dependencies
 
-Plugin dependencies are tracked in `/workspace/.opencode/package.json` and installed with npm:
+Plugin dependencies are tracked in `/workspace/.opencode/package.json` and installed with bun:
 
 ```bash
-cd .opencode && npm install
+cd .opencode && bun install
 ```
 
 ## Plugin Architecture
@@ -186,3 +186,109 @@ Plugins coordinate through shared session state via `SessionStorage` (disk-backe
 | **`permission.ask` — multiple handlers** | Last loaded plugin's return value takes precedence for `output.status`. |
 | **Custom tool naming conflicts** | Plugin-registered tools take precedence over built-in tools with the same name. |
 | **Experimental hook stability** | Experimental hooks may change or be removed between OpenCode versions. Do not rely on them in production plugins without version guards. |
+
+## SessionStorage Data Shape Consistency
+
+When using `SessionStorage` for per-plugin KV state, follow these rules to prevent shape mismatch bugs:
+
+### Rule 1: Namespace Your Keys
+
+Always store plugin state under a plugin-specific top-level key. Never write at the root level.
+
+```typescript
+// CORRECT: nested under plugin namespace
+sessionStorage.updateState(sessionID, (state) => ({
+  ...state,
+  qualityGateStatuses: {                    // plugin namespace
+    ...(state.qualityGateStatuses ?? {}),
+    [gateName]: { dirty: false, status: "pass" },
+  },
+}))
+
+// WRONG: writes at root, overwrites other plugins' state
+sessionStorage.updateState(sessionID, () => ({
+  dirty: false,                             // root-level — will clobber everything
+  status: "pass",
+}))
+```
+
+### Rule 2: Read and Write the Same Path
+
+The read path in `readState` MUST match the write path in `updateState`. Use the same key structure in both operations.
+
+```typescript
+// CORRECT: read and write both access qualityGateStatuses[gateName]
+const state = sessionStorage.readState(sessionID, (s) => s)
+const oldStatus = state?.qualityGateStatuses?.[gateName]?.status ?? "unknown"
+
+sessionStorage.updateState(sessionID, (state) => ({
+  ...state,
+  qualityGateStatuses: {
+    ...(state.qualityGateStatuses ?? {}),
+    [gateName]: { dirty: false, status: newStatus },
+  },
+}))
+
+// WRONG: writes nested but reads from root — shape mismatch
+const oldStatus = state?.status ?? "unknown"  // reads root, but data is at qualityGateStatuses[gateName].status
+```
+
+### Rule 3: Preserve Existing State on Write
+
+Always spread the existing state object when calling `updateState`. The updater function receives the current state; you MUST return a complete state object, not a partial replacement.
+
+```typescript
+// CORRECT: spreads existing state, only updates the target key
+updateState(id, (state) => ({ ...state, myPlugin: newValue }))
+
+// WRONG: replaces entire state, destroying all other plugins' data
+updateState(id, () => ({ myPlugin: newValue }))
+```
+
+### Rule 4: Verify Shape in Tests
+
+Tests that mock `readState` must return the exact nested shape the code expects. If the code reads `state.qualityGateStatuses[gateName].status`, the mock must return `{ qualityGateStatuses: { [gateName]: { status: "pass" } } }` — not `{ status: "pass" }`.
+
+## Steering Message Compliance
+
+Any plugin that emits `<steering>` messages to the agent MUST follow the steering message schema defined in `.opencode/instructions/steering-message.md`.
+
+### Required Attributes
+
+Every `<steering>` element must include:
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `priority` | Yes | `"info"`, `"warning"`, or `"high"` |
+| `reason` | Yes | Short description of what triggered the message |
+| `type` | Recommended | `"instructions"`, `"quality-gate"`, `"todo"` |
+
+### Example — Compliant
+
+```xml
+<steering priority="high" reason="relevant files touched" type="instructions">
+  <instruction>
+    <description>CLI structure</description>
+    <path>.opencode/instructions/cli-structure.instructions.md</path>
+    <content>...</content>
+  </instruction>
+</steering>
+```
+
+### Example — Non-Compliant (Legacy, Deprecated)
+
+```xml
+<!-- Missing priority, type attributes — deprecated format -->
+<steering reason="Relevant files touched">
+  === INSTRUCTION: CLI structure ===
+  ...
+</steering>
+```
+
+### Adding a Steering Message
+
+1. Choose the correct `priority` for your use case
+2. Write a clear, lowercase `reason` string
+3. Add the appropriate `type`
+4. Document any new patterns in `steering-message.md`
+5. Use structured XML for message body content (prefer `<element>` over ASCII delimiters)

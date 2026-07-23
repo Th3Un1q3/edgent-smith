@@ -40,3 +40,36 @@ Avoid the following practices, as they violate TDD principles:
  - Writing tests only after the implementation is complete.
  - Changing implementation code to make a test pass without first writing a failing test.
  - Skipping tests for "trivial" changes.
+
+## Constraint 4: Debug Artifact Cleanup
+
+After completing a RED → GREEN → REFACTOR cycle, you MUST remove all debug artifacts before considering the work done. Debug artifacts are temporary code added during development that serve no purpose in the final implementation.
+
+### What to Remove
+
+| Artifact | How to Detect | Why It Must Go |
+|----------|--------------|----------------|
+| `console.log()` / `console.debug()` calls | `grep -rn "console\.\(log\|debug\|warn\)"` in changed files | Pollutes output, leaks implementation details |
+| Temporary debug test files | `ls *_debug*.test.ts`, `ls __debug*` | Adds noise to test suite, may fail in different environments |
+| Commented-out code | `grep -rn "//.*\(DEBUG\|TEMP\|HACK\|FIXME\)"` in changed files | Clutters codebase, hides intent |
+| Test-only mock spy logs | `vi.fn().mockImplementation((...args) => { console.log(...); return ... })` | Debug instrumentation that doesn't test behavior |
+
+### Cleanup as a Gate
+
+Before running the final quality gates (`just test`, `just lint`, `just typecheck`), run a self-check:
+
+```bash
+# Check for console.log in changed source files (not test files)
+grep -rn "console\.\(log\|debug\)" plugins/ --include="*.ts" --exclude="*.test.ts"
+
+# Check for debug test files
+ls plugins/tests/__debug* 2>/dev/null
+```
+
+If either check returns results, remove the artifacts before proceeding.
+
+### Anti-Patterns
+
+- Leaving `console.log` calls with `[DEBUG]` prefix "so I can find them later" — they will never be found later. Remove them now.
+- Creating `__debug*.test.ts` files to isolate a test scenario — extract the scenario into the real test file or remove the debug file.
+- Commenting out code "in case we need it" — version control remembers; delete it.

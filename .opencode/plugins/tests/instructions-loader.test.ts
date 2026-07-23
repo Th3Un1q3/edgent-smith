@@ -66,34 +66,21 @@ async function runBudgetTest(
 }
 
 function getInjectedDescriptions(message: string): Array<{ desc: string; hasContent: boolean }> {
-    return message.split("=== INSTRUCTION:")
+    return message.split("<instruction>")
         .slice(1)
         .map(block => {
             const trimmedBlock = block.trim()
             if (trimmedBlock.length === 0) return undefined as any
-            const descLine = trimmedBlock.split("\n", 1)[0]
-            const desc = descLine.replace(/ ===/, "")
-            const afterDesc = trimmedBlock.slice(Math.max(0, descLine.length + 1))
-            const afterSeparator = afterDesc.indexOf("---")
-            const bodyAfterSeparator = afterSeparator === -1 ? "" : afterDesc.slice(Math.max(0, afterSeparator + 3))
-            const hasContent = bodyAfterSeparator.split("\n").some(line => {
-                const trimmed = line.trim()
-                return (
-                    trimmed.length > 0 &&
-                    !trimmed.startsWith("Source") &&
-                    !trimmed.startsWith("===") &&
-                    !trimmed.startsWith("---") &&
-                    trimmed !== "=".repeat(28) &&
-                    !trimmed.startsWith("</") &&
-                    !trimmed.startsWith("<")
-                )
-            })
+            const descMatch = trimmedBlock.match(/<description>(.*?)<\/description>/s)
+            const desc = descMatch ? descMatch[1].trim() : ""
+            // Full-content blocks have a <content> element; reference-only blocks have <meta/> instead
+            const hasContent = trimmedBlock.includes("<content>")
             return { desc, hasContent }
         })
 }
 
 function getInjectedCount(message: string): number {
-    return message.split("=== INSTRUCTION:").slice(1).filter(b => b.trim().length > 0).length
+    return message.split("<instruction>").slice(1).filter(b => b.trim().length > 0).length
 }
 
 // ── Tests ─────────────────────────────────────────────────────────
@@ -250,8 +237,8 @@ describe("instructionsLoaderPlugin", () => {
 
             expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
             const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as Parameters<typeof sessionHelpers.sendMessage>[0]).message
-            expect(message).toContain("=== INSTRUCTION: New instruction ===")
-            expect(message).not.toContain("Old instruction")
+            expect(message).toContain("<description>New instruction</description>")
+            expect(message).not.toContain("<description>Old instruction</description>")
         })
 
         it("updates sessionStorage with new tokens after sending", async () => {
@@ -295,8 +282,8 @@ describe("instructionsLoaderPlugin", () => {
 
             expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
             const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as Parameters<typeof sessionHelpers.sendMessage>[0]).message
-            expect(message).toContain("=== INSTRUCTION:")
-            expect(message).toContain("---")
+            expect(message).toContain("<instruction>")
+            expect(message).toContain("<content>")
 
             const tokens = (new SessionStorage()).readState<StateWithIdempotencyTokens, Record<string, string>>(sessionId, s => s.idempotencyTokens ?? {})
             expect(Object.keys(tokens ?? {}).length).toBe(expectedCount)

@@ -73,9 +73,20 @@ services:
 
   serena:
     image: ghcr.io/oraios/serena:latest
-    command: serena
+    command:
+      - "serena"
+      - "start-mcp-server"
+      - "--transport"
+      - "streamable-http"
+      - "--port"
+      - "9121"
+      - "--host"
+      - "0.0.0.0"
+      - "--project"
+      - "/workspaces/projects/edgent_smith"
     volumes:
-      - ../.:/workspaces/projects/edgent_smith:cached
+      - ..:/workspaces/projects/edgent_smith:cached
+      # - ../serena_config.yml:/etc/serena/serena_config.yml:ro
     networks:
       - edgent-dev
 
