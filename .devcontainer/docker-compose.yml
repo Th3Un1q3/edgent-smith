@@ -21,14 +21,12 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       JAEGER_QUERY_URL: http://jaeger:16686
       JAEGER_UI_URL: http://localhost:16686
-    depends_on:
-      - ollama
-      - jaeger
     networks:
       - edgent-dev
 
   mcp_gateway:
     image: docker/mcp-gateway:dind
+    profiles: ["infra"]
     privileged: true
     ports:
       - "8080:8080"
@@ -53,6 +51,7 @@ services:
 
   ollama:
     image: ollama/ollama:latest
+    profiles: ["infra"]
     ports:
       - "11434:11434"
     volumes:
@@ -64,6 +63,7 @@ services:
 
   jaeger:
     image: cr.jaegertracing.io/jaegertracing/jaeger:2.17.0
+    profiles: ["infra"]
     ports:
       - "16686:16686"
       - "4318:4318"
@@ -73,6 +73,7 @@ services:
 
   serena:
     image: ghcr.io/oraios/serena:latest
+    profiles: ["infra"]
     command:
       - "serena"
       - "start-mcp-server"
