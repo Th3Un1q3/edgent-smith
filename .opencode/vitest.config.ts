@@ -25,6 +25,7 @@ export default defineConfig({
     ],
   },
   test: {
+    setupFiles: ['./plugins/tests/vitest-bun-polyfill.setup.ts'],
     mockReset: true,
     environment: 'node',
     globals: true,

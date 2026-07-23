@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 // Import the module-under-test (stub provides interfaces; throws on call in TDD red phase)
 import { InstructionContextHelper, ResolvedInstruction } from "@plugins/helpers/instruction-context-helper"
@@ -131,6 +131,43 @@ describe("InstructionContextHelper", () => {
       const result = await helper.resolveInstructions(["src/dir/file.ts"])
 
       expect(result).toEqual([])
+    })
+
+    it("never calls indexerFactory when filePaths is empty — verifies early return", async () => {
+      const indexerFactory = vi.fn()
+      const helper = new InstructionContextHelper({ indexerFactory })
+
+      const result = await helper.resolveInstructions([])
+
+      expect(result).toEqual([])
+      expect(indexerFactory).not.toHaveBeenCalled()
+    })
+
+    it("never calls loadBody or sort when forFiles returns no matches — verifies early return", async () => {
+      const loadBody = vi.fn()
+      const indexerFactory = vi.fn().mockResolvedValue({
+        forFiles: vi.fn().mockResolvedValue([]),
+        loadBody,
+      })
+      const helper = new InstructionContextHelper({ indexerFactory })
+
+      // Spy on Array.prototype.sort to prove the early return prevents sorting.
+      // When metas is empty, the function should NOT reach `[...metas].sort(...)`.
+       
+      const sortSpy = vi.spyOn(Array.prototype, "sort")
+      const sortCallsBefore = sortSpy.mock.calls.length
+
+      try {
+        const result = await helper.resolveInstructions(["src/dir/file.ts"])
+
+        expect(result).toEqual([])
+        expect(indexerFactory).toHaveBeenCalledOnce()
+        expect(loadBody).not.toHaveBeenCalled()
+        // No additional sort calls during resolveInstructions → early return worked.
+        expect(sortSpy.mock.calls.length).toBe(sortCallsBefore)
+      } finally {
+        sortSpy.mockRestore()
+      }
     })
   })
 

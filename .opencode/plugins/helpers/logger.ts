@@ -5,7 +5,7 @@ All log messages are prefixed with the plugin ID for traceability across modules
 
 import { OpencodeClient } from "@opencode-ai/sdk"
 
-const PLUGIN_ID = "harness-plugin"
+export const PLUGIN_ID = "harness-plugin"
 
 export async function log(
   client: OpencodeClient,

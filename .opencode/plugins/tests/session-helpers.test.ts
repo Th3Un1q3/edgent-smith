@@ -190,6 +190,41 @@ describe("sendMessage", () => {
     })
   })
 
+  it("uses 'build' as the default agent when session.data is undefined (optional chain guard)", async () => {
+    const { sendMessage } = await import("@plugins/helpers/session-helpers")
+
+    // Build a client where session.get returns { data: undefined } — exercises the
+    // optional chaining on (session.data as {...})?.agent. Without the ?, the code
+    // would throw on `undefined.agent`.
+    const mockSessionGet = vi.fn().mockResolvedValue({ data: undefined })
+    const client = {
+      app: { log: vi.fn().mockResolvedValue(undefined) },
+      session: {
+        get: mockSessionGet,
+        prompt: vi.fn().mockResolvedValue({}),
+      },
+    } as unknown as OpencodeClient
+
+    await sendMessage({
+      client,
+      sessionId: "ses_no_data",
+      message: "hello",
+    })
+
+    // Should have called session.get
+    expect(mockSessionGet).toHaveBeenCalledWith({ path: { id: "ses_no_data" } })
+
+    // Should fall back to "build" and NOT throw
+    expect(client.session.prompt).toHaveBeenCalledWith({
+      path: { id: "ses_no_data" },
+      body: {
+        agent: "build",
+        noReply: false,
+        parts: [{ type: "text", text: "hello" }],
+      },
+    })
+  })
+
   it.each(["deploy", "test", "custom-agent"])("passes agent='%s' through when session data specifies it", async (expectedAgent) => {
     const { sendMessage } = await import("@plugins/helpers/session-helpers")
 

@@ -4,7 +4,6 @@ import { log } from "./helpers/logger"
 import { sendMessage } from "./helpers/session-helpers"
 import { SessionStorage, SESSION_FIELDS } from "./helpers/kv-store"
 
-
 const PLUGIN_ID = "todo-enforcer"
 
 type Todo = {

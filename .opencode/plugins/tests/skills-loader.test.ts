@@ -121,6 +121,9 @@ describe("skillsLoaderPlugin", () => {
         expect(output.args.prompt).toContain("Body of skill A.")
         expect(output.args.prompt).toContain("Body of skill B.")
 
+        // Skill blocks separated by newlines (not collapsed via join(""))
+        expect(output.args.prompt).toMatch(/<\/skill>\n<skill name=/)
+
         // Original prompt wrapped in <user_request> block
         expect(output.args.prompt).toContain("<user_request>\noriginal prompt\n</user_request>")
         // Original prompt comes after closing task_skills tag
@@ -156,6 +159,71 @@ describe("skillsLoaderPlugin", () => {
             await act(output)
             expect(output.args.skills).toBeUndefined()
         })
+
+        it("logs debug message when skills array is empty", async () => {
+            const output = { args: { prompt: "original prompt", skills: [] } }
+            await act(output)
+            expect(log).toHaveBeenCalledWith(
+                expect.any(Object),
+                "debug",
+                expect.stringContaining("skills array is empty"),
+            )
+        })
+    })
+
+    // ── tests for surviving mutants: optional chaining, non-array guard, directory guard ──
+
+    it("returns early without throwing when output.args is undefined", async () => {
+        const hook = executeBeforeHook()
+        const input = { tool: "task", sessionID: "sess-1", callID: "call-no-args" }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- intentionally testing runtime behavior when args is missing
+        const output: any = {}
+
+        await expect(hook(input, output)).resolves.toBeUndefined()
+
+        // No args property should have been added
+        expect(output.args).toBeUndefined()
+        // Bun.file should not be called
+        expect(mockBunFile).not.toHaveBeenCalled()
+    })
+
+    it.each([
+        { desc: "string", skills: "not-an-array" as unknown },
+        { desc: "undefined", skills: undefined as unknown },
+    ])("returns early and preserves skills field when skills is $desc", async ({ skills }) => {
+        const hook = executeBeforeHook()
+        const input = { tool: "task", sessionID: "sess-1", callID: "call-bad-skills" }
+        const output = { args: { prompt: "original prompt", skills } }
+
+        await hook(input, output)
+
+        // Prompt must remain unchanged
+        expect(output.args.prompt).toBe("original prompt")
+        // skills field must be preserved (not deleted by the cleanup block)
+        expect(output.args.skills).toBe(skills)
+        // Bun.file must not be called
+        expect(mockBunFile).not.toHaveBeenCalled()
+    })
+
+    it("removes skills field and returns early when directory is undefined", async () => {
+        const pluginNoDirectory = await skillsLoaderPlugin({ client } as unknown as PluginInput)
+        const hook = pluginNoDirectory?.["tool.execute.before"] ?? (() => Promise.resolve())
+
+        registerSkillFiles({
+            "skill-a": makeSkillFile({ name: "skill-a", content: "# Skill A", mtimeMs: 100 }),
+        })
+
+        const input = { tool: "task", sessionID: "sess-1", callID: "call-no-dir" }
+        const output = { args: { prompt: "original prompt", skills: ["skill-a"] } }
+
+        await hook(input, output)
+
+        // skills field must be deleted
+        expect(output.args.skills).toBeUndefined()
+        // Prompt must remain unchanged (early return before file loading)
+        expect(output.args.prompt).toBe("original prompt")
+        // Bun.file must not be called (guard returns before file loading)
+        expect(mockBunFile).not.toHaveBeenCalled()
     })
 
     // ── TEST 4: non-task tool with skills field ──────────────────
@@ -270,6 +338,27 @@ describe("skillsLoaderPlugin", () => {
         expect(output.args.prompt).toContain("Single body.")
         expect(output.args.prompt).toContain("<user_request>\noriginal prompt\n</user_request>")
         expect(output.args.prompt).toMatch(/<\/task_skills>\s*\n<user_request>\noriginal prompt/)
+    })
+
+    // ── TEST: missing prompt fallback (line 90: output.args.prompt || "") ──
+
+    it("uses empty string fallback when prompt is missing from args", async () => {
+        registerSkillFiles({
+            "skill-a": makeSkillFile({ name: "skill-a", content: "# Skill A", mtimeMs: 100 }),
+        })
+
+        const hook = executeBeforeHook()
+
+        const input = { tool: "task", sessionID: "sess-1", callID: "call-no-prompt" }
+        const output: { args: Record<string, unknown> } = { args: { skills: ["skill-a"] } }
+
+        await hook(input, output)
+
+        expect(output.args.skills).toBeUndefined()
+        // Prompt must NOT contain "undefined" — uses "" fallback
+        expect(output.args.prompt).toContain("<task_skills>")
+        expect(output.args.prompt).toContain("Skill A")
+        expect(output.args.prompt).toContain("<user_request>\n\n</user_request>")
     })
 
     // ── tool.definition hook tests ─────────────────────────────────
@@ -393,6 +482,32 @@ describe("skillsLoaderPlugin", () => {
             await expect(applyDefinitionHook({ toolID: "task" }, output)).resolves.toBeUndefined()
             // jsonSchema should not be created
             expect(output.jsonSchema).toBeUndefined()
+        })
+
+        it("does not overwrite skills property when it already exists (idempotent)", async () => {
+            const output: ToolHookOutput = {
+                description: "Run a subagent",
+                parameters: {},
+                jsonSchema: {
+                    type: "object",
+                    properties: {
+                        skills: { type: "array", items: { type: "string" }, description: "custom skills" },
+                        prompt: { type: "string" },
+                    },
+                },
+            }
+
+            await applyDefinitionHook({ toolID: "task" }, output)
+
+            const schema = output.jsonSchema as ToolJsonSchema
+            const properties = schema.properties as Record<string, SchemaProperty>
+
+            // Existing skills property must NOT be overwritten
+            expect(properties.skills).toBeDefined()
+            expect(properties.skills.description).toBe("custom skills")
+            expect(properties.skills.type).toBe("array")
+            // prompt should still be preserved
+            expect(properties.prompt).toBeDefined()
         })
     })
 

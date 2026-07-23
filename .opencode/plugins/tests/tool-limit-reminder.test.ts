@@ -26,6 +26,18 @@ interface ToolLimitReminderPlugin {
 
 describe("toolLimitReminder plugin", () => {
 
+  // Init — plugin creation logs the exact init message
+  it("logs the exact init message on plugin creation", async () => {
+    const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin
+    expect(plugin).toBeDefined()
+
+    expect(logMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "info",
+      "[tool-limit-reminder] init",
+    )
+  })
+
   // Zero — missing sessionID logs warn and returns without any other side effects
   it("logs warning when sessionID is absent in input", async () => {
     const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin
@@ -328,5 +340,80 @@ describe("toolLimitReminder plugin", () => {
 
     // No steering message yet
     expect(sendMessageMock).not.toHaveBeenCalled()
+  })
+
+  // Cache — agent list fetched only once across multiple tool.execute.before calls
+  it("calls app.agents() only once across multiple tool.execute.before invocations", async () => {
+    const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin
+
+    await plugin["tool.execute.before"]({ sessionID: "cache-1" })
+    await plugin["tool.execute.before"]({ sessionID: "cache-2" })
+    await plugin["tool.execute.before"]({ sessionID: "cache-3" })
+
+    // "fetched agent list" log should appear exactly once (from first call; subsequent calls hit cache)
+    const fetchLogCalls = logMock.mock.calls.filter(
+      (c) => c[1] === "info" && typeof c[2] === "string" && c[2].includes("fetched agent list"),
+    )
+    expect(fetchLogCalls.length).toBe(1)
+  })
+
+  // Fetched agent list — exact log prefix and mapped object shape
+  it("logs fetched agent list with exact prefix and correct mapped agent shape", async () => {
+    const testAgentName = "shape-agent"
+    const testMaxSteps = 12
+    const mockClient = defaultCreateClient(
+      testAgentName,
+      undefined,
+      [{ name: testAgentName, steps: testMaxSteps }],
+    ) as unknown as PluginInput
+
+    const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
+    await plugin["tool.execute.before"]({ sessionID: "sess-shape" })
+
+    // Verify the exact log prefix (mutants: StringLiteral → "")
+    expect(logMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "info",
+      expect.stringContaining("[tool-limit-reminder] fetched agent list: "),
+    )
+    // Verify mapped object includes correct name and maxSteps keys (mutants: ArrowFunction → undefined, ObjectLiteral → {})
+    expect(logMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "info",
+      expect.stringContaining('"name":"shape-agent"'),
+    )
+    expect(logMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "info",
+      expect.stringContaining('"maxSteps":12'),
+    )
+  })
+
+  // Optional chaining — missing data property on agents() response does not throw
+  it("handles missing data property from agents() response without throwing", async () => {
+    const agentsMock = vi.fn().mockResolvedValue({}) // no .data property
+    const sessionGetMock = vi.fn().mockResolvedValue({ data: { agent: "rug-swe" } })
+
+    const customClient = {
+      client: {
+        session: { get: sessionGetMock },
+        app: { agents: agentsMock },
+      },
+      "$": vi.fn(),
+      directory: "/workspace",
+    } as unknown as PluginInput
+
+    const plugin = (await toolLimitReminder(customClient)) as ToolLimitReminderPlugin
+
+    await expect(
+      plugin["tool.execute.before"]({ sessionID: "no-data-sess" }),
+    ).resolves.toBeUndefined()
+
+    // Empty agent list means all agents are "not listed" → unlimited → skip
+    expect(logMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "info",
+      expect.stringContaining("not listed in TOOL_LIMITS"),
+    )
   })
 })

@@ -34,6 +34,12 @@ const mkPlugin = async (): Promise<SessionTrackerPlugin> => {
   return result as unknown as SessionTrackerPlugin
 }
 
+const getUpdaterFunction = (
+  calls: unknown[],
+  index: number,
+): ((state: Record<string, unknown>) => Record<string, unknown>) =>
+  (calls[index] as [string, (state: Record<string, unknown>) => Record<string, unknown>])[1]
+
 function getPluginContext() {
   return pluginContextBuilder({
     clientFactory: () => opencodeClientFactory({ agentName: "build" }) as never,
@@ -50,9 +56,10 @@ beforeEach(() => {
 describe("sessionTracker", () => {
   describe("initialization", () => {
     it("logs initialized message on plugin creation and returns valid hooks", async () => {
+      vi.mocked(log).mockClear()
       await sessionTracker(getPluginContext() as never)
       expect(log).toHaveBeenCalledWith(
-        expect.any(Object), "info", expect.stringContaining("harness-plugin initialized"),
+        expect.any(Object), "info", "harness-plugin initialized",
       )
 
       const plugin = await mkPlugin()
@@ -391,6 +398,159 @@ describe("sessionTracker", () => {
       expect(log).toHaveBeenCalledWith(
         expect.any(Object), "info", expect.stringContaining("harness-plugin disposed"),
       )
+    })
+  })
+
+  // ── Updater function verification ─────────────────────────────
+
+  describe("updater function verification", () => {
+    describe("markSessionAsStarted (via chat.message[0])", () => {
+      beforeEach(async () => {
+        const plugin = await mkPlugin() as SessionTrackerPlugin
+        await (plugin as any)["chat.message"]({ sessionID: "ses_test", agent: "build" })
+      })
+
+      it("sets startedAt and agent when session has no prior state", () => {
+        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 0)
+        expect(updater({})).toMatchObject({ startedAt: expect.any(String), agent: "build" })
+      })
+
+      it("preserves existing session fields when adding startedAt", () => {
+        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 0)
+        const result = updater({ customField: "value", count: 42 })
+        expect(result).toMatchObject({ customField: "value", count: 42, startedAt: expect.any(String), agent: "build" })
+      })
+
+      it("returns session unchanged (same reference) when startedAt already exists", () => {
+        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 0)
+        const existing = { startedAt: "2024-01-01T00:00:00Z", agent: "old-agent", other: "data" }
+        expect(updater(existing)).toBe(existing)
+      })
+    })
+
+    describe("recordLastMessageSent (via chat.message[1])", () => {
+      beforeEach(async () => {
+        const plugin = await mkPlugin() as SessionTrackerPlugin
+        await (plugin as any)["chat.message"]({ sessionID: "ses_test", agent: "build" })
+      })
+
+      it("sets lastMessageSentAt on session", () => {
+        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 1)
+        const result = updater({})
+        expect(result).toMatchObject({ lastMessageSentAt: expect.any(String) })
+      })
+
+      it("preserves existing fields when setting lastMessageSentAt", () => {
+        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 1)
+        const result = updater({ existingField: 123, startedAt: "2024-01-01T00:00:00Z" })
+        expect(result).toMatchObject({ existingField: 123, startedAt: "2024-01-01T00:00:00Z", lastMessageSentAt: expect.any(String) })
+      })
+    })
+
+    describe("markToolAsCalled (via tool.execute.before)", () => {
+      beforeEach(async () => {
+        const plugin = await mkPlugin() as SessionTrackerPlugin
+        await (plugin as any)["tool.execute.before"]({ sessionID: "ses_tool", tool: "read" })
+      })
+
+      it("records tool call when no prior toolCalls exist", () => {
+        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 0)
+        const result = updater({})
+        expect(result).toMatchObject({ toolCalls: { read: expect.any(String) } })
+      })
+
+      it("accumulates tool calls preserving prior tool entries", () => {
+        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 0)
+        const result = updater({ toolCalls: { write: "2024-01-01T00:00:00Z" } })
+        expect(result.toolCalls).toMatchObject({ write: "2024-01-01T00:00:00Z", read: expect.any(String) })
+      })
+
+      it("preserves existing session fields when recording tool call", () => {
+        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 0)
+        const result = updater({ otherField: "value", count: 42 })
+        expect(result).toMatchObject({ otherField: "value", count: 42, toolCalls: expect.any(Object) })
+      })
+    })
+
+    describe("recordLastSessionIdle (via session.idle)", () => {
+      beforeEach(async () => {
+        const plugin = await mkPlugin() as SessionTrackerPlugin
+        await plugin["event"]?.({ event: { type: "session.idle" as const, properties: { sessionID: "ses_idle" } } })
+      })
+
+      it("sets idleAt on session", () => {
+        const result = getUpdaterFunction(_mockUpdateState.mock.calls, 0)({})
+        expect(result).toMatchObject({ idleAt: expect.any(String) })
+      })
+
+      it("preserves existing fields when setting idleAt", () => {
+        const result = getUpdaterFunction(_mockUpdateState.mock.calls, 0)({ existingField: "value", startedAt: "2024-01-01T00:00:00Z" })
+        expect(result).toMatchObject({ existingField: "value", startedAt: "2024-01-01T00:00:00Z", idleAt: expect.any(String) })
+      })
+    })
+
+    describe("recordMessageCancelled (via session.error)", () => {
+      beforeEach(async () => {
+        const plugin = await mkPlugin() as SessionTrackerPlugin
+        await plugin["event"]?.({
+          event: { type: "session.error" as const, properties: { sessionID: "ses_cancel", error: { name: "MessageAbortedError" } } },
+        })
+      })
+
+      it("sets cancelledAt on session", () => {
+        const result = getUpdaterFunction(_mockUpdateState.mock.calls, 0)({})
+        expect(result).toMatchObject({ cancelledAt: expect.any(String) })
+      })
+
+      it("preserves existing fields when setting cancelledAt", () => {
+        const result = getUpdaterFunction(_mockUpdateState.mock.calls, 0)({ existingField: "value", startedAt: "2024-01-01T00:00:00Z" })
+        expect(result).toMatchObject({ existingField: "value", startedAt: "2024-01-01T00:00:00Z", cancelledAt: expect.any(String) })
+      })
+    })
+  })
+
+  // ── Event handler conditional edge cases ──────────────────────
+
+  describe("event handler conditional edge cases", () => {
+    it("does not trigger cancelled for non-session.error event when sessionID is present", async () => {
+      const plugin = await mkPlugin() as SessionTrackerPlugin
+      await plugin["event"]?.({
+        event: { type: "some.other.event" as never, properties: { sessionID: "ses_other" } },
+      })
+      expect(_mockUpdateState).not.toHaveBeenCalled()
+    })
+
+    it("does not trigger cancelled for non-session.error event with sessionID and matching error name", async () => {
+      const plugin = await mkPlugin() as SessionTrackerPlugin
+      await plugin["event"]?.({
+        event: { type: "some.other.event" as never, properties: { sessionID: "ses_match", error: { name: "MessageAbortedError" } } },
+      })
+      expect(_mockUpdateState).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── Plugin ID verification ────────────────────────────────────
+
+  describe("plugin ID verification", () => {
+    it("logs the exact plugin ID in initialization message", async () => {
+      vi.mocked(log).mockReset()
+      await sessionTracker(getPluginContext() as never)
+      expect(log).toHaveBeenCalledTimes(1)
+      const lastCall = vi.mocked(log).mock.calls[0]
+      const initMessage = lastCall[2] as string
+      expect(initMessage).toBe("harness-plugin initialized")
+      expect(initMessage).not.toMatch(/^\s/)
+    })
+
+    it("logs the exact plugin ID in dispose message", async () => {
+      const plugin = await mkPlugin()
+      vi.mocked(log).mockReset()
+      await plugin.dispose?.()
+      expect(log).toHaveBeenCalledTimes(1)
+      const lastCall = vi.mocked(log).mock.calls[0]
+      const disposeMessage = lastCall[2] as string
+      expect(disposeMessage).toBe("harness-plugin disposed")
+      expect(disposeMessage).not.toMatch(/^\s/)
     })
   })
 })

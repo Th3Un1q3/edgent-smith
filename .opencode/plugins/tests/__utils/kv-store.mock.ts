@@ -52,6 +52,7 @@ export function makeKvStoreMockFactory(): {
         lastMessageSentAt: "lastMessageSentAt",
         idleAt: "idleAt",
         toolCalls: "toolCalls",
+        agent: "agent",
         needsReview: "needsReview",
     }
 

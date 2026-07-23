@@ -13,13 +13,19 @@ function makeMockClient() {
 
 const mockClient = makeMockClient()
 
+function mockBunFile(config: unknown) {
+  vi.spyOn(Bun, 'file').mockReturnValue({
+    json: vi.fn().mockResolvedValue(config),
+  } as unknown as ReturnType<typeof Bun.file>)
+}
+
 describe('gate-config loader', () => {
   it('missing config file returns empty gates', async () => {
     const result = await loadQualityGates('/nonexistent/project', mockClient)
 
     expect(result.gates).toEqual([])
     expect(result.debounceMs).toBe(300)
-    expect(log).toHaveBeenCalledWith(mockClient, "warn", expect.any(String))
+    expect(log).toHaveBeenCalledWith(mockClient, "warn", "No quality-gates config found at /nonexistent/project/.opencode/quality-gates.json")
   })
 
   it('valid config file returns parsed config', async () => {
@@ -67,7 +73,7 @@ describe('gate-config loader', () => {
 
     expect(result.gates).toEqual([])
     expect(result.debounceMs).toBe(300)
-    expect(log).toHaveBeenCalledWith(mockClient, "warn", expect.any(String))
+    expect(log).toHaveBeenCalledWith(mockClient, "warn", "No quality-gates config found at /tmp/gate-config-invalid-json/.opencode/quality-gates.json")
   })
 
   it('missing required fields returns empty gates', async () => {
@@ -84,6 +90,110 @@ describe('gate-config loader', () => {
 
     expect(result.gates).toEqual([])
     expect(result.debounceMs).toBe(300)
-    expect(log).toHaveBeenCalledWith(mockClient, "warn", expect.any(String))
+    expect(log).toHaveBeenCalledWith(mockClient, "warn", "Invalid quality-gates config at /tmp/gate-config-missing-fields/.opencode/quality-gates.json")
+  })
+
+  // --- Edge case tests to kill Stryker mutants ---
+
+  it('gate with empty string name is invalid', async () => {
+    mockBunFile({
+      gates: [{ name: '', patterns: ['**/*.ts'], commands: ['just lint'] }],
+    })
+
+    const result = await loadQualityGates('/tmp/test', mockClient)
+
+    expect(result.gates).toEqual([])
+    expect(result.debounceMs).toBe(300)
+  })
+
+  it('gate with non-string name (array) is invalid', async () => {
+    mockBunFile({
+      gates: [{ name: ['not-a-string'], patterns: ['**/*.ts'], commands: ['just lint'] }],
+    })
+
+    const result = await loadQualityGates('/tmp/test', mockClient)
+
+    expect(result.gates).toEqual([])
+    expect(result.debounceMs).toBe(300)
+  })
+
+  it('gate with non-array patterns rejects config', async () => {
+    mockBunFile({
+      gates: [{ name: 'lint', patterns: 'not-an-array', commands: ['just lint'] }],
+    })
+
+    const result = await loadQualityGates('/tmp/test', mockClient)
+
+    expect(result.gates).toEqual([])
+    expect(result.debounceMs).toBe(300)
+    expect(log).toHaveBeenCalledWith(mockClient, "warn", "Invalid quality-gates config at /tmp/test/.opencode/quality-gates.json")
+  })
+
+  it('gate with non-string element in patterns is invalid', async () => {
+    mockBunFile({
+      gates: [{ name: 'lint', patterns: ['**/*.ts', 42], commands: ['just lint'] }],
+    })
+
+    const result = await loadQualityGates('/tmp/test', mockClient)
+
+    expect(result.gates).toEqual([])
+    expect(result.debounceMs).toBe(300)
+  })
+
+  it('gate with empty patterns array is invalid', async () => {
+    mockBunFile({
+      gates: [{ name: 'lint', patterns: [], commands: ['just lint'] }],
+    })
+
+    const result = await loadQualityGates('/tmp/test', mockClient)
+
+    expect(result.gates).toEqual([])
+    expect(result.debounceMs).toBe(300)
+  })
+
+  it('gate with empty commands array is invalid', async () => {
+    mockBunFile({
+      gates: [{ name: 'lint', patterns: ['**/*.ts'], commands: [] }],
+    })
+
+    const result = await loadQualityGates('/tmp/test', mockClient)
+
+    expect(result.gates).toEqual([])
+    expect(result.debounceMs).toBe(300)
+  })
+
+  it('null gate in gates array is invalid', async () => {
+    // eslint-disable-next-line unicorn/no-null
+    mockBunFile({ gates: [null] })
+
+    const result = await loadQualityGates('/tmp/test', mockClient)
+
+    expect(result.gates).toEqual([])
+    expect(result.debounceMs).toBe(300)
+    expect(log).toHaveBeenCalledWith(mockClient, "warn", "Invalid quality-gates config at /tmp/test/.opencode/quality-gates.json")
+  })
+
+  it('undefined gate in gates array is invalid', async () => {
+    mockBunFile({ gates: [undefined] })
+
+    const result = await loadQualityGates('/tmp/test', mockClient)
+
+    expect(result.gates).toEqual([])
+    expect(result.debounceMs).toBe(300)
+    expect(log).toHaveBeenCalledWith(mockClient, "warn", "Invalid quality-gates config at /tmp/test/.opencode/quality-gates.json")
+  })
+
+  it('mixed valid and invalid gates rejects entire config', async () => {
+    mockBunFile({
+      gates: [
+        { name: 'lint', patterns: ['**/*.ts'], commands: ['just lint'] },
+        { name: '', patterns: ['**/*.ts'], commands: ['just lint'] },
+      ],
+    })
+
+    const result = await loadQualityGates('/tmp/test', mockClient)
+
+    expect(result.gates).toEqual([])
+    expect(result.debounceMs).toBe(300)
   })
 })

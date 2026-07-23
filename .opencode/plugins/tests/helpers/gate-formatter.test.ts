@@ -66,6 +66,7 @@ describe('formatGateBatchResults', () => {
     const result = formatGateBatchResults(outcomes)
 
     expect(result).toContain('info')
+    expect(result).toContain('result="pass"')
     expect(result).toContain('lint')
     expect(result).toContain('typecheck')
   })
@@ -78,6 +79,7 @@ describe('formatGateBatchResults', () => {
     const result = formatGateBatchResults(outcomes)
 
     expect(result).toContain('warning')
+    expect(result).toContain('result="fail"')
   })
 
   it('includes gate name and command in each result', () => {
@@ -132,9 +134,54 @@ describe('formatGateBatchResults', () => {
     expect(typeof result).toBe('string')
   })
 
-  it('empty outcomes returns empty string or neutral message', () => {
+  it('empty outcomes returns exactly empty string', () => {
     const result = formatGateBatchResults([])
 
-    expect(typeof result).toBe('string')
+    expect(result).toBe('')
+  })
+
+  it('uses checkmark for passing gate and cross for failing gate', () => {
+    const outcomes: GateRunOutcome[] = [
+      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
+      { gate: typeGate, previousStatus: 'unknown', newStatus: 'fail', result: { exitCode: 1, stdout: '', stderr: '' } },
+    ]
+    const result = formatGateBatchResults(outcomes)
+
+    expect(result).toContain(`✓ ${lintGate.name}`)
+    expect(result).toContain(`✗ ${typeGate.name}`)
+  })
+
+  it('does not append output section for passing gate even when stdout exists', () => {
+    const outcomes: GateRunOutcome[] = [
+      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: 'some output', stderr: '' } },
+    ]
+    const result = formatGateBatchResults(outcomes)
+
+    expect(result).not.toMatch(/some output/)
+  })
+
+  it('does not append output section for failing gate with no stdout or stderr', () => {
+    const outcomes: GateRunOutcome[] = [
+      { gate: lintGate, previousStatus: 'unknown', newStatus: 'fail', result: { exitCode: 1, stdout: '', stderr: '' } },
+    ]
+    const result = formatGateBatchResults(outcomes)
+
+    expect(result).toContain(`✗ ${lintGate.name}`)
+    // The output section ":\\n<output>" must not be appended when both stdout and stderr are empty
+    expect(result).not.toContain(`(exit 1):\n`)
+  })
+
+  it('separates multiple gate results with newlines', () => {
+    const outcomes: GateRunOutcome[] = [
+      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
+      { gate: typeGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
+    ]
+    const result = formatGateBatchResults(outcomes)
+
+    const lines = result.split('\n')
+    expect(lines.length).toBeGreaterThanOrEqual(3) // at least: tag open + summary + one gate line
+    expect(lines[1]).toMatch(/passed, 0 failed/)
+    expect(lines[2]).toContain(`✓ ${lintGate.name}`)
+    expect(lines[3]).toContain(`✓ ${typeGate.name}`)
   })
 })

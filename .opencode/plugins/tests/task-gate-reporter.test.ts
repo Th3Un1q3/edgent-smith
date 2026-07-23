@@ -158,7 +158,20 @@ describe("task-gate-reporter", () => {
         expect(output.output).not.toContain("FAILING QUALITY GATES")
     })
 
-    // ── Test 8: Appends failing gates message to empty output
+    // ── Test 8: Returns early when readState results in undefined
+
+    it("returns early when readState results in undefined", async () => {
+        mockReadState.mockReturnValue(undefined)
+
+        const output = makeOutput()
+
+        await hook(makeInput({ callID: "call_8" }), output)
+
+        expect(mockReadState).toHaveBeenCalledWith("ses_child_1", expect.any(Function))
+        expect(output.output).toBe("Task completed successfully.")
+    })
+
+    // ── Test 9: Appends failing gates message to empty output
 
     it("appends failing gates message to empty output", async () => {
         SessionStorage.reset({
@@ -171,9 +184,31 @@ describe("task-gate-reporter", () => {
 
         const output = makeOutput({ output: "" })
 
-        await hook(makeInput({ callID: "call_8" }), output)
+        await hook(makeInput({ callID: "call_9" }), output)
 
         expect(mockReadState).toHaveBeenCalledWith("ses_child_1", expect.any(Function))
         expect(output.output).toBe("\n\n⚠️ FAILING QUALITY GATES: lint")
+    })
+
+    // ── Test 10: Appends multiple failing gates with comma separator
+
+    it("appends multiple failing gates with comma separator", async () => {
+        SessionStorage.reset({
+            ses_child_1: {
+                qualityGateStatuses: {
+                    lint: { dirty: false, status: "fail" },
+                    typecheck: { dirty: false, status: "fail" },
+                    format: { dirty: false, status: "pass" },
+                },
+            },
+        })
+
+        const output = makeOutput()
+
+        await hook(makeInput({ callID: "call_10" }), output)
+
+        expect(output.output).toMatch(/^Task completed successfully\./)
+        expect(output.output).toContain("FAILING QUALITY GATES: lint, typecheck")
+        expect(output.output).not.toContain("format")
     })
 })

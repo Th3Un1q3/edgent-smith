@@ -38,10 +38,18 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
 
             // GUARD 2: Only act when skills is a non-empty array
             const skills = output.args?.skills
-            if (!skills || !Array.isArray(skills) || skills.length === 0) {
-                if (Array.isArray(skills) && skills.length === 0 && output.args) {
-                    delete output.args.skills
-                }
+
+            // GUARD 2a: skills must exist
+            if (!skills) return
+
+            // GUARD 2b: skills must be an array
+            if (!Array.isArray(skills)) return
+
+            // GUARD 2c: skills must be non-empty — output.args is guaranteed to exist
+            // because skills came from output.args?.skills.
+            if (skills.length === 0) {
+                await log(client, "debug", "skills array is empty — nothing to load")
+                delete (output.args as Record<string, unknown>).skills
                 return
             }
 
