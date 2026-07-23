@@ -10,7 +10,7 @@ export interface ClientMock {
   worktree: string
   experimental_workspace: { register: ReturnType<typeof vi.fn> }
   serverUrl: URL
-  app: { agents(): Promise<{ data: Array<{ name: string; steps?: number }> }> }
+  app: { log?: ReturnType<typeof vi.fn>; agents(): Promise<{ data: Array<{ name: string; steps?: number }> }> }
   $: ReturnType<typeof vi.fn>
 }
 

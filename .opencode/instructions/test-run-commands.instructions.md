@@ -4,7 +4,9 @@ applyTo: ".opencode/**/*.{ts,js,json}"
 appliesToAgents: rug-* # applies to entire agentic team
 ---
 
-# Ensure function and correctness of Opencode plugins
+# Manual run of quality gates
+
+> By default the quality gates trigger automatically on relevant files changes, and report the results in the chat. However, you can also run the quality gates manually to check the status of your plugin.
 
 Always ensure the following when developing Opencode plugins:
 

@@ -92,7 +92,7 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
             const formattedBlocks = instructionsWithFlag.map(inst => {
                 if (inst.isReference) {
                     const meta = inst.content
-                        ? ` lines="${inst.content.split('\n').length}" bytes="${new TextEncoder().encode(inst.content).length}"`
+                        ? ` lines="${inst.content.split('\n').length}" chars="${inst.content.length}"`
                         : ''
                     return [
                         `<instruction>`,

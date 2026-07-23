@@ -24,7 +24,7 @@
         ".opencode/plugins/**/*.ts"
       ],
       "commands": [
-        "cd /workspace/.opencode && just test"
+        "cd /workspace/.opencode && just test --coverage --coverage.thresholds.branches 85 --coverage.thresholds.functions 85 --coverage.thresholds.lines 85 --coverage.thresholds.statements 85"
       ]
     },
     {
