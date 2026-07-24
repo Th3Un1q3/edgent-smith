@@ -1,3 +1,7 @@
+# Install dependencies for CI
+deps:
+    bun install
+
 # Run tests for opencode plugins using Bun and Vitest. This command is intended to be run from the root of the opencode repository.
 
 # --coverage.provider istanbul forces Istanbul on Bun (Bun lacks V8 Profiler API that Vitest v4's default v8 provider requires).

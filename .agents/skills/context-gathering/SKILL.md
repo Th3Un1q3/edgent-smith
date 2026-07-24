@@ -11,6 +11,10 @@ compatibility: Universal
 metadata:
   version: "1.1.0"
   author: Th3Un1qu3
+  tools:
+    - gateway_mcp-find
+    - gateway_code-mode
+    - gateway_mcp-exec
 ---
 
 # Context Gathering
@@ -19,6 +23,8 @@ Before writing code, fixing a bug, or answering a question, gather the
 relevant context. This skill shows how to research external sources, explore
 local codebases, and combine findings into actionable information — using MCP
 gateway servers through the code-mode scripting environment.
+
+Replaces need for webfetch, curl and other tools.
 
 The code-mode is provided by the Docker MCP gateway. All tools prefixed with
 "gateway_" are hosted by the Docker MCP gateway.
@@ -68,6 +74,8 @@ return {
 ## Common Issues
 
 - **Using async functions**: All tool calls must be synchronous.
+- **Using curl or webfetch**: Terminal tools are less effective than code-mode tools, and often fail to fetch or parse results. Use
+  code-mode tools instead. MCP tools are already authenticated.
 
 ## Task Routing Table
 
