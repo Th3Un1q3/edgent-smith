@@ -7,7 +7,7 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   author: edgent-smith team
 ---
 
@@ -25,6 +25,7 @@ Analyse exported OpenCode session JSON files: skills loaded, instructions shown,
 ## Principles
 
 - NEVER read entire session files (they're gigantic), use schema-based lookups to extract only the fields you need.
+- Use the `session-analysis` command (`/session-analysis {sessionid}`) to automate the full audit + improvement pipeline.
 
 ## Task Routing Table
 
@@ -32,4 +33,6 @@ Analyse exported OpenCode session JSON files: skills loaded, instructions shown,
 |---|---|
 | Perform session audit | [workflows/session-audit.md](./workflows/session-audit.md) |
 | Use session schema to lookup session fields (such as messages, reasoning, tool calls) | [references/schema.md](./references/schema.md) |
-| Figure out types of improvements that can be made | [references/agentic_system.md](./references/agentic-system.md) |
+| Figure out types of improvements that can be made | [references/agentic-system.md](./references/agentic-system.md) |
+| Create a session review document | [templates/review-document.md](./templates/review-document.md) |
+| Produce improvement recommendations | [references/agentic-system.md](./references/agentic-system.md) |

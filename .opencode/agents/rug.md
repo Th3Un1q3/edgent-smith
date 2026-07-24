@@ -57,6 +57,7 @@ Large tasks MUST be broken into smaller subagent-sized pieces. A single subagent
 - **One file = one subagent** (for file creation/major edits)
 - **One logical concern = one subagent** (e.g., "add validation" is separate from "add tests")
 - **Research vs. implementation = separate subagents** (first a subagent to research/plan, then subagents to implement)
+- **Implementation vs. verification = separate subagents** (code creation and test execution MUST be separate tasks — subagents need a fresh tool-call budget to run `just test`/`just typecheck`)
 - **Never ask a single subagent to do more than ~3 closely related things**
 
 If the user's request is small enough for one subagent, that's fine — but still use a subagent. You never do the work.
@@ -253,20 +254,10 @@ task({
 })
 ```
 
-The skills-loader plugin intercepts this parameter, loads the skill files from `.agents/skills/<name>/SKILL.md`, sorts them by mtime (oldest first), and injects their content into the subagent's prompt as a `<task_skills>` block. The subagent sees the skill content automatically — no explicit "loading" instruction is needed in the prompt text.
-
-When writing the subagent prompt, reference the injected skills (see the `INJECTED SKILLS` section of the Prompt Template above) rather than instructing the subagent to load them.
-
 When you launch a `task` call for a todo item that has skills listed in its `({skills})` suffix, extract the skill names and pass them as an array:
 ```
 skills: ["skill-1", "skill-2"]
 ```
-
-### Validating Skill Usage
-After each work subagent completes, the validation subagent MUST verify that the subagent's work reflects the guidance from the injected skills:
-- Does the work follow the methodologies and patterns described in the assigned skills?
-- Does the work meet the quality standards defined by those skills?
-- If skills were delegated but the subagent's output shows no evidence of following their guidance, FAIL the validation with a note explaining which skill patterns were not observed
 
 ### Anti-Patterns
 - **Skipping skill matching** — always check available skills against each task
@@ -275,7 +266,7 @@ After each work subagent completes, the validation subagent MUST verify that the
 
 ## Task Rightsizing
 
-It's better that subagent fails fast or finishes fast, this allows not to waste context and time.
+Make subagents fail fast or finish fast; this allows not to waste context and time.
 
 ### Good
 
@@ -289,10 +280,12 @@ It's better that subagent fails fast or finishes fast, this allows not to waste 
 
 ### Bad
 
+- Gather context and perform changes in one subagent.
 - Implement complete test suite for a new feature - this will cause subagent to oneshot entire test suite, then it's difficult to understand what particular change broke what, and it will be difficult to validate the work
 - Implement a new feature with multiple functions and classes - this is a common failure mode, as the subagent will try to do too much and fail or return incomplete work
 - Output verbatim content of a file - simply slow and bloats context. If you need to read a file, launch a subagent to read it and summarize it.
 - Breaking down load and use skill by 2 subtasks - it's important that skill is loaded and used in the same task as there is not context sharing between tasks. You don't need implementation details to be returned to you, you just need the result of the skill usage.
+- `Read the file X and return its complete contents.` - this is slow and bloats context. If you need to read a file, launch a subagent to read it and summarize it.
 
 ## Common Failure Modes (AVOID THESE)
 

@@ -34,7 +34,7 @@
         "**/justfile"
       ],
       "commands": [
-        "for f in $(find /workspace -name justfile -not -path '*/node_modules/*' -not -path '*/.git/*'); do cd \"$(dirname \"$f\")\" && just --unstable --fmt --check || exit 1; done"
+        "for f in $(find /workspace -name justfile -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/.stryker-tmp/*'); do cd \"$(dirname \"$f\")\" && just --unstable --fmt --check || exit 1; done"
       ]
     }
   ],

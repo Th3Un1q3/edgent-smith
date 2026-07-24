@@ -6,6 +6,7 @@ description: >
   explore codebases to find files, symbols, and references; and investigate GitHub
   repositories. Uses MCP gateway servers (Tavily, DeepWiki, Context7) via code-mode
   scripting to fetch, parse, and combine results.
+  Trigger on: explore directory, inventory files, catalog, read all files, list and summarize, systematically read, bulk explore, directory exploration, file inventory, catalog skills, bulk read, enumerate files.
 license: MIT
 compatibility: Universal
 metadata:
@@ -48,7 +49,7 @@ const tavilySearch = globalThis["tavily-search"]; // Tavily search was identifie
 try {
   const searchResults = tavilySearch({ query: "How to configure Pydantic AI to work with ollama models" }); // Parameters schema was displayed at step 2. Always returns string(sometimes JSON stringified) so you can parse and manipulate as needed. But handle possible parsing errors when you expect JSON responses.
 } catch (error) {
-  // Prefer to display errors, and fallback if possible, rather than letting the script crash without explanation.
+  // Prefer to display errors, and fallback if possible, rather than letting the whole script crash without explanation.
   return "ERROR from Tavily search: " + error.message;
 }
 

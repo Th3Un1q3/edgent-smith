@@ -26,3 +26,75 @@ list-agent-cards:
 export-opencode-session session_id:
     mkdir -p /workspace/.tmp/session-review/{{ session_id }} && \
     opencode export {{ session_id }} > "/workspace/.tmp/session-review/{{ session_id }}/session.json"
+
+# ---------------------------------------------------------------------------
+# Session Review (session-analysis command support)
+# ---------------------------------------------------------------------------
+# Start or resume a session review.
+# If session_id is provided, use it. Otherwise find the first unreviewed session.
+# Outputs machine-parseable status lines for the command to consume.
+
+# Usage: just agent_utils/review-start [session_id]
+review-start session_id="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd /workspace
+    REVIEW_DIR="{{ session_id }}"
+    # If no session_id provided, find first unreviewed session
+    if [ -z "$REVIEW_DIR" ]; then
+        REVIEW_DIR=$(find .tmp/session-review -mindepth 1 -maxdepth 1 -type d ! -exec test -f {}/review.md \; -print -quit 2>/dev/null | xargs -r basename)
+    fi
+    if [ -z "$REVIEW_DIR" ]; then
+        echo "STATUS=no_sessions"
+        echo "MESSAGE=No sessions pending review in .tmp/session-review/"
+        exit 0
+    fi
+    SESSION_DIR=".tmp/session-review/$REVIEW_DIR"
+    # Validate session.json exists
+    if [ ! -f "$SESSION_DIR/session.json" ]; then
+        echo "STATUS=error"
+        echo "MESSAGE=session.json not found in $SESSION_DIR"
+        echo "SESSION_DIR=$SESSION_DIR"
+        exit 1
+    fi
+    # Check if review already started
+    REVIEW_MD="$SESSION_DIR/review.md"
+    TEMPLATE=".agents/skills/session-insights/templates/review-document.md"
+    if [ -f "$REVIEW_MD" ]; then
+        echo "STATUS=resumed"
+        echo "MESSAGE=Review already in progress"
+        echo "SESSION_ID=$REVIEW_DIR"
+        echo "SESSION_JSON=$SESSION_DIR/session.json"
+        echo "REVIEW_MD=$REVIEW_MD"
+    else
+        # New review: copy template
+        if [ ! -f "$TEMPLATE" ]; then
+            echo "STATUS=error"
+            echo "MESSAGE=Review template not found: $TEMPLATE"
+            echo "SESSION_ID=$REVIEW_DIR"
+            exit 1
+        fi
+        cp "$TEMPLATE" "$REVIEW_MD"
+        # Fill frontmatter with initial values
+        NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        sed -i "s|session_id: \"\"|session_id: \"$REVIEW_DIR\"|" "$REVIEW_MD"
+        sed -i "s|date_reviewed: \"\"|date_reviewed: \"$NOW\"|" "$REVIEW_MD"
+        sed -i 's|reviewer: ""|reviewer: "session-analysis command"|' "$REVIEW_MD"
+        # Extract and fill Section 1 identity fields
+        ID=$(jq -r '.info.id // "unknown"' "$SESSION_DIR/session.json")
+        AGENT=$(jq -r '.info.agent // "unknown"' "$SESSION_DIR/session.json")
+        MODEL=$(jq -r '.info.model.id // "unknown"' "$SESSION_DIR/session.json")
+        PROVIDER=$(jq -r '.info.model.providerID // "unknown"' "$SESSION_DIR/session.json")
+        CREATED=$(jq -r '.info.time.created // "unknown"' "$SESSION_DIR/session.json")
+        UPDATED=$(jq -r '.info.time.updated // "unknown"' "$SESSION_DIR/session.json")
+        sed -i "s|<!-- FILL: .info.id -->|$ID|" "$REVIEW_MD"
+        sed -i "s|<!-- FILL: .info.agent -->|$AGENT|" "$REVIEW_MD"
+        sed -i "s|<!-- FILL: .info.model.id (provider: .info.model.providerID) -->|$MODEL (provider: $PROVIDER)|" "$REVIEW_MD"
+        sed -i "s|<!-- FILL: .info.time.created -->|$CREATED|" "$REVIEW_MD"
+        sed -i "s|<!-- FILL: .info.time.updated -->|$UPDATED|" "$REVIEW_MD"
+        echo "STATUS=new"
+        echo "MESSAGE=New review started"
+        echo "SESSION_ID=$REVIEW_DIR"
+        echo "SESSION_JSON=$SESSION_DIR/session.json"
+        echo "REVIEW_MD=$REVIEW_MD"
+    fi

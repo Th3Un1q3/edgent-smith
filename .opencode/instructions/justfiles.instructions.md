@@ -527,3 +527,91 @@ change-working-dir:
 ```bash
 ~/app1/target$ just build
 ```
+
+## Command Support Recipes
+
+When writing justfile recipes that support OpenCode commands (called via `` `!`just ...` ``):
+
+### Working Directory
+
+Recipes run from the justfile's own directory, NOT the workspace root. You must choose one of:
+
+- `cd /workspace` at the top of the recipe before using workspace-relative paths (e.g., `.tmp/`, `.agents/`)
+- Absolute paths starting with `/workspace/` for every file reference
+
+```just
+my-recipe arg="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd /workspace  # REQUIRED for relative paths
+    # ... use ".tmp/", ".agents/", etc. safely now
+```
+
+### Placeholder Matching
+
+When using `sed` to fill template placeholders, the pattern must match the template exactly. Copy-paste placeholder strings from the actual template file. Test the recipe against the real template.
+
+Correct:
+
+```just
+# Template has: <!-- FILL: .info.agent -->
+sed -i "s|<!-- FILL: .info.agent -->|$AGENT|" "$REVIEW_MD"
+```
+
+Wrong:
+
+```just
+# Template has: <!-- FILL: .info.agent --> but recipe uses different string
+sed -i "s|<!-- FILL: agent -->|$AGENT|" "$REVIEW_MD"  # SILENTLY FAILS — no match
+```
+
+### Schema Verification
+
+`jq` field names must match the actual JSON schema, not assumed names. Verify against the schema reference file before writing `jq` queries. Common mistake: using `.provider` when schema has `.providerID`.
+
+Correct (verified against schema.md):
+
+```just
+PROVIDER=$(jq -r '.info.model.providerID // "unknown"' "$SESSION_DIR/session.json")
+```
+
+Wrong (assumed field name):
+
+```just
+PROVIDER=$(jq -r '.info.model.provider // "unknown"' "$SESSION_DIR/session.json")  # schema uses providerID
+```
+
+### Keep It Simple
+
+Prefer bash over Python for command support scripts. A 30-line bash recipe in the justfile is better than a 250-line Python script. Bash handles the trifecta well: file checks, `sed`/`cp`, and `jq` extraction. Do not create standalone Python scripts for tasks that bash and `jq` can handle.
+
+### Machine-Parseable Output
+
+Recipes called from commands must output KEY=VALUE lines for easy parsing. Include:
+
+- `STATUS` — values like `new`, `resumed`, `error`, `no_sessions`
+- `MESSAGE` — human-readable context
+- Paths like `SESSION_JSON`, `REVIEW_MD` for the command to consume
+
+```just
+echo "STATUS=new"
+echo "MESSAGE=New review started"
+echo "SESSION_ID=$REVIEW_DIR"
+echo "SESSION_JSON=$SESSION_DIR/session.json"
+echo "REVIEW_MD=$REVIEW_MD"
+```
+
+### State Management
+
+Recipes must check for existing state before acting (e.g., does `review.md` already exist?). Handle resume vs. new-start explicitly. Never assume a clean slate — the recipe may be called multiple times.
+
+## Common Mistakes
+
+| Mistake | Symptom | Fix |
+|---|---|---|
+| Missing `cd /workspace` | `find`, `cp`, `jq` fail silently | Add `cd /workspace` after `set -euo pipefail` |
+| Mismatched sed placeholders | sed runs but nothing changes in output file | Copy-paste placeholders from template; verify with grep |
+| Wrong jq field names | jq outputs `null` or empty strings | Check schema reference; test with a real data file |
+| Over-engineering with Python | 250-line Python script for what bash does in 30 lines | Use bash shebang recipes in justfile |
+| No status output | Command can't determine what happened | Always emit `STATUS=...` and relevant paths |
+| Not testing with real data | Works in theory, fails in practice | Run recipe against actual files from `.tmp/` or test fixtures |
