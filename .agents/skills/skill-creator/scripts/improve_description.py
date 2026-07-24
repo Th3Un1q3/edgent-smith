@@ -41,9 +41,7 @@ def _call_claude(prompt: str, model: str | None, timeout: int = 300) -> str:
         timeout=timeout,
     )
     if result.returncode != 0:
-        raise RuntimeError(
-            f"claude -p exited {result.returncode}\nstderr: {result.stderr}"
-        )
+        raise RuntimeError(f"claude -p exited {result.returncode}\nstderr: {result.stderr}")
     return result.stdout
 
 
@@ -59,13 +57,9 @@ def improve_description(
     iteration: int | None = None,
 ) -> str:
     """Call Claude to improve the description based on eval results."""
-    failed_triggers = [
-        r for r in eval_results["results"]
-        if r["should_trigger"] and not r["pass"]
-    ]
+    failed_triggers = [r for r in eval_results["results"] if r["should_trigger"] and not r["pass"]]
     false_triggers = [
-        r for r in eval_results["results"]
-        if not r["should_trigger"] and not r["pass"]
+        r for r in eval_results["results"] if not r["should_trigger"] and not r["pass"]
     ]
 
     # Build scores summary
@@ -76,18 +70,28 @@ def improve_description(
     else:
         scores_summary = f"Train: {train_score}"
 
-    prompt = f"""You are optimizing a skill description for a Claude Code skill called "{skill_name}". A "skill" is sort of like a prompt, but with progressive disclosure -- there's a title and description that Claude sees when deciding whether to use the skill, and then if it does use the skill, it reads the .md file which has lots more details and potentially links to other resources in the skill folder like helper files and scripts and additional documentation or examples.
-
-The description appears in Claude's "available_skills" list. When a user sends a query, Claude decides whether to invoke the skill based solely on the title and on this description. Your goal is to write a description that triggers for relevant queries, and doesn't trigger for irrelevant ones.
-
-Here's the current description:
-<current_description>
-"{current_description}"
-</current_description>
-
-Current scores ({scores_summary}):
-<scores_summary>
-"""
+    prompt = (
+        "You are optimizing a skill description for a Claude Code skill called "
+        f'"{skill_name}". A "skill" is sort of like a prompt, but with progressive '
+        "disclosure -- there's a title and description that Claude sees when deciding "
+        "whether to use the skill, and then if it does use the skill, it reads the .md "
+        "file which has lots more details and potentially links to other resources in "
+        "the skill folder like helper files and scripts and additional documentation "
+        "or examples.\n"
+        "\n"
+        'The description appears in Claude\'s "available_skills" list. When a user '
+        "sends a query, Claude decides whether to invoke the skill based solely on the "
+        "title and on this description. Your goal is to write a description that "
+        "triggers for relevant queries, and doesn't trigger for irrelevant ones.\n"
+        "\n"
+        "Here's the current description:\n"
+        "<current_description>\n"
+        f'"{current_description}"\n'
+        "</current_description>\n"
+        "\n"
+        f"Current scores ({scores_summary}):\n"
+        "<scores_summary>\n"
+    )
     if failed_triggers:
         prompt += "FAILED TO TRIGGER (should have triggered but didn't):\n"
         for r in failed_triggers:
@@ -101,45 +105,79 @@ Current scores ({scores_summary}):
         prompt += "\n"
 
     if history:
-        prompt += "PREVIOUS ATTEMPTS (do NOT repeat these — try something structurally different):\n\n"
+        prompt += (
+            "PREVIOUS ATTEMPTS (do NOT repeat these — try something structurally different):\n\n"
+        )
         for h in history:
-            train_s = f"{h.get('train_passed', h.get('passed', 0))}/{h.get('train_total', h.get('total', 0))}"
-            test_s = f"{h.get('test_passed', '?')}/{h.get('test_total', '?')}" if h.get('test_passed') is not None else None
+            train_s = (
+                f"{h.get('train_passed', h.get('passed', 0))}/"
+                f"{h.get('train_total', h.get('total', 0))}"
+            )
+            test_s = (
+                f"{h.get('test_passed', '?')}/{h.get('test_total', '?')}"
+                if h.get("test_passed") is not None
+                else None
+            )
             score_str = f"train={train_s}" + (f", test={test_s}" if test_s else "")
-            prompt += f'<attempt {score_str}>\n'
+            prompt += f"<attempt {score_str}>\n"
             prompt += f'Description: "{h["description"]}"\n'
             if "results" in h:
                 prompt += "Train results:\n"
                 for r in h["results"]:
                     status = "PASS" if r["pass"] else "FAIL"
-                    prompt += f'  [{status}] "{r["query"][:80]}" (triggered {r["triggers"]}/{r["runs"]})\n'
+                    prompt += (
+                        f'  [{status}] "{r["query"][:80]}" '
+                        f"(triggered {r['triggers']}/{r['runs']})\n"
+                    )
             if h.get("note"):
-                prompt += f'Note: {h["note"]}\n'
+                prompt += f"Note: {h['note']}\n"
             prompt += "</attempt>\n\n"
 
-    prompt += f"""</scores_summary>
-
-Skill content (for context on what the skill does):
-<skill_content>
-{skill_content}
-</skill_content>
-
-Based on the failures, write a new and improved description that is more likely to trigger correctly. When I say "based on the failures", it's a bit of a tricky line to walk because we don't want to overfit to the specific cases you're seeing. So what I DON'T want you to do is produce an ever-expanding list of specific queries that this skill should or shouldn't trigger for. Instead, try to generalize from the failures to broader categories of user intent and situations where this skill would be useful or not useful. The reason for this is twofold:
-
-1. Avoid overfitting
-2. The list might get loooong and it's injected into ALL queries and there might be a lot of skills, so we don't want to blow too much space on any given description.
-
-Concretely, your description should not be more than about 100-200 words, even if that comes at the cost of accuracy. There is a hard limit of 1024 characters — descriptions over that will be truncated, so stay comfortably under it.
-
-Here are some tips that we've found to work well in writing these descriptions:
-- The skill should be phrased in the imperative -- "Use this skill for" rather than "this skill does"
-- The skill description should focus on the user's intent, what they are trying to achieve, vs. the implementation details of how the skill works.
-- The description competes with other skills for Claude's attention — make it distinctive and immediately recognizable.
-- If you're getting lots of failures after repeated attempts, change things up. Try different sentence structures or wordings.
-
-I'd encourage you to be creative and mix up the style in different iterations since you'll have multiple opportunities to try different approaches and we'll just grab the highest-scoring one at the end. 
-
-Please respond with only the new description text in <new_description> tags, nothing else."""
+    prompt += (
+        "</scores_summary>\n"
+        "\n"
+        "Skill content (for context on what the skill does):\n"
+        "<skill_content>\n"
+        f"{skill_content}\n"
+        "</skill_content>\n"
+        "\n"
+        "Based on the failures, write a new and improved description that is more "
+        'likely to trigger correctly. When I say "based on the failures", it\'s a '
+        "bit of a tricky line to walk because we don't want to overfit to the "
+        "specific cases you're seeing. So what I DON'T want you to do is produce an "
+        "ever-expanding list of specific queries that this skill should or shouldn't "
+        "trigger for. Instead, try to generalize from the failures to broader "
+        "categories of user intent and situations where this skill would be useful "
+        "or not useful. The reason for this is twofold:\n"
+        "\n"
+        "1. Avoid overfitting\n"
+        "2. The list might get loooong and it's injected into ALL queries and there "
+        "might be a lot of skills, so we don't want to blow too much space on any "
+        "given description.\n"
+        "\n"
+        "Concretely, your description should not be more than about 100-200 words, "
+        "even if that comes at the cost of accuracy. There is a hard limit of 1024 "
+        "characters \u2014 descriptions over that will be truncated, so stay "
+        "comfortably under it.\n"
+        "\n"
+        "Here are some tips that we've found to work well in writing these "
+        "descriptions:\n"
+        '- The skill should be phrased in the imperative -- "Use this skill for" '
+        'rather than "this skill does"\n'
+        "- The skill description should focus on the user's intent, what they are "
+        "trying to achieve, vs. the implementation details of how the skill works.\n"
+        "- The description competes with other skills for Claude's attention "
+        "\u2014 make it distinctive and immediately recognizable.\n"
+        "- If you're getting lots of failures after repeated attempts, change "
+        "things up. Try different sentence structures or wordings.\n"
+        "\n"
+        "I'd encourage you to be creative and mix up the style in different "
+        "iterations since you'll have multiple opportunities to try different "
+        "approaches and we'll just grab the highest-scoring one at the end.\n"
+        "\n"
+        "Please respond with only the new description text in <new_description> "
+        "tags, nothing else."
+    )
 
     text = _call_claude(prompt, model)
 
@@ -192,8 +230,12 @@ Please respond with only the new description text in <new_description> tags, not
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Improve a skill description based on eval results")
-    parser.add_argument("--eval-results", required=True, help="Path to eval results JSON (from run_eval.py)")
+    parser = argparse.ArgumentParser(
+        description="Improve a skill description based on eval results"
+    )
+    parser.add_argument(
+        "--eval-results", required=True, help="Path to eval results JSON (from run_eval.py)"
+    )
     parser.add_argument("--skill-path", required=True, help="Path to skill directory")
     parser.add_argument("--history", default=None, help="Path to history JSON (previous attempts)")
     parser.add_argument("--model", required=True, help="Model for improvement")
@@ -215,7 +257,10 @@ def main():
 
     if args.verbose:
         print(f"Current: {current_description}", file=sys.stderr)
-        print(f"Score: {eval_results['summary']['passed']}/{eval_results['summary']['total']}", file=sys.stderr)
+        print(
+            f"Score: {eval_results['summary']['passed']}/{eval_results['summary']['total']}",
+            file=sys.stderr,
+        )
 
     new_description = improve_description(
         skill_name=name,
@@ -232,13 +277,16 @@ def main():
     # Output as JSON with both the new description and updated history
     output = {
         "description": new_description,
-        "history": history + [{
-            "description": current_description,
-            "passed": eval_results["summary"]["passed"],
-            "failed": eval_results["summary"]["failed"],
-            "total": eval_results["summary"]["total"],
-            "results": eval_results["results"],
-        }],
+        "history": history
+        + [
+            {
+                "description": current_description,
+                "passed": eval_results["summary"]["passed"],
+                "failed": eval_results["summary"]["failed"],
+                "total": eval_results["summary"]["total"],
+                "results": eval_results["results"],
+            }
+        ],
     }
     print(json.dumps(output, indent=2))
 

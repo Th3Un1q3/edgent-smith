@@ -109,6 +109,7 @@
         "external_directory": {
             "/tmp/*": "allow"
         },
+        "webfetch": "deny",
         "list_mcp_resources": "deny",
         "bash": {
             "*": "allow",

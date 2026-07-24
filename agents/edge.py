@@ -242,7 +242,7 @@ def _eval_ast(node: ast.expr) -> int | float:
     Raises:
         ValueError: When the node represents an unsupported expression type, a non-numeric
             constant, an unlisted operator, or when exponentiation magnitude exceeds the cap.
-"""
+    """
     if isinstance(node, ast.Constant):
         if not isinstance(node.value, (int, float)):
             raise ValueError("non-numeric constant")
@@ -273,7 +273,7 @@ def current_datetime() -> str:
     Returns:
         An ISO 8601 formatted string (e.g., ``"2026-06-29T14:30:00+00:00"``) representing the
         current moment in UTC. Includes timezone offset for unambiguous parsing downstream.
-"""
+    """
     return datetime.now(tz=UTC).isoformat()
 
 
@@ -292,7 +292,7 @@ def calculator(expression: str) -> str:
     Returns:
         The computed result as a string, or an error message prefixed with ``"Error:"`` if
         the expression is invalid, unsafe, or exceeds limits.
-"""
+    """
     if len(expression) > _MAX_EXPR_LEN:
         return f"Error: expression too long (max {_MAX_EXPR_LEN} characters)"
     try:
@@ -322,7 +322,7 @@ def web_search_stub(query: str) -> str:
     Returns:
         A descriptive string indicating that no external search backend is configured, along
         with the original query for traceability. Replace in production with actual search output.
-"""
+    """
     return (
         f"[web_search_stub] query='{query}' – "
         "no external search backend is configured in this deployment. "

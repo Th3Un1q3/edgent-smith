@@ -15,20 +15,26 @@ export default defineConfig({
       "@plugins": p('plugins'),
     },
   },
-  coverage: {
-    provider: 'istanbul',
-    include: ['plugins/**/*.ts'],
-    exclude: [
-      'plugins/tests/**/*',
-      '**/*.d.ts',
-      'node_modules/**/*',
-    ],
-  },
   test: {
     setupFiles: ['./plugins/tests/vitest-bun-polyfill.setup.ts'],
     mockReset: true,
     environment: 'node',
     globals: true,
     exclude: ['**/node_modules/**', '**/.stryker-tmp/**'],
+    coverage: {
+      provider: 'istanbul',
+      include: ['plugins/**/*.ts'],
+      exclude: [
+        'plugins/tests/**/*',
+        '**/*.d.ts',
+        'node_modules/**/*',
+      ],
+      thresholds: {
+        branches: 90,
+        functions: 90,
+        lines: 90,
+        statements: 90,
+      },
+    },
   },
 })

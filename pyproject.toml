@@ -32,6 +32,7 @@ packages = ["agents", "evals", "cli"]
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+exclude = [".agents/skills/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "S"]
@@ -52,4 +53,5 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+norecursedirs = [".agents/skills"]
 addopts = "--tb=short -q"
