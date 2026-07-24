@@ -34,6 +34,7 @@ const config = {
   thresholds: {
     high: 80,
     low: 60,
+    break: 72,
   },
 
   // Coverage analysis strategy (perTest is the default and best performance)

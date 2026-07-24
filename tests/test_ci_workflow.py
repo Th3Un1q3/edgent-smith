@@ -44,6 +44,14 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
                 "    sys.stdout.write('typecheck ok\\n')\n",
                 "elif command == ('test',):\n",
                 "    sys.stdout.write('test ok\\n')\n",
+                "elif command == ('.opencode/test', '--coverage'):\n",
+                "    sys.stdout.write('opencode test ok\\n')\n",
+                "elif command == ('.opencode/lint',):\n",
+                "    sys.stdout.write('opencode lint ok\\n')\n",
+                "elif command == ('.opencode/typecheck',):\n",
+                "    sys.stdout.write('opencode typecheck ok\\n')\n",
+                "elif command == ('.opencode/mutation',):\n",
+                "    sys.stdout.write('mutations_text\\n')\n",
                 "else:\n",
                 "    sys.stderr.write(f'unexpected just invocation: {sys.argv[1:]}\\n')\n",
                 "    raise SystemExit(99)\n",
@@ -94,6 +102,10 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
         "just typecheck",
         "just test",
         "uv run python scripts/validate_workflow_security.py",
+        "just .opencode/test --coverage",
+        "just .opencode/lint",
+        "just .opencode/typecheck",
+        "just .opencode/mutation",
     ]
 
     output = result.stdout
@@ -101,12 +113,20 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
     assert output.index("── lint") < output.index("── typecheck")
     assert output.index("── typecheck") < output.index("── test")
     assert output.index("── test") < output.index("── workflow-security")
+    assert output.index("── workflow-security") < output.index("── opencode-test")
+    assert output.index("── opencode-test") < output.index("── opencode-lint")
+    assert output.index("── opencode-lint") < output.index("── opencode-typecheck")
+    assert output.index("── opencode-typecheck") < output.index("── opencode-mutation")
     assert "format ok" in output
     assert "lint line 01" in output
     assert ":END" in output
     assert "typecheck ok" in output
     assert "test ok" in output
     assert "workflow security failed" in output
+    assert "opencode test ok" in output
+    assert "opencode lint ok" in output
+    assert "opencode typecheck ok" in output
+    assert "mutations_text" in output
 
     lint_annotation = next(
         line for line in output.splitlines() if line.startswith("::error title=lint failed::")
@@ -131,7 +151,7 @@ def test_ci_workflow_uses_script_backed_just_wrapper() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
     ci_job_match = re.search(r"(?ms)^  ci:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 
-    assert re.search(r"^ci:\n  @bash scripts/ci\.sh$", justfile, re.MULTILINE)
+    assert re.search(r"^ci:\n\s+@bash scripts/ci\.sh$", justfile, re.MULTILINE)
     assert ci_job_match is not None
 
     ci_job = ci_job_match.group(0)

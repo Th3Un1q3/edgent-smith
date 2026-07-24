@@ -12,6 +12,7 @@ vi.mock("@plugins/helpers/session-helpers", () => makeSessionHelpersMockFactory(
 import { toolLimitReminder } from "@plugins/tool-limit-reminder"
 import { log } from "@plugins/helpers/logger"
 import { sendMessage } from "@plugins/helpers/session-helpers"
+import { SessionStorage } from "@plugins/helpers/kv-store"
 
 const logMock = vi.mocked(log)
 const sendMessageMock = vi.mocked(sendMessage)
@@ -414,6 +415,126 @@ describe("toolLimitReminder plugin", () => {
       expect.anything(),
       "info",
       expect.stringContaining("not listed in TOOL_LIMITS"),
+    )
+  })
+
+  // ── Event handler (session.idle) ─────────────────────────────────────────
+
+  describe("event handler", () => {
+    it("returns early for non-session.idle events", async () => {
+      const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
+
+      await plugin.event({ event: { type: "tool.execute.after" } })
+
+      // No idle-related logs should appear
+      const idleCalls = logMock.mock.calls.filter(
+        (c) => c[1] === "info" && typeof c[2] === "string" && c[2].includes("idle — cleared tool call counter"),
+      )
+      expect(idleCalls.length).toBe(0)
+    })
+
+    it("returns early when session.idle event has no sessionID", async () => {
+      const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
+
+      await plugin.event({ event: { type: "session.idle" } })
+
+      const idleCalls = logMock.mock.calls.filter(
+        (c) => c[1] === "info" && typeof c[2] === "string" && c[2].includes("idle — cleared tool call counter"),
+      )
+      expect(idleCalls.length).toBe(0)
+    })
+
+    it("clears tool call counter when session goes idle", async () => {
+      const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
+
+      SessionStorage.reset({})
+
+      await plugin.event({ event: { type: "session.idle", properties: { sessionID: "idle-session" } } })
+
+      expect(logMock).toHaveBeenCalledWith(
+        expect.anything(),
+        "info",
+        expect.stringContaining("idle-session idle — cleared tool call counter"),
+      )
+    })
+
+    it("does not trigger export when idle session has no needsReview flag", async () => {
+      const mock$ = vi.fn()
+
+      const mockClient = {
+        client: {
+          session: { get: vi.fn() },
+          app: { agents: vi.fn().mockResolvedValue({ data: [] }) },
+        },
+        "$": mock$,
+        directory: "/workspace",
+      } as unknown as PluginInput
+
+      SessionStorage.reset({ "idle-no-flag": {} })
+
+      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
+
+      await plugin.event({ event: { type: "session.idle", properties: { sessionID: "idle-no-flag" } } })
+
+      expect(logMock).toHaveBeenCalledWith(
+        expect.anything(),
+        "info",
+        expect.stringContaining("idle-no-flag idle — cleared tool call counter"),
+      )
+
+      // Should not have triggered export
+      expect(mock$).not.toHaveBeenCalled()
+    })
+
+    it("triggers export and clears needsReview flag when idle session has needsReview flag set", async () => {
+      const mockNothrowQuietJson = {
+        nothrow: () => mockNothrowQuietJson,
+        quiet: () => mockNothrowQuietJson,
+        json: vi.fn().mockResolvedValue({ status: "ok" }),
+      }
+
+      const mock$ = vi.fn().mockReturnValue(mockNothrowQuietJson)
+
+      const mockClient = {
+        client: {
+          session: { get: vi.fn() },
+          app: { agents: vi.fn().mockResolvedValue({ data: [] }) },
+        },
+        "$": mock$,
+        directory: "/workspace",
+      } as unknown as PluginInput
+
+      SessionStorage.reset({ "idle-flagged": { needsReview: true } })
+
+      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
+
+      await plugin.event({ event: { type: "session.idle", properties: { sessionID: "idle-flagged" } } })
+
+      expect(logMock).toHaveBeenCalledWith(
+        expect.anything(),
+        "info",
+        expect.stringContaining("idle-flagged idle — cleared tool call counter"),
+      )
+
+      expect(logMock).toHaveBeenCalledWith(
+        expect.anything(),
+        "info",
+        expect.stringContaining("triggering export"),
+      )
+    })
+  })
+
+  // ── Dispose ──────────────────────────────────────────────────────────────
+
+  it("logs dispose message on shutdown", async () => {
+    const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin
+
+    await plugin.dispose?.()
+
+    expect(logMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "info",
+      "[tool-limit-reminder] dispose",
     )
   })
 })

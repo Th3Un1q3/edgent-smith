@@ -37,6 +37,16 @@ As the model is often lazy the system requires a bit of pushes. Like make sure t
 
 I had to create a plugin, to fix some of the issues.
 
+### React fast
+
+Instantly run quality gates when files change, don't trust the model to do it. It is often lazy and forgets to run tests, or lint, or typecheck.
+
+![alt text](image-5.png)
+
+### Mutational tests to force model to test better
+
+Combine test instructions with mutation test to force model actually test the code.
+
 ### Frequent tool failures
 
 Model suffers following tools description.
@@ -53,6 +63,8 @@ Model suffers following tools description.
 ## Agentic system
 
 Specialized minimalistic agents - start faster, fail faster. Keep tuning.
+
+
 
 ### Orchestration failures
 

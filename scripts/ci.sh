@@ -51,5 +51,6 @@ run_check workflow-security uv run python scripts/validate_workflow_security.py
 run_check opencode-test just .opencode/test --coverage
 run_check opencode-lint just .opencode/lint
 run_check opencode-typecheck just .opencode/typecheck
+run_check opencode-mutation just .opencode/mutation
 
 exit "$status"
