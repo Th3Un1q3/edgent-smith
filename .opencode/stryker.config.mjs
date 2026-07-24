@@ -58,6 +58,15 @@ const config = {
   disableTypeChecks: true,
 
   // reporters are optional; defaults ([clear-text, progress, html]) work well
+  "clearTextReporter": {
+    "allowColor": true,
+    "allowEmojis": false,
+    "logTests": true,
+    "maxTestsToLog": 3,
+    "reportMutants": true,
+    "reportScoreTable": true,
+    "skipFull": true
+  }
 };
 
 export default config;

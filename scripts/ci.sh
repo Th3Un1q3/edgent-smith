@@ -6,6 +6,9 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 cd "$REPO_ROOT"
 
+results_dir=$(mktemp -d)
+trap 'rm -rf "$results_dir"' EXIT
+
 status=0
 
 escape_workflow_command() {
@@ -31,12 +34,14 @@ run_check() {
   echo "── $name ─────────────────────────────────"
   if "$@" >"$output_file" 2>&1; then
     cat "$output_file"
+    printf pass >"$results_dir/$name"
   else
     cat "$output_file"
     summary="$(summarize_output "$output_file")"
     [ -n "$summary" ] || summary="No output captured."
     message=$(escape_workflow_command "$(printf '%s\n%s' "$name failed" "$summary")")
     echo "::error title=$name failed::$message"
+    printf fail >"$results_dir/$name"
     status=1
   fi
 
@@ -53,5 +58,13 @@ run_check opencode-test just .opencode/test --coverage
 run_check opencode-lint just .opencode/lint
 run_check opencode-typecheck just .opencode/typecheck
 run_check opencode-mutation just .opencode/mutation
+
+echo ""
+echo "─── Gate Summary ───"
+for result_file in "$results_dir"/*; do
+  gate_name=$(basename "$result_file")
+  gate_result=$(cat "$result_file")
+  echo "$gate_name: $gate_result"
+done
 
 exit "$status"

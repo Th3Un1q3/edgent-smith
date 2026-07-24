@@ -23,10 +23,11 @@ After completing a session review, map each audit finding to the pattern below t
 **Trigger:** Q2 = "partially achieved" AND Q6 shows file-editing tools present
 
 *Action:*
+- Review available instructions in .opencode/instructions/ to understand what instructions exist.
 - If relevant instructions shown — Update instructions to be more actionable and include more specific guidance for the agent to follow.
 - If relevant instructions exist but were not shown — Update instructions include file globs to ensure they are shown in relevant edits.
 - If no relevant instructions exist — Add new instructions to the agent's instruction set that are relevant to the session's objective.
-
+`
 ### P4 — Initial request was too large, vague, or complex
 
 **Trigger:** Q3 root cause mentions scope/complexity OR Q6 shows high ratio of text to tool parts

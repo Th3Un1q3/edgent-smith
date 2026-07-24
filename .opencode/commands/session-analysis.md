@@ -91,7 +91,8 @@ sed -i 's|status: "in-progress"|status: "completed"|' "$REVIEW_MD"
 
 ## Constraints
 
-- Never read entire session.json — use jq for targeted extraction.
+- Never ask to read entire session.json — use jq for targeted extraction.
 - Use RUG pattern: Decompose → Delegate → Validate → Iterate.
 - Every recommendation must specify exact file path and concrete change.
 - Review one session per invocation.
+- Don't rely on agents reporting you intermediate findings. Make subagents immediately write their findings to the review.md file(changing the relevant sections).

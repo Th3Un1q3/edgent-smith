@@ -52,6 +52,8 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
                 "    sys.stdout.write('opencode typecheck ok\\n')\n",
                 "elif command == ('.opencode/mutation',):\n",
                 "    sys.stdout.write('mutations_text\\n')\n",
+                "elif command == ('.opencode/deps',):\n",
+                "    sys.stdout.write('opencode deps ok\\n')\n",
                 "else:\n",
                 "    sys.stderr.write(f'unexpected just invocation: {sys.argv[1:]}\\n')\n",
                 "    raise SystemExit(99)\n",
@@ -102,6 +104,7 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
         "just typecheck",
         "just test",
         "uv run python scripts/validate_workflow_security.py",
+        "just .opencode/deps",
         "just .opencode/test --coverage",
         "just .opencode/lint",
         "just .opencode/typecheck",
@@ -113,7 +116,8 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
     assert output.index("── lint") < output.index("── typecheck")
     assert output.index("── typecheck") < output.index("── test")
     assert output.index("── test") < output.index("── workflow-security")
-    assert output.index("── workflow-security") < output.index("── opencode-test")
+    assert output.index("── workflow-security") < output.index("── opencode-deps")
+    assert output.index("── opencode-deps") < output.index("── opencode-test")
     assert output.index("── opencode-test") < output.index("── opencode-lint")
     assert output.index("── opencode-lint") < output.index("── opencode-typecheck")
     assert output.index("── opencode-typecheck") < output.index("── opencode-mutation")
@@ -124,6 +128,7 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
     assert "test ok" in output
     assert "workflow security failed" in output
     assert "opencode test ok" in output
+    assert "opencode deps ok" in output
     assert "opencode lint ok" in output
     assert "opencode typecheck ok" in output
     assert "mutations_text" in output

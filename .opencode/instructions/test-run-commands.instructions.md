@@ -12,11 +12,15 @@ Always ensure the following when developing Opencode plugins:
 
 From the '.opencode' directory, run the following commands to ensure that the plugin is working correctly:
 
-```
+```bash
 just test
 just test --coverage
+just test -- plugins/tests/skills-loader.test.ts
 just lint
 just typecheck
+
+# Run entire mutation test suite - has a long runtime, so only run for final verification before release
+just mutation
 # Run mutation tests to ensure the plugin is well tested
 just mutation --mutate plugins/todo-enforcer.ts
 ```

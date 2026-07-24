@@ -147,21 +147,23 @@ describe("skillsLoaderPlugin", () => {
         it.each([
             { desc: "skills field is absent", output: { args: { prompt: "original prompt" } } },
             { desc: "skills array is empty", output: { args: { prompt: "original prompt", skills: [] } } },
-        ])("does not modify prompt when $desc", async ({ output }) => {
+        ])("wraps prompt in user_request when $desc", async ({ output }) => {
             await act(output)
-            expect(output.args.prompt).toBe("original prompt")
+            expect(output.args.prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
         })
 
         it("does not call Bun.file when skills field is absent", async () => {
             const output = { args: { prompt: "original prompt" } }
             await act(output)
             expect(mockBunFile).not.toHaveBeenCalled()
+            expect(output.args.prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
         })
 
-        it("removes skills field when skills array is empty", async () => {
+        it("removes skills field and wraps prompt when skills array is empty", async () => {
             const output = { args: { prompt: "original prompt", skills: [] } }
             await act(output)
             expect(output.args.skills).toBeUndefined()
+            expect(output.args.prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
         })
 
         it("logs debug message when skills array is empty", async () => {
@@ -193,22 +195,22 @@ describe("skillsLoaderPlugin", () => {
     it.each([
         { desc: "string", skills: "not-an-array" as unknown },
         { desc: "undefined", skills: undefined as unknown },
-    ])("returns early and preserves skills field when skills is $desc", async ({ skills }) => {
+    ])("wraps prompt and preserves skills field when skills is $desc", async ({ skills }) => {
         const hook = executeBeforeHook()
         const input = { tool: "task", sessionID: "sess-1", callID: "call-bad-skills" }
         const output = { args: { prompt: "original prompt", skills } }
 
         await hook(input, output)
 
-        // Prompt must remain unchanged
-        expect(output.args.prompt).toBe("original prompt")
+        // Prompt must be wrapped in user_request
+        expect(output.args.prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
         // skills field must be preserved (not deleted by the cleanup block)
         expect(output.args.skills).toBe(skills)
         // Bun.file must not be called
         expect(mockBunFile).not.toHaveBeenCalled()
     })
 
-    it("removes skills field and returns early when directory is undefined", async () => {
+    it("removes skills field and wraps prompt when directory is undefined", async () => {
         const pluginNoDirectory = await skillsLoaderPlugin({ client } as unknown as PluginInput)
         const hook = pluginNoDirectory?.["tool.execute.before"] ?? (() => Promise.resolve())
 
@@ -223,8 +225,8 @@ describe("skillsLoaderPlugin", () => {
 
         // skills field must be deleted
         expect(output.args.skills).toBeUndefined()
-        // Prompt must remain unchanged (early return before file loading)
-        expect(output.args.prompt).toBe("original prompt")
+        // Prompt must be wrapped (no skill content since no directory to resolve)
+        expect(output.args.prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
         // Bun.file must not be called (guard returns before file loading)
         expect(mockBunFile).not.toHaveBeenCalled()
     })
@@ -637,4 +639,138 @@ describe("skillsLoaderPlugin", () => {
     })
 
     // (tool.listSkills removed — TODO to be re-implemented later)
+})
+
+// ── Task budget tag injection ─────────────────────────────────────
+
+describe("task budget", () => {
+    it("injects task-budget tag when agent info is available", async () => {
+        const client = createMockClient({
+            session: { get: vi.fn().mockResolvedValue({ data: { agent: "rug-swe" } }) },
+            app: {
+                log: vi.fn().mockResolvedValue(undefined),
+                agents: vi.fn().mockResolvedValue({ data: [{ name: "rug-swe", steps: 25 }] }),
+            },
+        })
+        const plugin = await skillsLoaderPlugin({ client, directory: "/workspace" } as unknown as PluginInput)
+        const hook = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+
+        registerSkillFiles({
+            "skill-a": makeSkillFile({ name: "skill-a", content: "---\nname: skill-a\n---\n\n# Skill A\nBody of skill A.", mtimeMs: 100 }),
+        })
+
+        const input = { tool: "task", sessionID: "sess-1", callID: "call-budget" }
+        const output = { args: { prompt: "original prompt", skills: ["skill-a"] } }
+
+        await hook(input, output)
+
+        expect(output.args.skills).toBeUndefined()
+
+        const prompt = output.args.prompt as string
+        expect(prompt).toContain('<task-budget tool-calls="25" />')
+        // Budget tag appears after </task_skills>
+        expect(prompt).toMatch(/<\/task_skills>\s*\n<task-budget tool-calls="25" \/>/)
+        // Budget tag appears before <user_request>
+        expect(prompt).toMatch(/<task-budget tool-calls="25" \/>\s*\n<user_request>/)
+    })
+
+    it("injects task-budget tag even without skills", async () => {
+        const client = createMockClient({
+            session: { get: vi.fn().mockResolvedValue({ data: { agent: "rug-swe" } }) },
+            app: {
+                log: vi.fn().mockResolvedValue(undefined),
+                agents: vi.fn().mockResolvedValue({ data: [{ name: "rug-swe", steps: 25 }] }),
+            },
+        })
+        const plugin = await skillsLoaderPlugin({ client, directory: "/workspace" } as unknown as PluginInput)
+        const hook = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+
+        const input = { tool: "task", sessionID: "sess-1", callID: "call-budget-noskills" }
+        const output = { args: { prompt: "original prompt" } }
+
+        await hook(input, output)
+
+        const prompt = output.args.prompt as string
+        expect(prompt).toContain('<task-budget tool-calls="25" />')
+        expect(prompt).toContain("<user_request>\noriginal prompt\n</user_request>")
+        expect(prompt).not.toContain("<task_skills>")
+    })
+
+    it("does not inject task-budget when sessionID is missing", async () => {
+        const client = createMockClient()
+        const plugin = await skillsLoaderPlugin({ client, directory: "/workspace" } as unknown as PluginInput)
+        const hook = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+
+        const input = { tool: "task", sessionID: undefined as unknown as string, callID: "call-no-session" }
+        const output = { args: { prompt: "original prompt" } }
+
+        await hook(input, output)
+
+        const prompt = output.args.prompt as string
+        expect(prompt).not.toContain("<task-budget")
+        expect(prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
+        expect(mockBunFile).not.toHaveBeenCalled()
+    })
+
+    it("does not inject task-budget when agent not found in agents list", async () => {
+        const client = createMockClient({
+            session: { get: vi.fn().mockResolvedValue({ data: { agent: "unknown-agent" } }) },
+            app: {
+                log: vi.fn().mockResolvedValue(undefined),
+                agents: vi.fn().mockResolvedValue({ data: [{ name: "build", steps: 10 }] }),
+            },
+        })
+        const plugin = await skillsLoaderPlugin({ client, directory: "/workspace" } as unknown as PluginInput)
+        const hook = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+
+        const input = { tool: "task", sessionID: "sess-1", callID: "call-unknown" }
+        const output = { args: { prompt: "original prompt" } }
+
+        await hook(input, output)
+
+        const prompt = output.args.prompt as string
+        expect(prompt).not.toContain("<task-budget")
+        expect(prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
+        expect(mockBunFile).not.toHaveBeenCalled()
+    })
+
+    it("does not inject task-budget when agent has no steps", async () => {
+        const client = createMockClient({
+            session: { get: vi.fn().mockResolvedValue({ data: { agent: "build" } }) },
+            app: {
+                log: vi.fn().mockResolvedValue(undefined),
+                agents: vi.fn().mockResolvedValue({ data: [{ name: "build" }] }),
+            },
+        })
+        const plugin = await skillsLoaderPlugin({ client, directory: "/workspace" } as unknown as PluginInput)
+        const hook = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+
+        const input = { tool: "task", sessionID: "sess-1", callID: "call-no-steps" }
+        const output = { args: { prompt: "original prompt" } }
+
+        await hook(input, output)
+
+        const prompt = output.args.prompt as string
+        expect(prompt).not.toContain("<task-budget")
+        expect(prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
+        expect(mockBunFile).not.toHaveBeenCalled()
+    })
+
+    it("does not inject task-budget when session.get throws", async () => {
+        const client = createMockClient({
+            session: { get: vi.fn().mockRejectedValue(new Error("API error")) },
+        })
+        const plugin = await skillsLoaderPlugin({ client, directory: "/workspace" } as unknown as PluginInput)
+        const hook = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+
+        const input = { tool: "task", sessionID: "sess-1", callID: "call-error" }
+        const output = { args: { prompt: "original prompt" } }
+
+        await hook(input, output)
+
+        const prompt = output.args.prompt as string
+        expect(prompt).not.toContain("<task-budget")
+        expect(prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
+        expect(mockBunFile).not.toHaveBeenCalled()
+    })
 })

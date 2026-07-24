@@ -186,6 +186,16 @@ describe('createIndex().forFiles', () => {
         "Instruction file not found: /nonexistent/path/instruction.md"
       )
     })
+
+    it("returns the body content for a file with frontmatter", async () => {
+      const result = await subject.loadBody('/workspace/.opencode/plugins/tests/fixtures/copilot-instructions/multiple-glob-patterns.instructions.md')
+      expect(result).toBe('An instruction that applies to all TypeScript and JavaScript files in the project.')
+    })
+
+    it("returns empty string for a file without frontmatter", async () => {
+      const result = await subject.loadBody('/workspace/.opencode/plugins/tests/fixtures/copilot-instructions/global-instruction-smpl.instructions.md')
+      expect(result).toBe('')
+    })
   })
 
   it("skips empty-frontmatter fixtures silently during indexing", async () => {
@@ -200,6 +210,17 @@ describe('createIndex().forFiles', () => {
     )
   })
 
+  it("skips files with empty frontmatter content during indexing", async () => {
+    const result = await subject.forFiles(['src/dir/some-file.ts'])
+
+    const instructionMatcher = expect.objectContaining({
+      path: expect.stringContaining('empty-frontmatter-content.instructions.md'),
+    });
+
+    expect(result).toEqual(
+      expect.not.arrayContaining([instructionMatcher])
+    )
+  })
 
   it("skips malformed-yaml fixtures silently during indexing", async () => {
     const result = await subject.forFiles(['src/dir/some-file.ts'])
