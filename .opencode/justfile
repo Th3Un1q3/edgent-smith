@@ -20,6 +20,6 @@ lint *ARGS:
 typecheck *ARGS:
     @_filtered=""; for _a in {{ ARGS }}; do if [ "${_a%/}" != "$_a" ]; then continue; fi; _filtered="${_filtered} ${_a}"; done; bun run --bun typecheck $_filtered
 
-# Runs mutation tests, allows detecting parts of code that lack proper tests
-mutation:
-    bun stryker
+# Runs mutation tests, allows detecting parts of code that lack proper tests. Use --mutate <file-name> parameter to scope mutation to a single file. Example: --mutate plugins/todo-enforcer.ts.
+mutation *ARGS:
+    @bun stryker {{ ARGS }}

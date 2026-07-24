@@ -52,6 +52,8 @@ const config = {
     'stryker-incremental.json',
   ],
 
+  cleanTempDir: "always",
+
   // Disable type checking during mutation (Stryker inserts @ts-nocheck)
   disableTypeChecks: true,
 

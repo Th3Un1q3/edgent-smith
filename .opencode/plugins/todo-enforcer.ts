@@ -61,10 +61,16 @@ export const todoEnforcer: Plugin = async ({ client }) => {
       if (!input.sessionID) return
       if (input.tool === TODO_TOOL_NAME) return
 
-      if (input.tool === "task" && output.args && output.args.command && output.args.command === "rug-brief") {
-        await log(client, "info", `[todo-enforcer] task tool called for session ${input.sessionID} — ${JSON.stringify(output.args)}`)
+      // Only enforce for the task tool; all other tools are free to use
+      if (input.tool !== "task") return
+
+      // Agent-based/command-driven tasks bypass todo requirement — they are internal routing calls
+      if (output?.args?.command) {
+        await log(client, "info", `[todo-enforcer] task tool called with command on session ${input.sessionID} — skipping enforcement`)
         return
       }
+
+      await log(client, "info", `[todo-enforcer] enforcing todo requirement for task tool on session ${input.sessionID}`)
 
       const currentAgent = ((await client.session.get({ path: { id: input.sessionID } }) as unknown as { data?: Record<string, string> })).data?.agent as string
 
@@ -72,13 +78,12 @@ export const todoEnforcer: Plugin = async ({ client }) => {
 
       const hasUsedTodos = sessionStorage.readState(input.sessionID, (state) => {
         if (!Object.hasOwn(state, SESSION_FIELDS.toolCalls)) return false
-
-        const lastMessageAt = Object.hasOwn(state, SESSION_FIELDS.lastMessageSentAt) && new Date(state[SESSION_FIELDS.lastMessageSentAt] as string)
-
         const lastToolCall = (state[SESSION_FIELDS.toolCalls] as Record<string, string>)[TODO_TOOL_NAME]
         if (!lastToolCall) return false
 
-        return lastMessageAt && new Date(lastToolCall) > lastMessageAt
+        if (!Object.hasOwn(state, SESSION_FIELDS.lastMessageSentAt)) return true
+        const lastMessageAt = new Date(state[SESSION_FIELDS.lastMessageSentAt] as string)
+        return new Date(lastToolCall) > lastMessageAt
       })
 
       if (hasUsedTodos) return

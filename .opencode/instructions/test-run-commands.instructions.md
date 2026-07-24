@@ -17,7 +17,8 @@ just test
 just test --coverage
 just lint
 just typecheck
-just mutation
+# Run mutation tests to ensure the plugin is well tested
+just mutation --mutate plugins/todo-enforcer.ts
 ```
 
 NEVER call underlying implementation commands directly (eg. `pytest`, `npm test`, `vitest`, `bun`, `tsc`) — always use the above commands to ensure that the plugin is tested, linted, and typechecked in the same way as it will be in production.
