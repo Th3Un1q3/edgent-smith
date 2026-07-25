@@ -4,9 +4,9 @@
   "service": "devcontainer",
   "workspaceFolder": "/workspace",
   "features": {
-    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/git:1.3.8": {},
     "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/devcontainers/features/node:1": {
+    "ghcr.io/devcontainers/features/node:2.1.0": {
       "version": "24"
     },
     "ghcr.io/devcontainers/features/python:1": {
@@ -16,7 +16,8 @@
     "ghcr.io/jsburckhardt/devcontainer-features/just:1": {},
     "ghcr.io/devcontainers-extra/features/bun:1": {
       "version": "latest"
-    }
+    },
+    "ghcr.io/devcontainers-extra/features/opencode:1": {}
   },
   "customizations": {
     "vscode": {
@@ -38,9 +39,10 @@
   },
   "containerEnv": {
     "BUN_INSTALL": "/home/vscode/.bun",
-    "PATH": "/home/vscode/.bun/bin:${localEnv:PATH}"
+    "OPENCODE_DATA_DIR": "/home/vscode/.local/share/opencode",
+    "PATH": "/home/vscode/.opencode/bin:/home/vscode/.bun/bin:${localEnv:PATH}"
   },
-  "initializeCommand": "echo \"Here could go a host command\"",
+  "initializeCommand": "if [ \"${CI}\" != \"true\" ] && ! grep -q '^COMPOSE_PROFILES=' .devcontainer/.env 2>/dev/null; then echo 'COMPOSE_PROFILES=infra' >> .devcontainer/.env; fi",
   "postCreateCommand": "bash .devcontainer/setup-dev.sh",
   "remoteUser": "vscode",
   "forwardPorts": [

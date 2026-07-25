@@ -3,18 +3,34 @@ set -euo pipefail
 
 echo "Starting development environment setup..."
 
-# Enable persistance volume for opencode
+# Enable persistence volume for opencode
+mkdir -p /home/vscode/.local/
 sudo chown -R $(id -u):$(id -g) /home/vscode/.local/
+
+# Ensure opencode bin directory is in PATH for this script
+export PATH="/home/vscode/.opencode/bin:$PATH"
 
 if ! command -v opencode &> /dev/null; then
   echo "Installing opencode..."
-  curl -fsSL https://opencode.ai/install | bash
+  OPENCODE_VERSION="1.18.4"
+  for i in 1 2 3; do
+    if curl -fsSL https://opencode.ai/install | bash -s -- --version "$OPENCODE_VERSION"; then
+      echo "opencode v$OPENCODE_VERSION installed successfully"
+      break
+    else
+      echo "Attempt $i/3 failed. Retrying in $((i * 2)) seconds..."
+      sleep $((i * 2))
+    fi
+  done
+  if ! command -v opencode &> /dev/null; then
+    echo "Warning: opencode installation failed after 3 attempts. Continuing..."
+  fi
 fi
 
 if ! command -v rtk &> /dev/null; then
   echo "Installing rtk..."
   curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
-  rtk init -g --opencode
+  echo "" | RTK_TELEMETRY_DISABLED=1 rtk init -g --opencode 2>/dev/null || true
 fi
 
 # Install codegraph cli(required for MCP)

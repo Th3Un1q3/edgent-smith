@@ -49,17 +49,6 @@ services:
           action: restart
     restart: always
 
-  ollama:
-    image: ollama/ollama:latest
-    profiles: ["infra"]
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    restart: unless-stopped
-    networks:
-      - edgent-dev
-
 
   jaeger:
     image: cr.jaegertracing.io/jaegertracing/jaeger:2.17.0

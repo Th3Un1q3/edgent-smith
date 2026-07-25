@@ -9,10 +9,13 @@ registry:
       transport_type: http
       headers:
         Authorization: "Bearer ${TAVILY_API_KEY}"
-    secrets:  
+    secrets:
       - name: "tavily.api_token"
         env: "TAVILY_API_KEY"
         example: "your_tavily_api_token_here"
+    tools:
+      - name: "tavily_search"
+      - name: "tavily_extract"
 
   deepwiki:
     type: remote  
@@ -47,7 +50,7 @@ registry:
   github:
     type: remote
     description: "Read-only GitHub API access. Browse repositories, search code and issues, view pull requests, commits, branches, diffs, file contents, and repository metadata."
-    title: "GitHub - Read-Only Code & Issue Browser MCP"
+    title: "GitHub - Read-Only Code & Issue, Actions Browser MCP"
     remote:
       url: "https://api.githubcopilot.com/mcp/x/all/readonly"
       transport_type: http

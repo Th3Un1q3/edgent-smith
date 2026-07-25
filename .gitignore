@@ -77,3 +77,6 @@ secrets/
 .opencode/coverage/
 .opencode/.stryker-tmp/
 .opencode/reports/
+
+# DevContainer auto-generated env files
+.devcontainer/.env

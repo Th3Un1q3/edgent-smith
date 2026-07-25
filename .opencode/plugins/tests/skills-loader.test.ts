@@ -1,4 +1,4 @@
- 
+
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 // Mock factories — synchronous imports avoid circular dependency issues.
@@ -14,11 +14,15 @@ vi.mock("@plugins/helpers/logger")
 vi.mock("node:fs/promises", () => ({
     readdir: vi.fn(),
 }))
+vi.mock("@plugins/helpers/agent-steps", () => ({
+    getAgentSteps: vi.fn(),
+}))
 
 // Import stubs AFTER vi.mock() calls
 import Bun from "bun"
 import { log } from "@plugins/helpers/logger"
 import { readdir } from "node:fs/promises"
+import { getAgentSteps } from "@plugins/helpers/agent-steps"
 
 // Future implementation — module-not-found is expected RED state
 import { skillsLoaderPlugin } from "@plugins/skills-loader"
@@ -637,21 +641,14 @@ describe("skillsLoaderPlugin", () => {
             expect(properties.prompt).toBeDefined()
         })
     })
-
-    // (tool.listSkills removed — TODO to be re-implemented later)
 })
 
 // ── Task budget tag injection ─────────────────────────────────────
 
 describe("task budget", () => {
     it("injects task-budget tag when agent info is available", async () => {
-        const client = createMockClient({
-            session: { get: vi.fn().mockResolvedValue({ data: { agent: "rug-swe" } }) },
-            app: {
-                log: vi.fn().mockResolvedValue(undefined),
-                agents: vi.fn().mockResolvedValue({ data: [{ name: "rug-swe", steps: 25 }] }),
-            },
-        })
+        vi.mocked(getAgentSteps).mockResolvedValue(25)
+        const client = createMockClient()
         const plugin = await skillsLoaderPlugin({ client, directory: "/workspace" } as unknown as PluginInput)
         const hook = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
 
@@ -660,7 +657,7 @@ describe("task budget", () => {
         })
 
         const input = { tool: "task", sessionID: "sess-1", callID: "call-budget" }
-        const output = { args: { prompt: "original prompt", skills: ["skill-a"] } }
+        const output = { args: { prompt: "original prompt", skills: ["skill-a"], subagent_type: "rug-swe" } }
 
         await hook(input, output)
 
@@ -675,18 +672,13 @@ describe("task budget", () => {
     })
 
     it("injects task-budget tag even without skills", async () => {
-        const client = createMockClient({
-            session: { get: vi.fn().mockResolvedValue({ data: { agent: "rug-swe" } }) },
-            app: {
-                log: vi.fn().mockResolvedValue(undefined),
-                agents: vi.fn().mockResolvedValue({ data: [{ name: "rug-swe", steps: 25 }] }),
-            },
-        })
+        vi.mocked(getAgentSteps).mockResolvedValue(25)
+        const client = createMockClient()
         const plugin = await skillsLoaderPlugin({ client, directory: "/workspace" } as unknown as PluginInput)
         const hook = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
 
         const input = { tool: "task", sessionID: "sess-1", callID: "call-budget-noskills" }
-        const output = { args: { prompt: "original prompt" } }
+        const output = { args: { prompt: "original prompt", subagent_type: "rug-swe" } }
 
         await hook(input, output)
 
@@ -696,12 +688,12 @@ describe("task budget", () => {
         expect(prompt).not.toContain("<task_skills>")
     })
 
-    it("does not inject task-budget when sessionID is missing", async () => {
+    it("does not inject task-budget when subagent_type is missing", async () => {
         const client = createMockClient()
         const plugin = await skillsLoaderPlugin({ client, directory: "/workspace" } as unknown as PluginInput)
         const hook = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
 
-        const input = { tool: "task", sessionID: undefined as unknown as string, callID: "call-no-session" }
+        const input = { tool: "task", sessionID: "sess-1", callID: "call-no-subagent" }
         const output = { args: { prompt: "original prompt" } }
 
         await hook(input, output)
@@ -713,18 +705,12 @@ describe("task budget", () => {
     })
 
     it("does not inject task-budget when agent not found in agents list", async () => {
-        const client = createMockClient({
-            session: { get: vi.fn().mockResolvedValue({ data: { agent: "unknown-agent" } }) },
-            app: {
-                log: vi.fn().mockResolvedValue(undefined),
-                agents: vi.fn().mockResolvedValue({ data: [{ name: "build", steps: 10 }] }),
-            },
-        })
+        const client = createMockClient()
         const plugin = await skillsLoaderPlugin({ client, directory: "/workspace" } as unknown as PluginInput)
         const hook = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
 
         const input = { tool: "task", sessionID: "sess-1", callID: "call-unknown" }
-        const output = { args: { prompt: "original prompt" } }
+        const output = { args: { prompt: "original prompt", subagent_type: "unknown-agent" } }
 
         await hook(input, output)
 
@@ -735,36 +721,12 @@ describe("task budget", () => {
     })
 
     it("does not inject task-budget when agent has no steps", async () => {
-        const client = createMockClient({
-            session: { get: vi.fn().mockResolvedValue({ data: { agent: "build" } }) },
-            app: {
-                log: vi.fn().mockResolvedValue(undefined),
-                agents: vi.fn().mockResolvedValue({ data: [{ name: "build" }] }),
-            },
-        })
+        const client = createMockClient()
         const plugin = await skillsLoaderPlugin({ client, directory: "/workspace" } as unknown as PluginInput)
         const hook = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
 
         const input = { tool: "task", sessionID: "sess-1", callID: "call-no-steps" }
-        const output = { args: { prompt: "original prompt" } }
-
-        await hook(input, output)
-
-        const prompt = output.args.prompt as string
-        expect(prompt).not.toContain("<task-budget")
-        expect(prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
-        expect(mockBunFile).not.toHaveBeenCalled()
-    })
-
-    it("does not inject task-budget when session.get throws", async () => {
-        const client = createMockClient({
-            session: { get: vi.fn().mockRejectedValue(new Error("API error")) },
-        })
-        const plugin = await skillsLoaderPlugin({ client, directory: "/workspace" } as unknown as PluginInput)
-        const hook = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
-
-        const input = { tool: "task", sessionID: "sess-1", callID: "call-error" }
-        const output = { args: { prompt: "original prompt" } }
+        const output = { args: { prompt: "original prompt", subagent_type: "build" } }
 
         await hook(input, output)
 

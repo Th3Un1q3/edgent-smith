@@ -41,8 +41,8 @@ The code-mode is provided by the Docker MCP gateway. All tools prefixed with
    "arguments": {"script": "# <synchronous js script>\nreturn \"hello word!\""}})`
    with the name "web-research"(from step 2) that and script:
 ```javascript
-// Map tools having hyphens in their
 
+// Map tools having hyphens in their names to valid JS identifiers by replacing hyphens with underscores.
 const tavilySearch = globalThis["tavily-search"]; // Tavily search was identified when initialized code-mode on step 2. Server with id tavily had a tavily-search tool.
 
 // Use the tool, you could do multiple calls, and also manipulate the response as needed before returning it.
@@ -63,6 +63,7 @@ return {
 ## Principles
 
 - Use descriptive task-related name when activating code-mode sandbox.
+- Learn from the existing recipes.
 - Use minimal set of servers for every sandbox.
 - Combine tools in chains within the script, rather than activating multiple
   sandboxes, to save context and improve performance.

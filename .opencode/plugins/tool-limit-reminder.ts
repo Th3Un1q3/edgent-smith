@@ -3,6 +3,7 @@ import { sendMessage } from "./helpers/session-helpers"
 import type { Plugin } from "@opencode-ai/plugin"
 
 import { SessionStorage, SESSION_FIELDS } from "./helpers/kv-store"
+import { fetchAgentList, AgentInfo } from "./helpers/agent-steps"
 
 /**
  * Per-agent tool call limits.
@@ -21,12 +22,6 @@ interface ToolExecuteBeforeInput {
   callID?: string
 }
 
-interface AgentInfo {
-  name: string
-  // Documentation says `maxSteps` but the actual API returns `steps`. Use `steps` here to avoid confusion.
-  steps?: number
-}
-
 export const toolLimitReminder: Plugin = async ({ client, $ }) => {
   await log(client, "info", "[tool-limit-reminder] init")
 
@@ -43,11 +38,9 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
       return _toolLimitsCache;
     }
 
-    const _agentListRaw = await client.app.agents()
+    const agentsList = await fetchAgentList(client)
 
-    await log(client, "info", `[tool-limit-reminder] fetched agent list: ${JSON.stringify(_agentListRaw.data?.map((a: AgentInfo) => ({ name: a.name, maxSteps: a.steps })))}`)
-
-    const agentsList = _agentListRaw.data ?? []
+    await log(client, "info", `[tool-limit-reminder] fetched agent list: ${JSON.stringify(agentsList.map((a: AgentInfo) => ({ name: a.name, maxSteps: a.steps })))}`)
 
     const toolLimits: Record<string, number> = Object.fromEntries(
       agentsList

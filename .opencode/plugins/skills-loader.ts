@@ -2,28 +2,10 @@ import { Plugin } from "@opencode-ai/plugin"
 import Bun from "bun"
 import { readdir } from "node:fs/promises"
 import { log } from "./helpers/logger"
+import { getAgentSteps } from "./helpers/agent-steps"
 
 export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
-    const buildTaskBudgetTag = async (sessionID: string | undefined): Promise<string | undefined> => {
-        if (!sessionID) return undefined
-        try {
-            const sessionInfo = await client.session.get({ path: { id: sessionID } }) as { data?: { agent?: string } }
-            const agentName = sessionInfo?.data?.agent
-            if (!agentName) return undefined
-
-            const agentListRaw = await client.app.agents() as { data?: Array<{ name: string; steps?: number }> }
-            const agentsList = agentListRaw.data ?? []
-            const agent = agentsList.find((a) => a.name === agentName)
-            if (!agent || typeof agent.steps !== "number") return undefined
-
-            return `<task-budget tool-calls="${agent.steps}" />`
-        } catch {
-            return undefined
-        }
-    }
-
     return {
-        // TODO: add a custom tool to list skills. under the hood should call `just agent_utils/list-skills` it's a simple text block.
         "tool.definition": async (input, output) => {
             // Guard: only modify the task tool
             if (input.toolID !== "task") return
@@ -127,7 +109,14 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
             }
 
             // --- Inject task budget ---
-            const budgetTag = await buildTaskBudgetTag(input.sessionID)
+            const subagentType = (output.args as Record<string, unknown>)?.subagent_type as string | undefined
+            let budgetTag: string | undefined
+            if (subagentType) {
+                const steps = await getAgentSteps(client, subagentType)
+                if (steps !== undefined) {
+                    budgetTag = `<task-budget tool-calls="${steps}" />`
+                }
+            }
             if (budgetTag) {
                 if (prefix) prefix += "\n"
                 prefix += budgetTag
