@@ -113,9 +113,9 @@
         "list_mcp_resources": "deny",
         "bash": {
             "*": "allow",
-            "{rtk git,git} *": "ask",
-            "{rtk git,git} {diff,status,show,log} *": "allow",
-            "{rtk curl,curl} *": "deny",
+            "*git *": "ask",
+            "*git {diff,status,show,log} *": "allow",
+            "*curl *": "deny",
         },
         "gateway_*": "deny",
         "gateway_mcp-find": "allow",
