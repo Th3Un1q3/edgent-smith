@@ -10,7 +10,7 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
   author: Th3Un1qu3
   tools:
     - gateway_mcp-find
@@ -85,10 +85,13 @@ Proactively explore the following files to learn about the skill's capabilities
 and how to use it effectively. Each file contains a specific workflow or recipe
 for common context-gathering tasks.
 
-| I want to... | File |
-|---|---|
-| Set up context-gathering tools: discover MCP servers, learn available tools, and create a code-mode sandbox | [workflows/setup.md](./workflows/setup.md) |
-| Write effective code-mode scripts to query, combine, and format results | [workflows/scripting-workflow.md](./workflows/scripting-workflow.md) |
-| Handle a complex context-gathering task with no ready-made recipe | [workflows/refinement-discovery.md](./workflows/refinement-discovery.md) |
-| Recipe: Get GitHub repository insights (stars, issues, README, recent commits) | [workflows/github_repository_insights.md](./workflows/github_repository_insights.md) |
-| Explore your local codebase: symbol references, file analysis, pattern search, with tested recipes and known pitfalls | [recipes/codebase-exploration.md](./recipes/codebase-exploration.md) |
+| Triggers | Actions | Recipe |
+|---|---|---|
+| First time using the skill or need different MCP servers | Discover servers, review tools, activate code-mode sandbox | [workflows/setup.md](./workflows/setup.md) |
+| Writing code-mode scripts — need sync JS patterns, error handling | Structure scripts, handle errors, combine tool calls | [workflows/scripting-workflow.md](./workflows/scripting-workflow.md) |
+| No ready-made recipe exists — need to design a new approach | Map capabilities, hypothesize tool chains, test, capture as recipe | [workflows/refinement-discovery.md](./workflows/refinement-discovery.md) |
+| Need to explore local codebase — find symbols, references, patterns | Find referencing symbols, analyze file structure, search patterns | [recipes/codebase-exploration.md](./recipes/codebase-exploration.md) |
+| Need to understand a GitHub repository — codebase, issues, docs | Semantic Q&A on repo code; search and analyze repository issues | [recipes/github-insights.md](./recipes/github-insights.md) |
+| Need to persist project knowledge — document modules, APIs, decisions | Write single/multiple memories with hierarchical naming, cross-references | [recipes/store-memories.md](./recipes/store-memories.md) |
+| Resuming work on a topic — need to recall what's known | List, read, aggregate memories by topic; follow cross-references | [recipes/collect-relevant-memories.md](./recipes/collect-relevant-memories.md) |
+| Need to update, reorganize, or clean up existing memories | Edit content (literal/regex), rename, delete memories | [recipes/manage-memories.md](./recipes/manage-memories.md) |

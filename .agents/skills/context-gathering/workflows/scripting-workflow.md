@@ -17,6 +17,52 @@ Make sure to perform servers discovery and code mode activation steps in the [Se
 - Perform multiple smaller mcp_exec calls with intermediate outputs if needed, rather than one big script, to simplify debugging and error handling.
 
 
+## JSON Escaping in mcp-exec Scripts
+
+When writing scripts for `mcp-exec`, the script string is embedded in JSON. This creates two interpreting layers — JSON first, then JavaScript. Careless quoting breaks the JSON layer.
+
+**Golden rules:**
+- Use **single quotes** for all JS strings inside the script — double quotes conflict with JSON
+- Use **array-join** to build multi-line strings: `['line1', 'line2'].join('\\n')` — JSON-level `\\n` becomes JS newline
+- For literal double quotes in the final output content: use `\\\"` triple escaping
+- Avoid embedding raw `\n` or `\"` inside the JSON script string — they corrupt JSON parsing
+
+**Common failure symptoms:**
+- `JSON Parse error: Unterminated string` — you used `"` inside a JS string and the JSON parser grabbed it
+- `Unexpected token ILLEGAL` — the script had `\"` that the JSON parser consumed, breaking JS syntax
+
+**Always wrap every tool call in try/catch** and verify success via return-value checks (e.g., `result.indexOf('written')` for write_memory).
+
+### Broken pattern (raw double quotes in JS strings)
+
+```javascript
+var result = write_memory({memory_name: "test", content: "hello world"});
+return result;
+```
+
+The `"test"` and `"hello world"` strings appear as raw double quotes in JSON, causing `JSON Parse error: Unterminated string`.
+
+### Working pattern (single quotes and array-join)
+
+```javascript
+var wm = globalThis['write_memory'];
+var content = [
+  '# Memory Title',
+  '',
+  'Body with a `mem:reference` link.',
+  '',
+  '| Col1 | Col2 |',
+  '|------|------|',
+  '| Value with \\\"quotes\\\" in output | data |',
+].join('\\n');
+try {
+  var result = wm({memory_name: 'topic/name', content: content});
+  return 'OK: ' + result;
+} catch(e) {
+  return 'ERROR: ' + e.message;
+}
+```
+
 ## Examples
 
 **Scenario**: Defensive scripting with error handling and response validation.

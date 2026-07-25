@@ -6,6 +6,10 @@ permissions:
   task: deny
   question: deny
   webfetch: deny
+  glob: deny
+  grep: deny
+  list_mcp_*: deny
+  read_mcp_*: deny
 ---
 
 ## Identity
