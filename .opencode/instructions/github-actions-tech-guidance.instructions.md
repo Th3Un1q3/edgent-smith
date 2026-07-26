@@ -1,6 +1,7 @@
 ---
 description: GitHub Actions guidance for DevContainers and action output variables.
 applyTo: ".github/workflows/**/*.yml"
+excludeAgents: "rug"
 ---
 
 # Using DevContainers in GitHub Actions

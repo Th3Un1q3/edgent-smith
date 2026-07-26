@@ -1,4 +1,4 @@
-import type { GateConfig } from '@plugins/types/quality-gate'
+import type { GateConfig } from '../types/quality-gate'
 
 export interface CommandResult {
   exitCode: number

@@ -10,7 +10,7 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.2.0"
+  version: "1.3.0"
   author: Th3Un1qu3
   tools:
     - gateway_mcp-find
@@ -73,6 +73,43 @@ return {
   available for use. All the requirements in responses are just for
   informational purposes.
 
+## Memory Convention
+
+Memories are organized by domain using the **domain/about/index** pattern. Every domain has an `about` entry (scope overview) and an `index` entry (table of contents with `mem:` cross-references). Topic memories use hierarchical names like `my-domain/subtopic/name`.
+
+### Domain / About / Index Pattern
+
+Each domain has a standard set of entries identified by memory names:
+
+| Memory Name | Purpose |
+|---|---|
+| `<domain>/about` | Domain scope overview — serves as the entry point for exploring that domain's memories. |
+| `<domain>/index` | Table of contents listing all topic memories with `mem:` cross-references. |
+| `<domain>/<subtopic>/<name>` | Individual topic memory (hierarchical naming via `/`). |
+
+- **`about` entry** — A single entry per domain that describes what the
+  domain covers. It serves as the entry point for anyone exploring
+  that domain's memories. Memory name: `my-domain/about`.
+- **`index` entry** — A table of contents that lists every memory in the
+  domain using `mem:` cross-references (e.g., `mem:topic-name`). It
+  enables discovery of all memories within a domain without reading
+ each memory individually. Memory name: `my-domain/index`.
+- **Topic naming** — Hierarchical topics use `/` as a separator
+  (e.g., `architecture/decisions/db-choice`). Each domain is a
+  top-level directory; subdirectories represent topic nesting.
+- **Overview memories** — Parent topics that contain sub-topics must
+  provide an overview memory that acts as a table of contents for
+  those sub-topics, linking to each child memory with a `mem:`
+  reference.
+
+### Recipe Usage
+
+| Recipe | How it uses the convention |
+|---|---|
+| **store-memories** | Writes the domain's `about` entry first (creating it if absent), then updates the `index` entry with the new `mem:` reference, then writes the topic memory itself. This order ensures the domain is always documented and discoverable. |
+| **collect-relevant-memories** | Reads the domain's `index` to discover all `mem:` references within a domain, then fetches only the memories that match the current query. This avoids loading every memory and keeps context tight. |
+| **manage-memories** | When a domain is added, renamed, or removed, updates the `about` and `index` entries accordingly. Ensures cross-references remain valid after structural changes. |
+
 ## Common Issues
 
 - **Using async functions**: All tool calls must be synchronous.
@@ -95,3 +132,4 @@ for common context-gathering tasks.
 | Need to persist project knowledge — document modules, APIs, decisions | Write single/multiple memories with hierarchical naming, cross-references | [recipes/store-memories.md](./recipes/store-memories.md) |
 | Resuming work on a topic — need to recall what's known | List, read, aggregate memories by topic; follow cross-references | [recipes/collect-relevant-memories.md](./recipes/collect-relevant-memories.md) |
 | Need to update, reorganize, or clean up existing memories | Edit content (literal/regex), rename, delete memories | [recipes/manage-memories.md](./recipes/manage-memories.md) |
+| Need to understand the memory convention — domain/about/index pattern | Read the memory convention guide and write about/index files | [recipes/memory-convention.md](./recipes/memory-convention.md) |

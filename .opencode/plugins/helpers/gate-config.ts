@@ -45,8 +45,16 @@ export async function loadQualityGates(directory: string, client: OpencodeClient
       gates: config.gates,
       debounceMs: typeof config.debounceMs === 'number' ? config.debounceMs : DEFAULT_DEBOUNCE_MS,
     }
-  } catch {
-    log(client, "warn", `No quality-gates config found at ${directory}/.opencode/quality-gates.json`)
+  } catch (error: unknown) {
+    const isFileNotFound = error instanceof Error && (error as Error & { code?: string }).code === 'ENOENT'
+
+    if (isFileNotFound) {
+      log(client, "warn", `No quality-gates config found at ${directory}/.opencode/quality-gates.json`)
+    } else {
+      const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+      log(client, "warn", `Failed to load quality-gates config at ${directory}/.opencode/quality-gates.json: ${message}`)
+    }
+
     return fallback
   }
 }

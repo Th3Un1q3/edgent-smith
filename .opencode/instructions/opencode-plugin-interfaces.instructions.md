@@ -1,6 +1,7 @@
 ---
 description: Explains how to structure opencode plugins. Required when designing an opencode plugin.
 applyTo: ".opencode/plugins/*.ts"
+excludeAgents: "rug"
 ---
 
 ## Plugin Conventions

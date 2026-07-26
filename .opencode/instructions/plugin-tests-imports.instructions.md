@@ -2,6 +2,7 @@
 name: plugin-tests-imports
 description: "Import conventions for TypeScript test files under .opencode/plugins/tests/."
 applyTo: ".opencode/plugins/tests/**/*"
+excludeAgents: "rug"
 ---
 
 ## Aliases

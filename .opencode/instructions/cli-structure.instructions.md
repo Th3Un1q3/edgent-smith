@@ -2,6 +2,7 @@
 name: cli-structure
 description: "CLI structure guide: defines file organization, placement rules, and anti-patterns for Click-backed CLI commands and services. Use when adding new commands, refactoring command logic, or moving utilities."
 applyTo: "cli/**/*.py,tests/test_cli_*.py,tests/test_*_cli.py"
+excludeAgents: "rug"
 ---
 
 # CLI Structure and Organization

@@ -3,7 +3,7 @@ import { sendMessage } from "./helpers/session-helpers"
 import type { Plugin } from "@opencode-ai/plugin"
 
 import { SessionStorage, SESSION_FIELDS } from "./helpers/kv-store"
-import { fetchAgentList, getSessionAgent, AgentInfo } from "./helpers/agent-steps"
+import { fetchAgentList, getSessionAgent, getAgentSteps, AgentInfo } from "./helpers/agent-steps"
 
 /**
  * Per-agent tool call limits.
@@ -62,7 +62,10 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
    * This Map is the SOURCE OF TRUTH for counting only.
    * sessionStorage persistence is one-way write-only — NEVER read from it for counting purposes.
    */
-  const sessionCounters = new Map<string, number>()
+   const sessionCounters = new Map<string, number>()
+
+   // Tracks sessions that have already received the budget tag in chat.message
+   const budgetTagInjectedSessions = new Set<string>()
 
   // Session storage for cross-plugin state persistence (needsReview flag)
   const sessionStorage = new SessionStorage()
@@ -89,6 +92,7 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
       }
 
       sessionCounters.delete(event.properties.sessionID as string)
+      budgetTagInjectedSessions.delete(event.properties.sessionID as string)
       await log(client, "info", `session ${event.properties.sessionID} idle — cleared tool call counter`, "tool-limit-reminder")
 
       const idleSessionId = event.properties.sessionID as string
@@ -121,7 +125,7 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
     dispose: async () => {
       void log(client, "info", "dispose", "tool-limit-reminder")
     },
-    "tool.execute.before": async (input: ToolExecuteBeforeInput) => {
+    "tool.execute.before": async (input: ToolExecuteBeforeInput, _output?: { args: Record<string, unknown> }) => {
       if (!input.sessionID) {
         await log(client, "warn", "missing sessionID in tool.execute.before input", "tool-limit-reminder")
         return
@@ -206,6 +210,43 @@ Output the summary:
       }
 
       // Below threshold: do nothing special
+    },
+    "chat.message": async (
+      input: { sessionID: string; agent?: string; messageID?: string },
+      output: { message: unknown; parts: { id: string; sessionID: string; messageID: string; type: string; text: string; synthetic?: boolean }[] }
+    ) => {
+      if (!input.sessionID || !input.agent) {
+        return
+      }
+
+      const sessionID = input.sessionID
+      if (budgetTagInjectedSessions.has(sessionID)) {
+        return
+      }
+
+      const steps = await getAgentSteps(client, input.agent)
+      if (steps === undefined) {
+        return
+      }
+
+      const budgetTag = `<task-budget tool-calls="${steps}" />`
+
+      const firstTextPart = output.parts.find((p: { type: string }) => p.type === "text")
+
+      if (firstTextPart) {
+        firstTextPart.text = budgetTag + "\n" + firstTextPart.text
+      } else {
+        output.parts.unshift({
+          id: "task-budget",
+          sessionID: input.sessionID,
+          messageID: input.messageID ?? "",
+          type: "text",
+          text: budgetTag,
+          synthetic: true,
+        })
+      }
+
+      budgetTagInjectedSessions.add(sessionID)
     },
   } as Record<string, (...arguments_: unknown[]) => void>
 }

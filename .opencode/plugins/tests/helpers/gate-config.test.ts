@@ -21,6 +21,12 @@ function mockBunFile(config: unknown) {
 
 describe('gate-config loader', () => {
   it('missing config file returns empty gates', async () => {
+    const error = new Error('ENOENT: no such file or directory') as Error & { code: string }
+    error.code = 'ENOENT'
+    vi.spyOn(Bun, 'file').mockReturnValue({
+      json: vi.fn().mockRejectedValue(error),
+    } as unknown as ReturnType<typeof Bun.file>)
+
     const result = await loadQualityGates('/nonexistent/project', mockClient)
 
     expect(result.gates).toEqual([])
@@ -64,7 +70,7 @@ describe('gate-config loader', () => {
     expect(result.gates).toEqual(config.gates)
   })
 
-  it('invalid JSON returns empty gates', async () => {
+  it('invalid JSON returns empty gates and logs parse error', async () => {
     vi.spyOn(Bun, 'file').mockReturnValue({
       json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected token')),
     } as unknown as ReturnType<typeof Bun.file>)
@@ -73,7 +79,21 @@ describe('gate-config loader', () => {
 
     expect(result.gates).toEqual([])
     expect(result.debounceMs).toBe(300)
-    expect(log).toHaveBeenCalledWith(mockClient, "warn", "No quality-gates config found at /tmp/gate-config-invalid-json/.opencode/quality-gates.json")
+    expect(log).toHaveBeenCalledWith(mockClient, "warn", "Failed to load quality-gates config at /tmp/gate-config-invalid-json/.opencode/quality-gates.json: SyntaxError: Unexpected token")
+  })
+
+  it('permission denied error returns empty gates and logs actual error', async () => {
+    const error = new Error('EACCES: permission denied') as Error & { code: string }
+    error.code = 'EACCES'
+    vi.spyOn(Bun, 'file').mockReturnValue({
+      json: vi.fn().mockRejectedValue(error),
+    } as unknown as ReturnType<typeof Bun.file>)
+
+    const result = await loadQualityGates('/tmp/gate-config-perm-denied', mockClient)
+
+    expect(result.gates).toEqual([])
+    expect(result.debounceMs).toBe(300)
+    expect(log).toHaveBeenCalledWith(mockClient, "warn", "Failed to load quality-gates config at /tmp/gate-config-perm-denied/.opencode/quality-gates.json: Error: EACCES: permission denied")
   })
 
   it('missing required fields returns empty gates', async () => {

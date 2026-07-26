@@ -2,7 +2,6 @@ import { Plugin } from "@opencode-ai/plugin"
 import Bun from "bun"
 import { readdir } from "node:fs/promises"
 import { log } from "./helpers/logger"
-import { getAgentSteps } from "./helpers/agent-steps"
 
 async function buildSkillIndex(name: string, directory: string): Promise<string> {
     const skillDirectory = `${directory}/.agents/skills/${name}`
@@ -105,20 +104,6 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
                 const allBlocks = [...resolvedBlocks, ...unresolvedBlocks]
 
                 prefix = `<task_skills>\n${allBlocks.join("\n")}\n</task_skills>`
-            }
-
-            // --- Inject task budget ---
-            const subagentType = (output.args as Record<string, unknown>)?.subagent_type as string | undefined
-            let budgetTag: string | undefined
-            if (subagentType) {
-                const steps = await getAgentSteps(client, subagentType)
-                if (steps !== undefined) {
-                    budgetTag = `<task-budget tool-calls="${steps}" />`
-                }
-            }
-            if (budgetTag) {
-                if (prefix) prefix += "\n"
-                prefix += budgetTag
             }
 
             // --- Always wrap prompt ---

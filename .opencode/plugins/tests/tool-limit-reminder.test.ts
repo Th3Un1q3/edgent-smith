@@ -21,7 +21,8 @@ type HookInput = { sessionID?: string; tool?: string }
 
 interface ToolLimitReminderPlugin {
   dispose?: () => Promise<void>
-  "tool.execute.before": (input: HookInput) => void | Promise<void | undefined>
+  "tool.execute.before": (input: HookInput, output?: { args: Record<string, unknown> }) => void | Promise<void | undefined>
+  "chat.message": (input: { sessionID?: string; agent?: string; messageID?: string }, output: { message: unknown; parts: { id: string; sessionID: string; messageID: string; type: string; text: string; synthetic?: boolean }[] }) => void | Promise<void | undefined>
 }
 
 describe("toolLimitReminder plugin", () => {
@@ -554,6 +555,130 @@ describe("toolLimitReminder plugin", () => {
         ["just agent_utils/export-opencode-session ", ""],
         "idle-flagged",
       )
+    })
+  })
+
+  // ── Budget tag injection ────────────────────────────────────────────
+
+  describe("budget tag injection", () => {
+    it("injects task-budget tag when agent has steps defined", async () => {
+      const agentList = [{ name: "test-agent", steps: 15 }]
+      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
+      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
+      const hook = plugin["chat.message"]
+      const output = { parts: [{ id: "p1", sessionID: "sess-budget", messageID: "m1", type: "text", text: "original prompt" }] }
+
+      await hook({ sessionID: "sess-budget", agent: "test-agent" }, output as never)
+
+      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
+    })
+
+    it("prepends budget tag to first text part without overwriting other parts", async () => {
+      const agentList = [{ name: "test-agent", steps: 15 }]
+      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
+      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
+      const hook = plugin["chat.message"]
+      const output = { parts: [
+        { id: "p1", sessionID: "sess-budget", messageID: "m1", type: "text", text: "first" },
+        { id: "p2", sessionID: "sess-budget", messageID: "m1", type: "text", text: "second" },
+      ] }
+
+      await hook({ sessionID: "sess-budget", agent: "test-agent" }, output as never)
+
+      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\nfirst')
+      expect((output.parts[1] as { text: string }).text).toBe("second")
+    })
+
+    it("creates a synthetic text part when no text part exists", async () => {
+      const agentList = [{ name: "test-agent", steps: 15 }]
+      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
+      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
+      const hook = plugin["chat.message"]
+      const output = { parts: [] }
+
+      await hook({ sessionID: "sess-budget", agent: "test-agent" }, output as never)
+
+      expect(output.parts).toHaveLength(1)
+      expect(output.parts[0]).toMatchObject({
+        id: "task-budget",
+        sessionID: "sess-budget",
+        messageID: "",
+        type: "text",
+        text: '<task-budget tool-calls="15" />',
+        synthetic: true,
+      })
+    })
+
+    it("does not inject budget tag when agent has no steps defined", async () => {
+      const agentList = [{ name: "no-steps-agent" }]
+      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
+      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
+      const hook = plugin["chat.message"]
+      const output = { parts: [{ id: "p1", sessionID: "sess-budget", messageID: "m1", type: "text", text: "original prompt" }] }
+
+      await hook({ sessionID: "sess-budget", agent: "no-steps-agent" }, output as never)
+
+      expect((output.parts[0] as { text: string }).text).toBe("original prompt")
+    })
+
+    it("does not inject budget tag when agent is missing", async () => {
+      const plugin = (await toolLimitReminder(defaultCreateClient("build") as unknown as PluginInput)) as ToolLimitReminderPlugin
+      const hook = plugin["chat.message"]
+      const output = { parts: [{ id: "p1", sessionID: "sess-budget", messageID: "m1", type: "text", text: "original prompt" }] }
+
+      await hook({ sessionID: "sess-budget" }, output as never)
+
+      expect((output.parts[0] as { text: string }).text).toBe("original prompt")
+    })
+
+    it("skips injection when sessionID is missing", async () => {
+      const agentList = [{ name: "test-agent", steps: 15 }]
+      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
+      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
+      const hook = plugin["chat.message"]
+      const output = { parts: [{ id: "p1", sessionID: "sess-budget", messageID: "m1", type: "text", text: "original prompt" }] }
+
+      await hook({ agent: "test-agent" }, output as never)
+
+      expect((output.parts[0] as { text: string }).text).toBe("original prompt")
+    })
+
+    it("does not prepend budget tag to subsequent messages in the same session", async () => {
+      const agentList = [{ name: "test-agent", steps: 15 }]
+      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
+      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
+      const hook = plugin["chat.message"]
+      const output = { parts: [{ id: "p1", sessionID: "sess-budget-subsequent", messageID: "m1", type: "text", text: "original prompt" }] }
+
+      await hook({ sessionID: "sess-budget-subsequent", agent: "test-agent" }, output as never)
+
+      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
+
+      await hook({ sessionID: "sess-budget-subsequent", agent: "test-agent" }, output as never)
+
+      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
+    })
+
+    it("prepends budget tag again after session goes idle", async () => {
+      const agentList = [{ name: "test-agent", steps: 15 }]
+      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
+      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
+      const hook = plugin["chat.message"]
+      const output = { parts: [{ id: "p1", sessionID: "sess-idle-reset", messageID: "m1", type: "text", text: "original prompt" }] }
+
+      await hook({ sessionID: "sess-idle-reset", agent: "test-agent" }, output as never)
+
+      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
+
+      await hook({ sessionID: "sess-idle-reset", agent: "test-agent" }, output as never)
+
+      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
+
+      await plugin.event({ event: { type: "session.idle", properties: { sessionID: "sess-idle-reset" } } })
+
+      await hook({ sessionID: "sess-idle-reset", agent: "test-agent" }, output as never)
+
+      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\n<task-budget tool-calls="15" />\noriginal prompt')
     })
   })
 

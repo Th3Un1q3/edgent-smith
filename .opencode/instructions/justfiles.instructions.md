@@ -1,6 +1,7 @@
 ---
 description: Best practices for writing justfiles to ensure maintainability, clarity, and consistency across projects.
 applyTo: "{.*,**}/justfile"
+excludeAgents: "rug"
 ---
 
 # Best Practices for just tasks

@@ -7,13 +7,13 @@ import type { GateConfig, GateRunOutcome } from '@plugins/types/quality-gate'
 describe('gate-formatter', () => {
   it('formats success as exact steering message', () => {
     expect(formatGateSuccess('lint', 'just lint')).toBe(
-      '<steering priority="info" reason="file change triggered quality gate run" result="pass" gate-id="lint">Quality gate \'lint\' passed — `just lint` completed (exit 0)</steering>',
+      '<steering priority="info" reason="file change triggered quality gate run" type="quality-gate" result="pass" gate-id="lint">Quality gate \'lint\' passed — `just lint` completed (exit 0)</steering>',
     )
   })
 
   it('formats success with no command', () => {
     expect(formatGateSuccess('lint', '')).toBe(
-      '<steering priority="info" reason="file change triggered quality gate run" result="pass" gate-id="lint">Quality gate \'lint\' passed — no commands to run</steering>',
+      '<steering priority="info" reason="file change triggered quality gate run" type="quality-gate" result="pass" gate-id="lint">Quality gate \'lint\' passed — no commands to run</steering>',
     )
   })
 
@@ -25,7 +25,7 @@ describe('gate-formatter', () => {
     }
 
     expect(formatGateFailure('lint', 'just lint', result)).toBe(
-      '<steering priority="warning" reason="file change triggered quality gate run" result="fail" gate-id="lint">Quality gate \'lint\' failed — `just lint` exited with code 1:\nstdout line\nstderr line</steering>',
+      '<steering priority="warning" reason="file change triggered quality gate run" type="quality-gate" result="fail" gate-id="lint">Quality gate \'lint\' failed — `just lint` exited with code 1:\nstdout line\nstderr line</steering>',
     )
   })
 
@@ -37,7 +37,7 @@ describe('gate-formatter', () => {
     }
 
     expect(formatGateFailure('test', 'just test', result)).toBe(
-      '<steering priority="warning" reason="file change triggered quality gate run" result="fail" gate-id="test">Quality gate \'test\' failed — `just test` exited with code 2:\nonly stdout</steering>',
+      '<steering priority="warning" reason="file change triggered quality gate run" type="quality-gate" result="fail" gate-id="test">Quality gate \'test\' failed — `just test` exited with code 2:\nonly stdout</steering>',
     )
   })
 
@@ -49,7 +49,7 @@ describe('gate-formatter', () => {
     }
 
     expect(formatGateFailure('test', 'just test', result)).toBe(
-      '<steering priority="warning" reason="file change triggered quality gate run" result="fail" gate-id="test">Quality gate \'test\' failed — `just test` exited with code 0</steering>',
+      '<steering priority="warning" reason="file change triggered quality gate run" type="quality-gate" result="fail" gate-id="test">Quality gate \'test\' failed — `just test` exited with code 0</steering>',
     )
   })
 })
@@ -66,6 +66,7 @@ describe('formatGateBatchResults', () => {
     const result = formatGateBatchResults(outcomes)
 
     expect(result).toContain('info')
+    expect(result).toContain('type="quality-gate"')
     expect(result).toContain('result="pass"')
     expect(result).toContain('lint')
     expect(result).toContain('typecheck')
@@ -79,6 +80,7 @@ describe('formatGateBatchResults', () => {
     const result = formatGateBatchResults(outcomes)
 
     expect(result).toContain('warning')
+    expect(result).toContain('type="quality-gate"')
     expect(result).toContain('result="fail"')
   })
 
@@ -193,6 +195,7 @@ describe('formatGateBatchResults', () => {
 
     expect(result).toContain('Pre-change Quality gate results')
     expect(result).toContain('reason="quality gate check before file change"')
+    expect(result).toContain('type="quality-gate"')
     expect(result).toContain('result="pass"')
   })
 

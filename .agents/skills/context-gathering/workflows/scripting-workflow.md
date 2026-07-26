@@ -2,7 +2,7 @@
 
 Follow this workflow to create and execute multi-tool JavaScript scripts for context gathering using the `code_mode` environment.
 
-Make sure to perform servers discovery and code mode activation steps in the [Setup workflow](./setup.md) before following this workflow.
+Make sure to perform servers discovery and code mode activation steps in the [Setup workflow](./setup) before following this workflow.
 
 ## Rules
 

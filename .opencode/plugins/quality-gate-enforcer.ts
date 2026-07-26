@@ -42,6 +42,12 @@ async function sendTransitionMessage(
 export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
   const gatesState: Record<string, GateStateEntry> = {}
 
+  const resolvedDirectory = directory ?? "/workspace"
+  const qualityGatesConfig = await loadQualityGates(resolvedDirectory, client)
+  const gates = qualityGatesConfig.gates
+  const sessionStorage = new SessionStorage()
+  const targetedTools = new Set(["edit", "write"])
+
   const readGateStatuses = (
     sessionID: string | undefined,
     sessionStorage: SessionStorage,
@@ -101,24 +107,23 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
     return promise
   }
 
-  const resolvedDirectory = directory ?? "/workspace"
-  const qualityGatesConfig = await loadQualityGates(resolvedDirectory, client)
-  const gates = qualityGatesConfig.gates
-  const sessionStorage = new SessionStorage()
-  const targetedTools = new Set(["edit", "write"])
-
   return {
-    "tool.execute.before": async (input: unknown) => {
-      const index = input as { tool?: string; sessionID?: string; args?: { filePath?: string } }
-      if (typeof index.tool !== "string" || !targetedTools.has(index.tool)) return
+    "tool.execute.before": async (
+      input,
+      output,
+    ) => {
+      if (typeof input.tool !== "string" || !targetedTools.has(input.tool)) return
 
-      const filePath = extractFilePath(index as { args?: { filePath?: string } }, resolvedDirectory)
+      const filePath = extractFilePath(
+        { args: output?.args as { filePath?: string } | undefined },
+        resolvedDirectory,
+      )
       if (!filePath) return
 
       const matchedGates = findMatchingGates(gates, filePath)
       if (matchedGates.length === 0) return
 
-      const sessionID = index.sessionID
+      const sessionID = input.sessionID
       const gateStatuses = readGateStatuses(sessionID, sessionStorage)
       const outcomes: GateRunOutcome[] = []
 

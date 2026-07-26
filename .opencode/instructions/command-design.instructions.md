@@ -2,6 +2,7 @@
 name: command-design
 description: "Best practices for designing OpenCode commands. Use when creating, editing, or reviewing command markdown files."
 applyTo: ".opencode/commands/**/*.md"
+excludeAgents: "rug"
 ---
 
 # OpenCode Command Design

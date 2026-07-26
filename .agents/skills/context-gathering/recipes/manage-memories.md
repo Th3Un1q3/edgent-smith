@@ -6,12 +6,12 @@
 |--------|-------------|
 | **Servers** | `serena` |
 | **When to use** | Needing to update, reorganize, or clean up existing memories |
-| **Combines with** | [`store-memories`](store-memories.md) — creating new memories; [`collect-relevant-memories`](collect-relevant-memories.md) — finding which memories need management |
+| **Combines with** | [store-memories](./store-memories) — creating new memories; [collect-relevant-memories](./collect-relevant-memories) — finding which memories need management |
 
 ## Prerequisites
 
-1. Follow [Setup](../workflows/setup.md) — discover servers, activate code-mode
-2. Follow [Scripting workflow](../workflows/scripting-workflow.md) — sync JS, error handling, mcp-exec patterns
+1. Follow [Setup](../workflows/setup) — discover servers, activate code-mode
+2. Follow [Scripting workflow](../workflows/scripting-workflow) — sync JS, error handling, mcp-exec patterns
 3. Activate code-mode: `code_mode({"name": "memory-manage", "servers": ["serena"]})`
 
 ## Scripts
@@ -186,3 +186,84 @@ if (remaining.indexOf("auth/legacy-config") < 0) {
 - **Exception**: `list_memories` returns a JSON string (`{"memories": [string, ...]}`) — use `JSON.parse` to access the `.memories` array.
 - Memory names are **case-sensitive**. `Auth/Tokens` and `auth/tokens` are distinct memories.
 - Error behavior differs by tool: `edit_memory` throws an exception (`FileNotFoundError`) when the memory doesn't exist, while `delete_memory` returns a plain-text error string (`"Memory <name> not found."`). Always wrap `edit_memory` in try/catch; for `delete_memory`, check the return value for `"not found"`.
+
+## Domain Maintenance
+
+Each domain has an `about` entry (domain overview) and an `index` entry (memory list + cross-references). Keep them consistent whenever memories change. Memory names use the format `my-domain/about` and `my-domain/index`.
+
+| Action | Required updates |
+|--------|-----------------|
+| **Add a memory** | Add a row to the `## Memories` table in the domain's `index` entry (memory name: `my-domain/index`) |
+| **Rename a domain** | Update all `mem:<domain>/...` references in every domain's index entry; update the new domain's `about` and `index` entries accordingly |
+| **Delete a memory** | Remove the row from the domain's `index` entry (memory name: `my-domain/index`) |
+| **Restructure a domain** | Update the `index` entry (reorder or split the `## Memories` table) and `about` entry (update the `## Scope` section); verify all `mem:` cross-references resolve via `read_memory` |
+
+### Validate domain consistency
+
+Run this script against a domain to verify that its `about` entry exists and every memory listed in the `index` has a corresponding entry. Uses only memory-level tools — never filesystem I/O.
+
+```javascript
+// Validate that a domain's about entry exists and all memories in its index are present.
+// Uses list_memories + read_memory (never ioutil or file paths).
+var domain = "agents"; // Change to the domain you want to validate.
+
+const parseJson = (str, src) => {
+  try { return JSON.parse(str); }
+  catch (e) { throw new Error("Failed to parse " + src + ": " + e.message); }
+};
+
+function readMemoryContent(name) {
+  var raw = read_memory({ memory_name: name });
+  if (typeof raw === "string" && raw.indexOf("not found") >= 0) return null;
+  try { var parsed = JSON.parse(raw); return parsed.content || raw; } catch (e) { return raw; }
+}
+
+// Step 1: Check the domain's about entry exists.
+var aboutContent = readMemoryContent(domain + "/about");
+if (aboutContent === null) {
+  throw new Error("Missing " + domain + "/about — create it with write_memory or the store-memories recipe.");
+}
+
+// Step 2: Read the index and extract memory names from its ## Memories table.
+var indexContent = readMemoryContent(domain + "/index");
+if (indexContent === null) {
+  throw new Error("Missing " + domain + "/index — create it with write_memory or the store-memories recipe.");
+}
+
+// Extract memory names from backtick-quoted cells in table rows.
+var memoryNames = [];
+var lines = indexContent.split("\n");
+for (var i = 0; i < lines.length; i++) {
+  var line = lines[i];
+  if (line.indexOf("|") < 0) continue;
+  var parts = line.split("|");
+  if (parts.length < 3) continue;
+  var cell = parts[1].trim();
+  if (cell.indexOf("`") < 0) continue;
+  var m = cell.match(/`([^`]+)`/);
+  if (m) memoryNames.push(m[1]);
+}
+
+// Step 3: Check each listed memory exists via list_memories.
+var listResult = list_memories({ topic: domain });
+var parsed = parseJson(listResult, "list_memories");
+var existingMemories = (parsed.memories || []).reduce(function(acc, name) { acc[name] = true; return acc; }, {});
+
+// Step 4: Report results.
+var missing = [];
+for (var j = 0; j < memoryNames.length; j++) {
+  if (!existingMemories[memoryNames[j]]) {
+    missing.push(memoryNames[j]);
+  }
+}
+
+if (missing.length > 0) {
+  var errMsg = "Domain " + domain + " has " + missing.length + " index entry(s) that don't exist: ";
+  for (var k = 0; k < missing.length; k++) {
+    errMsg += missing[k] + (k < missing.length - 1 ? ", " : "");
+  }
+  throw new Error(errMsg);
+}
+
+return "OK — domain " + domain + " is consistent. " + memoryNames.length + " index entry(s) verified. about entry present.";
+```

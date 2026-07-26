@@ -335,7 +335,8 @@ describe("qualityGateEnforcer", () => {
       vi.mocked(runGate).mockResolvedValue(successResult)
 
       await (plugin["tool.execute.before"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_before1", args: { filePath: "/workspace/src/main.ts" } },
+        { tool: "edit", sessionID: "ses_before1" },
+        { args: { filePath: "/workspace/src/main.ts" } },
       )
 
       // Only "lint" matches **/*.ts
@@ -361,10 +362,11 @@ describe("qualityGateEnforcer", () => {
       // sendMessage called once by after handler (unknown→pass)
       expect(sendMessage).toHaveBeenCalledTimes(1)
 
-      // Then call tool.execute.before for the same file
-      await (plugin["tool.execute.before"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_gs_before", args: { filePath: "/workspace/src/main.ts" } },
-      )
+       // Then call tool.execute.before for the same file
+       await (plugin["tool.execute.before"] as (...arguments_: unknown[]) => unknown)(
+         { tool: "edit", sessionID: "ses_gs_before" },
+         { args: { filePath: "/workspace/src/main.ts" } },
+       )
 
       // runGate should NOT have been called again by the before handler
       expect(runGate).toHaveBeenCalledTimes(1)
@@ -372,18 +374,20 @@ describe("qualityGateEnforcer", () => {
       expect(sendMessage).toHaveBeenCalledTimes(1)
     })
 
-    it("ignores non-edit/write tools", async () => {
-      await (plugin["tool.execute.before"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "read", sessionID: "ses_before2", args: { filePath: "/workspace/src/main.ts" } },
-      )
+     it("ignores non-edit/write tools", async () => {
+       await (plugin["tool.execute.before"] as (...arguments_: unknown[]) => unknown)(
+         { tool: "read", sessionID: "ses_before2" },
+         { args: { filePath: "/workspace/src/main.ts" } },
+       )
 
       expect(runGate).not.toHaveBeenCalled()
     })
 
     it("skips gates with unknown status if no matching patterns", async () => {
-      await (plugin["tool.execute.before"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_before3", args: { filePath: "/workspace/README.md" } },
-      )
+       await (plugin["tool.execute.before"] as (...arguments_: unknown[]) => unknown)(
+         { tool: "edit", sessionID: "ses_before3" },
+         { args: { filePath: "/workspace/README.md" } },
+       )
 
       expect(runGate).not.toHaveBeenCalled()
     })
@@ -402,12 +406,12 @@ describe("qualityGateEnforcer", () => {
       const input = {
         tool: "edit",
         sessionID: "ses_before_dedup",
-        args: { filePath: "/workspace/src/main.ts" },
       }
+      const output = { args: { filePath: "/workspace/src/main.ts" } }
 
       // Fire two before calls within the debounce window — both see unknown
-      const handler1 = (plugin["tool.execute.before"] as (...arguments_: unknown[]) => Promise<unknown>)(input)
-      const handler2 = (plugin["tool.execute.before"] as (...arguments_: unknown[]) => Promise<unknown>)(input)
+      const handler1 = (plugin["tool.execute.before"] as (...arguments_: unknown[]) => Promise<unknown>)(input, output)
+      const handler2 = (plugin["tool.execute.before"] as (...arguments_: unknown[]) => Promise<unknown>)(input, output)
 
       // Advance past debounce — gate runs once, both handlers continue
       await vi.advanceTimersByTimeAsync(100)
