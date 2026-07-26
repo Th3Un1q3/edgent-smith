@@ -184,4 +184,25 @@ describe('formatGateBatchResults', () => {
     expect(lines[2]).toContain(`✓ ${lintGate.name}`)
     expect(lines[3]).toContain(`✓ ${typeGate.name}`)
   })
+
+  it('prefixes with "Pre-change " and uses changed reason when isPreChange is true', () => {
+    const outcomes: GateRunOutcome[] = [
+      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
+    ]
+    const result = formatGateBatchResults(outcomes, true)
+
+    expect(result).toContain('Pre-change Quality gate results')
+    expect(result).toContain('reason="quality gate check before file change"')
+    expect(result).toContain('result="pass"')
+  })
+
+  it('behaves identically to default when isPreChange is false', () => {
+    const outcomes: GateRunOutcome[] = [
+      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
+    ]
+    const defaultResult = formatGateBatchResults(outcomes)
+    const explicitFalseResult = formatGateBatchResults(outcomes, false)
+
+    expect(explicitFalseResult).toBe(defaultResult)
+  })
 })

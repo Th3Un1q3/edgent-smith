@@ -3,6 +3,7 @@ name: tdd-enforcement
 description: "Follow it when: implementing any code change, feature, or bugfix. This instruction enforces strict Test-Driven Development (TDD) with no exceptions."
 applyTo: "**/*.{ts,js,py}"
 excludePaths: "**/*.test.ts,tests/*.py"
+"excludeAgents": rug
 ---
 
 # TDD Enforcement: The Iron Law

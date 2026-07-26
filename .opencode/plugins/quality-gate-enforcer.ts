@@ -8,7 +8,7 @@ import { SessionStorage } from "./helpers/kv-store"
 import { sendMessage } from "./helpers/session-helpers"
 import { formatGateBatchResults } from "./helpers/gate-formatter"
 import { log } from "./helpers/logger"
-import type { GateConfig, GateResult, GateRunOutcome } from "./types/quality-gate"
+import type { GateConfig, GateResult, GateRunOutcome, GateStateEntry } from "./types/quality-gate"
 
 function extractFilePath(input: { args?: { filePath?: string } }, workspaceRoot: string): string | undefined {
   if (typeof input.args?.filePath !== "string") return undefined
@@ -23,27 +23,14 @@ function findMatchingGates(gates: GateConfig[], filePath: string): GateConfig[] 
   )
 }
 
-function readGateStatuses(
-  sessionID: string | undefined,
-  sessionStorage: SessionStorage,
-): Record<string, GateResult> {
-  if (!sessionID) return {}
-  const state = sessionStorage.readState(sessionID, (s) => s as Record<string, unknown>)
-  const statuses = state?.qualityGateStatuses as
-    Record<string, { dirty?: boolean; status: GateResult }> | undefined
-  if (!statuses) return {}
-  return Object.fromEntries(
-    Object.entries(statuses).map(([name, entry]) => [name, entry.status]),
-  )
-}
-
 async function sendTransitionMessage(
   outcomes: GateRunOutcome[],
   sessionID: string | undefined,
   client: OpencodeClient,
+  isPreChange?: boolean,
 ): Promise<void> {
   if (outcomes.length === 0) return
-  const message = formatGateBatchResults(outcomes)
+  const message = formatGateBatchResults(outcomes, isPreChange)
   void log(client, "info", `Sending transition message for ${outcomes.length} gate(s)`, "quality-gate-enforcer")
   if (sessionID) {
     await sendMessage({ client, sessionId: sessionID, message, noReply: true })
@@ -53,33 +40,140 @@ async function sendTransitionMessage(
 }
 
 export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
+  const gatesState: Record<string, GateStateEntry> = {}
+
+  const readGateStatuses = (
+    sessionID: string | undefined,
+    sessionStorage: SessionStorage,
+  ): Record<string, GateResult> => {
+    const result: Record<string, GateResult> = {}
+    for (const [name, entry] of Object.entries(gatesState)) {
+      result[name] = entry.lastStatus
+    }
+    if (sessionID) {
+      const state = sessionStorage.readState(sessionID, (s) => s as Record<string, unknown>)
+      const statuses = state?.qualityGateStatuses as
+        Record<string, { dirty?: boolean; status: GateResult }> | undefined
+      if (statuses) {
+        for (const [name, entry] of Object.entries(statuses)) {
+          if (!Object.hasOwn(result, name)) {
+            result[name] = entry.status
+          }
+        }
+      }
+    }
+    return result
+  }
+
+  const pendingRuns = new Map<string, Promise<CommandResult>>()
+  const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const beforeTransitionSent = new Set<string>()
+
+  const runGatePooled = (gate: GateConfig): Promise<CommandResult> => {
+    const existing = pendingRuns.get(gate.name)
+    if (existing) return existing
+
+    const debounceMs = qualityGatesConfig.debounceMs ?? 0
+
+    const execute = async (): Promise<CommandResult> => {
+      try {
+        const raw = await runGate(gate, $ as unknown as Shell)
+        return raw ?? { exitCode: 1, stdout: "", stderr: "Gate returned no result" }
+      } catch (error: unknown) {
+        return { exitCode: 1, stdout: "", stderr: String(error) }
+      } finally {
+        pendingRuns.delete(gate.name)
+      }
+    }
+
+    const promise: Promise<CommandResult> = debounceMs > 0
+      ? new Promise(resolve => {
+          const timer = debounceTimers.get(gate.name)
+          if (timer) clearTimeout(timer)
+          debounceTimers.set(gate.name, setTimeout(async () => {
+            debounceTimers.delete(gate.name)
+            resolve(await execute())
+          }, debounceMs))
+        })
+      : execute()
+
+    pendingRuns.set(gate.name, promise)
+    return promise
+  }
+
   const resolvedDirectory = directory ?? "/workspace"
   const qualityGatesConfig = await loadQualityGates(resolvedDirectory, client)
   const gates = qualityGatesConfig.gates
   const sessionStorage = new SessionStorage()
   const targetedTools = new Set(["edit", "write"])
 
-  async function updateGateStatus(
-    sessionId: string,
-    gateName: string,
-    isDirty: boolean,
-    status: GateResult,
-  ): Promise<void> {
-    await sessionStorage.updateState(sessionId, (state) => {
-      const current = state as Record<string, unknown>
-      const gates = (current.qualityGateStatuses as Record<string, { dirty: boolean; status: GateResult }>) ?? {}
-      return {
-        ...current,
-        qualityGateStatuses: {
-          ...gates,
-          [gateName]: { dirty: isDirty, status },
-        },
-      }
-    })
-  }
-
   return {
-    "tool.execute.after": async (input, _output) => {
+    "tool.execute.before": async (input: unknown) => {
+      const index = input as { tool?: string; sessionID?: string; args?: { filePath?: string } }
+      if (typeof index.tool !== "string" || !targetedTools.has(index.tool)) return
+
+      const filePath = extractFilePath(index as { args?: { filePath?: string } }, resolvedDirectory)
+      if (!filePath) return
+
+      const matchedGates = findMatchingGates(gates, filePath)
+      if (matchedGates.length === 0) return
+
+      const sessionID = index.sessionID
+      const gateStatuses = readGateStatuses(sessionID, sessionStorage)
+      const outcomes: GateRunOutcome[] = []
+
+      for (const gate of matchedGates) {
+        const currentStatus = gateStatuses[gate.name] ?? "unknown"
+        if (currentStatus !== "unknown") continue
+
+        const result = await runGatePooled(gate)
+        const newStatus: "pass" | "fail" = result.exitCode === 0 ? "pass" : "fail"
+
+        if (sessionID) {
+          gatesState[gate.name] = {
+            lastStatus: newStatus,
+            lastExecutedAt: new Date(),
+            lastStdOut: result.stdout,
+            affectedSessions: [sessionID],
+          }
+          if (newStatus === "pass") {
+            gatesState[gate.name].affectedSessions = []
+          }
+        }
+
+        if ((newStatus as GateResult) !== currentStatus && !beforeTransitionSent.has(gate.name)) {
+          beforeTransitionSent.add(gate.name)
+          outcomes.push({ gate, previousStatus: currentStatus, newStatus, result })
+        }
+      }
+
+      if (outcomes.length > 0) {
+        await sendTransitionMessage(outcomes, sessionID, client, true)
+      }
+    },
+    "tool.execute.after": async (input, output) => {
+      if (input.tool === "task") {
+        const childSessionID = (output.metadata as Record<string, unknown> | undefined)?.sessionId as string | undefined
+        if (!childSessionID) return
+
+        const state = sessionStorage.readState(childSessionID, (s) => s as Record<string, unknown>)
+        if (!state) return
+
+        const gateStatuses = state.qualityGateStatuses as
+          Record<string, { dirty: boolean; status: string }> | undefined
+        if (!gateStatuses) return
+
+        const failingGates = Object.entries(gateStatuses)
+          .filter(([_, info]) => info.status === "fail")
+          .map(([name]) => name)
+
+        if (failingGates.length === 0) return
+
+        const failMessage = `\n\n⚠️ FAILING QUALITY GATES: ${failingGates.join(", ")}`
+        output.output = (output.output || "") + failMessage
+        return
+      }
+
       if (!targetedTools.has(input.tool)) return
 
       const filePath = extractFilePath(input, resolvedDirectory)
@@ -95,31 +189,21 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
       for (const gate of matchedGates) {
         const oldStatus = gateStatuses[gate.name] ?? "unknown"
 
-        // Mark dirty before running — signals that gate evaluation is in progress
-        if (sessionID) {
-          try {
-            await updateGateStatus(sessionID, gate.name, true, oldStatus)
-          } catch (error: unknown) {
-            await log(client, "error", `failed to mark gate ${gate.name} dirty for session ${sessionID}: ${(error as Error).message}`, "quality-gate-enforcer")
-          }
+        const result = await runGatePooled(gate)
+
+        const newStatus: "pass" | "fail" = result.exitCode === 0 ? "pass" : "fail"
+
+        gatesState[gate.name] = {
+          lastStatus: newStatus,
+          lastExecutedAt: new Date(),
+          lastStdOut: result.stdout,
+          affectedSessions: sessionID ? [...(gatesState[gate.name]?.affectedSessions ?? []), sessionID].filter(
+            (s, index, array) => array.indexOf(s) === index,
+          ) : [],
         }
 
-        let result: CommandResult
-        try {
-          const raw = await runGate(gate, $ as unknown as Shell)
-          result = raw ?? { exitCode: 1, stdout: "", stderr: "Gate returned no result" }
-        } catch (error: unknown) {
-          result = { exitCode: 1, stdout: "", stderr: String(error) }
-        }
-
-        const newStatus: GateResult = result.exitCode === 0 ? "pass" : "fail"
-
-        if (sessionID) {
-          try {
-            await updateGateStatus(sessionID, gate.name, false, newStatus)
-          } catch (error: unknown) {
-            await log(client, "error", `failed to update gate ${gate.name} status for session ${sessionID}: ${(error as Error).message}`, "quality-gate-enforcer")
-          }
+        if (newStatus === "pass") {
+          gatesState[gate.name].affectedSessions = []
         }
 
         if (oldStatus !== newStatus) {

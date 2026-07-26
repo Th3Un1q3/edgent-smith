@@ -20,6 +20,13 @@ export interface GateRunOutcome {
   result: CommandResult
 }
 
+export interface GateStateEntry {
+  lastStatus: GateResult
+  lastExecutedAt: Date
+  lastStdOut: string
+  affectedSessions: string[]
+}
+
 export interface QualityGatesConfig {
   gates: GateConfig[]
   debounceMs?: number

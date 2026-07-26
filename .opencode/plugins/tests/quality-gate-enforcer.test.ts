@@ -26,7 +26,7 @@ const _kvInstance = new (SessionStorage as unknown as new () => {
   readState: ReturnType<typeof vi.fn>
   updateState: ReturnType<typeof vi.fn>
 })()
-const mockUpdateState = _kvInstance.updateState
+const mockReadState = _kvInstance.readState
 
 import type { QualityGatesConfig } from "@plugins/types/quality-gate"
 import type { CommandResult } from "@plugins/helpers/gate-runner"
@@ -223,85 +223,10 @@ describe("qualityGateEnforcer", () => {
     })
   })
 
-  // ── KV state updates ──────────────────────────────────────────────────
-
-  describe("KV state updates", () => {
-    it("stores pass status on exit 0", async () => {
-      vi.mocked(runGate).mockResolvedValue(successResult)
-
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_kv1", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-
-      expect(mockUpdateState).toHaveBeenCalled()
-      // Two calls: first marks dirty=true, last writes final status with dirty=false
-      const lastCall = mockUpdateState.mock.calls.at(-1)
-      if (!lastCall) throw new Error("Expected at least one mockUpdateState call")
-      const lastUpdater = lastCall[1] as (state: Record<string, unknown>) => Record<string, unknown>
-      const result = lastUpdater({})
-      expect(result).toEqual({
-        qualityGateStatuses: {
-          lint: { dirty: false, status: "pass" },
-        },
-      })
-    })
-
-    it("stores fail status on non-zero exit", async () => {
-      vi.mocked(runGate).mockResolvedValue(failureResult)
-
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_kv2", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: "", metadata: {} },
-      )
-
-      expect(mockUpdateState).toHaveBeenCalled()
-      const lastCall = mockUpdateState.mock.calls.at(-1)
-      if (!lastCall) throw new Error("Expected at least one mockUpdateState call")
-      const lastUpdater = lastCall[1] as (state: Record<string, unknown>) => Record<string, unknown>
-      const result = lastUpdater({})
-      expect(result).toEqual({
-        qualityGateStatuses: {
-          lint: { dirty: false, status: "fail" },
-        },
-      })
-    })
-
-    const input = {
-      tool: "edit",
-      sessionID: "ses_dirty",
-      args: { filePath: "/workspace/src/main.ts" },
-    }
-
-    it("marks gates dirty before running, clears after completion", async () => {
-      vi.mocked(runGate).mockResolvedValue(successResult)
-
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        input,
-        { title: "", output: "", metadata: {} },
-      )
-
-      // Get all update calls for this session
-      const calls = (mockUpdateState as ReturnType<typeof vi.fn>).mock.calls.filter(
-        (call: unknown[]) => call[0] === input.sessionID,
-      )
-      expect(calls.length).toBeGreaterThanOrEqual(2)
-
-      // First call should set dirty: true
-      const first = calls[0]
-      if (!first) throw new Error("Expected first mockUpdateState call for session")
-      const firstUpdater = first[1] as (state: Record<string, unknown>) => Record<string, unknown>
-      const firstState = firstUpdater({}) as { qualityGateStatuses: Record<string, { dirty: boolean; status: string }> }
-      expect(firstState.qualityGateStatuses.lint).toEqual({ dirty: true, status: "unknown" })
-
-      // Last call should set dirty: false with new status
-      const last = calls.at(-1)
-      if (!last) throw new Error("Expected last mockUpdateState call for session")
-      const lastUpdater = last[1] as (state: Record<string, unknown>) => Record<string, unknown>
-      const lastState = lastUpdater({}) as { qualityGateStatuses: Record<string, { dirty: boolean; status: string }> }
-      expect(lastState.qualityGateStatuses.lint).toEqual({ dirty: false, status: "pass" })
-    })
-  })
+  // ── KV state updates have been removed ────────────────────────────────
+  // updateGateStatus calls were removed from tool.execute.after, so
+  // SessionStorage.updateState is no longer called during gate execution.
+  // GatesState is tracked in-memory via the gatesState closure variable.
 
   // ── Session handling ─────────────────────────────────────────────────
 
@@ -342,52 +267,160 @@ describe("qualityGateEnforcer", () => {
     })
   })
 
-  // ── Error logging ─────────────────────────────────────────────────────
+  // ── Error logging on updateState removed ──────────────────────────────
+  // updateGateStatus error logging was removed along with the
+  // updateGateStatus function itself.
 
-  describe("error logging on updateState failure", () => {
-    beforeEach(() => {
-      mockUpdateState.mockRejectedValue(new Error("kv-store unavailable"))
-    })
+  // ── gatesState tracking ───────────────────────────────────────────────
 
-    it("does not double-prefix error message when marking gate dirty", async () => {
+  describe("gatesState tracking", () => {
+    it("tracks gate status across sessions preventing redundant messages", async () => {
       vi.mocked(runGate).mockResolvedValue(successResult)
 
+      // First execution: unknown → pass, sends message
       await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_err_log", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: {}, metadata: {} },
+        { tool: "edit", sessionID: "ses_gs1", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: "", metadata: {} },
       )
 
-      const logCalls = (mockClient.app.log as ReturnType<typeof vi.fn>).mock.calls as Array<[unknown]>
-      const errorCall = logCalls.find((call) => {
-        const body = (call[0] as { body?: { message?: string } })?.body
-        return typeof body?.message === "string" && body.message.includes("failed to mark gate")
-      })
-      expect(errorCall).toBeDefined()
-      const message = ((errorCall![0] as { body: { message: string } }).body).message
-      expect((message.match(/\[quality-gate-enforcer\]/g) || []).length).toBe(1)
+      // Second execution (different session, same gate via gatesState): pass → pass, no message
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_gs2", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: "", metadata: {} },
+      )
+
+      // Only 1 message for the first transition (unknown→pass)
+      expect(sendMessage).toHaveBeenCalledTimes(1)
+      expect(runGate).toHaveBeenCalledTimes(2)
     })
 
-    it("does not double-prefix error message when updating gate status", async () => {
-      // First call succeeds, second call (update status) fails
-      mockUpdateState
-        .mockResolvedValueOnce(undefined)  // dirty marking succeeds
-        .mockRejectedValueOnce(new Error("kv-store unavailable"))  // status update fails
+    it("clears affectedSessions when gate passes and detects new transitions", async () => {
+      // Step 1: ses_A triggers gate → fails (unknown→fail, sends message)
+      vi.mocked(runGate).mockResolvedValue(failureResult)
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_gcA", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: "", metadata: {} },
+      )
+      expect(sendMessage).toHaveBeenCalledTimes(1)
+
+      // Step 2: ses_B triggers gate → fails (fail→fail via gatesState, no transition, no message)
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_gcB", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: "", metadata: {} },
+      )
+      expect(sendMessage).toHaveBeenCalledTimes(1)
+
+      // Step 3: ses_A triggers gate → passes (fail→pass, sends message, clears affectedSessions)
+      vi.mocked(runGate).mockResolvedValue(successResult)
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_gcA", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: "", metadata: {} },
+      )
+      expect(sendMessage).toHaveBeenCalledTimes(2)
+
+      // Step 4: ses_A triggers gate → fails again (pass→fail via gatesState from step 3, sends message)
+      vi.mocked(runGate).mockResolvedValue(failureResult)
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_gcA", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: "", metadata: {} },
+      )
+      expect(sendMessage).toHaveBeenCalledTimes(3)
+    })
+  })
+
+  // ── tool.execute.before ───────────────────────────────────────────────
+
+  describe("tool.execute.before", () => {
+    it("runs unknown-status gates before edit and reports baseline", async () => {
+      vi.mocked(runGate).mockResolvedValue(successResult)
+
+      await (plugin["tool.execute.before"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_before1", args: { filePath: "/workspace/src/main.ts" } },
+      )
+
+      // Only "lint" matches **/*.ts
+      expect(runGate).toHaveBeenCalledTimes(1)
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining("<steering"),
+        }),
+      )
+    })
+
+    it("does not run gates that already have status in gatesState", async () => {
+      vi.mocked(runGate).mockResolvedValue(successResult)
+
+      // First, run tool.execute.after for main.ts (lint runs, status→"pass" in gatesState)
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_gs_before", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: "", metadata: {} },
+      )
+
+      // runGate called once by after handler
+      expect(runGate).toHaveBeenCalledTimes(1)
+      // sendMessage called once by after handler (unknown→pass)
+      expect(sendMessage).toHaveBeenCalledTimes(1)
+
+      // Then call tool.execute.before for the same file
+      await (plugin["tool.execute.before"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_gs_before", args: { filePath: "/workspace/src/main.ts" } },
+      )
+
+      // runGate should NOT have been called again by the before handler
+      expect(runGate).toHaveBeenCalledTimes(1)
+      // sendMessage should NOT have been called again
+      expect(sendMessage).toHaveBeenCalledTimes(1)
+    })
+
+    it("ignores non-edit/write tools", async () => {
+      await (plugin["tool.execute.before"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "read", sessionID: "ses_before2", args: { filePath: "/workspace/src/main.ts" } },
+      )
+
+      expect(runGate).not.toHaveBeenCalled()
+    })
+
+    it("skips gates with unknown status if no matching patterns", async () => {
+      await (plugin["tool.execute.before"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_before3", args: { filePath: "/workspace/README.md" } },
+      )
+
+      expect(runGate).not.toHaveBeenCalled()
+    })
+
+    it("sends only one message when before handler fires multiple times rapidly", async () => {
+      // Use debounce so both handlers start within the same window and both see unknown status
+      vi.useFakeTimers()
+      vi.mocked(loadQualityGates).mockResolvedValue({
+        gates: [{ name: "lint", patterns: ["**/*.ts"], commands: ["just lint"] }],
+        debounceMs: 100,
+      })
+      plugin = await (qualityGateEnforcer as unknown as (context: unknown) => Promise<Record<string, unknown>>)(mockContext)
 
       vi.mocked(runGate).mockResolvedValue(successResult)
 
-      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
-        { tool: "edit", sessionID: "ses_err_log2", args: { filePath: "/workspace/src/main.ts" } },
-        { title: "", output: {}, metadata: {} },
-      )
+      const input = {
+        tool: "edit",
+        sessionID: "ses_before_dedup",
+        args: { filePath: "/workspace/src/main.ts" },
+      }
 
-      const logCalls = (mockClient.app.log as ReturnType<typeof vi.fn>).mock.calls as Array<[unknown]>
-      const errorCall = logCalls.find((call) => {
-        const body = (call[0] as { body?: { message?: string } })?.body
-        return typeof body?.message === "string" && body.message.includes("failed to update gate")
-      })
-      expect(errorCall).toBeDefined()
-      const message = ((errorCall![0] as { body: { message: string } }).body).message
-      expect((message.match(/\[quality-gate-enforcer\]/g) || []).length).toBe(1)
+      // Fire two before calls within the debounce window — both see unknown
+      const handler1 = (plugin["tool.execute.before"] as (...arguments_: unknown[]) => Promise<unknown>)(input)
+      const handler2 = (plugin["tool.execute.before"] as (...arguments_: unknown[]) => Promise<unknown>)(input)
+
+      // Advance past debounce — gate runs once, both handlers continue
+      await vi.advanceTimersByTimeAsync(100)
+
+      await handler1
+      await handler2
+
+      // runGate called once (debounce consolidated the two calls)
+      expect(runGate).toHaveBeenCalledTimes(1)
+      // Only one transition message — beforeTransitionSent suppresses duplicate
+      expect(sendMessage).toHaveBeenCalledTimes(1)
+
+      vi.useRealTimers()
     })
   })
 
@@ -435,6 +468,166 @@ describe("qualityGateEnforcer", () => {
 
       // Should be treated as a failure, triggering a status transition message
       expect(sendMessage).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  // ── runGatePooled ───────────────────────────────────────────────────────
+
+  describe("runGatePooled", () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it("consolidates same-gate runs under a single promise with debounce", async () => {
+      vi.useFakeTimers()
+
+      vi.mocked(loadQualityGates).mockResolvedValue({
+        gates: fixtureConfig.gates,
+        debounceMs: 100,
+      })
+      plugin = await (qualityGateEnforcer as unknown as (context: unknown) => Promise<Record<string, unknown>>)(mockContext)
+
+      vi.mocked(runGate).mockResolvedValue(successResult)
+
+      const input = {
+        tool: "edit",
+        sessionID: "ses_pool_debounce",
+        args: { filePath: "/workspace/src/main.ts" },
+      }
+
+      // Fire two consecutive calls (both match "lint")
+      const handler1 = (plugin["tool.execute.after"] as (...arguments_: unknown[]) => Promise<unknown>)(input, {})
+      const handler2 = (plugin["tool.execute.after"] as (...arguments_: unknown[]) => Promise<unknown>)(input, {})
+
+      // Advance timers by debounceMs (100ms) — async to flush microtasks
+      await vi.advanceTimersByTimeAsync(100)
+
+      await handler1
+      await handler2
+
+      // runGate called only ONCE (consolidation + debounce works)
+      expect(runGate).toHaveBeenCalledTimes(1)
+    })
+
+    it("executes immediately when debounceMs is 0", async () => {
+      // Default config (no debounceMs)
+      vi.mocked(loadQualityGates).mockResolvedValue(fixtureConfig)
+      plugin = await (qualityGateEnforcer as unknown as (context: unknown) => Promise<Record<string, unknown>>)(mockContext)
+
+      vi.mocked(runGate).mockResolvedValue(successResult)
+
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => Promise<unknown>)(
+        { tool: "edit", sessionID: "ses_immediate", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: "", metadata: {} },
+      )
+
+      // runGate was called (no setTimeout delay)
+      expect(runGate).toHaveBeenCalled()
+    })
+
+    it("caches the same gate promise while running without debounce", async () => {
+      // Use a never-resolving promise so runGatePooled keeps the cached entry
+      const neverResolving = new Promise<CommandResult>(() => { /* never resolves */ })
+      vi.mocked(runGate).mockReturnValue(neverResolving)
+
+      // Use sessionID: undefined to skip the await updateGateStatus before runGatePooled
+      // (otherwise the handler suspends on the updateGateStatus microtask before reaching runGate)
+      const input = {
+        tool: "edit",
+        sessionID: undefined,
+        args: { filePath: "/workspace/src/main.ts" },
+      }
+
+      // Fire first call — runGate called synchronously inside execute(), promise stored in pendingRuns
+       
+      const _handler1 = (plugin["tool.execute.after"] as (...arguments_: unknown[]) => Promise<unknown>)(input, {})
+
+      // Fire second call — should find existing promise, NOT call runGate again
+       
+      const _handler2 = (plugin["tool.execute.after"] as (...arguments_: unknown[]) => Promise<unknown>)(input, {})
+
+      // runGate was called only once despite two handlers
+      expect(runGate).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  // ── Task tool handling ──────────────────────────────────────────────────
+
+  describe("task tool handling", () => {
+    it("appends failing gates to task output when task tool completes", async () => {
+      resetMockState({
+        ses_child_1: {
+          qualityGateStatuses: {
+            lint: { dirty: false, status: "fail" },
+          },
+        },
+      })
+
+      const output = {
+        output: "Task completed successfully.",
+        title: "",
+        metadata: { sessionId: "ses_child_1" },
+      }
+
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "task", sessionID: "ses_parent", callID: "call_1", args: {} },
+        output,
+      )
+
+      expect(mockReadState).toHaveBeenCalledWith("ses_child_1", expect.any(Function))
+      expect(output.output).toContain("Task completed successfully.")
+      expect(output.output).toContain("FAILING QUALITY GATES: lint")
+    })
+
+    it("skips when all child gates pass", async () => {
+      resetMockState({
+        ses_child_1: {
+          qualityGateStatuses: {
+            lint: { dirty: false, status: "pass" },
+          },
+        },
+      })
+
+      const output = {
+        output: "Task done.",
+        title: "",
+        metadata: { sessionId: "ses_child_1" },
+      }
+
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "task", sessionID: "ses_parent", callID: "call_2", args: {} },
+        output,
+      )
+
+      expect(output.output).toBe("Task done.")
+      expect(output.output).not.toContain("FAILING QUALITY GATES")
+    })
+
+    it("skips when no child session ID in metadata", async () => {
+      const output = {
+        output: "Task done.",
+        title: "",
+        metadata: {},
+      }
+
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "task", sessionID: "ses_parent", callID: "call_3", args: {} },
+        output,
+      )
+
+      expect(output.output).toBe("Task done.")
+      expect(mockReadState).not.toHaveBeenCalled()
+    })
+
+    it("skips non-task tools normally", async () => {
+      vi.mocked(runGate).mockResolvedValue(successResult)
+
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_edit", callID: "call_4", args: { filePath: "/workspace/src/main.ts" } },
+        { output: "", title: "", metadata: {} },
+      )
+
+      expect(runGate).toHaveBeenCalled()
     })
   })
 })

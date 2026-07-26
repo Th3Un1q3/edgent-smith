@@ -15,7 +15,7 @@ export function formatGateFailure(
   return `<steering priority="warning" reason="file change triggered quality gate run" result="fail" gate-id="${gateName}">Quality gate '${gateName}' failed — \`${command}\` exited with code ${result.exitCode}${output ? `:\n${output}` : ''}</steering>`
 }
 
-export function formatGateBatchResults(outcomes: GateRunOutcome[]): string {
+export function formatGateBatchResults(outcomes: GateRunOutcome[], isPreChange?: boolean): string {
   if (outcomes.length === 0) return ''
 
   const passed = outcomes.filter((o) => o.newStatus === 'pass').length
@@ -25,8 +25,9 @@ export function formatGateBatchResults(outcomes: GateRunOutcome[]): string {
   const priority = isAnyFail ? 'warning' : 'info'
   const resultAttribute = isAnyFail ? 'fail' : 'pass'
 
+  const prefix = isPreChange ? 'Pre-change ' : ''
   const lines: string[] = [
-    `Quality gate results (${passed} passed, ${failed} failed):`,
+    `${prefix}Quality gate results (${passed} passed, ${failed} failed):`,
   ]
 
   for (const outcome of outcomes) {
@@ -48,5 +49,6 @@ export function formatGateBatchResults(outcomes: GateRunOutcome[]): string {
     lines.push(line)
   }
 
-  return `<steering priority="${priority}" reason="quiet period ended; ran dirty quality gates" result="${resultAttribute}">\n${lines.join('\n')}\n</steering>`
+  const reason = isPreChange ? 'quality gate check before file change' : 'quiet period ended; ran dirty quality gates'
+  return `<steering priority="${priority}" reason="${reason}" result="${resultAttribute}">\n${lines.join('\n')}\n</steering>`
 }

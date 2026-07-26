@@ -124,4 +124,4 @@ Rules relaxed for test files:
 - `@typescript-eslint/no-explicit-any` — `any` is often needed for mock types
 - `unicorn/no-null` — vitest assertions and mock APIs use `null`
 
-Do NOT use `eslint-disable` or `eslint-disable-next-line` comments. Fix the underlying issue or update the ESLint configuration in `eslint.config.js` to turn the rule off for test file globs instead.
+Do NOT use `eslint-disable` or `eslint-disable-next-line` comments. Fix the underlying issue. There is always a way to address linter error. Linter rules are made to produce better code, so let it push you.
