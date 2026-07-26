@@ -3,7 +3,7 @@ import { sendMessage } from "./helpers/session-helpers"
 import type { Plugin } from "@opencode-ai/plugin"
 
 import { SessionStorage, SESSION_FIELDS } from "./helpers/kv-store"
-import { fetchAgentList, AgentInfo } from "./helpers/agent-steps"
+import { fetchAgentList, getSessionAgent, AgentInfo } from "./helpers/agent-steps"
 
 /**
  * Per-agent tool call limits.
@@ -23,7 +23,7 @@ interface ToolExecuteBeforeInput {
 }
 
 export const toolLimitReminder: Plugin = async ({ client, $ }) => {
-  await log(client, "info", "[tool-limit-reminder] init")
+  await log(client, "info", "init", "tool-limit-reminder")
 
   /**
    * Per-agent tool call limits — dynamically resolved from client.app.agents().
@@ -40,7 +40,7 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
 
     const agentsList = await fetchAgentList(client)
 
-    await log(client, "info", `[tool-limit-reminder] fetched agent list: ${JSON.stringify(agentsList.map((a: AgentInfo) => ({ name: a.name, maxSteps: a.steps })))}`)
+    await log(client, "info", `fetched agent list: ${JSON.stringify(agentsList.map((a: AgentInfo) => ({ name: a.name, maxSteps: a.steps })))}`, "tool-limit-reminder")
 
     const toolLimits: Record<string, number> = Object.fromEntries(
       agentsList
@@ -54,6 +54,7 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
     return toolLimits
   }
 
+  // 2 extra calls beyond the threshold to account for the current call still being in-flight
   const PADDING_TILL_ERROR = 2
 
   /**
@@ -74,10 +75,10 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
   const triggerExport = async (sessionId: string) => {
     try {
       const result = await ($`just agent_utils/export-opencode-session ${sessionId}`).nothrow().quiet().json()
-      void log(client, "info", `[tool-limit-reminder] export completed for session ${sessionId}: ${JSON.stringify(result)}`)
+      void log(client, "info", `export completed for session ${sessionId}: ${JSON.stringify(result)}`, "tool-limit-reminder")
     } catch (error: unknown) {
       const errorString = (error as Error)?.message ?? String(error)
-      void log(client, "error", `[tool-limit-reminder] failed to trigger export for session ${sessionId}: ${errorString}`)
+      void log(client, "error", `failed to trigger export for session ${sessionId}: ${errorString}`, "tool-limit-reminder")
     }
   }
 
@@ -88,7 +89,7 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
       }
 
       sessionCounters.delete(event.properties.sessionID as string)
-      await log(client, "info", `[tool-limit-reminder] session ${event.properties.sessionID} idle — cleared tool call counter`)
+      await log(client, "info", `session ${event.properties.sessionID} idle — cleared tool call counter`, "tool-limit-reminder")
 
       const idleSessionId = event.properties.sessionID as string
 
@@ -102,7 +103,7 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
         return  // Session not flagged; no export needed
       }
 
-      await log(client, "info", `[tool-limit-reminder] session ${idleSessionId} idle with needsReview flag — triggering export`)
+      await log(client, "info", `session ${idleSessionId} idle with needsReview flag — triggering export`, "tool-limit-reminder")
 
       try {
         triggerExport(idleSessionId)
@@ -112,33 +113,31 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
           return next
         })
       } catch (error) {
-        await log(client, "error", `[tool-limit-reminder] failed to trigger export for session ${idleSessionId}: ${(error as Error).message}`)
+        await log(client, "error", `failed to trigger export for session ${idleSessionId}: ${(error as Error).message}`, "tool-limit-reminder")
       }
 
 
     },
     dispose: async () => {
-      void log(client, "info", "[tool-limit-reminder] dispose")
+      void log(client, "info", "dispose", "tool-limit-reminder")
     },
     "tool.execute.before": async (input: ToolExecuteBeforeInput) => {
       if (!input.sessionID) {
-        await log(client, "warn", "[tool-limit-reminder] missing sessionID in tool.execute.before input")
+        await log(client, "warn", "missing sessionID in tool.execute.before input", "tool-limit-reminder")
         return
       }
 
       const sessionID = input.sessionID
 
-      const sessionInfo = await client.session.get({ path: { id: sessionID } }) as { data?: { agent?: string } }
+      // Resolve agent name via shared helper
+      const agentName = await getSessionAgent(client, sessionID)
 
-      const agentName = sessionInfo?.data?.agent ?? 'build' // Default agent if not specified
-
-      await log(client, "info", `[tool-limit-reminder] sessionID: ${sessionID}, agent: ${agentName}`)
+      await log(client, "info", `sessionID: ${sessionID}, agent: ${agentName}`, "tool-limit-reminder")
 
       const TOOL_LIMITS = await getToolLimits()
 
       if (!TOOL_LIMITS.hasOwnProperty(agentName)) {
-
-        await log(client, "info", `[tool-limit-reminder] agent ${agentName} not listed in TOOL_LIMITS, skipping limit check`)
+        await log(client, "info", `agent ${agentName} not listed in TOOL_LIMITS, skipping limit check`, "tool-limit-reminder")
         // Agent not listed in TOOL_LIMITS → unlimited (skip threshold logic entirely).
         return
       }
@@ -148,29 +147,41 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
 
       const agentReminderThreshold = TOOL_LIMITS[agentName]
 
-      await log(client, "info", `[tool-limit-reminder] sessionID: ${sessionID}, agent: ${agentName}, currentCount: ${currentCount}, threshold: ${agentReminderThreshold}`)
+      await log(client, "info", `sessionID: ${sessionID}, agent: ${agentName}, currentCount: ${currentCount}, threshold: ${agentReminderThreshold}`, "tool-limit-reminder")
 
       sessionCounters.set(sessionID, currentCount + 1)
 
+      // Diagnostic log — fires for limited agents to indicate tracking is active
+      await log(client, "warn", `reached tool call limit of ${agentReminderThreshold}`, "tool-limit-reminder")
 
-      await log(client, "warn", `[tool-limit-reminder] reached tool call limit of ${agentReminderThreshold}`)
-
-      if (currentCount > agentReminderThreshold) {
-        await log(client, "info", `[tool-limit-reminder] flagging session ${sessionID} for review`)
-        sessionStorage.updateState(sessionID, (state) => ({ ...state, [SESSION_FIELDS.needsReview]: true }))
-      }
+      // ── Threshold enforcement tiers ──────────────────────────────────
 
       if (currentCount > agentReminderThreshold + PADDING_TILL_ERROR) {
-        await log(client, "error", `[tool-limit-reminder] tool call limit exceeded for session ${sessionID}. Current count: ${currentCount + 1}, Limit: ${agentReminderThreshold}`)
+        // BLOCK: hard limit exceeded — stop execution immediately
+        await log(client, "error", `tool call limit exceeded for session ${sessionID}. Current count: ${currentCount + 1}, Limit: ${agentReminderThreshold}`, "tool-limit-reminder")
         throw new Error(`Error calling tools. Reason: tools are blocked. STOP YOUR WORK. DON'T change, read, write files, execute commands in this session. Follow the instructions in the previous message to summarize your work and stop.`)
       }
 
-      if (currentCount !== agentReminderThreshold) {
-        await log(client, "info", `[tool-limit-reminder] sessionID: ${sessionID}, agent: ${agentName}, currentCount: ${currentCount}, threshold: ${agentReminderThreshold}`)
-        return
+      if (currentCount > agentReminderThreshold) {
+        // NEEDS REVIEW: above threshold but within padding tolerance
+        await log(client, "info", `flagging session ${sessionID} for review`, "tool-limit-reminder")
+        sessionStorage.updateState(sessionID, (state) => ({ ...state, [SESSION_FIELDS.needsReview]: true }))
+        const message = `<steering priority="warning" reason="tool call limit exceeded" type="instructions">
+STOP!
+You have exceeded the tool call limit for this agent. Current count: ${currentCount + 1}, Limit: ${agentReminderThreshold}
+Your work will be exported for review when the session goes idle.
+</steering>`
+        await sendMessage({
+          client,
+          sessionId: sessionID,
+          message,
+          noReply: true,
+        })
       }
 
-      const message = `<steering reason="Scope Creep Detected" severity="warning">
+      if (currentCount === agentReminderThreshold) {
+        // REMINDER: at the exact threshold — warn the agent with full instructions
+        const message = `<steering priority="warning" reason="tool call limit reached" type="instructions">
 STOP!
 DO NOT CALL ANY OTHER TOOLS, DON'T change, read, write files, execute commands in this session. You have reached the tool call limit for this agent.
 
@@ -186,12 +197,15 @@ Output the summary:
 - What you could've done if you got more time
 </steering>`
 
-      await sendMessage({
-        client,
-        sessionId: sessionID,
-        message,
-        noReply: true
-      })
+        await sendMessage({
+          client,
+          sessionId: sessionID,
+          message,
+          noReply: true,
+        })
+      }
+
+      // Below threshold: do nothing special
     },
   } as Record<string, (...arguments_: unknown[]) => void>
 }

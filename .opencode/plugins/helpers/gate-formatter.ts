@@ -1,5 +1,5 @@
-import type { CommandResult } from '@plugins/helpers/gate-runner'
-import type { GateRunOutcome } from '@plugins/types/quality-gate'
+import type { CommandResult } from './gate-runner'
+import type { GateRunOutcome } from '../types/quality-gate'
 
 export function formatGateSuccess(gateName: string, command: string): string {
   const detail = command ? ` — \`${command}\` completed (exit 0)` : ' — no commands to run'

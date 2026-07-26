@@ -1,5 +1,5 @@
-import type { GateConfig, QualityGatesConfig } from '@plugins/types/quality-gate'
-import { log } from '@plugins/helpers/logger'
+import type { GateConfig, QualityGatesConfig } from '../types/quality-gate'
+import { log } from './logger'
 import type { OpencodeClient } from "@opencode-ai/sdk"
 
 const DEFAULT_DEBOUNCE_MS = 300

@@ -4,10 +4,7 @@ import { sendMessage } from "./helpers/session-helpers"
 import { log } from "./helpers/logger"
 import { SessionStorage, State } from "./helpers/kv-store"
 import { InstructionContextHelper } from "./helpers/instruction-context-helper"
-
-interface AgentSession extends State {
-    agent?: string
-}
+import { getSessionAgent } from "./helpers/agent-steps"
 
 const PLUGIN_ID = "instructions-loader"
 
@@ -25,13 +22,12 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
     const _helperCache: Record<string, InstructionContextHelper> = {};
 
     const getHelper = async (sessionID: string) => {
-        const session = await client.session.get({ path: { id: sessionID } })
-        const agent = ((session?.data as AgentSession)?.agent) || "build"
+        const agent = await getSessionAgent(client, sessionID)
 
         if (Object.hasOwn(_helperCache, agent)) return _helperCache[agent]
 
         // Create helper with factory that returns indexer's forFiles + loadBody
-        const index = await createIndex({ agent, instructionsGlob: ".opencode/instructions/*.instructions.md", currentWorkingDirectory: directory, type: "custom", log: (message) => log(client, "info", `[${PLUGIN_ID}] ${message}`) })
+        const index = await createIndex({ agent, instructionsGlob: ".opencode/instructions/*.instructions.md", currentWorkingDirectory: directory, type: "custom", log: (message) => log(client, "info", message, PLUGIN_ID) })
 
         const helper = new InstructionContextHelper({
             indexerFactory: () => Promise.resolve({
@@ -77,7 +73,7 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
             })
 
             if (nonSentInstructions.length === 0) {
-                await log(client, "info", `[${PLUGIN_ID}] No new instructions to send for session ${input.sessionID}.`)
+                await log(client, "info", `No new instructions to send for session ${input.sessionID}.`, PLUGIN_ID)
                 return
             }
 

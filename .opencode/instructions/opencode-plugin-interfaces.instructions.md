@@ -21,6 +21,17 @@ OpenCode plugins use a **functional, hook-based architecture**. Each plugin is a
 
 All files use **pure ESM** with named exports only. No classes are used anywhere in the plugins directory. Runtime behavior is entirely function-based.
 
+## Import Conventions
+
+OpenCode distinguishes two import contexts with different rules:
+
+| Context | Files | Import Style | Why |
+|---------|-------|-------------|-----|
+| **Plugin source** | `plugins/*.ts`, `plugins/helpers/*.ts`, `plugins/types/*.ts` | **Relative imports only** (`./helpers/logger`, `../types/quality-gate`) | The OpenCode plugin runtime loads `.ts` files directly and does **not** resolve TypeScript `paths` aliases. `@plugins/...` would fail at runtime. |
+| **Test files** | `plugins/tests/**/*.test.ts` | **Alias imports** (`@plugins/...`, `@tests/...`) | Vitest resolves `paths` from `tsconfig.json` via tsconfig-paths. Aliases keep test imports concise and resilient to directory restructuring. |
+
+**Rule:** Plugin source files MUST use relative paths for all internal imports. The `@plugins/*` and `@tests/*` aliases defined in `tsconfig.json` are for test files only. Both the runtime and `tsc` will fail to resolve these aliases in source code.
+
 ## Development Workflow
 
 ### Install dependencies

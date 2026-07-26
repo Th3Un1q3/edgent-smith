@@ -32,3 +32,16 @@ export async function getAgentSteps(client: { app: { agents: () => unknown } }, 
     if (!agent || typeof agent.steps !== "number") return undefined
     return agent.steps
 }
+
+/**
+ * Resolves the current agent name for a given session.
+ * Falls back to "build" when no agent is specified.
+ */
+export async function getSessionAgent(
+    client: { session: { get: (parameters: { path: { id: string } }) => Promise<unknown> } },
+    sessionID: string,
+): Promise<string> {
+    const result = await client.session.get({ path: { id: sessionID } }) as { data?: Record<string, unknown> }
+    const agent = result?.data?.agent
+    return typeof agent === "string" && agent.length > 0 ? agent : "build"
+}

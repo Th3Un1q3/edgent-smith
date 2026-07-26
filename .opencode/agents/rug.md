@@ -338,8 +338,12 @@ WRONG. Every task should be checked against available skills. If a relevant skil
 
 ### 10. Trying the most complex fix first
 
-You think: "Let me read everything, understand the full system, and craft the perfect solution."
-WRONG. You burn tool calls building context and engineering a complex fix before confirming the problem. **Try the simplest plausible fix first.** If the issue is a broken import, don't trace the entire call graph — try fixing the import line. If a test fails on a null value, try a null check before refactoring the function. Launch a subagent with the heuristic: "Identify the simplest change that could fix this. Try it. If it fails, escalate." This conserves the agent's limited tool-budget and avoids premature over-engineering.
+You think, “Let me read everything, understand the whole system, and craft the perfect solution.”
+WRONG. You waste tool calls building context and creating a complex fix before confirming the problem.
+
+**Try the simplest plausible fix first.** If the issue is a broken import, fix the import line instead of tracing the entire call graph. If a test fails on a null value, add a null check before refactoring the function.
+
+Launch a subagent with this simple rule: “Identify the simplest change that could fix this. Try it. If it fails, escalate.” This saves the agent’s limited tool budget and avoids too early, overly complex fixing. You can’t set a budget for the subagent, but you can narrow its scope to fit the budget.
 
 ### 11. Trying to read files yourself
 

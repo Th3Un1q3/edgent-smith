@@ -3,7 +3,7 @@ import type { PluginInput } from "@opencode-ai/plugin"
 
 // Synchronous mock factories — no dynamic imports to avoid circular dependency issues.
 import { defaultCreateClient, makeLoggerMockFactory, makeSessionHelpersMockFactory } from "@tests/helpers/mock-utilities"
-import { makeKvStoreMockFactory } from "@tests/__utils/kv-store.mock"
+import { makeKvStoreMockFactory, resetMockState } from "@tests/__utils/kv-store.mock"
 
 vi.mock("@plugins/helpers/logger", () => makeLoggerMockFactory())
 vi.mock("@plugins/helpers/kv-store", () => makeKvStoreMockFactory())
@@ -12,7 +12,6 @@ vi.mock("@plugins/helpers/session-helpers", () => makeSessionHelpersMockFactory(
 import { toolLimitReminder } from "@plugins/tool-limit-reminder"
 import { log } from "@plugins/helpers/logger"
 import { sendMessage } from "@plugins/helpers/session-helpers"
-import { SessionStorage } from "@plugins/helpers/kv-store"
 
 const logMock = vi.mocked(log)
 const sendMessageMock = vi.mocked(sendMessage)
@@ -33,9 +32,10 @@ describe("toolLimitReminder plugin", () => {
     expect(plugin).toBeDefined()
 
     expect(logMock).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       "info",
-      "[tool-limit-reminder] init",
+      "init",
+      "tool-limit-reminder",
     )
   })
 
@@ -47,9 +47,10 @@ describe("toolLimitReminder plugin", () => {
     await hook({})
 
     expect(logMock).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       "warn",
       expect.stringContaining("missing sessionID"),
+      "tool-limit-reminder",
     )
   })
 
@@ -61,9 +62,10 @@ describe("toolLimitReminder plugin", () => {
     await hook({ sessionID: "sess-1" })
 
     expect(logMock).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       "info",
       expect.stringContaining("not listed in TOOL_LIMITS"),
+      "tool-limit-reminder",
     )
   })
 
@@ -86,11 +88,11 @@ describe("toolLimitReminder plugin", () => {
       await hook({ sessionID: "sess-many" })
 
       expect(logMock).toHaveBeenCalledWith(
-        expect.anything(),
+        expect.any(Object),
         "warn",
         expect.stringContaining("reached tool call limit"),
+        "tool-limit-reminder",
       )
-      expect(sendMessageMock).not.toHaveBeenCalled()
     })
   })
 
@@ -124,9 +126,10 @@ describe("toolLimitReminder plugin", () => {
       ).resolves.toBeUndefined()
 
       expect(logMock).toHaveBeenCalledWith(
-        expect.anything(),
+        expect.any(Object),
         "warn",
         expect.stringContaining("reached tool call limit"),
+        "tool-limit-reminder",
       )
     })
 
@@ -143,14 +146,17 @@ describe("toolLimitReminder plugin", () => {
       expect(sendMessageMock).toHaveBeenCalledTimes(1)
       expect(sendMessageMock).toHaveBeenCalledWith(
         expect.objectContaining({
+          client: expect.any(Object),
+          sessionId: "sess-threshold",
           noReply: true,
-          message: expect.stringContaining("Scope Creep Detected"),
+          message: expect.stringContaining("tool call limit reached"),
         }),
       )
       expect(logMock).toHaveBeenCalledWith(
-        expect.anything(),
+        expect.any(Object),
         "warn",
         expect.stringContaining("reached tool call limit"),
+        "tool-limit-reminder",
       )
     })
 
@@ -164,9 +170,10 @@ describe("toolLimitReminder plugin", () => {
       }
 
       expect(logMock).toHaveBeenCalledWith(
-        expect.anything(),
+        expect.any(Object),
         "warn",
         expect.stringContaining("reached tool call limit"),
+        "tool-limit-reminder",
       )
     })
 
@@ -193,9 +200,10 @@ describe("toolLimitReminder plugin", () => {
       ).rejects.toThrow("STOP YOUR WORK.")
 
       expect(logMock).toHaveBeenCalledWith(
-        expect.anything(),
+        expect.any(Object),
         "error",
         expect.stringContaining("tool call limit exceeded"),
+        "tool-limit-reminder",
       )
     })
   })
@@ -212,9 +220,10 @@ describe("toolLimitReminder plugin", () => {
     ).resolves.toBeUndefined()
 
     expect(logMock).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       "warn",
       expect.stringContaining("reached tool call limit"),
+      "tool-limit-reminder",
     )
     expect(sendMessageMock).not.toHaveBeenCalled()
   })
@@ -240,9 +249,10 @@ describe("toolLimitReminder plugin", () => {
     }
 
     expect(logMock).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       "warn",
       expect.stringContaining("reached tool call limit"),
+      "tool-limit-reminder",
     )
     // No steering message yet — threshold NOT exceeded
     expect(sendMessageMock).not.toHaveBeenCalled()
@@ -260,9 +270,10 @@ describe("toolLimitReminder plugin", () => {
     await plugin["tool.execute.before"]({ sessionID: "sess-unlimited" })
 
     expect(logMock).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       "info",
       expect.stringContaining("not listed in TOOL_LIMITS"),
+      "tool-limit-reminder",
     )
   })
 
@@ -279,9 +290,10 @@ describe("toolLimitReminder plugin", () => {
     await ((plugin as ToolLimitReminderPlugin)["tool.execute.before"]({ sessionID: "test-empty" }))
 
     expect(logMock).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       "info",
       expect.stringContaining("not listed in TOOL_LIMITS"),
+      "tool-limit-reminder",
     )
   })
 
@@ -304,9 +316,10 @@ describe("toolLimitReminder plugin", () => {
     await ((plugin as ToolLimitReminderPlugin)["tool.execute.before"]({ sessionID: "test2", tool: "read_file" }))
 
     expect(logMock).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       "info",
       expect.stringContaining("limited-agent"),
+      "tool-limit-reminder",
     )
     // Should NOT have the 'not listed' message for limited-agent
     const notListedCalls = logMock.mock.calls.filter((c) =>
@@ -373,20 +386,23 @@ describe("toolLimitReminder plugin", () => {
 
     // Verify the exact log prefix (mutants: StringLiteral → "")
     expect(logMock).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       "info",
-      expect.stringContaining("[tool-limit-reminder] fetched agent list: "),
+      expect.stringContaining("fetched agent list: "),
+      "tool-limit-reminder",
     )
     // Verify mapped object includes correct name and maxSteps keys (mutants: ArrowFunction → undefined, ObjectLiteral → {})
     expect(logMock).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       "info",
       expect.stringContaining('"name":"shape-agent"'),
+      "tool-limit-reminder",
     )
     expect(logMock).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       "info",
       expect.stringContaining('"maxSteps":12'),
+      "tool-limit-reminder",
     )
   })
 
@@ -412,9 +428,10 @@ describe("toolLimitReminder plugin", () => {
 
     // Empty agent list means all agents are "not listed" → unlimited → skip
     expect(logMock).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       "info",
       expect.stringContaining("not listed in TOOL_LIMITS"),
+      "tool-limit-reminder",
     )
   })
 
@@ -447,14 +464,15 @@ describe("toolLimitReminder plugin", () => {
     it("clears tool call counter when session goes idle", async () => {
       const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
 
-      SessionStorage.reset({})
+      resetMockState({})
 
       await plugin.event({ event: { type: "session.idle", properties: { sessionID: "idle-session" } } })
 
       expect(logMock).toHaveBeenCalledWith(
-        expect.anything(),
+        expect.any(Object),
         "info",
         expect.stringContaining("idle-session idle — cleared tool call counter"),
+        "tool-limit-reminder",
       )
     })
 
@@ -470,16 +488,17 @@ describe("toolLimitReminder plugin", () => {
         directory: "/workspace",
       } as unknown as PluginInput
 
-      SessionStorage.reset({ "idle-no-flag": {} })
+      resetMockState({ "idle-no-flag": {} })
 
       const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
 
       await plugin.event({ event: { type: "session.idle", properties: { sessionID: "idle-no-flag" } } })
 
       expect(logMock).toHaveBeenCalledWith(
-        expect.anything(),
+        expect.any(Object),
         "info",
         expect.stringContaining("idle-no-flag idle — cleared tool call counter"),
+        "tool-limit-reminder",
       )
 
       // Should not have triggered export
@@ -504,22 +523,36 @@ describe("toolLimitReminder plugin", () => {
         directory: "/workspace",
       } as unknown as PluginInput
 
-      SessionStorage.reset({ "idle-flagged": { needsReview: true } })
+      resetMockState({ "idle-flagged": { needsReview: true } })
 
       const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
 
       await plugin.event({ event: { type: "session.idle", properties: { sessionID: "idle-flagged" } } })
 
       expect(logMock).toHaveBeenCalledWith(
-        expect.anything(),
+        expect.any(Object),
         "info",
         expect.stringContaining("idle-flagged idle — cleared tool call counter"),
+        "tool-limit-reminder",
       )
 
       expect(logMock).toHaveBeenCalledWith(
-        expect.anything(),
+        expect.any(Object),
         "info",
         expect.stringContaining("triggering export"),
+        "tool-limit-reminder",
+      )
+
+      expect(logMock).toHaveBeenCalledWith(
+        expect.any(Object),
+        "info",
+        expect.stringContaining("export completed"),
+        "tool-limit-reminder",
+      )
+
+      expect(mock$).toHaveBeenCalledWith(
+        ["just agent_utils/export-opencode-session ", ""],
+        "idle-flagged",
       )
     })
   })
@@ -532,9 +565,10 @@ describe("toolLimitReminder plugin", () => {
     await plugin.dispose?.()
 
     expect(logMock).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       "info",
-      "[tool-limit-reminder] dispose",
+      "dispose",
+      "tool-limit-reminder",
     )
   })
 })

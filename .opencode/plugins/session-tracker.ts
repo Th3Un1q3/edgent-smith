@@ -2,58 +2,56 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { log } from "./helpers/logger"
 import { SessionStorage, SESSION_FIELDS } from "./helpers/kv-store"
 
-const PLUGIN_ID = "harness-plugin"
-
 export const sessionTracker: Plugin = async ({ client }) => {
   const sessionStorage = new SessionStorage()
-  await log(client, "info", `${PLUGIN_ID} initialized`)
+  await log(client, "info", "session-tracker initialized", "session-tracker")
 
-  const markSessionAsStarted = (sessionId: string, agent: string) => sessionStorage.updateState(sessionId, (session) => {
-    if (Object.hasOwn(session, SESSION_FIELDS.startedAt)) return session
-    return { ...session, [SESSION_FIELDS.startedAt]: new Date().toISOString(), [SESSION_FIELDS.agent]: agent }
-  })
+  async function setSessionField(sessionId: string, field: string, value: unknown = new Date().toISOString()): Promise<void> {
+    await sessionStorage.updateState(sessionId, (state: Record<string, unknown>) => ({
+      ...state,
+      [field]: value,
+    }))
+  }
 
-  const markToolAsCalled = (sessionId: string, tool: string) => sessionStorage.updateState(sessionId, (session) => {
-    const toolCalls = session[SESSION_FIELDS.toolCalls] || {}
-    return { ...session, [SESSION_FIELDS.toolCalls]: { ...toolCalls, [tool]: new Date().toISOString() } }
-  })
-
-  const recordLastSessionIdle = (sessionId: string) => sessionStorage.updateState(sessionId, (session) => {
-    return { ...session, [SESSION_FIELDS.idleAt]: new Date().toISOString() }
-  })
-
-  const recordMessageCancelled = (sessionId: string) => sessionStorage.updateState(sessionId, (session) => {
-    return { ...session, [SESSION_FIELDS.cancelledAt]: new Date().toISOString() }
-  })
-
-  const recordLastMessageSent = (sessionId: string) => sessionStorage.updateState(sessionId, (session) => {
-    return { ...session, [SESSION_FIELDS.lastMessageSentAt]: new Date().toISOString() }
-  })
+  async function markSessionAsStarted(sessionId: string): Promise<void> {
+    await sessionStorage.updateState(sessionId, (state: Record<string, unknown>) => {
+      if (Object.hasOwn(state, SESSION_FIELDS.startedAt)) return state
+      return { ...state, [SESSION_FIELDS.startedAt]: new Date().toISOString() }
+    })
+  }
 
   return {
     "chat.message": async ({ sessionID, agent }) => {
       if (!sessionID || !agent) return
-      markSessionAsStarted(sessionID, agent)
-      recordLastMessageSent(sessionID)
+      void markSessionAsStarted(sessionID)
+      void setSessionField(sessionID, SESSION_FIELDS.agent, agent)
+      void setSessionField(sessionID, SESSION_FIELDS.lastMessageSentAt)
     },
 
     "tool.execute.before": async (input, _output) => {
       if (!input.sessionID) return
-      markToolAsCalled(input.sessionID, input.tool)
+      const existingToolCalls = sessionStorage.readState(
+        input.sessionID,
+        (s) => (s as Record<string, unknown>)[SESSION_FIELDS.toolCalls] as Record<string, string> | undefined,
+      )
+      void setSessionField(input.sessionID, SESSION_FIELDS.toolCalls, {
+        ...existingToolCalls,
+        [input.tool]: new Date().toISOString(),
+      })
     },
 
     event: async ({ event }) => {
       if (typeof event.properties !== "object") throw new TypeError("event.properties is not an object")
 
       if (event.type === "session.error" && event.properties.sessionID && event.properties.error?.name === "MessageAbortedError") {
-        recordMessageCancelled(event.properties.sessionID)
+        void setSessionField(event.properties.sessionID, SESSION_FIELDS.cancelledAt)
       }
 
       if (event.type === "session.idle" && event.properties.sessionID) {
-        recordLastSessionIdle(event.properties.sessionID)
+        void setSessionField(event.properties.sessionID, SESSION_FIELDS.idleAt)
       }
     },
 
-    dispose: async () => { log(client, "info", `${PLUGIN_ID} disposed`) },
+    dispose: async () => { log(client, "info", "session-tracker disposed", "session-tracker") },
   }
 }

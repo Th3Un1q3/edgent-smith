@@ -153,8 +153,8 @@ describe("SessionStorage", () => {
   })
 
   describe("reset()", () => {
-    it("throws an error indicating it is not implemented", () => {
-      expect(() => SessionStorage.reset()).toThrow("Method not implemented.")
+    it("is no longer available on SessionStorage", () => {
+      expect("reset" in SessionStorage).toBe(false)
     })
   })
 

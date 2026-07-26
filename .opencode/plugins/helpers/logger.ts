@@ -11,12 +11,14 @@ export async function log(
   client: OpencodeClient,
   level: "debug" | "info" | "warn" | "error" = "info",
   message: string,
+  pluginId?: string,
 ): Promise<void> {
+  const id = pluginId ?? PLUGIN_ID
   await client.app.log({
     body: {
-      service: PLUGIN_ID,
+      service: id,
       level,
-      message: `[${PLUGIN_ID}] ${message}`,
+      message: `[${id}] ${message}`,
     },
   })
 }

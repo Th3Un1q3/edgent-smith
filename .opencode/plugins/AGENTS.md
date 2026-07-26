@@ -31,3 +31,7 @@ Plugins ecosystem uses:
 - Bun - runtime
 - eslint - linter
 - tsc - typescript compiler
+
+**Import style:** Plugin source files use relative imports (`./helpers/...`).
+The `@plugins/*` and `@tests/*` aliases from `tsconfig.json` are for test files only.
+See `.opencode/instructions/opencode-plugin-interfaces.instructions.md` for details.

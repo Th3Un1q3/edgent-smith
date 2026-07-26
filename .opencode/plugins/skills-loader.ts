@@ -4,6 +4,19 @@ import { readdir } from "node:fs/promises"
 import { log } from "./helpers/logger"
 import { getAgentSteps } from "./helpers/agent-steps"
 
+async function buildSkillIndex(name: string, directory: string): Promise<string> {
+    const skillDirectory = `${directory}/.agents/skills/${name}`
+    try {
+        const entries = await readdir(skillDirectory)
+        const files = entries.filter((entry): entry is string => typeof entry === "string")
+        files.sort((a, b) => a.localeCompare(b))
+        const lines = files.map((f) => `.agents/skills/${name}/${f}`)
+        return `<skill_index>\n${lines.join("\n")}\n</skill_index>`
+    } catch {
+        return `<skill_index>\n.agents/skills/${name}/SKILL.md\n</skill_index>`
+    }
+}
+
 export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
     return {
         "tool.definition": async (input, output) => {
@@ -74,24 +87,10 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
             let prefix = ""
 
             if (resolved.length > 0 || unresolved.length > 0) {
-                // Build skill_index block for a resolved skill.
-                async function buildSkillIndex(name: string): Promise<string> {
-                    const skillDirectory = `${directory}/.agents/skills/${name}`
-                    try {
-                        const entries = await readdir(skillDirectory)
-                        const files = entries.filter((entry): entry is string => typeof entry === "string")
-                        files.sort((a, b) => a.localeCompare(b))
-                        const lines = files.map((f) => `.agents/skills/${name}/${f}`)
-                        return `<skill_index>\n${lines.join("\n")}\n</skill_index>`
-                    } catch {
-                        return `<skill_index>\n.agents/skills/${name}/SKILL.md\n</skill_index>`
-                    }
-                }
-
                 // Build resolved skill blocks with path attribute and skill_index
                 const resolvedBlocks: string[] = []
                 for (const s of resolved) {
-                    const index = await buildSkillIndex(s.name)
+                    const index = await buildSkillIndex(s.name, directory)
                     const path = `.agents/skills/${s.name}/SKILL.md`
                     resolvedBlocks.push(
                         `<skill name="${s.name}" path="${path}">\n${index}\n${s.content}\n</skill>`

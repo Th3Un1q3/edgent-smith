@@ -3,6 +3,7 @@ import { Plugin } from "@opencode-ai/plugin"
 import { log } from "./helpers/logger"
 import { sendMessage } from "./helpers/session-helpers"
 import { SessionStorage, SESSION_FIELDS } from "./helpers/kv-store"
+import { getSessionAgent } from "./helpers/agent-steps"
 
 const PLUGIN_ID = "todo-enforcer"
 
@@ -46,7 +47,7 @@ Proceed with the following steps:
 
 export const todoEnforcer: Plugin = async ({ client }) => {
   const sessionStorage = new SessionStorage()
-  await log(client, "info", `${PLUGIN_ID} initialized`)
+  await log(client, "info", "initialized", PLUGIN_ID)
 
   const extractTodos = async (sessionId: string): Promise<Array<Todo>> => {
     const todosRaw = await client.session.todo({ path: { id: sessionId } });
@@ -66,13 +67,13 @@ export const todoEnforcer: Plugin = async ({ client }) => {
 
       // Agent-based/command-driven tasks bypass todo requirement — they are internal routing calls
       if (output?.args?.command) {
-        await log(client, "info", `[todo-enforcer] task tool called with command on session ${input.sessionID} — skipping enforcement`)
+        await log(client, "info", `task tool called with command on session ${input.sessionID} — skipping enforcement`, PLUGIN_ID)
         return
       }
 
-      await log(client, "info", `[todo-enforcer] enforcing todo requirement for task tool on session ${input.sessionID}`)
+      await log(client, "info", `enforcing todo requirement for task tool on session ${input.sessionID}`, PLUGIN_ID)
 
-      const currentAgent = ((await client.session.get({ path: { id: input.sessionID } }) as unknown as { data?: Record<string, string> })).data?.agent as string
+      const currentAgent = await getSessionAgent(client, input.sessionID)
 
       if (!AGENTS_REQUIRED_TO_START_WITH_TODOS.has(currentAgent)) return
 
@@ -104,42 +105,46 @@ export const todoEnforcer: Plugin = async ({ client }) => {
       const todos = await extractTodos(event.properties.sessionID)
       const remainingTodos = todos.filter((todo) => ["pending", "in_progress"].includes(todo.status));
       if (remainingTodos.length === 0) {
-        await log(client, "info", "No remaining todos — clearing cancellation state.")
+        await log(client, "info", "No remaining todos — clearing cancellation state.", PLUGIN_ID)
         return
       }
 
 
       setTimeout(async () => {
-        const shouldFollowUp = sessionStorage.readState(event.properties.sessionID, (state) => {
-          const lastCancelledAt = Object.hasOwn(state, SESSION_FIELDS.cancelledAt) && new Date(state[SESSION_FIELDS.cancelledAt] as string)
-          const lastMessageSentAt = Object.hasOwn(state, SESSION_FIELDS.lastMessageSentAt) && new Date(state[SESSION_FIELDS.lastMessageSentAt] as string)
+        try {
+          const shouldFollowUp = sessionStorage.readState(event.properties.sessionID, (state) => {
+            const lastCancelledAt = Object.hasOwn(state, SESSION_FIELDS.cancelledAt) && new Date(state[SESSION_FIELDS.cancelledAt] as string)
+            const lastMessageSentAt = Object.hasOwn(state, SESSION_FIELDS.lastMessageSentAt) && new Date(state[SESSION_FIELDS.lastMessageSentAt] as string)
 
-          if (!lastCancelledAt || !lastMessageSentAt) return true
+            if (!lastCancelledAt || !lastMessageSentAt) return true
 
-          /**
-          idle after cancellation -> no resume
-          idle after message && no cancellation after message -> resume
-          */
+            /**
+            idle after cancellation -> no resume
+            idle after message && no cancellation after message -> resume
+            */
 
-          const isNoCancellationAfterMessage = lastCancelledAt < lastMessageSentAt
-          return isNoCancellationAfterMessage
-        })
+            const isNoCancellationAfterMessage = lastCancelledAt < lastMessageSentAt
+            return isNoCancellationAfterMessage
+          })
 
-        if (!shouldFollowUp) {
-          await log(client, "info", "Session was cancelled after last message — skipping followup.")
-          return
+          if (!shouldFollowUp) {
+            await log(client, "info", "Session was cancelled after last message — skipping followup.", PLUGIN_ID)
+            return
+          }
+
+          await sendMessage({
+            client,
+            sessionId: event.properties.sessionID,
+            message: buildTodoContinuationMessage(remainingTodos),
+          })
+
+          sessionStorage.updateState(event.properties.sessionID, (s) => ({ ...s, todoFollowupSentAt: (new Date()).toISOString() }))
+        } catch (error) {
+          await log(client, "error", `Todo follow-up failed: ${error}`, PLUGIN_ID)
         }
-
-        await sendMessage({
-          client,
-          sessionId: event.properties.sessionID,
-          message: buildTodoContinuationMessage(remainingTodos),
-        })
-
-        sessionStorage.updateState(event.properties.sessionID, (s) => ({ ...s, todoFollowupSentAt: (new Date()).toISOString() }))
       }, 500)
     },
 
-    dispose: async () => { await log(client, "info", `${PLUGIN_ID} disposed`) },
+    dispose: async () => { await log(client, "info", "disposed", PLUGIN_ID) },
   }
 }

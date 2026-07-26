@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
-import { makeKvStoreMockFactory } from "@tests/__utils/kv-store.mock"
+import { makeKvStoreMockFactory, resetMockState } from "@tests/__utils/kv-store.mock"
 import { pluginContextBuilder } from "@tests/__utils/plugin-builder"
 
 import { log } from "@plugins/helpers/logger"
@@ -33,12 +33,6 @@ const mkPlugin = async (): Promise<SessionTrackerPlugin> => {
   return result as unknown as SessionTrackerPlugin
 }
 
-const getUpdaterFunction = (
-  calls: unknown[],
-  index: number,
-): ((state: Record<string, unknown>) => Record<string, unknown>) =>
-  (calls[index] as [string, (state: Record<string, unknown>) => Record<string, unknown>])[1]
-
 function getPluginContext() {
   return pluginContextBuilder({
     clientFactory: () => opencodeClientFactory({ agentName: "build" }) as never,
@@ -46,7 +40,7 @@ function getPluginContext() {
 }
 
 beforeEach(() => {
-  SessionStorage.reset()
+  resetMockState()
   void getSessionStorageInstance().updateState
 })
 
@@ -58,7 +52,7 @@ describe("sessionTracker", () => {
       vi.mocked(log).mockClear()
       await sessionTracker(getPluginContext() as never)
       expect(log).toHaveBeenCalledWith(
-        expect.any(Object), "info", "harness-plugin initialized",
+        expect.any(Object), "info", "session-tracker initialized", "session-tracker",
       )
 
       const plugin = await mkPlugin()
@@ -78,18 +72,18 @@ describe("sessionTracker", () => {
 
   describe("chat.message", () => {
     it("sets startedAt and agent when sessionID and agent are provided", async () => {
-      SessionStorage.reset({ ses_test: {} })
+      resetMockState({ ses_test: {} })
       const plugin = await mkPlugin() as SessionTrackerPlugin
       const hook = (plugin as any)["chat.message"]
 
       await hook({ sessionID: "ses_test", agent: "build" })
       await hook({ sessionID: "ses_test", agent: "deploy" })
 
-      expect(_mockUpdateState).toHaveBeenCalledTimes(4) // 2 per call = markSessionAsStarted + recordLastMessageSent
+      expect(_mockUpdateState).toHaveBeenCalledTimes(6) // 3 per call = startedAt + agent + lastMessageSentAt
     })
 
     it("records lastMessageSent when a chat message arrives", async () => {
-      SessionStorage.reset({ ses_msg: {} })
+      resetMockState({ ses_msg: {} })
       const plugin = await mkPlugin() as SessionTrackerPlugin
       const hook = (plugin as any)["chat.message"]
 
@@ -114,7 +108,7 @@ describe("sessionTracker", () => {
     })
 
     it("does not update startedAt if already set (guard condition)", async () => {
-      SessionStorage.reset({ ses_guard: { startedAt: "2026-01-01T00:00:00Z" } })
+      resetMockState({ ses_guard: { startedAt: "2026-01-01T00:00:00Z" } })
       const plugin = await mkPlugin() as SessionTrackerPlugin
       const hook = (plugin as any)["chat.message"]
 
@@ -278,7 +272,7 @@ describe("sessionTracker", () => {
 
       expect(log).toHaveBeenCalledWith(
         expect.any(Object), "info",
-        expect.stringContaining("harness-plugin disposed"),
+        expect.stringContaining("session-tracker disposed"), "session-tracker",
       )
     })
   })
@@ -287,7 +281,7 @@ describe("sessionTracker", () => {
 
   describe("state mutation edge cases", () => {
     it.each([
-      { desc: "marks session as started on first chat.message call", setup: async () => { SessionStorage.reset({ ses_first: {} }) }, action: async (p: SessionTrackerPlugin) => { const hook = (p as any)["chat.message"]; _mockUpdateState.mockClear(); await hook({ sessionID: "ses_first", agent: "build" }); expect(_mockUpdateState).toHaveBeenCalled() }},
+      { desc: "marks session as started on first chat.message call", setup: async () => { resetMockState({ ses_first: {} }) }, action: async (p: SessionTrackerPlugin) => { const hook = (p as any)["chat.message"]; _mockUpdateState.mockClear(); await hook({ sessionID: "ses_first", agent: "build" }); expect(_mockUpdateState).toHaveBeenCalled() }},
       { desc: "records tool calls accumulating across multiple invocations for the same session", setup: () => {}, action: async (p: SessionTrackerPlugin) => { const hook = (p as any)["tool.execute.before"]; _mockUpdateState.mockClear(); await hook({ sessionID: "ses_accum", tool: "read" }); await hook({ sessionID: "ses_accum", tool: "write" }); await hook({ sessionID: "ses_accum", tool: "question" }); expect(_mockUpdateState).toHaveBeenCalledTimes(3) }},
       { desc: "handles empty string sessionID (falsy check)", setup: () => {}, action: async (p: SessionTrackerPlugin) => { const hook = (p as any)["chat.message"]; _mockUpdateState.mockClear(); await hook({ sessionID: "" } as const); expect(_mockUpdateState).not.toHaveBeenCalled() }},
       { desc: "handles empty string agent (falsy check)", setup: () => {}, action: async (p: SessionTrackerPlugin) => { const hook = (p as any)["chat.message"]; _mockUpdateState.mockClear(); await hook({ sessionID: "ses_empty_agent", agent: "" } as const); expect(_mockUpdateState).not.toHaveBeenCalled() }},
@@ -337,7 +331,7 @@ describe("sessionTracker", () => {
     })
 
     it("full session lifecycle: start → tool calls → idle → cancel", async () => {
-      SessionStorage.reset({ ses_full: {} })
+      resetMockState({ ses_full: {} })
       const plugin = await mkPlugin() as SessionTrackerPlugin
 
       expect(_mockUpdateState).not.toHaveBeenCalled()
@@ -358,14 +352,14 @@ describe("sessionTracker", () => {
     })
 
     it.each([
-      { desc: "tracks multiple sessions independently", setup: async () => { SessionStorage.reset({ ses_A: {}, ses_B: {} }); const plugin = await mkPlugin(); _mockUpdateState.mockClear(); return plugin }},
+      { desc: "tracks multiple sessions independently", setup: async () => { resetMockState({ ses_A: {}, ses_B: {} }); const plugin = await mkPlugin(); _mockUpdateState.mockClear(); return plugin }},
       { desc: "handles rapid successive idle events on the same session", setup: async () => {}, action: async (p: SessionTrackerPlugin) => { const handler = (p as any)["event"]; for (let index = 0; index < 5; index++) await handler({ event: { type: "session.idle" as const, properties: { sessionID: "ses_rapid" } } }); expect(_mockUpdateState).toHaveBeenCalledTimes(5) }},
       { desc: "handles rapid successive tool calls on the same session", setup: async () => { const plugin = await mkPlugin(); return plugin }, action: async (p: SessionTrackerPlugin) => { const hook = (p as any)["tool.execute.before"]; for (const t of ["read","write","question","edit","diff"]) await hook({ sessionID: "ses_rapid_tool", tool: t }); expect(_mockUpdateState).toHaveBeenCalledTimes(5) }},
-      { desc: "handles rapid successive chat messages on the same session", setup: async () => { const plugin = await mkPlugin(); return plugin }, action: async (p: SessionTrackerPlugin) => { const hook = (p as any)["chat.message"]; for (let index = 0; index < 3; index++) await hook({ sessionID: "ses_rapid_chat", agent: "build" }); expect(_mockUpdateState).toHaveBeenCalledTimes(6) }},
-      { desc: "marks session started even when chat arrives before any tool calls", setup: async () => { SessionStorage.reset({ ses_pre_tool: {} }); const plugin = await mkPlugin(); _mockUpdateState.mockClear(); return plugin }, action: async (p: SessionTrackerPlugin) => { await (p as any)["chat.message"]({ sessionID: "ses_pre_tool", agent: "build" }); expect(_mockUpdateState).toHaveBeenCalled() }},
+      { desc: "handles rapid successive chat messages on the same session", setup: async () => { const plugin = await mkPlugin(); return plugin }, action: async (p: SessionTrackerPlugin) => { const hook = (p as any)["chat.message"]; for (let index = 0; index < 3; index++) await hook({ sessionID: "ses_rapid_chat", agent: "build" }); expect(_mockUpdateState).toHaveBeenCalledTimes(9) }},
+      { desc: "marks session started even when chat arrives before any tool calls", setup: async () => { resetMockState({ ses_pre_tool: {} }); const plugin = await mkPlugin(); _mockUpdateState.mockClear(); return plugin }, action: async (p: SessionTrackerPlugin) => { await (p as any)["chat.message"]({ sessionID: "ses_pre_tool", agent: "build" }); expect(_mockUpdateState).toHaveBeenCalled() }},
       { desc: "does not record idle for non-idle events", setup: async () => {}, action: async (p: SessionTrackerPlugin) => { await p["event"]?.({ event: { type: "session.unknown" as never, properties: {} } }); expect(_mockUpdateState).not.toHaveBeenCalled() }},
       { desc: "does not record cancelled for non-aborted errors", setup: async () => {}, action: async (p: SessionTrackerPlugin) => { await p["event"]?.({ event: { type: "session.error" as const, properties: { sessionID: "ses_non_abort", error: { name: "TimeoutError" } } } }); expect(_mockUpdateState).not.toHaveBeenCalled() }},
-      { desc: "handles dispose logging with correct plugin ID in message", setup: async () => { const plugin = await mkPlugin(); _mockUpdateState.mockClear(); return plugin }, action: async (p: SessionTrackerPlugin) => { await p.dispose?.(); expect(log).toHaveBeenCalledWith(expect.any(Object), "info", expect.stringContaining("harness-plugin")) }},
+      { desc: "handles dispose logging with correct plugin ID in message", setup: async () => { const plugin = await mkPlugin(); _mockUpdateState.mockClear(); return plugin }, action: async (p: SessionTrackerPlugin) => { await p.dispose?.(); expect(log).toHaveBeenCalledWith(expect.any(Object), "info", expect.stringContaining("session-tracker disposed"), "session-tracker") }},
       { desc: "handles undefined error on session.error event without throwing", setup: async () => { const plugin = await mkPlugin(); return plugin }, action: async (p: SessionTrackerPlugin) => { await expect(p["event"]?.({ event: { type: "session.error" as const, properties: { error: undefined } } })).resolves.toBeUndefined() }},
       { desc: "handles chat.message with whitespace-only agent (truthy in JS)", setup: async () => { const plugin = await mkPlugin(); _mockUpdateState.mockClear(); return plugin }, action: async (p: SessionTrackerPlugin) => { const hook = (p as any)["chat.message"]; await hook({ sessionID: "ses_ws_agent", agent: "  " } as never); expect(_mockUpdateState).toHaveBeenCalled() }},
     ])("$desc", async ({ setup, action }) => {
@@ -395,118 +389,141 @@ describe("sessionTracker", () => {
       _mockUpdateState.mockClear()
       await plugin.dispose?.()
       expect(log).toHaveBeenCalledWith(
-        expect.any(Object), "info", expect.stringContaining("harness-plugin disposed"),
+        expect.any(Object), "info", expect.stringContaining("session-tracker disposed"), "session-tracker",
       )
     })
   })
 
-  // ── Updater function verification ─────────────────────────────
+  // ── State validation after operations ──────────────────
 
-  describe("updater function verification", () => {
-    describe("markSessionAsStarted (via chat.message[0])", () => {
-      beforeEach(async () => {
-        const plugin = await mkPlugin() as SessionTrackerPlugin
-        await (plugin as any)["chat.message"]({ sessionID: "ses_test", agent: "build" })
-      })
+  describe("state validation after operations", () => {
+    const getState = async (sessionID: string) => {
+      return (new SessionStorage()).readState(sessionID, (s) => s as Record<string, unknown>)
+    }
 
-      it("sets startedAt and agent when session has no prior state", () => {
-        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 0)
-        expect(updater({})).toMatchObject({ startedAt: expect.any(String), agent: "build" })
-      })
+    it("sets startedAt, agent, and lastMessageSentAt on first chat.message", async () => {
+      resetMockState({ ses_val: {} })
+      const plugin = await mkPlugin() as SessionTrackerPlugin
+      const hook = (plugin as any)["chat.message"]
 
-      it("preserves existing session fields when adding startedAt", () => {
-        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 0)
-        const result = updater({ customField: "value", count: 42 })
-        expect(result).toMatchObject({ customField: "value", count: 42, startedAt: expect.any(String), agent: "build" })
-      })
+      await hook({ sessionID: "ses_val", agent: "build" })
 
-      it("returns session unchanged (same reference) when startedAt already exists", () => {
-        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 0)
-        const existing = { startedAt: "2024-01-01T00:00:00Z", agent: "old-agent", other: "data" }
-        expect(updater(existing)).toBe(existing)
+      const state = await getState("ses_val")
+      expect(state ?? {}).toMatchObject({
+        startedAt: expect.any(String),
+        agent: "build",
+        lastMessageSentAt: expect.any(String),
       })
     })
 
-    describe("recordLastMessageSent (via chat.message[1])", () => {
-      beforeEach(async () => {
-        const plugin = await mkPlugin() as SessionTrackerPlugin
-        await (plugin as any)["chat.message"]({ sessionID: "ses_test", agent: "build" })
-      })
+    it("does not overwrite startedAt on subsequent chat.message calls", async () => {
+      resetMockState({ ses_guard_val: { startedAt: "2026-01-01T00:00:00Z" } })
+      const plugin = await mkPlugin() as SessionTrackerPlugin
+      const hook = (plugin as any)["chat.message"]
 
-      it("sets lastMessageSentAt on session", () => {
-        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 1)
-        const result = updater({})
-        expect(result).toMatchObject({ lastMessageSentAt: expect.any(String) })
-      })
+      await hook({ sessionID: "ses_guard_val", agent: "build" })
 
-      it("preserves existing fields when setting lastMessageSentAt", () => {
-        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 1)
-        const result = updater({ existingField: 123, startedAt: "2024-01-01T00:00:00Z" })
-        expect(result).toMatchObject({ existingField: 123, startedAt: "2024-01-01T00:00:00Z", lastMessageSentAt: expect.any(String) })
+      const state = await getState("ses_guard_val")
+      expect(state?.startedAt).toBe("2026-01-01T00:00:00Z")
+    })
+
+    it("updates agent and lastMessageSentAt on subsequent chat.message calls", async () => {
+      resetMockState({ ses_upd: { startedAt: "2026-01-01T00:00:00Z", agent: "old" } })
+      const plugin = await mkPlugin() as SessionTrackerPlugin
+      const hook = (plugin as any)["chat.message"]
+
+      await hook({ sessionID: "ses_upd", agent: "deploy" })
+
+      const state = await getState("ses_upd")
+      expect(state?.agent).toBe("deploy")
+      expect(state?.lastMessageSentAt).toBeDefined()
+      expect(state?.startedAt).toBe("2026-01-01T00:00:00Z")
+    })
+
+    it("records tool calls accumulating across multiple invocations", async () => {
+      resetMockState({ ses_tools: {} })
+      const plugin = await mkPlugin() as SessionTrackerPlugin
+      const hook = (plugin as any)["tool.execute.before"]
+
+      await hook({ sessionID: "ses_tools", tool: "read" })
+      await hook({ sessionID: "ses_tools", tool: "write" })
+      await hook({ sessionID: "ses_tools", tool: "question" })
+
+      const state = await getState("ses_tools")
+      expect(state?.toolCalls).toMatchObject({
+        read: expect.any(String),
+        write: expect.any(String),
+        question: expect.any(String),
       })
     })
 
-    describe("markToolAsCalled (via tool.execute.before)", () => {
-      beforeEach(async () => {
-        const plugin = await mkPlugin() as SessionTrackerPlugin
-        await (plugin as any)["tool.execute.before"]({ sessionID: "ses_tool", tool: "read" })
-      })
+    it("merges tool calls with prior entries", async () => {
+      resetMockState({ ses_merge: { toolCalls: { edit: "2024-01-01T00:00:00Z" } } })
+      const plugin = await mkPlugin() as SessionTrackerPlugin
+      const hook = (plugin as any)["tool.execute.before"]
 
-      it("records tool call when no prior toolCalls exist", () => {
-        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 0)
-        const result = updater({})
-        expect(result).toMatchObject({ toolCalls: { read: expect.any(String) } })
-      })
+      await hook({ sessionID: "ses_merge", tool: "read" })
 
-      it("accumulates tool calls preserving prior tool entries", () => {
-        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 0)
-        const result = updater({ toolCalls: { write: "2024-01-01T00:00:00Z" } })
-        expect(result.toolCalls).toMatchObject({ write: "2024-01-01T00:00:00Z", read: expect.any(String) })
-      })
-
-      it("preserves existing session fields when recording tool call", () => {
-        const updater = getUpdaterFunction(_mockUpdateState.mock.calls, 0)
-        const result = updater({ otherField: "value", count: 42 })
-        expect(result).toMatchObject({ otherField: "value", count: 42, toolCalls: expect.any(Object) })
+      const state = await getState("ses_merge")
+      expect(state?.toolCalls).toMatchObject({
+        edit: "2024-01-01T00:00:00Z",
+        read: expect.any(String),
       })
     })
 
-    describe("recordLastSessionIdle (via session.idle)", () => {
-      beforeEach(async () => {
-        const plugin = await mkPlugin() as SessionTrackerPlugin
-        await plugin["event"]?.({ event: { type: "session.idle" as const, properties: { sessionID: "ses_idle" } } })
-      })
+    it("sets idleAt on session.idle event", async () => {
+      resetMockState({ ses_idle_val: {} })
+      const plugin = await mkPlugin() as SessionTrackerPlugin
 
-      it("sets idleAt on session", () => {
-        const result = getUpdaterFunction(_mockUpdateState.mock.calls, 0)({})
-        expect(result).toMatchObject({ idleAt: expect.any(String) })
-      })
+      await plugin["event"]?.({ event: { type: "session.idle" as const, properties: { sessionID: "ses_idle_val" } } })
 
-      it("preserves existing fields when setting idleAt", () => {
-        const result = getUpdaterFunction(_mockUpdateState.mock.calls, 0)({ existingField: "value", startedAt: "2024-01-01T00:00:00Z" })
-        expect(result).toMatchObject({ existingField: "value", startedAt: "2024-01-01T00:00:00Z", idleAt: expect.any(String) })
-      })
+      const state = await getState("ses_idle_val")
+      expect(state?.idleAt).toBeDefined()
     })
 
-    describe("recordMessageCancelled (via session.error)", () => {
-      beforeEach(async () => {
-        const plugin = await mkPlugin() as SessionTrackerPlugin
-        await plugin["event"]?.({
-          event: { type: "session.error" as const, properties: { sessionID: "ses_cancel", error: { name: "MessageAbortedError" } } },
-        })
+    it("sets cancelledAt on session.error with MessageAbortedError", async () => {
+      resetMockState({ ses_cancel: {} })
+      const plugin = await mkPlugin() as SessionTrackerPlugin
+
+      await plugin["event"]?.({
+        event: { type: "session.error" as const, properties: { sessionID: "ses_cancel", error: { name: "MessageAbortedError" } } },
       })
 
-      it("sets cancelledAt on session", () => {
-        const result = getUpdaterFunction(_mockUpdateState.mock.calls, 0)({})
-        expect(result).toMatchObject({ cancelledAt: expect.any(String) })
-      })
+      const state = await getState("ses_cancel")
+      expect(state?.cancelledAt).toBeDefined()
+    })
 
-      it("preserves existing fields when setting cancelledAt", () => {
-        const result = getUpdaterFunction(_mockUpdateState.mock.calls, 0)({ existingField: "value", startedAt: "2024-01-01T00:00:00Z" })
-        expect(result).toMatchObject({ existingField: "value", startedAt: "2024-01-01T00:00:00Z", cancelledAt: expect.any(String) })
-      })
+    it("full session lifecycle: start → tool calls → idle → cancel", async () => {
+      resetMockState({ ses_full_val: {} })
+      const plugin = await mkPlugin() as SessionTrackerPlugin
+
+      await (plugin as any)["chat.message"]({ sessionID: "ses_full_val", agent: "build" })
+      await (plugin as any)["tool.execute.before"]({ sessionID: "ses_full_val", tool: "read" })
+
+       {
+         const s = await getState("ses_full_val")
+         expect(s?.startedAt).toBeDefined()
+         expect(s?.agent).toBe("build")
+         expect(s?.toolCalls).toMatchObject({ read: expect.any(String) })
+       }
+
+       await plugin["event"]?.({ event: { type: "session.idle" as const, properties: { sessionID: "ses_full_val" } } })
+       {
+         const s = await getState("ses_full_val")
+         expect(s?.idleAt).toBeDefined()
+       }
+
+       await plugin["event"]?.({
+         event: { type: "session.error" as const, properties: { sessionID: "ses_full_val", error: { name: "MessageAbortedError" } } },
+       })
+       {
+         const s = await getState("ses_full_val")
+         expect(s?.cancelledAt).toBeDefined()
+       }
     })
   })
+
+  // ── Plugin ID verification ────────────────────────────────────
 
   // ── Event handler conditional edge cases ──────────────────────
 
@@ -537,7 +554,7 @@ describe("sessionTracker", () => {
       expect(log).toHaveBeenCalledTimes(1)
       const lastCall = vi.mocked(log).mock.calls[0]
       const initMessage = lastCall[2] as string
-      expect(initMessage).toBe("harness-plugin initialized")
+      expect(initMessage).toBe("session-tracker initialized")
       expect(initMessage).not.toMatch(/^\s/)
     })
 
@@ -548,7 +565,7 @@ describe("sessionTracker", () => {
       expect(log).toHaveBeenCalledTimes(1)
       const lastCall = vi.mocked(log).mock.calls[0]
       const disposeMessage = lastCall[2] as string
-      expect(disposeMessage).toBe("harness-plugin disposed")
+      expect(disposeMessage).toBe("session-tracker disposed")
       expect(disposeMessage).not.toMatch(/^\s/)
     })
   })

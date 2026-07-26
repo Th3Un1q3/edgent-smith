@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { makeKvStoreMockFactory } from "@tests/__utils/kv-store.mock"
+import { makeKvStoreMockFactory, resetMockState } from "@tests/__utils/kv-store.mock"
 
 // ── Module mocks (hoisted by vitest) ─────────────────────────────────────
 
@@ -36,7 +36,7 @@ describe("task-gate-reporter", () => {
 
     beforeEach(async () => {
         // Re-apply mock implementations after vitest's mockReset
-        SessionStorage.reset()
+        resetMockState()
 
         const mockContext = {
             client: {} as unknown,
@@ -56,7 +56,7 @@ describe("task-gate-reporter", () => {
     // ── Test 1: Appends failing gates when child session has failing gates
 
     it("appends failing gates when child session has failing gates", async () => {
-        SessionStorage.reset({
+        resetMockState({
             ses_child_1: {
                 qualityGateStatuses: {
                     lint: { dirty: false, status: "fail" },
@@ -78,7 +78,7 @@ describe("task-gate-reporter", () => {
     // ── Test 2: Does NOT append when all gates pass in child session
 
     it("does NOT append when all gates pass in child session", async () => {
-        SessionStorage.reset({
+        resetMockState({
             ses_child_1: {
                 qualityGateStatuses: {
                     lint: { dirty: false, status: "pass" },
@@ -97,7 +97,7 @@ describe("task-gate-reporter", () => {
     // ── Test 3: Does NOT append when no quality gates in child session state
 
     it("does NOT append when no quality gates in child session state", async () => {
-        SessionStorage.reset({
+        resetMockState({
             ses_child_1: {},
         })
 
@@ -112,8 +112,8 @@ describe("task-gate-reporter", () => {
     // ── Test 4: Does NOT append when child session has no state
 
     it("does NOT append when child session has no state", async () => {
-        // SessionStorage.reset() with no matching key → readState returns undefined
-        SessionStorage.reset({})
+        // resetMockState() with no matching key → readState returns undefined
+        resetMockState({})
 
         const output = makeOutput()
 
@@ -174,7 +174,7 @@ describe("task-gate-reporter", () => {
     // ── Test 9: Appends failing gates message to empty output
 
     it("appends failing gates message to empty output", async () => {
-        SessionStorage.reset({
+        resetMockState({
             ses_child_1: {
                 qualityGateStatuses: {
                     lint: { dirty: false, status: "fail" },
@@ -193,7 +193,7 @@ describe("task-gate-reporter", () => {
     // ── Test 10: Appends multiple failing gates with comma separator
 
     it("appends multiple failing gates with comma separator", async () => {
-        SessionStorage.reset({
+        resetMockState({
             ses_child_1: {
                 qualityGateStatuses: {
                     lint: { dirty: false, status: "fail" },

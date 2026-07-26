@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { defaultCreateClient, type ClientMock } from "@tests/helpers/mock-utilities"
 
 // Mock factories — synchronous imports avoid circular dependency issues.
-import { makeKvStoreMockFactory } from "@tests/__utils/kv-store.mock"
+import { makeKvStoreMockFactory, resetMockState } from "@tests/__utils/kv-store.mock"
 
 vi.mock("@plugins/helpers/instruction-indexer", () => ({ createIndex: vi.fn() }))
 vi.mock("@plugins/helpers/session-helpers")
@@ -50,7 +50,7 @@ async function runBudgetTest(
 ): Promise<string> {
     const client = defaultCreateClient()
 
-    SessionStorage.reset({ [sessionId]: { idempotencyTokens: tokens } })
+    resetMockState({ [sessionId]: { idempotencyTokens: tokens } })
 
     vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
         forFiles: async () => Array.from({ length: instructionCount }, (_, index) => ({
@@ -92,7 +92,7 @@ describe("instructionsLoaderPlugin", () => {
 
     beforeEach(() => {
         vi.clearAllMocks()
-        SessionStorage.reset()
+        resetMockState()
         client = defaultCreateClient()
     })
 
@@ -145,7 +145,7 @@ describe("instructionsLoaderPlugin", () => {
             await hookFunction({ tool: "write", sessionID: "sess-1", callID: "call-unknown" }, { args: { filePath: "/unknown/file.ts" } })
 
             expect(sessionHelpers.sendMessage).not.toHaveBeenCalled()
-            expect(log).toHaveBeenCalledWith(expect.anything(), "info", expect.stringContaining("No new instructions to send for session sess-1"))
+            expect(log).toHaveBeenCalledWith(expect.any(Object), "info", expect.stringContaining("No new instructions to send for session"), expect.any(String))
         })
     })
 
@@ -216,7 +216,7 @@ describe("instructionsLoaderPlugin", () => {
 
     describe("idempotency edge cases", () => {
         it("skips instructions already sent in a previous call", async () => {
-            SessionStorage.reset({ "sess-1": { idempotencyTokens: { "instruction_load:/some/file.ts": "2026-01-01T00:00:00Z" } } })
+            resetMockState({ "sess-1": { idempotencyTokens: { "instruction_load:/some/file.ts": "2026-01-01T00:00:00Z" } } })
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(makeInstructions("/some/file.ts", "Test instruction")))
 
             const plugin = await createPlugin(client)
@@ -228,7 +228,7 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("sends only new instructions when some were previously sent", async () => {
-            SessionStorage.reset({ "sess-1": { idempotencyTokens: { "instruction_load:/old/file.ts": "2026-01-01T00:00:00Z" } } })
+            resetMockState({ "sess-1": { idempotencyTokens: { "instruction_load:/old/file.ts": "2026-01-01T00:00:00Z" } } })
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex([
                 { path: "/old/file.ts", description: "Old instruction", applyTo: "**/*.{ts}" },
                 { path: "/new/file.ts", description: "New instruction", applyTo: "**/*.{ts}" },
@@ -247,7 +247,7 @@ describe("instructionsLoaderPlugin", () => {
 
         it("updates sessionStorage with new tokens after sending", async () => {
             const sessionId = "sess-1"
-            SessionStorage.reset({ [sessionId]: { idempotencyTokens: { "instruction_load:/some/file.ts": "2026-01-01T00:00:00Z" } } })
+            resetMockState({ [sessionId]: { idempotencyTokens: { "instruction_load:/some/file.ts": "2026-01-01T00:00:00Z" } } })
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(makeInstructions("/new/file.ts", "New instruction")))
 
             const plugin = await createPlugin(client)
@@ -271,7 +271,7 @@ describe("instructionsLoaderPlugin", () => {
             { name: "empty idempotencyTokens", state: () => ({ idempotencyTokens: {} }), expectedCount: 2 },
         ])("handles $name gracefully", async ({ expectedCount }) => {
             const sessionId = "sess-1"
-            SessionStorage.reset({ [sessionId]: (expectedCount === 3 ? { idempotencyTokens: undefined } : { idempotencyTokens: {} }) })
+            resetMockState({ [sessionId]: (expectedCount === 3 ? { idempotencyTokens: undefined } : { idempotencyTokens: {} }) })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(
                 expectedCount === 3
@@ -330,7 +330,7 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("legacy tokens without suffix prevent re-injection but do not consume budget slots", async () => {
-            SessionStorage.reset({ "sess-legacy": { idempotencyTokens: {
+            resetMockState({ "sess-legacy": { idempotencyTokens: {
                 "instruction_load:/prev1.ts": "2026-01-01T00:00:00Z",
                 "instruction_load:/prev2.ts": "2026-01-01T00:00:00Z",
             } }})
@@ -350,7 +350,7 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("exactly hits the cap boundary at slot 5", async () => {
-            SessionStorage.reset({ "sess-boundary": { idempotencyTokens: {
+            resetMockState({ "sess-boundary": { idempotencyTokens: {
                 "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
                 "instruction_load:/prev2.ts:ref": "2026-01-01T00:00:00Z",
             } }})
@@ -371,7 +371,7 @@ describe("instructionsLoaderPlugin", () => {
 
         it("session survives restart with pre-populated state", async () => {
             const sessionId = "sess-survive"
-            SessionStorage.reset({ [sessionId]: { idempotencyTokens: {
+            resetMockState({ [sessionId]: { idempotencyTokens: {
                 "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
                 "instruction_load:/prev2.ts:full": "2026-01-01T00:00:00Z",
                 "instruction_load:/prev3.ts:full": "2026-01-01T00:00:00Z",
@@ -392,7 +392,7 @@ describe("instructionsLoaderPlugin", () => {
 
             vi.mocked(sessionHelpers.sendMessage).mockClear()
 
-            SessionStorage.reset({ [sessionId]: { idempotencyTokens: {
+            resetMockState({ [sessionId]: { idempotencyTokens: {
                 "instruction_load:/prev1.ts:full": "2026-01-01T00:00:00Z",
                 "instruction_load:/prev2.ts:full": "2026-01-01T00:00:00Z",
                 "instruction_load:/prev3.ts:full": "2026-01-01T00:00:00Z",
@@ -413,7 +413,7 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("new session starts fresh", async () => {
-            SessionStorage.reset({ "sess-new": {} })
+            resetMockState({ "sess-new": {} })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => [{ path: "/a.ts", description: "Inst A", applyTo: "**/*.{ts}" }],
@@ -464,7 +464,7 @@ describe("instructionsLoaderPlugin", () => {
             const call = vi.mocked(instructionIndexer.createIndex).mock.calls[0][0]
             // Invoke the log callback to verify it calls the mocked log function
             ;(call.log as (message: string) => void)("test message")
-            expect(log).toHaveBeenCalledWith(expect.anything(), "info", expect.stringContaining("test message"))
+            expect(log).toHaveBeenCalledWith(expect.any(Object), "info", expect.stringContaining("test message"), expect.any(String))
         })
     })
 
@@ -488,7 +488,7 @@ describe("instructionsLoaderPlugin", () => {
 
     describe("budget counting only counts :full tokens", () => {
         it("does not count :ref suffixed tokens as budget consumers", async () => {
-            SessionStorage.reset({ "sess-ref": { idempotencyTokens: {
+            resetMockState({ "sess-ref": { idempotencyTokens: {
                 "instruction_load:/x.ts:ref": "ts",
                 "instruction_load:/y.ts:ref": "ts",
             }}})
@@ -514,7 +514,7 @@ describe("instructionsLoaderPlugin", () => {
             { name: ":full suffix", key: "instruction_load:/a.ts:full" as const },
             { name: ":ref suffix", key: "instruction_load:/a.ts:ref" as const },
         ])("skips instruction when idempotency token has $name", async ({ key }) => {
-            SessionStorage.reset({ "sess-sfx": { idempotencyTokens: { [key]: "ts" }}})
+            resetMockState({ "sess-sfx": { idempotencyTokens: { [key]: "ts" }}})
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex([
                 { path: "/a.ts", description: "A", applyTo: "**/*.{ts}" },
             ]))
@@ -528,7 +528,7 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("does NOT skip instruction when idempotency token suffix does not match :full or :ref", async () => {
-            SessionStorage.reset({ "sess-other": { idempotencyTokens: { "instruction_load:/a.ts:other": "ts" }}})
+            resetMockState({ "sess-other": { idempotencyTokens: { "instruction_load:/a.ts:other": "ts" }}})
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex([
                 { path: "/a.ts", description: "A", applyTo: "**/*.{ts}" },
             ]))
@@ -545,7 +545,7 @@ describe("instructionsLoaderPlugin", () => {
 
     describe("slot boundary and content format", () => {
         it("distributes full vs reference slots at exact boundary", async () => {
-            SessionStorage.reset({ "sess-bound2": { idempotencyTokens: {
+            resetMockState({ "sess-bound2": { idempotencyTokens: {
                 "instruction_load:/f1.ts:full": "ts",
                 "instruction_load:/f2.ts:full": "ts",
                 "instruction_load:/f3.ts:full": "ts",
@@ -586,7 +586,7 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("does NOT include content text in reference-only instruction blocks", async () => {
-            SessionStorage.reset({ "sess-ref-no-content": { idempotencyTokens: {
+            resetMockState({ "sess-ref-no-content": { idempotencyTokens: {
                 "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
                 "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
                 "instruction_load:/f5.ts:full": "ts",
@@ -637,7 +637,7 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("records token keys ending with :ref for reference instructions", async () => {
-            SessionStorage.reset({ "sess-tok-ref": { idempotencyTokens: {
+            resetMockState({ "sess-tok-ref": { idempotencyTokens: {
                 "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
                 "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
                 "instruction_load:/f5.ts:full": "ts",
@@ -688,7 +688,7 @@ describe("instructionsLoaderPlugin", () => {
                 { tool: "write", sessionID: "sess-log-1", callID: "call-1" }, { args: { filePath: "/none.ts" } },
             )
 
-            expect(log).toHaveBeenCalledWith(expect.anything(), "info", expect.stringContaining("[instructions-loader]"))
+            expect(log).toHaveBeenCalledWith(expect.any(Object), "info", expect.stringContaining("No new instructions to send for session"), "instructions-loader")
         })
 
         it("includes [instructions-loader] prefix in the createIndex log callback", async () => {
@@ -700,7 +700,7 @@ describe("instructionsLoaderPlugin", () => {
 
             const call = vi.mocked(instructionIndexer.createIndex).mock.calls[0][0]
             ;(call.log as (message: string) => void)("index built")
-            expect(log).toHaveBeenCalledWith(expect.anything(), "info", "[instructions-loader] index built")
+            expect(log).toHaveBeenCalledWith(expect.any(Object), "info", "index built", expect.any(String))
         })
     })
 
@@ -744,7 +744,7 @@ describe("instructionsLoaderPlugin", () => {
 
     describe("XML tag structure in reference-only instruction blocks", () => {
         it("renders <instruction>, <description>, <path>, <meta/>, </instruction> tags and omits <content>", async () => {
-            SessionStorage.reset({ "sess-xml-ref": { idempotencyTokens: {
+            resetMockState({ "sess-xml-ref": { idempotencyTokens: {
                 "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
                 "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
                 "instruction_load:/f5.ts:full": "ts",
@@ -771,7 +771,7 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("includes lines and chars attributes in the meta tag when content exists", async () => {
-            SessionStorage.reset({ "sess-meta-attrs": { idempotencyTokens: {
+            resetMockState({ "sess-meta-attrs": { idempotencyTokens: {
                 "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
                 "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
                 "instruction_load:/f5.ts:full": "ts",
@@ -794,7 +794,7 @@ describe("instructionsLoaderPlugin", () => {
         })
 
         it("omits lines/chars attributes in meta tag when content is falsy", async () => {
-            SessionStorage.reset({ "sess-meta-empty": { idempotencyTokens: {
+            resetMockState({ "sess-meta-empty": { idempotencyTokens: {
                 "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
                 "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
                 "instruction_load:/f5.ts:full": "ts",
@@ -857,7 +857,7 @@ describe("instructionsLoaderPlugin", () => {
         it("returns empty object when state has no idempotencyTokens property", async () => {
             // Simulate state without idempotencyTokens at all
             const sessionId = "sess-no-prop"
-            SessionStorage.reset({ [sessionId]: {} })
+            resetMockState({ [sessionId]: {} })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(makeInstructions("/f.ts", "Test")))
 
@@ -872,7 +872,7 @@ describe("instructionsLoaderPlugin", () => {
 
         it("treats idempotencyTokens as valid when it contains entries", async () => {
             const sessionId = "sess-has-tokens"
-            SessionStorage.reset({ [sessionId]: { idempotencyTokens: { "instruction_load:/existing.ts:full": "ts" } } })
+            resetMockState({ [sessionId]: { idempotencyTokens: { "instruction_load:/existing.ts:full": "ts" } } })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(makeInstructions("/f.ts", "Test")))
 
@@ -939,7 +939,7 @@ describe("instructionsLoaderPlugin", () => {
 
     describe("reference block internal newline separators", () => {
         it("uses newline separators between XML elements in reference blocks", async () => {
-            SessionStorage.reset({ "sess-ref-nl": { idempotencyTokens: {
+            resetMockState({ "sess-ref-nl": { idempotencyTokens: {
                 "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
                 "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
                 "instruction_load:/f5.ts:full": "ts",
@@ -972,7 +972,7 @@ describe("instructionsLoaderPlugin", () => {
                 manyTokens[`instruction_load:/ref${index}.ts:ref`] = "ts"
             }
 
-            SessionStorage.reset({ "sess-filter": { idempotencyTokens: manyTokens } })
+            resetMockState({ "sess-filter": { idempotencyTokens: manyTokens } })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => [{ path: "/new.ts", description: "New", applyTo: "**/*.{ts}" }],
@@ -993,7 +993,7 @@ describe("instructionsLoaderPlugin", () => {
     describe("slots remaining decrement exactly at isReference boundary", () => {
         it("does not decrement slotsRemaining once isReference is already true", async () => {
             // 5 full tokens = budget full → next instruction is reference
-            SessionStorage.reset({ "sess-decr": { idempotencyTokens: {
+            resetMockState({ "sess-decr": { idempotencyTokens: {
                 "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
                 "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
                 "instruction_load:/f5.ts:full": "ts",
@@ -1027,12 +1027,11 @@ describe("instructionsLoaderPlugin", () => {
                 { tool: "write", sessionID: "sess-plugid", callID: "call-1" }, { args: { filePath: "/no-match.ts" } },
             )
 
-            // The log message must start exactly with [instructions-loader], not [] or [something-else]
+            // The log must include instructions-loader as the pluginId (4th argument)
             const logCalls = vi.mocked(log).mock.calls
             const noNewMessageCall = logCalls.find(c => typeof c[2] === "string" && (c[2] as string).includes("No new instructions to send"))
             expect(noNewMessageCall).toBeDefined()
-            const logMessage = (noNewMessageCall as (typeof logCalls)[number])[2]
-            expect(logMessage).toMatch(/^\[instructions-loader\]/)
+            expect((noNewMessageCall as (typeof logCalls)[number])[3]).toBe("instructions-loader")
         })
     })
 
@@ -1042,7 +1041,7 @@ describe("instructionsLoaderPlugin", () => {
         it("returns empty object when session state has undefined idempotencyTokens", async () => {
             const sessionId = "sess-undef-tokens"
             // State without idempotencyTokens — readState callback sees undefined
-            SessionStorage.reset({ [sessionId]: {} })
+            resetMockState({ [sessionId]: {} })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(makeInstructions("/f.ts", "Test")))
 
@@ -1058,7 +1057,7 @@ describe("instructionsLoaderPlugin", () => {
 
         it("returns empty object when session state has empty idempotencyTokens object", async () => {
             const sessionId = "sess-empty-tokens"
-            SessionStorage.reset({ [sessionId]: { idempotencyTokens: {} } })
+            resetMockState({ [sessionId]: { idempotencyTokens: {} } })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(makeInstructions("/f.ts", "Test")))
 
@@ -1075,7 +1074,7 @@ describe("instructionsLoaderPlugin", () => {
     describe("safePath guard prevents empty path from being excluded by matching token", () => {
         it("includes instruction when both path and description are empty strings but a matching token exists", async () => {
             // The token "instruction_load:" would match isAlreadyInjected("") if the guard didn't intercept
-            SessionStorage.reset({ "sess-emptystr": { idempotencyTokens: { "instruction_load:": "ts" } } })
+            resetMockState({ "sess-emptystr": { idempotencyTokens: { "instruction_load:": "ts" } } })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => [{ path: "" as any, description: "" as any, applyTo: "**/*.{ts}" }],
@@ -1095,7 +1094,7 @@ describe("instructionsLoaderPlugin", () => {
 
         it("includes instruction when safePath is undefined and a token would otherwise match", async () => {
             // Token with key "instruction_load:undefined" would match if guard were bypassed
-            SessionStorage.reset({ "sess-undefpath": { idempotencyTokens: { "instruction_load:undefined": "ts" } } })
+            resetMockState({ "sess-undefpath": { idempotencyTokens: { "instruction_load:undefined": "ts" } } })
 
             vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
                 forFiles: async () => [{ path: undefined as any, description: undefined as any, applyTo: "**/*.{ts}" }],
@@ -1115,7 +1114,7 @@ describe("instructionsLoaderPlugin", () => {
 
     describe("slots remaining boundary (equivalent mutant)", () => {
         it("does not let slotsRemaining go below zero with reference-only instructions", async () => {
-            SessionStorage.reset({ "sess-boundary-decr": { idempotencyTokens: {
+            resetMockState({ "sess-boundary-decr": { idempotencyTokens: {
                 "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
                 "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
                 "instruction_load:/f5.ts:full": "ts",
@@ -1162,9 +1161,10 @@ describe("instructionsLoaderPlugin", () => {
             // The PLUGIN_ID is interpolated into the log message.
             // If mutated to "", the message would be "[] mutant-test" — the regex catches this.
             expect(log).toHaveBeenCalledWith(
-                expect.anything(),
+                expect.any(Object),
                 "info",
-                expect.stringMatching(/^\[instructions-loader\] mutant-test$/),
+                "mutant-test",
+                expect.any(String),
             )
         })
     })

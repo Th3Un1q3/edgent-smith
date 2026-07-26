@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { makeKvStoreMockFactory } from "@tests/__utils/kv-store.mock"
+import { makeKvStoreMockFactory, resetMockState } from "@tests/__utils/kv-store.mock"
 import { opencodeClientFactory } from "@tests/__utils/factories/client-factory"
 
 import { qualityGateEnforcer } from "@plugins/quality-gate-enforcer"
@@ -66,7 +66,7 @@ describe("qualityGateEnforcer", () => {
       $: vi.fn(),
     }
 
-    SessionStorage.reset() // re-apply mock implementations
+    resetMockState() // re-apply mock implementations
     vi.mocked(loadQualityGates).mockResolvedValue(fixtureConfig)
     vi.mocked(sendMessage).mockResolvedValue(undefined)
 
@@ -339,6 +339,55 @@ describe("qualityGateEnforcer", () => {
           body.message.includes("Sending transition message for 1 gate(s)")
       })
       expect(sendingCall).toBeDefined()
+    })
+  })
+
+  // ── Error logging ─────────────────────────────────────────────────────
+
+  describe("error logging on updateState failure", () => {
+    beforeEach(() => {
+      mockUpdateState.mockRejectedValue(new Error("kv-store unavailable"))
+    })
+
+    it("does not double-prefix error message when marking gate dirty", async () => {
+      vi.mocked(runGate).mockResolvedValue(successResult)
+
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_err_log", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: {}, metadata: {} },
+      )
+
+      const logCalls = (mockClient.app.log as ReturnType<typeof vi.fn>).mock.calls as Array<[unknown]>
+      const errorCall = logCalls.find((call) => {
+        const body = (call[0] as { body?: { message?: string } })?.body
+        return typeof body?.message === "string" && body.message.includes("failed to mark gate")
+      })
+      expect(errorCall).toBeDefined()
+      const message = ((errorCall![0] as { body: { message: string } }).body).message
+      expect((message.match(/\[quality-gate-enforcer\]/g) || []).length).toBe(1)
+    })
+
+    it("does not double-prefix error message when updating gate status", async () => {
+      // First call succeeds, second call (update status) fails
+      mockUpdateState
+        .mockResolvedValueOnce(undefined)  // dirty marking succeeds
+        .mockRejectedValueOnce(new Error("kv-store unavailable"))  // status update fails
+
+      vi.mocked(runGate).mockResolvedValue(successResult)
+
+      await (plugin["tool.execute.after"] as (...arguments_: unknown[]) => unknown)(
+        { tool: "edit", sessionID: "ses_err_log2", args: { filePath: "/workspace/src/main.ts" } },
+        { title: "", output: {}, metadata: {} },
+      )
+
+      const logCalls = (mockClient.app.log as ReturnType<typeof vi.fn>).mock.calls as Array<[unknown]>
+      const errorCall = logCalls.find((call) => {
+        const body = (call[0] as { body?: { message?: string } })?.body
+        return typeof body?.message === "string" && body.message.includes("failed to update gate")
+      })
+      expect(errorCall).toBeDefined()
+      const message = ((errorCall![0] as { body: { message: string } }).body).message
+      expect((message.match(/\[quality-gate-enforcer\]/g) || []).length).toBe(1)
     })
   })
 

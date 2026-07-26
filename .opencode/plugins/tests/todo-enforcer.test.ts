@@ -1,13 +1,11 @@
 
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { makeKvStoreMockFactory } from "@tests/__utils/kv-store.mock"
+import { makeKvStoreMockFactory, resetMockState } from "@tests/__utils/kv-store.mock"
 import { pluginContextBuilder } from "@tests/__utils/plugin-builder"
 
 import { log } from "@plugins/helpers/logger"
 import { sendMessage } from "@plugins/helpers/session-helpers"
-import { SessionStorage } from "@plugins/helpers/kv-store"
-
 import { todoEnforcer } from "@plugins/todo-enforcer"
 import { opencodeClientFactory } from "@tests/__utils/factories/client-factory"
 
@@ -29,7 +27,7 @@ describe("todoEnforcer", () => {
   let pluginContext: ReturnType<typeof pluginContextBuilder>
 
   beforeEach(() => {
-    SessionStorage.reset()
+    resetMockState()
     pluginContext = pluginContextBuilder({
       clientFactory: () => opencodeClientFactory({
         agentName: "rug",
@@ -43,7 +41,8 @@ describe("todoEnforcer", () => {
       await todoEnforcer(pluginContext as never)
       expect(log).toHaveBeenCalledWith(
         expect.any(Object), "info",
-        "todo-enforcer initialized",
+        "initialized",
+        expect.any(String),
       )
     })
   })
@@ -60,7 +59,8 @@ describe("todoEnforcer", () => {
       // Verify log was called before the error was thrown (kills mutants #15, #16)
       expect(log).toHaveBeenCalledWith(
         expect.any(Object), "info",
-        expect.stringContaining("[todo-enforcer] enforcing todo requirement for task tool on session ses_test"),
+        expect.stringContaining("enforcing todo requirement for task tool on session ses_test"),
+        expect.any(String),
       )
     })
 
@@ -144,6 +144,7 @@ describe("todoEnforcer", () => {
         expect(log).toHaveBeenCalledWith(
           expect.any(Object), "info",
           expect.stringContaining("skipping enforcement"),
+          expect.any(String),
         )
       })
 
@@ -159,7 +160,7 @@ describe("todoEnforcer", () => {
 
     describe("hasUsedTodos true skips enforcement for task tool", () => {
       it("skips task enforcement when readState returns true (todos already used since last message)", async () => {
-        SessionStorage.reset({
+        resetMockState({
           ses_has_todos: {
             toolCalls: { todowrite: "2026-01-01T02:00:00Z" },
             lastMessageSentAt: "2026-01-01T01:00:00Z",
@@ -175,7 +176,7 @@ describe("todoEnforcer", () => {
       })
 
       it("blocks task when todowrite call is older than last message (hasUsedTodos is false)", async () => {
-        SessionStorage.reset({
+        resetMockState({
           ses_old_todo: {
             toolCalls: { todowrite: "2026-01-01T00:00:00Z" },
             lastMessageSentAt: "2026-01-01T01:00:00Z",
@@ -191,7 +192,7 @@ describe("todoEnforcer", () => {
       })
 
       it("blocks task when todowrite timestamp equals last message timestamp (strict-greater-than boundary)", async () => {
-        SessionStorage.reset({
+        resetMockState({
           ses_equal_times: {
             toolCalls: { todowrite: "2026-01-01T01:00:00Z" },
             lastMessageSentAt: "2026-01-01T01:00:00Z",
@@ -207,7 +208,7 @@ describe("todoEnforcer", () => {
       })
 
       it("blocks task when toolCalls state exists but todowrite key is missing", async () => {
-        SessionStorage.reset({
+        resetMockState({
           ses_no_todowrite: {
             toolCalls: { someOtherTool: "2026-01-01T02:00:00Z" },
             lastMessageSentAt: "2026-01-01T01:00:00Z",
@@ -223,7 +224,7 @@ describe("todoEnforcer", () => {
       })
 
       it("allows task when todowrite exists but lastMessageSentAt is missing (treated as true)", async () => {
-        SessionStorage.reset({
+        resetMockState({
           ses_no_msg_at: {
             toolCalls: { todowrite: "2026-01-01T02:00:00Z" },
           },
@@ -238,7 +239,7 @@ describe("todoEnforcer", () => {
       })
 
       it("blocks task when todowrite missing and lastMessageSentAt absent (kills mutant #18)", async () => {
-        SessionStorage.reset({
+        resetMockState({
           ses_no_todowrite_no_msg: {
             toolCalls: { someOtherTool: "2026-01-01T02:00:00Z" },
             // Intentionally OMIT lastMessageSentAt so the mutated path differs
@@ -311,7 +312,7 @@ describe("todoEnforcer", () => {
 
       it("sends follow-up when shouldFollowUp is true", async () => {
         vi.mocked(log).mockImplementation(async () => {})
-        SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
+        resetMockState({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
 
         const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
         const plugin = await todoEnforcer(pluginContext as never) as unknown as TodoEnforcerPlugin
@@ -321,7 +322,7 @@ describe("todoEnforcer", () => {
       })
 
       it("skips follow-up when cancelled after last message", async () => {
-        SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T01:00:00Z", lastMessageSentAt: "2026-01-01T00:00:00Z" } })
+        resetMockState({ test_session: { cancelledAt: "2026-01-01T01:00:00Z", lastMessageSentAt: "2026-01-01T00:00:00Z" } })
         vi.useFakeTimers()
         const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
         const plugin = await todoEnforcer(pluginContext as never) as unknown as TodoEnforcerPlugin
@@ -330,13 +331,14 @@ describe("todoEnforcer", () => {
         expect(log).toHaveBeenCalledWith(
           expect.any(Object), "info",
           expect.stringContaining("Session was cancelled after last message — skipping followup."),
+          expect.any(String),
         )
 
         expect(sendMessage).not.toHaveBeenCalled()
       })
 
       it("follows up when cancelled before last message", async () => {
-        SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
+        resetMockState({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
         vi.useFakeTimers()
         const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
         const plugin = await todoEnforcer(pluginContext as never) as unknown as TodoEnforcerPlugin
@@ -355,7 +357,7 @@ describe("todoEnforcer", () => {
       })
 
       it("returns early when no remaining todos", async () => {
-        SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
+        resetMockState({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
         pluginContext = pluginContextBuilder({
           clientFactory: () => opencodeClientFactory({
             agentName: "rug",
@@ -369,13 +371,14 @@ describe("todoEnforcer", () => {
         expect(log).toHaveBeenCalledWith(
           expect.any(Object), "info",
           expect.stringContaining("No remaining todos"),
+          expect.any(String),
         )
         vi.advanceTimersByTime(1001)
         expect(sendMessage).not.toHaveBeenCalled()
       })
 
       it("handles null todo data gracefully (kills no-coverage mutant on line 53)", async () => {
-        SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
+        resetMockState({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
         vi.useFakeTimers()
 
         // Override client.session.todo to return null data, forcing the || [] fallback
@@ -393,6 +396,7 @@ describe("todoEnforcer", () => {
           expect(log).toHaveBeenCalledWith(
             expect.any(Object), "info",
             "No remaining todos — clearing cancellation state.",
+            expect.any(String),
           ),
         )
         vi.useRealTimers()
@@ -419,7 +423,7 @@ describe("todoEnforcer", () => {
       })
 
       it("filters out completed and cancelled todos, keeping only pending and in_progress", async () => {
-        SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
+        resetMockState({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
         pluginContext = pluginContextBuilder({
           clientFactory: () => opencodeClientFactory({
             agentName: "rug",
@@ -452,7 +456,7 @@ describe("todoEnforcer", () => {
       })
 
       it("sends follow-up when cancelledAt is missing from session state", async () => {
-        SessionStorage.reset({ test_session: { lastMessageSentAt: "2026-01-01T01:00:00Z" } })
+        resetMockState({ test_session: { lastMessageSentAt: "2026-01-01T01:00:00Z" } })
         vi.useFakeTimers()
         const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
         const plugin = await todoEnforcer(pluginContext as never) as unknown as TodoEnforcerPlugin
@@ -462,7 +466,7 @@ describe("todoEnforcer", () => {
       })
 
       it("sends follow-up when lastMessageSentAt is missing from session state", async () => {
-        SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T00:00:00Z" } })
+        resetMockState({ test_session: { cancelledAt: "2026-01-01T00:00:00Z" } })
         vi.useFakeTimers()
         const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
         const plugin = await todoEnforcer(pluginContext as never) as unknown as TodoEnforcerPlugin
@@ -472,7 +476,7 @@ describe("todoEnforcer", () => {
       })
 
       it("skips follow-up when cancelledAt equals lastMessageSentAt (boundary for strict-less-than comparison)", async () => {
-        SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T01:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
+        resetMockState({ test_session: { cancelledAt: "2026-01-01T01:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
         vi.useFakeTimers()
         const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
         const plugin = await todoEnforcer(pluginContext as never) as unknown as TodoEnforcerPlugin
@@ -482,13 +486,14 @@ describe("todoEnforcer", () => {
           expect(log).toHaveBeenCalledWith(
             expect.any(Object), "info",
             expect.stringContaining("Session was cancelled after last message — skipping followup."),
+            expect.any(String),
           ),
         )
         expect(sendMessage).not.toHaveBeenCalled()
       })
 
       it("verifies sendMessage is called with the correct steering message payload and todo content", async () => {
-        SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
+        resetMockState({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
         vi.useFakeTimers()
         const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
         const plugin = await todoEnforcer(pluginContext as never) as unknown as TodoEnforcerPlugin
@@ -511,7 +516,7 @@ describe("todoEnforcer", () => {
       })
 
       it("renders exact status symbols [ ] and [•] for pending and in_progress todos in the follow-up message", async () => {
-        SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
+        resetMockState({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
         pluginContext = pluginContextBuilder({
           clientFactory: () => opencodeClientFactory({
             agentName: "rug",
@@ -540,7 +545,7 @@ describe("todoEnforcer", () => {
       })
 
       it("separates multiple remaining todos with newlines in the follow-up message", async () => {
-        SessionStorage.reset({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
+        resetMockState({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
         pluginContext = pluginContextBuilder({
           clientFactory: () => opencodeClientFactory({
             agentName: "rug",
@@ -571,7 +576,8 @@ describe("todoEnforcer", () => {
         await plugin?.dispose?.()
         expect(log).toHaveBeenCalledWith(
           expect.any(Object), "info",
-          expect.stringContaining("todo-enforcer disposed"),
+          expect.stringContaining("disposed"),
+          expect.any(String),
         )
       })
     })

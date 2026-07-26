@@ -44,7 +44,7 @@ async function sendTransitionMessage(
 ): Promise<void> {
   if (outcomes.length === 0) return
   const message = formatGateBatchResults(outcomes)
-  void log(client, "info", `[quality-gate-enforcer] Sending transition message for ${outcomes.length} gate(s)`)
+  void log(client, "info", `Sending transition message for ${outcomes.length} gate(s)`, "quality-gate-enforcer")
   if (sessionID) {
     await sendMessage({ client, sessionId: sessionID, message, noReply: true })
   } else {
@@ -58,6 +58,25 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
   const gates = qualityGatesConfig.gates
   const sessionStorage = new SessionStorage()
   const targetedTools = new Set(["edit", "write"])
+
+  async function updateGateStatus(
+    sessionId: string,
+    gateName: string,
+    isDirty: boolean,
+    status: GateResult,
+  ): Promise<void> {
+    await sessionStorage.updateState(sessionId, (state) => {
+      const current = state as Record<string, unknown>
+      const gates = (current.qualityGateStatuses as Record<string, { dirty: boolean; status: GateResult }>) ?? {}
+      return {
+        ...current,
+        qualityGateStatuses: {
+          ...gates,
+          [gateName]: { dirty: isDirty, status },
+        },
+      }
+    })
+  }
 
   return {
     "tool.execute.after": async (input, _output) => {
@@ -78,13 +97,11 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
 
         // Mark dirty before running — signals that gate evaluation is in progress
         if (sessionID) {
-          sessionStorage.updateState(sessionID, (state: Record<string, unknown>) => ({
-            ...(state as Record<string, unknown>),
-            qualityGateStatuses: {
-              ...((state as Record<string, unknown>).qualityGateStatuses as Record<string, { dirty: boolean; status: GateResult }> | undefined),
-              [gate.name]: { dirty: true, status: oldStatus },
-            },
-          }))
+          try {
+            await updateGateStatus(sessionID, gate.name, true, oldStatus)
+          } catch (error: unknown) {
+            await log(client, "error", `failed to mark gate ${gate.name} dirty for session ${sessionID}: ${(error as Error).message}`, "quality-gate-enforcer")
+          }
         }
 
         let result: CommandResult
@@ -98,13 +115,11 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
         const newStatus: GateResult = result.exitCode === 0 ? "pass" : "fail"
 
         if (sessionID) {
-          sessionStorage.updateState(sessionID, (state: Record<string, unknown>) => ({
-            ...(state as Record<string, unknown>),
-            qualityGateStatuses: {
-              ...((state as Record<string, unknown>).qualityGateStatuses as Record<string, { dirty: boolean; status: GateResult }> | undefined),
-              [gate.name]: { dirty: false, status: newStatus },
-            },
-          }))
+          try {
+            await updateGateStatus(sessionID, gate.name, false, newStatus)
+          } catch (error: unknown) {
+            await log(client, "error", `failed to update gate ${gate.name} status for session ${sessionID}: ${(error as Error).message}`, "quality-gate-enforcer")
+          }
         }
 
         if (oldStatus !== newStatus) {

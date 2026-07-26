@@ -154,5 +154,50 @@ describe("logger", () => {
         log(undefined as unknown as OpencodeClient, "warn", "no client available"),
       ).rejects.toThrow()
     })
+
+    // ── pluginId parameter tests ──────────────────────────
+    it("uses provided pluginId as the service name when pluginId is supplied", async () => {
+      const { log } = await import("@plugins/helpers/logger")
+      const client = makeMockClient()
+
+      await log(client, "info", "custom service test", "my-plugin")
+
+      expect(client.app.log).toHaveBeenCalledWith({
+        body: { service: "my-plugin", level: "info", message: "[my-plugin] custom service test" },
+      })
+    })
+
+    it("uses provided pluginId in the message prefix when pluginId is supplied", async () => {
+      const { log } = await import("@plugins/helpers/logger")
+      const client = makeMockClient()
+
+      await log(client, "error", "prefix test", "another-plugin")
+
+      expect(client.app.log).toHaveBeenCalledWith({
+        body: { service: "another-plugin", level: "error", message: "[another-plugin] prefix test" },
+      })
+    })
+
+    it("falls back to default PLUGIN_ID when pluginId is explicitly undefined", async () => {
+      const { log } = await import("@plugins/helpers/logger")
+      const client = makeMockClient()
+
+      await log(client, "warn", "fallback test", undefined)
+
+      expect(client.app.log).toHaveBeenCalledWith({
+        body: { service: "harness-plugin", level: "warn", message: "[harness-plugin] fallback test" },
+      })
+    })
+
+    it("uses provided pluginId with debug level", async () => {
+      const { log } = await import("@plugins/helpers/logger")
+      const client = makeMockClient()
+
+      await log(client, "debug", "debug with custom plugin", "debug-plugin")
+
+      expect(client.app.log).toHaveBeenCalledWith({
+        body: { service: "debug-plugin", level: "debug", message: "[debug-plugin] debug with custom plugin" },
+      })
+    })
   })
 })

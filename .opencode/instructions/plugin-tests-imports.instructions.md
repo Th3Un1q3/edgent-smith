@@ -6,6 +6,11 @@ applyTo: ".opencode/plugins/tests/**/*"
 
 ## Aliases
 
+> **Aliases are test-only.** `@plugins/*` and `@tests/*` resolve via Vitest + tsconfig-paths.
+> Plugin source files (`plugins/*.ts`) must use relative imports — the runtime does not
+> resolve these aliases. See `opencode-plugin-interfaces.instructions.md` for source-file
+> import conventions.
+
 Alias reference table (primary lookup):
 
 | Alias | Resolves To | Use Case |

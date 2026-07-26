@@ -28,6 +28,42 @@
       ]
     },
     {
+      "name": "python-lint",
+      "patterns": [
+        "cli/**/*.py",
+        "agents/**/*.py",
+        "evals/**/*.py",
+        "scripts/**/*.py"
+      ],
+      "commands": [
+        "cd /workspace && just lint"
+      ]
+    },
+    {
+      "name": "python-typecheck",
+      "patterns": [
+        "cli/**/*.py",
+        "agents/**/*.py",
+        "evals/**/*.py"
+      ],
+      "commands": [
+        "cd /workspace && just typecheck"
+      ]
+    },
+    {
+      "name": "python-test",
+      "patterns": [
+        "cli/**/*.py",
+        "agents/**/*.py",
+        "evals/**/*.py",
+        "scripts/**/*.py",
+        "tests/**/*.py"
+      ],
+      "commands": [
+        "cd /workspace && just test"
+      ]
+    },
+    {
       "name": "justfile-fmt",
       "patterns": [
         "justfile",

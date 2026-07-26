@@ -41,9 +41,6 @@ class FileSystemSessionStorageAdapter implements SessionStorageAdapter {
 }
 
 class SessionStorage {
-  static reset(_state: Record<string, State> = {}) {
-    throw new Error("Method not implemented.")
-  }
   constructor(private storageAdapter: SessionStorageAdapter = new FileSystemSessionStorageAdapter()) {}
 
   readState<T extends State, R = unknown>(sessionId: string, reader: (state: T) => R): R | undefined {
