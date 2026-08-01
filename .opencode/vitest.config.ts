@@ -13,6 +13,9 @@ export default defineConfig({
     alias: {
       "@tests": p('plugins/tests'),
       "@plugins": p('plugins'),
+      // Stryker runs under Node (node_modules/.bin/stryker has a node shebang), where the
+      // "bun" module does not exist. Route it to a faithful shim so tests load under Node.
+      "bun": p('plugins/tests/__mocks__/bun.ts'),
     },
   },
   test: {

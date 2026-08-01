@@ -39,6 +39,10 @@ function getPluginContext() {
   })
 }
 
+async function getState(sessionID: string) {
+  return (new SessionStorage()).readState(sessionID, (s) => s as Record<string, unknown>)
+}
+
 beforeEach(() => {
   resetMockState()
   void getSessionStorageInstance().updateState
@@ -397,10 +401,6 @@ describe("sessionTracker", () => {
   // ── State validation after operations ──────────────────
 
   describe("state validation after operations", () => {
-    const getState = async (sessionID: string) => {
-      return (new SessionStorage()).readState(sessionID, (s) => s as Record<string, unknown>)
-    }
-
     it("sets startedAt, agent, and lastMessageSentAt on first chat.message", async () => {
       resetMockState({ ses_val: {} })
       const plugin = await mkPlugin() as SessionTrackerPlugin

@@ -208,4 +208,26 @@ describe('formatGateBatchResults', () => {
 
     expect(explicitFalseResult).toBe(defaultResult)
   })
+
+  it('uses empty prefix in default (non-pre-change) mode (kills string prefix mutant)', () => {
+    const outcomes: GateRunOutcome[] = [
+      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
+    ]
+    const result = formatGateBatchResults(outcomes)
+
+    // With the original code, the summary line starts right after \n with "Quality gate results".
+    // Mutant: prefix becomes "Stryker was here!" -> "\nStryker was here!Quality gate results..."
+    expect(result).toContain('\nQuality gate results')
+  })
+
+  it('uses correct default reason in steering tag (kills string reason mutant)', () => {
+    const outcomes: GateRunOutcome[] = [
+      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
+    ]
+    const result = formatGateBatchResults(outcomes)
+
+    // The reason attribute must be "quiet period ended; ran dirty quality gates" for default mode.
+    // Mutant: reason becomes "".
+    expect(result).toContain('reason="quiet period ended; ran dirty quality gates"')
+  })
 })

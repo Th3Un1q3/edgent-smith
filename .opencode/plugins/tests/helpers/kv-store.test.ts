@@ -187,6 +187,17 @@ describe("SessionStorage", () => {
       const result = storage.readState("non-existent", (state) => state)
       expect(result).toBeUndefined()
     })
+
+    it("returns undefined when reader would return non-undefined but state is missing (kills if-false conditional mutant)", () => {
+      // When !state is true (no state), the function should return undefined early.
+      // Mutant: if (!state) return undefined  →  if (false) return undefined
+      // With the mutant, reader(undefined) would return "fallback" instead of undefined.
+      const result = storage.readState<{ count: number }, string>(
+        "non-existent",
+        (state) => state?.count == null ? "fallback" : String(state.count),
+      )
+      expect(result).toBeUndefined()
+    })
   })
 
   describe("updateState()", () => {

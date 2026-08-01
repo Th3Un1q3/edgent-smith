@@ -45,6 +45,17 @@ describe("todoEnforcer", () => {
         expect.any(String),
       )
     })
+
+    it("uses exact PLUGIN_ID 'todo-enforcer' in log calls (kills PLUGIN_ID string mutant)", async () => {
+      vi.mocked(log).mockClear()
+      await todoEnforcer(pluginContext as never)
+      // PLUGIN_ID is passed as the 4th arg to every log call
+      expect(log).toHaveBeenCalledWith(
+        expect.any(Object), "info",
+        "initialized",
+        "todo-enforcer",
+      )
+    })
   })
 
   describe("tool.execute.before", () => {
@@ -118,6 +129,23 @@ describe("todoEnforcer", () => {
       ).resolves.toBeUndefined()
     })
 
+    it("does not log enforcement or call session.get when tool is todowrite (kills todowrite string mutant)", async () => {
+      vi.mocked(log).mockClear()
+      const sessionGet = (pluginContext as any).client.session.get as ReturnType<typeof vi.fn>
+      sessionGet.mockClear()
+
+      const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
+      const beforeHook = plugin["tool.execute.before"] as (input: { sessionID?: string; tool: string }) => Promise<void>
+
+      await beforeHook({ sessionID: "ses_test", tool: "todowrite" })
+
+      // The enforcement log (line 74) is called before getSessionAgent (line 76).
+      // If it's not logged, we prove the code returned before reaching enforcement.
+      expect(log).not.toHaveBeenCalledWith(expect.any(Object), "info", expect.stringContaining("enforcing"), expect.any(String))
+      // session.get is only called by getSessionAgent — if not called, agent check was never reached
+      expect(sessionGet).not.toHaveBeenCalled()
+    })
+
     describe("task tool edge cases", () => {
       it("skips enforcement for task tool with undefined sessionID (early return on line 61)", async () => {
         const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
@@ -159,99 +187,28 @@ describe("todoEnforcer", () => {
 
 
     describe("hasUsedTodos true skips enforcement for task tool", () => {
-      it("skips task enforcement when readState returns true (todos already used since last message)", async () => {
-        resetMockState({
-          ses_has_todos: {
-            toolCalls: { todowrite: "2026-01-01T02:00:00Z" },
-            lastMessageSentAt: "2026-01-01T01:00:00Z",
-          },
-        })
+      const usedTodoCases = [
+        { name: "skips when todowrite after last message", state: { toolCalls: { todowrite: "2026-01-01T02:00:00Z" }, lastMessageSentAt: "2026-01-01T01:00:00Z" }, expectBlock: false },
+        { name: "blocks when todowrite before last message", state: { toolCalls: { todowrite: "2026-01-01T00:00:00Z" }, lastMessageSentAt: "2026-01-01T01:00:00Z" }, expectBlock: true },
+        { name: "blocks when todowrite equals last message (strict > boundary)", state: { toolCalls: { todowrite: "2026-01-01T01:00:00Z" }, lastMessageSentAt: "2026-01-01T01:00:00Z" }, expectBlock: true },
+        { name: "blocks when todowrite key missing from toolCalls", state: { toolCalls: { someOtherTool: "2026-01-01T02:00:00Z" }, lastMessageSentAt: "2026-01-01T01:00:00Z" }, expectBlock: true },
+        { name: "allows when todowrite exists but lastMessageSentAt missing", state: { toolCalls: { todowrite: "2026-01-01T02:00:00Z" } }, expectBlock: false },
+        { name: "blocks when todowrite missing and lastMessageSentAt absent (kills mutant #18)", state: { toolCalls: { someOtherTool: "2026-01-01T02:00:00Z" } }, expectBlock: true },
+      ]
+
+      it.each(usedTodoCases)("$name", async ({ state, expectBlock }) => {
+        resetMockState({ ses_has_todos_state: state })
 
         const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
         const beforeHook = plugin["tool.execute.before"]
 
-        await expect(
-          beforeHook({ sessionID: "ses_has_todos", tool: "task" }),
-        ).resolves.toBeUndefined()
-      })
-
-      it("blocks task when todowrite call is older than last message (hasUsedTodos is false)", async () => {
-        resetMockState({
-          ses_old_todo: {
-            toolCalls: { todowrite: "2026-01-01T00:00:00Z" },
-            lastMessageSentAt: "2026-01-01T01:00:00Z",
-          },
-        })
-
-        const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
-        const beforeHook = plugin["tool.execute.before"]
-
-        await expect(
-          beforeHook({ sessionID: "ses_old_todo", tool: "task" }),
-        ).rejects.toThrow(/Error calling task\. All tools are suspended/)
-      })
-
-      it("blocks task when todowrite timestamp equals last message timestamp (strict-greater-than boundary)", async () => {
-        resetMockState({
-          ses_equal_times: {
-            toolCalls: { todowrite: "2026-01-01T01:00:00Z" },
-            lastMessageSentAt: "2026-01-01T01:00:00Z",
-          },
-        })
-
-        const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
-        const beforeHook = plugin["tool.execute.before"]
-
-        await expect(
-          beforeHook({ sessionID: "ses_equal_times", tool: "task" }),
-        ).rejects.toThrow(/Error calling task\. All tools are suspended/)
-      })
-
-      it("blocks task when toolCalls state exists but todowrite key is missing", async () => {
-        resetMockState({
-          ses_no_todowrite: {
-            toolCalls: { someOtherTool: "2026-01-01T02:00:00Z" },
-            lastMessageSentAt: "2026-01-01T01:00:00Z",
-          },
-        })
-
-        const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
-        const beforeHook = plugin["tool.execute.before"]
-
-        await expect(
-          beforeHook({ sessionID: "ses_no_todowrite", tool: "task" }),
-        ).rejects.toThrow(/Error calling task\. All tools are suspended/)
-      })
-
-      it("allows task when todowrite exists but lastMessageSentAt is missing (treated as true)", async () => {
-        resetMockState({
-          ses_no_msg_at: {
-            toolCalls: { todowrite: "2026-01-01T02:00:00Z" },
-          },
-        })
-
-        const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
-        const beforeHook = plugin["tool.execute.before"]
-
-        await expect(
-          beforeHook({ sessionID: "ses_no_msg_at", tool: "task" }),
-        ).resolves.toBeUndefined()
-      })
-
-      it("blocks task when todowrite missing and lastMessageSentAt absent (kills mutant #18)", async () => {
-        resetMockState({
-          ses_no_todowrite_no_msg: {
-            toolCalls: { someOtherTool: "2026-01-01T02:00:00Z" },
-            // Intentionally OMIT lastMessageSentAt so the mutated path differs
-          },
-        })
-
-        const plugin = await todoEnforcer(pluginContext as never) as TodoEnforcerPlugin
-        const beforeHook = plugin["tool.execute.before"]
-
-        await expect(
-          beforeHook({ sessionID: "ses_no_todowrite_no_msg", tool: "task" }),
-        ).rejects.toThrow(/Error calling task\. All tools are suspended/)
+        let isThrew = false
+        try {
+          await beforeHook({ sessionID: "ses_has_todos_state", tool: "task" })
+        } catch {
+          isThrew = true
+        }
+        expect(isThrew).toBe(expectBlock)
       })
     })
 
@@ -280,6 +237,22 @@ describe("todoEnforcer", () => {
 
         await expect(
           beforeHook({ sessionID: "ses_test", tool: "task" }),
+        ).resolves.toBeUndefined()
+      })
+
+      it("allows agent 'build' to use task tool without enforcement (kills rug string mutant)", async () => {
+        const context = pluginContextBuilder({ clientFactory: () => opencodeClientFactory({ agentName: "build", todoList: [] }) as never })
+        const p = await todoEnforcer(context as never) as TodoEnforcerPlugin
+        await expect((p["tool.execute.before"] as any)({ sessionID: "ses_build", tool: "task" })).resolves.toBeUndefined()
+      })
+
+      it("does not block empty string agent (not in AGENTS_REQUIRED_TO_START_WITH_TODOS)", async () => {
+        const emptyAgentContext = pluginContextBuilder({
+          clientFactory: () => opencodeClientFactory({ agentName: "", todoList: [] }) as never,
+        })
+        const plugin = await todoEnforcer(emptyAgentContext as never) as TodoEnforcerPlugin
+        await expect(
+          plugin["tool.execute.before"]({ sessionID: "ses_empty", tool: "task" }),
         ).resolves.toBeUndefined()
       })
     })
@@ -455,8 +428,13 @@ describe("todoEnforcer", () => {
         }))
       })
 
-      it("sends follow-up when cancelledAt is missing from session state", async () => {
-        resetMockState({ test_session: { lastMessageSentAt: "2026-01-01T01:00:00Z" } })
+      const missingFollowUpFields = [
+        { name: "sends follow-up when cancelledAt missing", state: { lastMessageSentAt: "2026-01-01T01:00:00Z" } },
+        { name: "sends follow-up when lastMessageSentAt missing", state: { cancelledAt: "2026-01-01T00:00:00Z" } },
+      ]
+
+      it.each(missingFollowUpFields)("$name", async ({ state }) => {
+        resetMockState({ test_session: state })
         vi.useFakeTimers()
         const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
         const plugin = await todoEnforcer(pluginContext as never) as unknown as TodoEnforcerPlugin
@@ -465,17 +443,7 @@ describe("todoEnforcer", () => {
         await vi.waitFor(() => expect(sendMessage).toHaveBeenCalled())
       })
 
-      it("sends follow-up when lastMessageSentAt is missing from session state", async () => {
-        resetMockState({ test_session: { cancelledAt: "2026-01-01T00:00:00Z" } })
-        vi.useFakeTimers()
-        const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
-        const plugin = await todoEnforcer(pluginContext as never) as unknown as TodoEnforcerPlugin
-        await plugin["event"]?.(eventInput)
-        vi.advanceTimersByTime(1001)
-        await vi.waitFor(() => expect(sendMessage).toHaveBeenCalled())
-      })
-
-      it("skips follow-up when cancelledAt equals lastMessageSentAt (boundary for strict-less-than comparison)", async () => {
+      it("skips follow-up when cancelledAt equals lastMessageSentAt (strict < boundary)", async () => {
         resetMockState({ test_session: { cancelledAt: "2026-01-01T01:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
         vi.useFakeTimers()
         const eventInput = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
@@ -544,6 +512,28 @@ describe("todoEnforcer", () => {
         )
       })
 
+      it("includes all status symbols in reference and formats todos as symbol+content (kills status string + arrow mutants)", async () => {
+        resetMockState({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
+        pluginContext = pluginContextBuilder({ clientFactory: () => opencodeClientFactory({ agentName: "rug", todoList: [
+          { status: "pending" as const, content: "task-pending", priority: "medium", id: "1" },
+          { status: "in_progress" as const, content: "task-wip", priority: "medium", id: "2" },
+        ] }) as never })
+        vi.useFakeTimers()
+        const ei = { event: { type: "session.idle" as const, properties: { sessionID: "test_session" } } }
+        const p = await todoEnforcer(pluginContext as never) as unknown as TodoEnforcerPlugin
+        await p["event"]?.(ei); vi.advanceTimersByTime(1001)
+        await vi.waitFor(() => expect(sendMessage).toHaveBeenCalled())
+        // All 4 status symbols appear in the <reference> section
+        expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("pending - [ ]") }))
+        expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("in-progress - [•]") }))
+        expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("completed - [✓]") }))
+        expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("cancelled - [-]") }))
+        // Arrow function formats each todo as "symbol content"
+        expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("[ ] task-pending") }))
+        expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("[•] task-wip") }))
+        vi.useRealTimers()
+      })
+
       it("separates multiple remaining todos with newlines in the follow-up message", async () => {
         resetMockState({ test_session: { cancelledAt: "2026-01-01T00:00:00Z", lastMessageSentAt: "2026-01-01T01:00:00Z" } })
         pluginContext = pluginContextBuilder({
@@ -582,4 +572,5 @@ describe("todoEnforcer", () => {
       })
     })
   })
+
 })

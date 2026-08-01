@@ -207,6 +207,30 @@ describe('runGate', () => {
     // Should use .text() output, not raw stdout Buffer
     expect(result.stdout).toBe('clean-text-output')
   })
+
+  it('returns non-Buffer non-string stderr object as-is without calling toString on non-fatal path', async () => {
+    const gate = makeGate('lint', ['cmd'])
+    const customStderr = { toString: () => 'should-not-be-called' }
+    const shell = vi.fn().mockImplementation(() => {
+      const output = {
+        exitCode: 1, // non-zero exit avoids combinedStderr += (which would call .toString())
+        stdout: Buffer.from(''),
+        stderr: customStderr,
+        text: vi.fn().mockResolvedValue(''),
+      }
+      const promise = Promise.resolve(output) as unknown as ReturnType<Shell>
+      promise.nothrow = () => promise
+      promise.quiet = () => promise
+      return promise
+    }) as unknown as Shell
+
+    const result = await runGate(gate, shell)
+
+    // Real: Buffer.isBuffer(customStderr) is false → returns object at line 31
+    //       Early return at line 58 avoids combinedStderr += (which would toString)
+    // Mutant (#1): Buffer.isBuffer always true → calls toString() → returns string
+    expect(result.stderr).toBe(customStderr)
+  })
 })
 
 describe('DirtyGateBatcher', () => {
@@ -430,6 +454,49 @@ describe('DirtyGateBatcher', () => {
     expect(onBatch).not.toHaveBeenCalled()
   })
 
+  it('cancelTimer does not call clearTimeout when timer is already undefined', () => {
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
+    const onBatch = vi.fn()
+    const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
+
+    // No marks → timer is never set → timer === undefined at construction
+    // dispose() → cancelTimer()
+    // Real: guard at line 98 returns early → clearTimeout NOT called
+    // Mutant #2 (block removal): falls through → clearTimeout(undefined) called
+    // Mutant #3 (if(false)): guard skipped → clearTimeout(undefined) called
+    batcher.dispose()
+
+    expect(clearTimeoutSpy).not.toHaveBeenCalled()
+  })
+
+  it('isFlushing guard in timer callback prevents extra timer creation', () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+    const onBatch = vi.fn()
+    const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
+
+    onBatch.mockImplementation(() => {
+      batcher.markDirty(['typecheck'])
+    })
+
+    batcher.markDirty(['lint'])
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(1)
+
+    vi.advanceTimersByTime(100)
+    // Timer fires. Inside callback, onBatch calls markDirty(['typecheck']).
+    // Real (#4): isFlushing=true → markDirty sees !isFlushing=false → no startTimer
+    //            → post-batch dirty.size>0 → startTimer → setTimeout (2nd call)
+    // Real (#7): same — !isFlushing is false → markDirty path not taken
+    // Mutant #4: isFlushing=false → markDirty sees !isFlushing=true → startTimer (2nd call)
+    //            → post-batch startTimer→cancelTimer→setTimeout (3rd call total)
+    // Mutant #7: !isFlushing always true → same extra call as #4
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(2)
+
+    // Re-armed timer from post-batch fires for typecheck
+    vi.advanceTimersByTime(100)
+    expect(onBatch).toHaveBeenCalledTimes(2)
+    expect(onBatch).toHaveBeenNthCalledWith(2, ['typecheck'])
+  })
+
   describe('adaptive timer', () => {
     it('falls back to maxQuietMs when adaptive delay is zero', () => {
       const onBatch = vi.fn()
@@ -528,6 +595,65 @@ describe('DirtyGateBatcher', () => {
       nowSpy.mockRestore()
     })
 
+    it('shifts editTimestamps when length exceeds 10 to prevent stale entry skew', () => {
+      const onBatch = vi.fn()
+      const batcher = createDirtyGateBatcher({ maxQuietMs: 500, onBatch })
+
+      let nowValue = 0
+      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
+
+      // 12 edits: first two are far apart, remaining 10 are close
+      nowValue = 0
+      batcher.markDirty(['g1'])
+      nowValue = 100
+      batcher.markDirty(['g2'])
+      for (let index = 0; index < 10; index++) {
+        nowValue = 101 + index
+        batcher.markDirty([`g${index + 3}`])
+      }
+      // Real: shifts at entries 11 and 12 → window=[101..110] (10 entries, 1ms gaps)
+      //       avg=1ms → adaptive=2ms → fires 2ms after last edit
+      // Mutant #5: never shifts → window=[0,100,101..110] (12 entries, includes 100ms gap)
+      //            avg≈10ms → adaptive≈20ms → fires much later
+
+      vi.advanceTimersByTime(2)
+      // Real: fires. Mutant #5: not yet. Calls onBatch only in real path.
+      expect(onBatch).toHaveBeenCalledTimes(1)
+
+      nowSpy.mockRestore()
+    })
+
+    it('does not shift editTimestamps at exactly 10 entries', () => {
+      const onBatch = vi.fn()
+      const batcher = createDirtyGateBatcher({ maxQuietMs: 500, onBatch })
+
+      let nowValue = 0
+      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
+
+      // 10 edits: first gap is large, rest are 1ms each
+      // At 10 entries, real code (>10) does NOT shift; mutant #6 (>=10) DOES shift
+      nowValue = 0
+      batcher.markDirty(['g1'])
+      nowValue = 100
+      batcher.markDirty(['g2'])
+      for (let index = 0; index < 8; index++) {
+        nowValue = 101 + index
+        batcher.markDirty([`g${index + 3}`])
+      }
+      // After 10 edits:
+      // Real: no shift → [0,100,101..108] → adaptive≈24ms
+      // Mutant #6: shift at length>=10 → [100,101..108] (9 entries) → adaptive=2ms
+
+      vi.advanceTimersByTime(2)
+      // Real: 24ms delay → timer not yet. Mutant #6: 2ms delay → fires → assertion fails
+      expect(onBatch).not.toHaveBeenCalled()
+
+      vi.advanceTimersByTime(22) // total 24ms from last markDirty
+      expect(onBatch).toHaveBeenCalledTimes(1)
+
+      nowSpy.mockRestore()
+    })
+
     it('caps adaptive delay at maxQuietMs', () => {
       const onBatch = vi.fn()
       const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
@@ -611,6 +737,32 @@ describe('DirtyGateBatcher', () => {
       // The re-armed timer should fire for ['typecheck']
       vi.advanceTimersByTime(100)
 
+      expect(onBatch).toHaveBeenCalledTimes(2)
+      expect(onBatch).toHaveBeenNthCalledWith(2, ['typecheck'])
+    })
+
+    it('isFlushing guard in flush prevents extra timer creation', () => {
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+      const onBatch = vi.fn()
+      const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
+
+      onBatch.mockImplementation(() => {
+        batcher.markDirty(['typecheck'])
+      })
+
+      batcher.markDirty(['lint'])
+      expect(setTimeoutSpy).toHaveBeenCalledTimes(1)
+
+      batcher.flush()
+      // Inside flush:
+      // Real (#8): isFlushing=true → markDirty→!isFlushing=false→no startTimer
+      //            → post-batch dirty.size>0 → startTimer → setTimeout (2nd call total)
+      // Mutant #8: isFlushing=false → markDirty→!isFlushing=true→startTimer (2nd call)
+      //            → post-batch startTimer→cancelTimer+setTimeout (3rd call total)
+      expect(setTimeoutSpy).toHaveBeenCalledTimes(2)
+
+      // Re-armed timer fires for typecheck
+      vi.advanceTimersByTime(100)
       expect(onBatch).toHaveBeenCalledTimes(2)
       expect(onBatch).toHaveBeenNthCalledWith(2, ['typecheck'])
     })

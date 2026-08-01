@@ -81,6 +81,19 @@ function registerSkillFiles(
     })
 }
 
+async function act(
+    plugin: Awaited<ReturnType<typeof skillsLoaderPlugin>>,
+    output: { args: Record<string, unknown> },
+): Promise<void> {
+    const hook = plugin?.["tool.execute.before"] ?? (() => Promise.resolve())
+    const input = { tool: "task", sessionID: "sess-1", callID: "call-no-skills" }
+    await hook(input, output)
+}
+
+function toolDefinitionHook(plugin: Awaited<ReturnType<typeof skillsLoaderPlugin>>) {
+    return plugin?.["tool.definition"] ?? (() => Promise.resolve())
+}
+
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe("skillsLoaderPlugin", () => {
@@ -137,41 +150,45 @@ describe("skillsLoaderPlugin", () => {
     // ── when no skills to inject ─────────────────────────────────
 
     describe("when no skills to inject", () => {
-        async function act(output: { args: Record<string, unknown> }): Promise<void> {
-            const hook = executeBeforeHook()
-            const input = { tool: "task", sessionID: "sess-1", callID: "call-no-skills" }
-            await hook(input, output)
-        }
-
         it.each([
             { desc: "skills field is absent", output: { args: { prompt: "original prompt" } } },
             { desc: "skills array is empty", output: { args: { prompt: "original prompt", skills: [] } } },
         ])("wraps prompt in user_request when $desc", async ({ output }) => {
-            await act(output)
+            await act(plugin, output)
             expect(output.args.prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
         })
 
         it("does not call Bun.file when skills field is absent", async () => {
             const output = { args: { prompt: "original prompt" } }
-            await act(output)
+            await act(plugin, output)
             expect(mockBunFile).not.toHaveBeenCalled()
             expect(output.args.prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
         })
 
         it("removes skills field and wraps prompt when skills array is empty", async () => {
             const output = { args: { prompt: "original prompt", skills: [] } }
-            await act(output)
+            await act(plugin, output)
             expect(output.args.skills).toBeUndefined()
             expect(output.args.prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
         })
 
         it("logs debug message when skills array is empty", async () => {
             const output = { args: { prompt: "original prompt", skills: [] } }
-            await act(output)
+            await act(plugin, output)
             expect(log).toHaveBeenCalledWith(
                 expect.any(Object),
                 "debug",
                 expect.stringContaining("skills array is empty"),
+            )
+        })
+
+        it("does not log 'debug' when skills field is absent", async () => {
+            const output = { args: { prompt: "original prompt" } }
+            await act(plugin, output)
+            expect(log).not.toHaveBeenCalledWith(
+                expect.any(Object),
+                "debug",
+                expect.any(String),
             )
         })
     })
@@ -228,6 +245,26 @@ describe("skillsLoaderPlugin", () => {
         expect(output.args.prompt).toBe("<user_request>\noriginal prompt\n</user_request>")
         // Bun.file must not be called (guard returns before file loading)
         expect(mockBunFile).not.toHaveBeenCalled()
+    })
+
+    it("does not log 'debug' when skills is a non-empty array but directory is missing", async () => {
+        const pluginNoDirectory = await skillsLoaderPlugin({ client } as unknown as PluginInput)
+        const hook = pluginNoDirectory?.["tool.execute.before"] ?? (() => Promise.resolve())
+
+        registerSkillFiles({
+            "skill-a": makeSkillFile({ name: "skill-a", content: "# Skill A", mtimeMs: 100 }),
+        })
+
+        const input = { tool: "task", sessionID: "sess-1", callID: "call-no-dir-log" }
+        const output = { args: { prompt: "original prompt", skills: ["skill-a"] } }
+
+        await hook(input, output)
+
+        expect(log).not.toHaveBeenCalledWith(
+            expect.any(Object),
+            "debug",
+            expect.any(String),
+        )
     })
 
     // ── TEST 4: non-task tool with skills field ──────────────────
@@ -331,7 +368,20 @@ describe("skillsLoaderPlugin", () => {
         )
     })
 
-    // ── TEST 8: single skill injection ───────────────────────────
+        it("does not contain stray content inside <task_skills> when no skills are resolved", async () => {
+            const hook = executeBeforeHook()
+
+            const input = { tool: "task", sessionID: "sess-1", callID: "call-all-unresolved" }
+            const output = { args: { prompt: "prompt", skills: ["skill-x", "skill-y"] } }
+
+            await hook(input, output)
+
+            // The first content after <task_skills>\n should be a <skill> tag
+            // (no stray text left over from initialized empty arrays)
+            expect(output.args.prompt).toMatch(/<task_skills>\n<skill/)
+        })
+
+        // ── TEST 8: single skill injection ───────────────────────────
 
     it("injects a single skill correctly", async () => {
         registerSkillFiles({
@@ -486,6 +536,73 @@ describe("skillsLoaderPlugin", () => {
             expect(output.args.prompt).toContain("<skill_index>")
             expect(output.args.prompt).toContain(".agents/skills/skill-a/SKILL.md")
         })
+
+        it("filters non-string entries from skill directory listing", async () => {
+            vi.mocked(readdir).mockImplementation(async (path) => {
+                const directoryPath = String(path)
+                if (directoryPath.endsWith(".agents/skills/skill-a")) {
+                    // Include a non-string entry to test the filter
+                    return ["SKILL.md", { name: "extra.md" } as any, "references/options.md"] as any
+                }
+                throw new Error("ENOENT")
+            })
+
+            registerSkillFiles({
+                "skill-a": makeSkillFile({ name: "skill-a", content: "# Skill A", mtimeMs: 100 }),
+            })
+
+            const hook = executeBeforeHook()
+            const input = { tool: "task", sessionID: "sess-1", callID: "call-filter" }
+            const output = { args: { prompt: "prompt", skills: ["skill-a"] } }
+
+            await hook(input, output)
+
+            // Only string entries make it into the skill_index
+            expect(output.args.prompt).toContain(".agents/skills/skill-a/SKILL.md")
+            expect(output.args.prompt).toContain(".agents/skills/skill-a/references/options.md")
+        })
+
+        it("sorts and joins skill directory files alphabetically with newlines", async () => {
+            vi.mocked(readdir).mockImplementation(async (path) => {
+                const directoryPath = String(path)
+                if (directoryPath.endsWith(".agents/skills/skill-a")) {
+                    // Return in reverse alphabetical order
+                    return ["workflows/create.md", "references/options.md", "SKILL.md"] as any
+                }
+                throw new Error("ENOENT")
+            })
+
+            registerSkillFiles({
+                "skill-a": makeSkillFile({ name: "skill-a", content: "# Skill A", mtimeMs: 100 }),
+            })
+
+            const hook = executeBeforeHook()
+            const input = { tool: "task", sessionID: "sess-1", callID: "call-sort" }
+            const output = { args: { prompt: "prompt", skills: ["skill-a"] } }
+
+            await hook(input, output)
+
+            const match = (output.args.prompt as string).match(/<skill_index>[\s\S]*?<\/skill_index>/)
+            expect(match).not.toBeNull()
+            const indexContent = (match as RegExpMatchArray)[0]
+
+            // Files sorted via localeCompare: references/options.md < SKILL.md < workflows/create.md
+            const referencePos = indexContent.indexOf(".agents/skills/skill-a/references/options.md")
+            const skPos = indexContent.indexOf(".agents/skills/skill-a/SKILL.md")
+            const wfPos = indexContent.indexOf(".agents/skills/skill-a/workflows/create.md")
+
+            expect(referencePos).toBeGreaterThan(-1)
+            expect(skPos).toBeGreaterThan(referencePos)
+            expect(wfPos).toBeGreaterThan(skPos)
+
+            // Files joined with newlines (not collapsed via join(""))
+            expect(indexContent).toContain(
+                ".agents/skills/skill-a/references/options.md\n.agents/skills/skill-a/SKILL.md",
+            )
+            expect(indexContent).toContain(
+                ".agents/skills/skill-a/SKILL.md\n.agents/skills/skill-a/workflows/create.md",
+            )
+        })
     })
 
     // ── tool.definition hook tests ─────────────────────────────────
@@ -493,12 +610,8 @@ describe("skillsLoaderPlugin", () => {
     // The hook modifies output.jsonSchema (plain JSON Schema format that the LLM sees).
 
     describe("tool.definition", () => {
-        function toolDefinitionHook() {
-            return plugin?.["tool.definition"] ?? (() => Promise.resolve())
-        }
-
         async function applyDefinitionHook(input: { toolID: string }, output: ToolHookOutput): Promise<void> {
-            const hook = toolDefinitionHook()
+            const hook = toolDefinitionHook(plugin)
             await hook(input, output)
         }
 
