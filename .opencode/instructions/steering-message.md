@@ -1,32 +1,32 @@
 # Steering Message System
 
-All plugins that send `<steering>` messages to the agent MUST follow this schema.
+`<steering />` messages are auto-generated. They carry structured metadata that the agent MUST interpret to determine response urgency and action.
 
-## Attributes
+## Schema
 
 | Attribute | Required | Values | Description |
 |-----------|----------|--------|-------------|
-| `priority` | Yes | `"info"`, `"warning"`, `"high"` | How urgently the agent should respond |
-| `reason` | Yes | descriptive string | Why the message was triggered (e.g., `"relevant files touched"`, `"quiet period ended; ran dirty quality gates"`) |
+| `priority` | Yes | `"info"`, `"warning"`, `"high"` | How urgently the agent must respond |
+| `reason` | Yes | descriptive string | Why the message was triggered (e.g., `"relevant files touched"`, `"ran quality checks on files changed since last check"`) |
 | `type` | No | `"instructions"`, `"quality-gate"`, `"todo"` | Message category for routing/handling |
-| `result` | No | `"pass"`, `"fail"` | For quality gate results only |
+| `result` | No | `"pass"`, `"fail"` | Quality gate results only |
 | `gate-id` | No | string | Identifier of a specific quality gate |
 
-## Handling Rules
+## Handling Rules (Agent)
 
-When the agent receives a `<steering>` message, it SHOULD:
+When you receive a `<steering>` message, apply these rules in order:
 
-1. **Check `priority`** to determine response urgency:
-   - `high` — must be addressed before proceeding
-   - `warning` — review and correct but may proceed
-   - `info` — informational only, no action required
+1. **Read `priority`** to determine urgency:
+   - `high` — stop current work, address immediately before proceeding
+   - `warning` — review the content, fix issues, but may continue work
+   - `info` — read for awareness, no action required
 
-2. **Check `type`** to determine how to process:
-   - `instructions` — read and apply the referenced instructions
-   - `quality-gate` — review gate results, fix failures
+2. **Read `type`** to understand the message category:
+   - `instructions` — apply the referenced project instructions to your work
+   - `quality-gate` — review gate results, fix failures before continuing
    - `todo` — address the listed TODOs
 
-3. **Check `result`** (quality gates) — if `fail`, investigate and fix before continuing.
+3. **Read `result`** (quality gates only) — if `fail`, investigate and fix the failing gate.
 
 ## Existing Usage
 
@@ -43,22 +43,20 @@ When the agent receives a `<steering>` message, it SHOULD:
 
 ### Quality Gate Enforcer
 ```xml
-<steering priority="warning" reason="quiet period ended; ran dirty quality gates" result="fail">
+<steering priority="warning" reason="ran quality checks on files changed since last check" result="fail">
   Quality gate results (0 passed, 1 failed):
   ✗ lint: pass → fail — `just lint` (exit 1):
   error output here
 </steering>
 ```
 
-### Legacy (deprecated)
-```xml
-<!-- Old format — should be migrated -->
-<steering reason="Relevant files touched">...</steering>
-```
-
 ## Adding a New Steer Message
 
-1. Choose the right `priority` for your use case
-2. Include `reason` describing what triggered the message
-3. Add `type` for routing
-4. Follow the established XML inner structure for your message type
+Plugins MUST produce consistent steering messages. When adding a new steering message:
+
+1. Choose the correct `priority` for your use case
+2. Include a descriptive `reason`
+3. Add the appropriate `type`
+4. Document any new `<steering>` patterns in this file
+
+Legacy steering messages without attributes are deprecated and must be migrated.

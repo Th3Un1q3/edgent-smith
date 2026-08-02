@@ -104,6 +104,20 @@ describe('skillsLoaderPlugin', () => {
       expect(log).not.toHaveBeenCalledWith(expect.any(Object), 'debug', expect.any(String))
     })
   })
+  it('strips existing user_request tags before wrapping to prevent nesting', async () => {
+    const output = { args: { prompt: '<user_request>model echoed this</user_request>' } }
+
+    await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
+    expect(output.args.prompt).toBe('<user_request>\nmodel echoed this\n</user_request>')
+  })
+
+  it('removes user_request wrapper from prompt with nested tags', async () => {
+    const output = { args: { prompt: '<user_request><user_request>double wrapped</user_request></user_request>' } }
+
+    await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
+    expect(output.args.prompt).toBe('<user_request>\ndouble wrapped\n</user_request>')
+  })
+
   it('returns early when args undefined and preserves non-array skills', async () => {
     const output = {} as { args: Record<string, unknown> }
 

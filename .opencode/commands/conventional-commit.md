@@ -1,6 +1,7 @@
 ---
 name: cc
 description: "Create a conventional commit with user approval"
+agent: build
 ---
 
 # Conventional Commit

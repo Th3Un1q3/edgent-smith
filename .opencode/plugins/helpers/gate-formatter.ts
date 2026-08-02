@@ -1,11 +1,6 @@
 import type { CommandResult } from './gate-runner'
 import type { GateRunOutcome } from '../types/quality-gate'
 
-export function formatGateSuccess(gateName: string, command: string): string {
-  const detail = command ? ` — \`${command}\` completed (exit 0)` : ' — no commands to run'
-  return `<steering priority="info" reason="file change triggered quality gate run" type="quality-gate" result="pass" gate-id="${gateName}">Quality gate '${gateName}' passed${detail}</steering>`
-}
-
 export function formatGateFailure(
   gateName: string,
   command: string,
@@ -27,7 +22,7 @@ export function formatGateBatchResults(outcomes: GateRunOutcome[], isPreChange?:
 
   const prefix = isPreChange ? 'Pre-change ' : ''
   const lines: string[] = [
-    `${prefix}Quality gate results (${passed} passed, ${failed} failed):`,
+    `${prefix}Quality gate transitions (${passed} now passing, ${failed} now failing):`,
   ]
 
   for (const outcome of outcomes) {
@@ -49,6 +44,6 @@ export function formatGateBatchResults(outcomes: GateRunOutcome[], isPreChange?:
     lines.push(line)
   }
 
-  const reason = isPreChange ? 'quality gate check before file change' : 'quiet period ended; ran dirty quality gates'
+  const reason = isPreChange ? 'pre-change quality check' : 'ran quality checks on files changed since last check'
   return `<steering priority="${priority}" reason="${reason}" type="quality-gate" result="${resultAttribute}">\n${lines.join('\n')}\n</steering>`
 }

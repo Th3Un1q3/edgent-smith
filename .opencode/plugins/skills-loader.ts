@@ -109,9 +109,11 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
       }
 
       // --- Always wrap prompt ---
+      // Strip existing user_request wrappers to prevent nesting when the model echoes them back
+      const prompt = (output.args.prompt || '').replaceAll(/<\/?user_request>/g, '')
       output.args.prompt = (prefix ? prefix + '\n' : '')
         + '<user_request>\n'
-        + (output.args.prompt || '')
+        + prompt
         + '\n</user_request>'
 
       // --- Cleanup skills field (only for arrays) ---

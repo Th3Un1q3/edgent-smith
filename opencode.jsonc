@@ -7,7 +7,7 @@
         "reserved": 10000
     },
     "instructions": [
-        ".opencode/instructions/steering-handling.md"
+        ".opencode/instructions/steering-message.md"
     ],
     "provider": {
         "local": {

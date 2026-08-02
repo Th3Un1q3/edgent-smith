@@ -1,21 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatGateBatchResults, formatGateFailure, formatGateSuccess } from '@plugins/helpers/gate-formatter'
+import { formatGateBatchResults, formatGateFailure } from '@plugins/helpers/gate-formatter'
 
 import type { CommandResult } from '@plugins/helpers/gate-runner'
 
 import type { GateConfig, GateRunOutcome } from '@plugins/types/quality-gate'
 
 describe('gate-formatter', () => {
-  it('formats success with command and without command', () => {
-    expect(formatGateSuccess('lint', 'just lint')).toBe(
-      '<steering priority="info" reason="file change triggered quality gate run" type="quality-gate" result="pass" gate-id="lint">Quality gate \'lint\' passed — `just lint` completed (exit 0)</steering>',
-    )
-    expect(formatGateSuccess('lint', '')).toBe(
-      '<steering priority="info" reason="file change triggered quality gate run" type="quality-gate" result="pass" gate-id="lint">Quality gate \'lint\' passed — no commands to run</steering>',
-    )
-  })
-
   it('formats failure with stdout+stderr, stdout-only, and no output', () => {
     const both: CommandResult = { exitCode: 1, stdout: 'stdout line', stderr: 'stderr line' }
 
@@ -85,14 +76,14 @@ describe('formatGateBatchResults', () => {
   it('uses "Pre-change" prefix and correct reason when isPreChange is true', () => {
     const result = formatGateBatchResults([passOutcome(lintGate)], true)
 
-    expect(result).toContain('Pre-change Quality gate results')
-    expect(result).toContain('reason="quality gate check before file change"')
+    expect(result).toContain('Pre-change Quality gate transitions')
+    expect(result).toContain('reason="pre-change quality check"')
   })
 
   it('uses correct default prefix and reason (kills string mutants)', () => {
     const result = formatGateBatchResults([passOutcome(lintGate)])
 
-    expect(result).toContain('\nQuality gate results')
-    expect(result).toContain('reason="quiet period ended; ran dirty quality gates"')
+    expect(result).toContain('\nQuality gate transitions')
+    expect(result).toContain('reason="ran quality checks on files changed since last check"')
   })
 })
