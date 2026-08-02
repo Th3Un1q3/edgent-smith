@@ -1,7 +1,7 @@
-import Bun, { Glob } from "bun"
-import { CustomInstructionFrontMatter, InstructionMeta } from "../types/instructions"
-import { load } from "js-yaml"
-import { isGlobMatch } from "./glob-match"
+import Bun, { Glob } from 'bun'
+import { CustomInstructionFrontMatter, InstructionMeta } from '../types/instructions'
+import { load } from 'js-yaml'
+import { isGlobMatch } from './glob-match'
 
 const loadBody = async (filePath: string): Promise<string> => {
   const file = Bun.file(filePath)
@@ -9,11 +9,11 @@ const loadBody = async (filePath: string): Promise<string> => {
   const content = await file.text()
   // Strip YAML frontmatter — extract body after closing ---
   const bodyMatch = content.match(/^---[\s\S]*?---\s*\n?\s*/)
-  return bodyMatch ? content.slice(bodyMatch[0].length).trim() : ""
+  return bodyMatch ? content.slice(bodyMatch[0].length).trim() : ''
 }
 
 type IndexOptions = {
-  type: "custom" | "copilot"
+  type: 'custom' | 'copilot'
   instructionsGlob: string
   agent: string
   currentWorkingDirectory: string
@@ -25,7 +25,7 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
   const instructionsGlob = new Glob(options.instructionsGlob)
 
   const index: Record<string, InstructionMeta[]> = {
-    "all": []
+    all: [],
   }
 
   for await (const filePath of instructionsGlob.scan({ cwd: options.currentWorkingDirectory, dot: true, absolute: true })) {
@@ -45,7 +45,7 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
 
     try {
       const parsedFrontmatter: T = load(frontmatterContent) as T
-      const applyTo = parsedFrontmatter.applyTo || "all"
+      const applyTo = parsedFrontmatter.applyTo || 'all'
 
       if (['', '**', '**/*.*', '**/*'].includes(applyTo)) {
         continue
@@ -59,8 +59,8 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
       }
 
       if (parsedFrontmatter.excludeAgents && isGlobMatch(parsedFrontmatter.excludeAgents, options.agent)) {
-          continue
-        }
+        continue
+      }
 
       index[applyTo] ||= []
 
@@ -70,7 +70,8 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
         applyTo: applyTo,
         excludePaths: parsedFrontmatter.excludePaths,
       })
-    } catch {
+    }
+    catch {
       continue
     }
   }
@@ -78,34 +79,34 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
   const forFiles = async (filePaths: string[]): Promise<InstructionMeta[]> => {
     const filePathsRelative = filePaths.map(filePath => filePath.startsWith(options.currentWorkingDirectory) ? filePath.slice(options.currentWorkingDirectory.length + 1) : filePath)
 
-    const patterns: string[] = Object.keys(index);
+    const patterns: string[] = Object.keys(index)
 
     await logger(`Index patterns: ${patterns.join(', ')}`)
 
-    const matchingPatterns = patterns.filter(pattern => {
-      return filePathsRelative.some(filePath => isGlobMatch(pattern, filePath));
-    });
+    const matchingPatterns = patterns.filter((pattern) => {
+      return filePathsRelative.some(filePath => isGlobMatch(pattern, filePath))
+    })
 
     await logger(`Matching patterns for files [${filePaths.join(', ')}]: ${matchingPatterns.join(', ')}`)
 
     const matchingInstructions = matchingPatterns.reduce((accumulator: InstructionMeta[], pattern) => {
-      const instructions = index[pattern] || [];
-      return [...accumulator, ...instructions];
-    }, []);
+      const instructions = index[pattern] || []
+      return [...accumulator, ...instructions]
+    }, [])
 
     await logger(`Matching instructions for files [${filePaths.join(', ')}]: ${matchingInstructions.map(index_ => index_.path).join(', ')}`)
 
-    const filteredInstructions = matchingInstructions.filter(instruction => {
+    const filteredInstructions = matchingInstructions.filter((instruction) => {
       const excludePaths = instruction.excludePaths
       if (!excludePaths) {
-        return true;
+        return true
       }
-      return filePathsRelative.some(filePath => !isGlobMatch(excludePaths, filePath));
-    });
+      return filePathsRelative.some(filePath => !isGlobMatch(excludePaths, filePath))
+    })
 
     await logger(`Filtered instructions for files [${filePaths.join(', ')}]: ${filteredInstructions.map(index_ => index_.path).join(', ')}`)
 
-    return filteredInstructions;
+    return filteredInstructions
   }
 
   return {
@@ -115,5 +116,3 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
 }
 
 export { createIndex }
-
-

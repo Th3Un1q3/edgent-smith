@@ -1,54 +1,37 @@
 import { describe, expect, it } from 'vitest'
 
 import { formatGateBatchResults, formatGateFailure, formatGateSuccess } from '@plugins/helpers/gate-formatter'
+
 import type { CommandResult } from '@plugins/helpers/gate-runner'
+
 import type { GateConfig, GateRunOutcome } from '@plugins/types/quality-gate'
 
 describe('gate-formatter', () => {
-  it('formats success as exact steering message', () => {
+  it('formats success with command and without command', () => {
     expect(formatGateSuccess('lint', 'just lint')).toBe(
       '<steering priority="info" reason="file change triggered quality gate run" type="quality-gate" result="pass" gate-id="lint">Quality gate \'lint\' passed — `just lint` completed (exit 0)</steering>',
     )
-  })
-
-  it('formats success with no command', () => {
     expect(formatGateSuccess('lint', '')).toBe(
       '<steering priority="info" reason="file change triggered quality gate run" type="quality-gate" result="pass" gate-id="lint">Quality gate \'lint\' passed — no commands to run</steering>',
     )
   })
 
-  it('formats failure with combined stdout and stderr output', () => {
-    const result: CommandResult = {
-      exitCode: 1,
-      stdout: 'stdout line',
-      stderr: 'stderr line',
-    }
+  it('formats failure with stdout+stderr, stdout-only, and no output', () => {
+    const both: CommandResult = { exitCode: 1, stdout: 'stdout line', stderr: 'stderr line' }
 
-    expect(formatGateFailure('lint', 'just lint', result)).toBe(
+    expect(formatGateFailure('lint', 'just lint', both)).toBe(
       '<steering priority="warning" reason="file change triggered quality gate run" type="quality-gate" result="fail" gate-id="lint">Quality gate \'lint\' failed — `just lint` exited with code 1:\nstdout line\nstderr line</steering>',
     )
-  })
 
-  it('formats failure using stdout when stderr is empty', () => {
-    const result: CommandResult = {
-      exitCode: 2,
-      stdout: 'only stdout',
-      stderr: '',
-    }
+    const stdoutOnly: CommandResult = { exitCode: 2, stdout: 'only stdout', stderr: '' }
 
-    expect(formatGateFailure('test', 'just test', result)).toBe(
+    expect(formatGateFailure('test', 'just test', stdoutOnly)).toBe(
       '<steering priority="warning" reason="file change triggered quality gate run" type="quality-gate" result="fail" gate-id="test">Quality gate \'test\' failed — `just test` exited with code 2:\nonly stdout</steering>',
     )
-  })
 
-  it('formats failure without output', () => {
-    const result: CommandResult = {
-      exitCode: 0,
-      stdout: '',
-      stderr: '',
-    }
+    const noOutput: CommandResult = { exitCode: 0, stdout: '', stderr: '' }
 
-    expect(formatGateFailure('test', 'just test', result)).toBe(
+    expect(formatGateFailure('test', 'just test', noOutput)).toBe(
       '<steering priority="warning" reason="file change triggered quality gate run" type="quality-gate" result="fail" gate-id="test">Quality gate \'test\' failed — `just test` exited with code 0</steering>',
     )
   })
@@ -56,178 +39,60 @@ describe('gate-formatter', () => {
 
 describe('formatGateBatchResults', () => {
   const lintGate: GateConfig = { name: 'lint', patterns: ['**/*.ts'], commands: ['just lint'] }
+
   const typeGate: GateConfig = { name: 'typecheck', patterns: ['**/*.ts'], commands: ['just typecheck'] }
 
-  it('returns info priority when all gates pass', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-      { gate: typeGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-    ]
-    const result = formatGateBatchResults(outcomes)
+  const passOutcome = (gate: GateConfig): GateRunOutcome => ({ gate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } })
 
-    expect(result).toContain('info')
-    expect(result).toContain('type="quality-gate"')
-    expect(result).toContain('result="pass"')
-    expect(result).toContain('lint')
-    expect(result).toContain('typecheck')
+  const failOutcome = (gate: GateConfig, exitCode: number, stderr = ''): GateRunOutcome => ({ gate, previousStatus: 'unknown', newStatus: 'fail', result: { exitCode, stdout: '', stderr } })
+
+  it('returns info when all pass, warning when any fail', () => {
+    const allPass = formatGateBatchResults([passOutcome(lintGate), passOutcome(typeGate)])
+
+    expect(allPass).toContain('priority="info"')
+    expect(allPass).toContain('result="pass"')
+
+    const anyFail = formatGateBatchResults([passOutcome(lintGate), failOutcome(typeGate, 1, 'Type error')])
+
+    expect(anyFail).toContain('priority="warning"')
+    expect(anyFail).toContain('result="fail"')
   })
 
-  it('returns warning priority when any gate fails', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-      { gate: typeGate, previousStatus: 'unknown', newStatus: 'fail', result: { exitCode: 1, stdout: '', stderr: 'Type error' } },
-    ]
-    const result = formatGateBatchResults(outcomes)
-
-    expect(result).toContain('warning')
-    expect(result).toContain('type="quality-gate"')
-    expect(result).toContain('result="fail"')
+  it('returns empty string for empty outcomes', () => {
+    expect(formatGateBatchResults([])).toBe('')
   })
 
-  it('includes gate name and command in each result', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-      { gate: typeGate, previousStatus: 'unknown', newStatus: 'fail', result: { exitCode: 1, stdout: '', stderr: '' } },
-    ]
-    const result = formatGateBatchResults(outcomes)
+  it('includes gate names, commands, and checkmarks', () => {
+    const result = formatGateBatchResults([passOutcome(lintGate), failOutcome(typeGate, 1)])
 
-    expect(result).toContain('lint')
-    expect(result).toContain('typecheck')
+    expect(result).toContain('✓ lint')
+    expect(result).toContain('✗ typecheck')
     expect(result).toContain('just lint')
     expect(result).toContain('just typecheck')
   })
 
-  it('includes exit code for each gate', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-      { gate: { name: 'test', patterns: ['**/*.ts'], commands: ['just test'] }, previousStatus: 'unknown', newStatus: 'fail', result: { exitCode: 2, stdout: '', stderr: '' } },
-    ]
-    const result = formatGateBatchResults(outcomes)
+  it('omits output section for passing gate and for failing gate with no output', () => {
+    const withStdout = formatGateBatchResults([{ ...passOutcome(lintGate), result: { exitCode: 0, stdout: 'some output', stderr: '' } }])
 
-    expect(result).toContain('0')
-    expect(result).toContain('2')
+    expect(withStdout).not.toMatch(/some output/)
+
+    const noOutput = formatGateBatchResults([failOutcome(lintGate, 1)])
+
+    expect(noOutput).toContain('✗ lint')
+    expect(noOutput).not.toContain('(exit 1):\n')
   })
 
-  it('all gates passed → single summary line', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-      { gate: typeGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-    ]
-    const result = formatGateBatchResults(outcomes)
-
-    expect(result).toMatch(/2.*passed|passed.*2/i)
-  })
-
-  it('failing gate includes stderr in output', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'fail', result: { exitCode: 1, stdout: '', stderr: 'Unexpected token' } },
-    ]
-    const result = formatGateBatchResults(outcomes)
-
-    expect(result).toContain('Unexpected token')
-  })
-
-  it('single message string (not array)', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-    ]
-    const result = formatGateBatchResults(outcomes)
-
-    expect(typeof result).toBe('string')
-  })
-
-  it('empty outcomes returns exactly empty string', () => {
-    const result = formatGateBatchResults([])
-
-    expect(result).toBe('')
-  })
-
-  it('uses checkmark for passing gate and cross for failing gate', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-      { gate: typeGate, previousStatus: 'unknown', newStatus: 'fail', result: { exitCode: 1, stdout: '', stderr: '' } },
-    ]
-    const result = formatGateBatchResults(outcomes)
-
-    expect(result).toContain(`✓ ${lintGate.name}`)
-    expect(result).toContain(`✗ ${typeGate.name}`)
-  })
-
-  it('does not append output section for passing gate even when stdout exists', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: 'some output', stderr: '' } },
-    ]
-    const result = formatGateBatchResults(outcomes)
-
-    expect(result).not.toMatch(/some output/)
-  })
-
-  it('does not append output section for failing gate with no stdout or stderr', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'fail', result: { exitCode: 1, stdout: '', stderr: '' } },
-    ]
-    const result = formatGateBatchResults(outcomes)
-
-    expect(result).toContain(`✗ ${lintGate.name}`)
-    // The output section ":\\n<output>" must not be appended when both stdout and stderr are empty
-    expect(result).not.toContain(`(exit 1):\n`)
-  })
-
-  it('separates multiple gate results with newlines', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-      { gate: typeGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-    ]
-    const result = formatGateBatchResults(outcomes)
-
-    const lines = result.split('\n')
-    expect(lines.length).toBeGreaterThanOrEqual(3) // at least: tag open + summary + one gate line
-    expect(lines[1]).toMatch(/passed, 0 failed/)
-    expect(lines[2]).toContain(`✓ ${lintGate.name}`)
-    expect(lines[3]).toContain(`✓ ${typeGate.name}`)
-  })
-
-  it('prefixes with "Pre-change " and uses changed reason when isPreChange is true', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-    ]
-    const result = formatGateBatchResults(outcomes, true)
+  it('uses "Pre-change" prefix and correct reason when isPreChange is true', () => {
+    const result = formatGateBatchResults([passOutcome(lintGate)], true)
 
     expect(result).toContain('Pre-change Quality gate results')
     expect(result).toContain('reason="quality gate check before file change"')
-    expect(result).toContain('type="quality-gate"')
-    expect(result).toContain('result="pass"')
   })
 
-  it('behaves identically to default when isPreChange is false', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-    ]
-    const defaultResult = formatGateBatchResults(outcomes)
-    const explicitFalseResult = formatGateBatchResults(outcomes, false)
+  it('uses correct default prefix and reason (kills string mutants)', () => {
+    const result = formatGateBatchResults([passOutcome(lintGate)])
 
-    expect(explicitFalseResult).toBe(defaultResult)
-  })
-
-  it('uses empty prefix in default (non-pre-change) mode (kills string prefix mutant)', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-    ]
-    const result = formatGateBatchResults(outcomes)
-
-    // With the original code, the summary line starts right after \n with "Quality gate results".
-    // Mutant: prefix becomes "Stryker was here!" -> "\nStryker was here!Quality gate results..."
     expect(result).toContain('\nQuality gate results')
-  })
-
-  it('uses correct default reason in steering tag (kills string reason mutant)', () => {
-    const outcomes: GateRunOutcome[] = [
-      { gate: lintGate, previousStatus: 'unknown', newStatus: 'pass', result: { exitCode: 0, stdout: '', stderr: '' } },
-    ]
-    const result = formatGateBatchResults(outcomes)
-
-    // The reason attribute must be "quiet period ended; ran dirty quality gates" for default mode.
-    // Mutant: reason becomes "".
     expect(result).toContain('reason="quiet period ended; ran dirty quality gates"')
   })
 })

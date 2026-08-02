@@ -1,7 +1,6 @@
-import { InstructionMeta, ResolvedInstruction } from "../types/instructions"
+import { InstructionMeta, ResolvedInstruction } from '../types/instructions'
 
 // Re-export for convenience (tests import these from this module)
-
 
 /** Options passed to the helper constructor. */
 export interface InstructionContextHelperOptions {
@@ -13,9 +12,9 @@ export interface InstructionContextHelperOptions {
 
 /** Count non-wildcard literal segments in a glob pattern. */
 function calcSpecificity(applyTo: string): number {
-  const segments = applyTo.split("/")
+  const segments = applyTo.split('/')
   return segments.reduce((score, seg) => {
-    if (seg === "" || /\*/.test(seg)) return score
+    if (seg === '' || /\*/.test(seg)) return score
     return score + 1
   }, 0)
 }
@@ -64,4 +63,4 @@ export class InstructionContextHelper {
   }
 }
 
-export { type InstructionMeta, type ResolvedInstruction } from "../types/instructions"
+export { type InstructionMeta, type ResolvedInstruction } from '../types/instructions'

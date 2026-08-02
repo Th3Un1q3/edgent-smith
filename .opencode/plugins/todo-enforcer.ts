@@ -1,28 +1,27 @@
+import { Plugin } from '@opencode-ai/plugin'
+import { log } from './helpers/logger'
+import { sendMessage } from './helpers/session-helpers'
+import { SessionStorage, SESSION_FIELDS } from './helpers/kv-store'
+import { getSessionAgent } from './helpers/agent-steps'
 
-import { Plugin } from "@opencode-ai/plugin"
-import { log } from "./helpers/logger"
-import { sendMessage } from "./helpers/session-helpers"
-import { SessionStorage, SESSION_FIELDS } from "./helpers/kv-store"
-import { getSessionAgent } from "./helpers/agent-steps"
-
-const PLUGIN_ID = "todo-enforcer"
+const PLUGIN_ID = 'todo-enforcer'
 
 type Todo = {
   content: string
-  status: "pending" | "in_progress" | "completed" | "cancelled"
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
 }
 
 const AGENTS_REQUIRED_TO_START_WITH_TODOS = new Set([
-  "rug"
+  'rug',
 ])
 
-const TODO_TOOL_NAME = "todowrite"
+const TODO_TOOL_NAME = 'todowrite'
 
-const TODO_STATUS_SYMBOLS: Record<Todo["status"], string> = {
-  pending: "[ ]",
-  in_progress: "[•]",
-  completed: "[✓]",
-  cancelled: "[-]",
+const TODO_STATUS_SYMBOLS: Record<Todo['status'], string> = {
+  pending: '[ ]',
+  in_progress: '[•]',
+  completed: '[✓]',
+  cancelled: '[-]',
 }
 
 const todoLineToPrettyString = (todo: Todo) => `${TODO_STATUS_SYMBOLS[todo.status]} ${todo.content}`
@@ -31,7 +30,7 @@ const todoLineToPrettyString = (todo: Todo) => `${TODO_STATUS_SYMBOLS[todo.statu
 function buildTodoContinuationMessage(todos: Array<Todo>): string {
   return `<steering priority="high" reason="incomplete todos remain" type="todo">
 There are incomplete todos:
-${todos.map((todo) => todoLineToPrettyString(todo)).join("\n")}
+${todos.map(todo => todoLineToPrettyString(todo)).join('\n')}
 
 Proceed with the following steps:
 1. Review the pending todos.
@@ -47,31 +46,31 @@ Proceed with the following steps:
 
 export const todoEnforcer: Plugin = async ({ client }) => {
   const sessionStorage = new SessionStorage()
-  await log(client, "info", "initialized", PLUGIN_ID)
+  await log(client, 'info', 'initialized', PLUGIN_ID)
 
   const extractTodos = async (sessionId: string): Promise<Array<Todo>> => {
-    const todosRaw = await client.session.todo({ path: { id: sessionId } });
-    return (todosRaw.data || []).map((todo) => ({
+    const todosRaw = await client.session.todo({ path: { id: sessionId } })
+    return (todosRaw.data || []).map(todo => ({
       content: todo.content as string,
-      status: todo.status as "pending" | "in_progress" | "completed" | "cancelled",
+      status: todo.status as 'pending' | 'in_progress' | 'completed' | 'cancelled',
     }))
   }
 
   return {
-    "tool.execute.before": async (input, output) => {
+    'tool.execute.before': async (input, output) => {
       if (!input.sessionID) return
       if (input.tool === TODO_TOOL_NAME) return
 
       // Only enforce for the task tool; all other tools are free to use
-      if (input.tool !== "task") return
+      if (input.tool !== 'task') return
 
       // Agent-based/command-driven tasks bypass todo requirement — they are internal routing calls
       if (output?.args?.command) {
-        await log(client, "info", `task tool called with command on session ${input.sessionID} — skipping enforcement`, PLUGIN_ID)
+        await log(client, 'info', `task tool called with command on session ${input.sessionID} — skipping enforcement`, PLUGIN_ID)
         return
       }
 
-      await log(client, "info", `enforcing todo requirement for task tool on session ${input.sessionID}`, PLUGIN_ID)
+      await log(client, 'info', `enforcing todo requirement for task tool on session ${input.sessionID}`, PLUGIN_ID)
 
       const currentAgent = await getSessionAgent(client, input.sessionID)
 
@@ -91,24 +90,23 @@ export const todoEnforcer: Plugin = async ({ client }) => {
 
       const sampleTodo = [{
         content: `#plan express the plan in todos; assignee: @${currentAgent}`,
-        status: "pending",
-        priority: "high",
-        id: "1"
+        status: 'pending',
+        priority: 'high',
+        id: '1',
       }]
 
-      throw new Error(`Error calling ${input.tool}. All tools are suspended until \`${TODO_TOOL_NAME}\` is called with updated todo list. Sample todo list: ${JSON.stringify(sampleTodo)}`);
+      throw new Error(`Error calling ${input.tool}. All tools are suspended until \`${TODO_TOOL_NAME}\` is called with updated todo list. Sample todo list: ${JSON.stringify(sampleTodo)}`)
     },
-    event: async ({ event }) => {
-      const isSessionIdle = event.type === "session.idle" && event.properties.sessionID
+    'event': async ({ event }) => {
+      const isSessionIdle = event.type === 'session.idle' && event.properties.sessionID
       if (!isSessionIdle) return
 
       const todos = await extractTodos(event.properties.sessionID)
-      const remainingTodos = todos.filter((todo) => ["pending", "in_progress"].includes(todo.status));
+      const remainingTodos = todos.filter(todo => ['pending', 'in_progress'].includes(todo.status))
       if (remainingTodos.length === 0) {
-        await log(client, "info", "No remaining todos — clearing cancellation state.", PLUGIN_ID)
+        await log(client, 'info', 'No remaining todos — clearing cancellation state.', PLUGIN_ID)
         return
       }
-
 
       setTimeout(async () => {
         try {
@@ -128,7 +126,7 @@ export const todoEnforcer: Plugin = async ({ client }) => {
           })
 
           if (!shouldFollowUp) {
-            await log(client, "info", "Session was cancelled after last message — skipping followup.", PLUGIN_ID)
+            await log(client, 'info', 'Session was cancelled after last message — skipping followup.', PLUGIN_ID)
             return
           }
 
@@ -138,13 +136,14 @@ export const todoEnforcer: Plugin = async ({ client }) => {
             message: buildTodoContinuationMessage(remainingTodos),
           })
 
-          sessionStorage.updateState(event.properties.sessionID, (s) => ({ ...s, todoFollowupSentAt: (new Date()).toISOString() }))
-        } catch (error) {
-          await log(client, "error", `Todo follow-up failed: ${error}`, PLUGIN_ID)
+          sessionStorage.updateState(event.properties.sessionID, s => ({ ...s, todoFollowupSentAt: (new Date()).toISOString() }))
+        }
+        catch (error) {
+          await log(client, 'error', `Todo follow-up failed: ${error}`, PLUGIN_ID)
         }
       }, 500)
     },
 
-    dispose: async () => { await log(client, "info", "disposed", PLUGIN_ID) },
+    'dispose': async () => { await log(client, 'info', 'disposed', PLUGIN_ID) },
   }
 }

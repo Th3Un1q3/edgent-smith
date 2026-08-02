@@ -3,13 +3,13 @@ Unified logger wrapping client.app.log with consistent formatting.
 All log messages are prefixed with the plugin ID for traceability across modules.
 */
 
-import { OpencodeClient } from "@opencode-ai/sdk"
+import { OpencodeClient } from '@opencode-ai/sdk'
 
-export const PLUGIN_ID = "harness-plugin"
+export const PLUGIN_ID = 'harness-plugin'
 
 export async function log(
   client: OpencodeClient,
-  level: "debug" | "info" | "warn" | "error" = "info",
+  level: 'debug' | 'info' | 'warn' | 'error' = 'info',
   message: string,
   pluginId?: string,
 ): Promise<void> {

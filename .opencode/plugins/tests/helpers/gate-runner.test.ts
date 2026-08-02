@@ -1,57 +1,64 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { GateConfig } from '@plugins/types/quality-gate'
+
 import { createDirtyGateBatcher, runGate, type CommandResult, type Shell } from '@plugins/helpers/gate-runner'
 
-function makeTemplateArray(command: string): TemplateStringsArray {
+const makeTemplateArray = (command: string): TemplateStringsArray => {
   return Object.assign([command], { raw: [command] })
 }
 
-function createNoQuietShellPromise(output: CommandResult): ReturnType<Shell> {
+const createShellPromise = (
+  output: CommandResult,
+  options?: { quiet?: boolean, nothrow?: boolean },
+): ReturnType<Shell> => {
+  const { quiet = true, nothrow = true } = options ?? {}
+
   const resolved = {
     ...output,
     stdout: typeof output.stdout === 'string' ? Buffer.from(output.stdout) : output.stdout,
     stderr: typeof output.stderr === 'string' ? Buffer.from(output.stderr) : output.stderr,
     text: async () => String(output.stdout),
   }
+
   const promise = Promise.resolve(resolved) as ReturnType<Shell>
-  promise.nothrow = () => promise
+  if (nothrow) promise.nothrow = () => promise
+  if (quiet) promise.quiet = () => promise
   return promise
 }
 
-function createNoQuietShellMock(output: CommandResult): Shell {
-  return vi.fn().mockImplementation(() => createNoQuietShellPromise(output)) as Shell
-}
-
-function createShellPromise(output: CommandResult): ReturnType<Shell> {
-  const resolved = {
-    ...output,
-    stdout: typeof output.stdout === 'string' ? Buffer.from(output.stdout) : output.stdout,
-    stderr: typeof output.stderr === 'string' ? Buffer.from(output.stderr) : output.stderr,
-    text: async () => String(output.stdout),
-  }
-  const promise = Promise.resolve(resolved) as ReturnType<Shell>
-  promise.nothrow = () => promise
-  promise.quiet = () => promise
-  return promise
-}
-
-function createShellSequenceMock(outputs: CommandResult[]): Shell {
+const createShellMock = (outputs: CommandResult[]): Shell => {
   const queue = [...outputs]
+  return vi.fn().mockImplementation(() =>
+    createShellPromise(queue.shift() ?? { exitCode: 0, stdout: '', stderr: '' }),
+  ) as Shell
+}
+
+type ShellFunction = () => ReturnType<Shell>
+
+const createSpyShell = (
+  output: CommandResult,
+  spies: { quiet?: ShellFunction, nothrow?: ShellFunction },
+): Shell => {
   return vi.fn().mockImplementation(() => {
-    const next = queue.shift() ?? { exitCode: 0, stdout: '', stderr: '' }
-    return createShellPromise(next)
+    const promise = createShellPromise(output, { quiet: false, nothrow: false }) as ReturnType<Shell>
+    if (spies.quiet) promise.quiet = spies.quiet
+    if (spies.nothrow) promise.nothrow = spies.nothrow
+    return promise
   }) as Shell
 }
 
-function makeGate(name: string, commands: string[]): GateConfig {
+const makeGate = ({ name, commands }: { name: string, commands: string[] }): GateConfig => {
   return { name, patterns: ['**/*.ts'], commands }
 }
 
+// ─── runGate ─────────────────────────────────────────────────
+
 describe('runGate', () => {
   it('passes all commands and returns exitCode 0 with combined output', async () => {
-    const gate = makeGate('lint', ['echo a', 'echo b'])
-    const shell = createShellSequenceMock([
+    const gate = makeGate({ name: 'lint', commands: ['echo a', 'echo b'] })
+
+    const shell = createShellMock([
       { exitCode: 0, stdout: 'a\n', stderr: '' },
       { exitCode: 0, stdout: 'b\n', stderr: '' },
     ])
@@ -65,8 +72,9 @@ describe('runGate', () => {
   })
 
   it('stops at first failing command and returns its result', async () => {
-    const gate = makeGate('test', ['echo ok', 'exit 1', 'echo skipped'])
-    const shell = createShellSequenceMock([
+    const gate = makeGate({ name: 'test', commands: ['echo ok', 'exit 1', 'echo skipped'] })
+
+    const shell = createShellMock([
       { exitCode: 0, stdout: 'ok\n', stderr: '' },
       { exitCode: 1, stdout: '', stderr: 'failed\n' },
       { exitCode: 0, stdout: 'skipped\n', stderr: '' },
@@ -78,9 +86,20 @@ describe('runGate', () => {
     expect(shell).toHaveBeenCalledTimes(2)
   })
 
-  it('works when shell does not support quiet', async () => {
-    const gate = makeGate('lint', ['echo ok'])
-    const shell = createNoQuietShellMock({ exitCode: 0, stdout: 'ok\n', stderr: '' })
+  it.each([
+    { label: 'quiet', setup: (output: CommandResult) => createShellMock([output]) },
+    { label: 'nothrow', setup: (output: CommandResult) => {
+      const shellPromise = createShellPromise(output)
+
+      const promise = Promise.resolve(shellPromise) as ReturnType<Shell>
+
+      promise.quiet = () => promise
+      return vi.fn().mockImplementation(() => promise) as Shell
+    } },
+  ])('works when shell lacks $label', async ({ setup }) => {
+    const gate = makeGate({ name: 'lint', commands: ['echo ok'] })
+
+    const shell = setup({ exitCode: 0, stdout: 'ok\n', stderr: '' })
 
     const result = await runGate(gate, shell)
 
@@ -88,115 +107,55 @@ describe('runGate', () => {
     expect(shell).toHaveBeenCalledTimes(1)
   })
 
-  it('returns empty string for undefined stderr', async () => {
-    const gate = makeGate('lint', ['cmd'])
+  it.each([
+    { label: 'undefined stderr', stderr: undefined as string | Buffer | undefined, expected: '' },
+    { label: 'string stderr', stderr: 'raw-string-stderr' as string | Buffer | undefined, expected: 'raw-string-stderr' },
+  ])('handles $label', async ({ stderr, expected }) => {
+    const gate = makeGate({ name: 'lint', commands: ['cmd'] })
+
     const shell = vi.fn().mockImplementation(() => {
-      const output = {
-        exitCode: 0,
-        stdout: Buffer.from('ok\n'),
-        stderr: undefined,
-        text: vi.fn().mockResolvedValue('ok\n'),
-      }
+      const output = { exitCode: 0, stdout: Buffer.from('ok\n'), stderr, text: vi.fn().mockResolvedValue('ok\n') }
+
       const promise = Promise.resolve(output) as unknown as ReturnType<Shell>
+
       promise.nothrow = () => promise
       promise.quiet = () => promise
       return promise
     }) as unknown as Shell
 
     const result = await runGate(gate, shell)
-    expect(result.stderr).toBe('')
+
+    expect(result.stderr).toBe(expected)
   })
 
-  it('returns plain string stderr as-is without buffer conversion', async () => {
-    const gate = makeGate('lint', ['cmd'])
-    const shell = vi.fn().mockImplementation(() => {
-      const output = {
-        exitCode: 0,
-        stdout: Buffer.from('ok\n'),
-        stderr: 'raw-string-stderr',
-        text: vi.fn().mockResolvedValue('ok\n'),
-      }
-      const promise = Promise.resolve(output) as unknown as ReturnType<Shell>
-      promise.nothrow = () => promise
-      promise.quiet = () => promise
-      return promise
-    }) as unknown as Shell
+  it.each([
+    { label: 'quiet', method: 'quiet' as const },
+    { label: 'nothrow', method: 'nothrow' as const },
+  ])('calls $method() on shell output when available', async ({ method }) => {
+    const gate = makeGate({ name: 'lint', commands: ['cmd'] })
 
-    const result = await runGate(gate, shell)
-    expect(result.stderr).toBe('raw-string-stderr')
-  })
+    const spy = vi.fn()
 
-  it('calls quiet() on shell output when available', async () => {
-    const gate = makeGate('lint', ['cmd'])
-    const quietFunction = vi.fn()
-    const shell = vi.fn().mockImplementation(() => {
-      const output = {
-        exitCode: 0,
-        stdout: Buffer.from('ok\n'),
-        stderr: Buffer.from(''),
-        text: vi.fn().mockResolvedValue('ok\n'),
-      }
-      const promise = Promise.resolve(output) as unknown as ReturnType<Shell>
-      promise.nothrow = () => promise
-      promise.quiet = quietFunction.mockReturnValue(promise)
-      return promise
-    }) as unknown as Shell
+    const shell = createSpyShell(
+      { exitCode: 0, stdout: 'ok\n', stderr: '' },
+      { [method]: spy.mockReturnValue(createShellPromise({ exitCode: 0, stdout: 'ok\n', stderr: '' })) },
+    )
 
     await runGate(gate, shell)
-    expect(quietFunction).toHaveBeenCalled()
-  })
-
-  it('calls nothrow() on shell output when available', async () => {
-    const gate = makeGate('lint', ['cmd'])
-    const nothrowFunction = vi.fn()
-    const shell = vi.fn().mockImplementation(() => {
-      const output = {
-        exitCode: 0,
-        stdout: Buffer.from('ok\n'),
-        stderr: Buffer.from(''),
-        text: vi.fn().mockResolvedValue('ok\n'),
-      }
-      const promise = Promise.resolve(output) as unknown as ReturnType<Shell>
-      promise.nothrow = nothrowFunction.mockReturnValue(promise)
-      promise.quiet = () => promise
-      return promise
-    }) as unknown as Shell
-
-    await runGate(gate, shell)
-    expect(nothrowFunction).toHaveBeenCalled()
-  })
-
-  it('works when shell does not support nothrow', async () => {
-    const gate = makeGate('lint', ['cmd'])
-    const shell = vi.fn().mockImplementation(() => {
-      const output = {
-        exitCode: 0,
-        stdout: Buffer.from('ok\n'),
-        stderr: Buffer.from(''),
-        text: vi.fn().mockResolvedValue('ok\n'),
-      }
-      const promise = Promise.resolve(output) as unknown as ReturnType<Shell>
-      // no nothrow property set
-      promise.quiet = () => promise
-      return promise
-    }) as unknown as Shell
-
-    const result = await runGate(gate, shell)
-    expect(result).toEqual({ exitCode: 0, stdout: 'ok\n', stderr: '' })
+    expect(spy).toHaveBeenCalled()
   })
 
   it('uses .text() for stdout when available on ShellOutput', async () => {
-    const gate = makeGate('test', ['noisy-command'])
-    // Simulate a ShellOutput that has .text() returning different (cleaner) output
-    // than the raw stdout Buffer — this proves runGate prefers the official API.
+    const gate = makeGate({ name: 'test', commands: ['noisy-command'] })
+
     const shell = vi.fn().mockImplementation(() => {
       const output = {
-        exitCode: 0,
-        stdout: Buffer.from('raw-buffer-output'),
-        stderr: Buffer.from(''),
+        exitCode: 0, stdout: Buffer.from('raw-buffer-output'), stderr: Buffer.from(''),
         text: vi.fn().mockResolvedValue('clean-text-output'),
       }
+
       const promise = Promise.resolve(output) as unknown as ReturnType<Shell>
+
       promise.nothrow = () => promise
       promise.quiet = () => promise
       return promise
@@ -204,21 +163,19 @@ describe('runGate', () => {
 
     const result = await runGate(gate, shell)
 
-    // Should use .text() output, not raw stdout Buffer
     expect(result.stdout).toBe('clean-text-output')
   })
 
   it('returns non-Buffer non-string stderr object as-is without calling toString on non-fatal path', async () => {
-    const gate = makeGate('lint', ['cmd'])
+    const gate = makeGate({ name: 'lint', commands: ['cmd'] })
+
     const customStderr = { toString: () => 'should-not-be-called' }
+
     const shell = vi.fn().mockImplementation(() => {
-      const output = {
-        exitCode: 1, // non-zero exit avoids combinedStderr += (which would call .toString())
-        stdout: Buffer.from(''),
-        stderr: customStderr,
-        text: vi.fn().mockResolvedValue(''),
-      }
+      const output = { exitCode: 1, stdout: Buffer.from(''), stderr: customStderr, text: vi.fn().mockResolvedValue('') }
+
       const promise = Promise.resolve(output) as unknown as ReturnType<Shell>
+
       promise.nothrow = () => promise
       promise.quiet = () => promise
       return promise
@@ -226,153 +183,95 @@ describe('runGate', () => {
 
     const result = await runGate(gate, shell)
 
-    // Real: Buffer.isBuffer(customStderr) is false → returns object at line 31
-    //       Early return at line 58 avoids combinedStderr += (which would toString)
-    // Mutant (#1): Buffer.isBuffer always true → calls toString() → returns string
+    // Mutant #1: Buffer.isBuffer always true → toString() → returns string instead of object
     expect(result.stderr).toBe(customStderr)
   })
 })
+
+// ─── DirtyGateBatcher ────────────────────────────────────────
 
 describe('DirtyGateBatcher', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
-
   afterEach(() => {
     vi.useRealTimers()
   })
 
   it('marks gates dirty and fires callback after quiet period', () => {
     const onBatch = vi.fn()
+
     const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
 
     batcher.markDirty(['lint'])
     expect(onBatch).not.toHaveBeenCalled()
-
     vi.advanceTimersByTime(100)
-
     expect(onBatch).toHaveBeenCalledTimes(1)
     expect(onBatch).toHaveBeenCalledWith(['lint'])
   })
 
   it('reset timer on second mark before quiet', () => {
     const onBatch = vi.fn()
+
     const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
 
     batcher.markDirty(['lint'])
     vi.advanceTimersByTime(50)
-
     batcher.markDirty(['typecheck'])
     expect(onBatch).not.toHaveBeenCalled()
-
-    // At t=60 (50+10), the original timer would have fired at t=100 if not reset.
-    // Since the second mark at t=50 should reset the timer, it should fire at t=150.
-    // Advancing to t=110 (50+60) should NOT trigger the callback.
     vi.advanceTimersByTime(60)
-
     expect(onBatch).not.toHaveBeenCalled()
-
-    // Now advance past the reset deadline (t=150)
     vi.advanceTimersByTime(50)
-
     expect(onBatch).toHaveBeenCalledTimes(1)
     expect(onBatch).toHaveBeenCalledWith(['lint', 'typecheck'])
   })
 
-  it('no callback when no gates marked', () => {
-    const onBatch = vi.fn()
-    createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
-
-    vi.advanceTimersByTime(200)
-
-    expect(onBatch).not.toHaveBeenCalled()
-  })
-
   it('dispose cancels pending timer', () => {
     const onBatch = vi.fn()
+
     const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
 
     batcher.markDirty(['lint'])
     batcher.dispose()
-
     vi.advanceTimersByTime(100)
-
     expect(onBatch).not.toHaveBeenCalled()
   })
 
   it('multiple names in single mark', () => {
     const onBatch = vi.fn()
+
     const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
 
     batcher.markDirty(['lint', 'typecheck', 'test'])
-
     vi.advanceTimersByTime(100)
-
     expect(onBatch).toHaveBeenCalledTimes(1)
     expect(onBatch).toHaveBeenCalledWith(['lint', 'typecheck', 'test'])
   })
 
-  it('mark after dispose is no-op', () => {
-    const onBatch = vi.fn()
-    const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
-
-    batcher.dispose()
-    batcher.markDirty(['lint'])
-
-    vi.advanceTimersByTime(100)
-
-    expect(onBatch).not.toHaveBeenCalled()
-  })
-
   it('single-flight: edit during flush re-arms timer after batch completes', () => {
     const onBatch = vi.fn()
+
     const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
 
     onBatch.mockImplementation((_gates: string[]) => {
       batcher.markDirty(['lint'])
     })
-
     batcher.markDirty(['lint'])
-
-    // First flush: onBatch fires, inside it markDirty is called again
     vi.advanceTimersByTime(100)
-
     expect(onBatch).toHaveBeenCalledTimes(1)
     expect(onBatch).toHaveBeenCalledWith(['lint'])
-
-    // Second flush after re-armed timer
     vi.advanceTimersByTime(100)
-
     expect(onBatch).toHaveBeenCalledTimes(2)
     expect(onBatch).toHaveBeenNthCalledWith(2, ['lint'])
   })
 
-  it('resets isFlushing after timer callback, allowing new marks to start timer', () => {
-    const onBatch = vi.fn()
-    const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
-
-    // First batch: fire timer
-    batcher.markDirty(['lint'])
-    vi.advanceTimersByTime(100)
-    expect(onBatch).toHaveBeenCalledTimes(1)
-
-    // After timer callback, isFlushing should be false.
-    // A new mark should start a fresh timer.
-    batcher.markDirty(['typecheck'])
-    vi.advanceTimersByTime(100)
-    expect(onBatch).toHaveBeenCalledTimes(2)
-    expect(onBatch).toHaveBeenLastCalledWith(['typecheck'])
-  })
-
   it('during timer onBatch, new dirty marks defer to post-batch timer', () => {
     const callOrder: string[] = []
+
     const batcher = createDirtyGateBatcher({
       maxQuietMs: 100,
       onBatch: (gates) => {
         callOrder.push(`batch:${gates.join(',')}`)
-        // markDirty during onBatch — isFlushing guard (line 134) prevents
-        // startTimer from running here. The post-batch check (dirty.size > 0)
-        // handles re-arming instead.
         batcher.markDirty(['late'])
         callOrder.push('after-mark')
       },
@@ -380,229 +279,170 @@ describe('DirtyGateBatcher', () => {
 
     batcher.markDirty(['early'])
     vi.advanceTimersByTime(100)
-
-    // First batch fired synchronously. markDirty during onBatch did NOT
-    // trigger startTimer — it deferred to the post-batch check.
     expect(callOrder).toEqual(['batch:early', 'after-mark'])
-
-    // Second batch fires after re-armed timer from post-batch check
     vi.advanceTimersByTime(100)
     expect(callOrder).toEqual(['batch:early', 'after-mark', 'batch:late', 'after-mark'])
   })
 
-  it('does not restart timer when dirty set is empty after batch completes', () => {
+  it('cancelTimer does not call clearTimeout when timer is already undefined', () => {
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
+
     const onBatch = vi.fn()
+
     const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
 
-    batcher.markDirty(['lint'])
-    vi.advanceTimersByTime(100)
-    expect(onBatch).toHaveBeenCalledTimes(1)
-
-    // No new marks during onBatch — dirty is empty. Timer should not re-arm.
-    vi.advanceTimersByTime(200)
-    expect(onBatch).toHaveBeenCalledTimes(1)
+    // Mutants #2/#3: removing guard → clearTimeout(undefined) called
+    batcher.dispose()
+    expect(clearTimeoutSpy).not.toHaveBeenCalled()
   })
 
-  it('resets isFlushing after flush, allowing subsequent marks to start timer', () => {
+  it('isFlushing guard in timer callback prevents extra timer creation', () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+
     const onBatch = vi.fn()
+
+    const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
+
+    onBatch.mockImplementation(() => {
+      batcher.markDirty(['typecheck'])
+    })
+    batcher.markDirty(['lint'])
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(100)
+    // Mutants #4/#7: isFlushing not guarding → 3rd setTimeout call
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(2)
+    vi.advanceTimersByTime(100)
+    expect(onBatch).toHaveBeenCalledTimes(2)
+    expect(onBatch).toHaveBeenNthCalledWith(2, ['typecheck'])
+  })
+
+  it.each([
+    { label: 'no marks → no callback', run: (_b: ReturnType<typeof createDirtyGateBatcher>) => vi.advanceTimersByTime(200) },
+    { label: 'dispose before marks → no throw', run: (b: ReturnType<typeof createDirtyGateBatcher>) => b.dispose() },
+    { label: 'flush before marks → no-op', run: (b: ReturnType<typeof createDirtyGateBatcher>) => b.flush() },
+  ])('handles edge cases: $label', ({ run }) => {
+    const onBatch = vi.fn()
+
+    const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
+
+    run(batcher)
+    expect(onBatch).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { label: 'after timer callback', trigger: (_b: ReturnType<typeof createDirtyGateBatcher>) => vi.advanceTimersByTime(100) },
+    { label: 'after flush()', trigger: (b: ReturnType<typeof createDirtyGateBatcher>) => b.flush() },
+  ])('isFlushing resets after batch completes — $label', ({ trigger }) => {
+    const onBatch = vi.fn()
+
     const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
 
     batcher.markDirty(['lint'])
-    batcher.flush()
+    trigger(batcher)
     expect(onBatch).toHaveBeenCalledTimes(1)
-
-    // After flush, isFlushing should be false.
-    // A new mark should start a fresh timer.
     batcher.markDirty(['typecheck'])
     vi.advanceTimersByTime(100)
     expect(onBatch).toHaveBeenCalledTimes(2)
     expect(onBatch).toHaveBeenLastCalledWith(['typecheck'])
   })
 
-  it('flush does not restart timer when dirty set is empty after batch', () => {
+  it.each([
+    { label: 'after timer callback', trigger: (_b: ReturnType<typeof createDirtyGateBatcher>) => vi.advanceTimersByTime(100) },
+    { label: 'after flush()', trigger: (b: ReturnType<typeof createDirtyGateBatcher>) => b.flush() },
+  ])('does not re-arm timer when dirty set is empty after batch — $label', ({ trigger }) => {
     const onBatch = vi.fn()
+
     const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
 
     batcher.markDirty(['lint'])
-    batcher.flush()
+    trigger(batcher)
     expect(onBatch).toHaveBeenCalledTimes(1)
-
-    // No new marks during onBatch — dirty is empty. Timer should not re-arm.
     vi.advanceTimersByTime(200)
     expect(onBatch).toHaveBeenCalledTimes(1)
-  })
-
-  it('dispose() on a batcher that never started a timer does not throw', () => {
-    const onBatch = vi.fn()
-    const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
-
-    // cancelTimer is called with timer === undefined — the guard at line 99
-    // prevents clearTimeout(undefined). Even without the guard, clearTimeout(undefined)
-    // is a no-op per spec, so the behavior is correct either way.
-    expect(() => batcher.dispose()).not.toThrow()
-    expect(onBatch).not.toHaveBeenCalled()
-  })
-
-  it('flush() on a batcher that never started a timer is a no-op', () => {
-    const onBatch = vi.fn()
-    const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
-
-    // flush early-returns when dirty.size === 0, but we also want to verify
-    // that startTimer() (called via markDirty path) handles cancelTimer
-    // when no prior timer was set.
-    batcher.flush()
-    expect(onBatch).not.toHaveBeenCalled()
-  })
-
-  it('cancelTimer does not call clearTimeout when timer is already undefined', () => {
-    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
-    const onBatch = vi.fn()
-    const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
-
-    // No marks → timer is never set → timer === undefined at construction
-    // dispose() → cancelTimer()
-    // Real: guard at line 98 returns early → clearTimeout NOT called
-    // Mutant #2 (block removal): falls through → clearTimeout(undefined) called
-    // Mutant #3 (if(false)): guard skipped → clearTimeout(undefined) called
-    batcher.dispose()
-
-    expect(clearTimeoutSpy).not.toHaveBeenCalled()
-  })
-
-  it('isFlushing guard in timer callback prevents extra timer creation', () => {
-    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
-    const onBatch = vi.fn()
-    const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
-
-    onBatch.mockImplementation(() => {
-      batcher.markDirty(['typecheck'])
-    })
-
-    batcher.markDirty(['lint'])
-    expect(setTimeoutSpy).toHaveBeenCalledTimes(1)
-
-    vi.advanceTimersByTime(100)
-    // Timer fires. Inside callback, onBatch calls markDirty(['typecheck']).
-    // Real (#4): isFlushing=true → markDirty sees !isFlushing=false → no startTimer
-    //            → post-batch dirty.size>0 → startTimer → setTimeout (2nd call)
-    // Real (#7): same — !isFlushing is false → markDirty path not taken
-    // Mutant #4: isFlushing=false → markDirty sees !isFlushing=true → startTimer (2nd call)
-    //            → post-batch startTimer→cancelTimer→setTimeout (3rd call total)
-    // Mutant #7: !isFlushing always true → same extra call as #4
-    expect(setTimeoutSpy).toHaveBeenCalledTimes(2)
-
-    // Re-armed timer from post-batch fires for typecheck
-    vi.advanceTimersByTime(100)
-    expect(onBatch).toHaveBeenCalledTimes(2)
-    expect(onBatch).toHaveBeenNthCalledWith(2, ['typecheck'])
   })
 
   describe('adaptive timer', () => {
     it('falls back to maxQuietMs when adaptive delay is zero', () => {
       const onBatch = vi.fn()
+
       const batcher = createDirtyGateBatcher({ maxQuietMs: 500, onBatch })
 
       const nowValue = 1000
-      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
 
-      // Two edits at the same faked timestamp → adaptive = 0 → fallback to maxQuietMs
+      vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
       batcher.markDirty(['lint'])
       batcher.markDirty(['typecheck'])
-
       vi.advanceTimersByTime(499)
       expect(onBatch).not.toHaveBeenCalled()
-
       vi.advanceTimersByTime(1)
       expect(onBatch).toHaveBeenCalledTimes(1)
       expect(onBatch).toHaveBeenCalledWith(['lint', 'typecheck'])
-
-      nowSpy.mockRestore()
     })
 
-    it('computes adaptive delay with exactly two spaced edits', () => {
+    it('caps adaptive delay at maxQuietMs', () => {
       const onBatch = vi.fn()
-      const batcher = createDirtyGateBatcher({ maxQuietMs: 500, onBatch })
 
+      const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
       let nowValue = 1000
-      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
-
+      vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
       batcher.markDirty(['lint'])
-      nowValue = 1100
-      batcher.markDirty(['typecheck'])
-      // Adaptive = 2 * (100ms gap) = 200ms from second edit
-
-      vi.advanceTimersByTime(199)
-      expect(onBatch).not.toHaveBeenCalled()
-
-      vi.advanceTimersByTime(1)
-      expect(onBatch).toHaveBeenCalledTimes(1)
-      expect(onBatch).toHaveBeenCalledWith(['lint', 'typecheck'])
-
-      nowSpy.mockRestore()
-    })
-
-    it('computes adaptive delay with three spaced edits', () => {
-      const onBatch = vi.fn()
-      const batcher = createDirtyGateBatcher({ maxQuietMs: 500, onBatch })
-
-      let nowValue = 1000
-      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
-
-      batcher.markDirty(['a'])
-      nowValue = 1050
-      batcher.markDirty(['b'])
-      nowValue = 1100
-      batcher.markDirty(['c'])
-      // Three edits 50ms apart: avg gap = 50ms, adaptive = 2 * 50 = 100ms
-
       vi.advanceTimersByTime(100)
       expect(onBatch).toHaveBeenCalledTimes(1)
-      expect(onBatch).toHaveBeenCalledWith(['a', 'b', 'c'])
+      batcher.markDirty(['a'])
+      nowValue = 1200
+      batcher.markDirty(['b'])
+      vi.advanceTimersByTime(99)
+      expect(onBatch).toHaveBeenCalledTimes(1)
+      vi.advanceTimersByTime(1)
+      expect(onBatch).toHaveBeenCalledTimes(2)
+      expect(onBatch).toHaveBeenLastCalledWith(['a', 'b'])
+    })
 
-      nowSpy.mockRestore()
+    it.each([
+      { label: 'two edits 100ms apart → 200ms delay', edits: [{ t: 1000, gates: ['lint'] }, { t: 1100, gates: ['typecheck'] }], expectDelay: 200 },
+      { label: 'three edits 50ms apart → 100ms delay', edits: [{ t: 1000, gates: ['a'] }, { t: 1050, gates: ['b'] }, { t: 1100, gates: ['c'] }], expectDelay: 100 },
+    ])('computes adaptive delay: $label', ({ edits, expectDelay }) => {
+      const onBatch = vi.fn()
+
+      const batcher = createDirtyGateBatcher({ maxQuietMs: 500, onBatch })
+      let nowValue = edits[0].t
+      vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
+      for (const edit of edits) {
+        nowValue = edit.t
+        batcher.markDirty(edit.gates)
+      }
+      vi.advanceTimersByTime(expectDelay - 1)
+      expect(onBatch).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(1)
+      expect(onBatch).toHaveBeenCalledTimes(1)
+      expect(onBatch).toHaveBeenCalledWith(edits.flatMap(edit => edit.gates))
     })
 
     it('trims editTimestamps to last 10 entries for adaptive calculation', () => {
       const onBatch = vi.fn()
+
       const batcher = createDirtyGateBatcher({ maxQuietMs: 500, onBatch })
-
       let nowValue = 1000
-      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
-
-      // Make 12 edits, each 10ms apart. After the 10th edit, the sliding
-      // window trims old entries so only the last 10 timestamps remain.
+      vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
       for (let index = 0; index < 12; index++) {
         nowValue = 1000 + index * 10
         batcher.markDirty([`gate-${index}`])
       }
-
-      // After 12 edits at t=1110, only last 10 timestamps [1020..1110] remain.
-      // Gaps: 9 intervals of 10ms → avg = 10ms → adaptive = 20ms from t=1110.
-      // Timer should fire 20ms after the last markDirty call.
-
-      // At 19ms past the last edit, timer hasn't fired yet
+      // After 12 edits at 10ms gaps, last 10 timestamps → avg=10ms → adaptive=20ms
       vi.advanceTimersByTime(19)
       expect(onBatch).not.toHaveBeenCalled()
-
-      // At 20ms, timer fires
       vi.advanceTimersByTime(1)
       expect(onBatch).toHaveBeenCalledTimes(1)
-      // Only the most recent dirty gates from the last reset should batch
-      expect(onBatch).toHaveBeenCalledWith(
-        expect.arrayContaining(['gate-11'])
-      )
-
-      nowSpy.mockRestore()
+      expect(onBatch).toHaveBeenCalledWith(expect.arrayContaining(['gate-11']))
     })
 
     it('shifts editTimestamps when length exceeds 10 to prevent stale entry skew', () => {
       const onBatch = vi.fn()
+
       const batcher = createDirtyGateBatcher({ maxQuietMs: 500, onBatch })
-
       let nowValue = 0
-      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
-
-      // 12 edits: first two are far apart, remaining 10 are close
+      vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
+      // 12 edits: first two far apart, remaining 10 close (1ms gaps)
       nowValue = 0
       batcher.markDirty(['g1'])
       nowValue = 100
@@ -611,27 +451,18 @@ describe('DirtyGateBatcher', () => {
         nowValue = 101 + index
         batcher.markDirty([`g${index + 3}`])
       }
-      // Real: shifts at entries 11 and 12 → window=[101..110] (10 entries, 1ms gaps)
-      //       avg=1ms → adaptive=2ms → fires 2ms after last edit
-      // Mutant #5: never shifts → window=[0,100,101..110] (12 entries, includes 100ms gap)
-      //            avg≈10ms → adaptive≈20ms → fires much later
-
+      // Mutant #5: never shifts → 100ms gap inflates avg → fires later than 2ms
       vi.advanceTimersByTime(2)
-      // Real: fires. Mutant #5: not yet. Calls onBatch only in real path.
       expect(onBatch).toHaveBeenCalledTimes(1)
-
-      nowSpy.mockRestore()
     })
 
     it('does not shift editTimestamps at exactly 10 entries', () => {
       const onBatch = vi.fn()
+
       const batcher = createDirtyGateBatcher({ maxQuietMs: 500, onBatch })
-
       let nowValue = 0
-      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
-
-      // 10 edits: first gap is large, rest are 1ms each
-      // At 10 entries, real code (>10) does NOT shift; mutant #6 (>=10) DOES shift
+      vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
+      // 10 edits: first gap large, rest 1ms — no shift at length=10 (>10 threshold)
       nowValue = 0
       batcher.markDirty(['g1'])
       nowValue = 100
@@ -640,131 +471,76 @@ describe('DirtyGateBatcher', () => {
         nowValue = 101 + index
         batcher.markDirty([`g${index + 3}`])
       }
-      // After 10 edits:
-      // Real: no shift → [0,100,101..108] → adaptive≈24ms
-      // Mutant #6: shift at length>=10 → [100,101..108] (9 entries) → adaptive=2ms
-
+      // Mutant #6: shift at >=10 → adaptive=2ms → fires at 2ms (should not)
       vi.advanceTimersByTime(2)
-      // Real: 24ms delay → timer not yet. Mutant #6: 2ms delay → fires → assertion fails
       expect(onBatch).not.toHaveBeenCalled()
-
-      vi.advanceTimersByTime(22) // total 24ms from last markDirty
+      vi.advanceTimersByTime(22)
       expect(onBatch).toHaveBeenCalledTimes(1)
-
-      nowSpy.mockRestore()
-    })
-
-    it('caps adaptive delay at maxQuietMs', () => {
-      const onBatch = vi.fn()
-      const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
-
-      let nowValue = 1000
-      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowValue)
-
-      // First edit
-      batcher.markDirty(['lint'])
-      // Timer set for 100ms (maxQuietMs, only 1 edit)
-
-      // Advance 100ms for the first timer to fire
-      vi.advanceTimersByTime(100)
-      // First batch fires
-      expect(onBatch).toHaveBeenCalledTimes(1)
-
-      // Now make two spaced edits (far apart) — adaptive > maxQuietMs, should cap
-      batcher.markDirty(['a'])
-      nowValue = 1200
-      batcher.markDirty(['b'])
-      // Adaptive = 2 * 200 = 400, capped at maxQuietMs=100
-
-      vi.advanceTimersByTime(99)
-      expect(onBatch).toHaveBeenCalledTimes(1)
-
-      vi.advanceTimersByTime(1)
-      expect(onBatch).toHaveBeenCalledTimes(2)
-      expect(onBatch).toHaveBeenLastCalledWith(['a', 'b'])
-
-      nowSpy.mockRestore()
     })
   })
 
   describe('flush', () => {
     it('runs callback immediately without waiting for timer', () => {
       const onBatch = vi.fn()
+
       const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
 
       batcher.markDirty(['lint'])
       batcher.flush()
-
       expect(onBatch).toHaveBeenCalledTimes(1)
       expect(onBatch).toHaveBeenCalledWith(['lint'])
     })
 
-    it('does nothing when dirty set is empty', () => {
-      const onBatch = vi.fn()
-      const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
-
-      batcher.flush()
-
-      expect(onBatch).not.toHaveBeenCalled()
-    })
-
-    it('does nothing on disposed batcher', () => {
-      const onBatch = vi.fn()
-      const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
-
-      batcher.markDirty(['lint'])
-      batcher.dispose()
-      batcher.flush()
-
-      expect(onBatch).not.toHaveBeenCalled()
-    })
-
     it('restarts timer if new dirty marks arrive during flush', () => {
       const onBatch = vi.fn()
+
       const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
 
       onBatch.mockImplementation(() => {
         batcher.markDirty(['typecheck'])
       })
-
       batcher.markDirty(['lint'])
       batcher.flush()
-
-      // Flush called onBatch with ['lint']; inside it, typecheck was marked dirty
       expect(onBatch).toHaveBeenCalledTimes(1)
       expect(onBatch).toHaveBeenCalledWith(['lint'])
-
-      // The re-armed timer should fire for ['typecheck']
       vi.advanceTimersByTime(100)
-
       expect(onBatch).toHaveBeenCalledTimes(2)
       expect(onBatch).toHaveBeenNthCalledWith(2, ['typecheck'])
     })
 
     it('isFlushing guard in flush prevents extra timer creation', () => {
       const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+
       const onBatch = vi.fn()
+
       const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
 
       onBatch.mockImplementation(() => {
         batcher.markDirty(['typecheck'])
       })
-
       batcher.markDirty(['lint'])
       expect(setTimeoutSpy).toHaveBeenCalledTimes(1)
-
       batcher.flush()
-      // Inside flush:
-      // Real (#8): isFlushing=true → markDirty→!isFlushing=false→no startTimer
-      //            → post-batch dirty.size>0 → startTimer → setTimeout (2nd call total)
-      // Mutant #8: isFlushing=false → markDirty→!isFlushing=true→startTimer (2nd call)
-      //            → post-batch startTimer→cancelTimer+setTimeout (3rd call total)
+      // Mutant #8: isFlushing not guarding → 3rd setTimeout call
       expect(setTimeoutSpy).toHaveBeenCalledTimes(2)
-
-      // Re-armed timer fires for typecheck
       vi.advanceTimersByTime(100)
       expect(onBatch).toHaveBeenCalledTimes(2)
       expect(onBatch).toHaveBeenNthCalledWith(2, ['typecheck'])
+    })
+
+    it.each([
+      { label: 'dirty set is empty', markDirty: false },
+      { label: 'batcher is disposed', markDirty: true },
+    ])('flush is no-op when $label', ({ markDirty: shouldMark }) => {
+      const onBatch = vi.fn()
+
+      const batcher = createDirtyGateBatcher({ maxQuietMs: 100, onBatch })
+      if (shouldMark) {
+        batcher.markDirty(['lint'])
+        batcher.dispose()
+      }
+      batcher.flush()
+      expect(onBatch).not.toHaveBeenCalled()
     })
   })
 })

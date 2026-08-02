@@ -1,15 +1,13 @@
-import { OpencodeClient } from "@opencode-ai/sdk"
-import { log } from "./logger"
-import { getSessionAgent } from "./agent-steps"
-
+import { OpencodeClient } from '@opencode-ai/sdk'
+import { log } from './logger'
+import { getSessionAgent } from './agent-steps'
 
 type SendMessageImplementation = (arguments_: {
-  client: OpencodeClient,
-  sessionId: string,
-  message: string,
-  noReply?: boolean, // when set to true, the message is sent without triggering agent reply
+  client: OpencodeClient
+  sessionId: string
+  message: string
+  noReply?: boolean // when set to true, the message is sent without triggering agent reply
 }) => Promise<void>
-
 
 const sendMessage: SendMessageImplementation = async ({
   client,
@@ -17,16 +15,22 @@ const sendMessage: SendMessageImplementation = async ({
   message,
   noReply = false,
 }: {
-  client: OpencodeClient,
-  sessionId: string,
-  message: string,
-  noReply?: boolean, // when set to true, the message is sent without triggering agent reply
+  client: OpencodeClient
+  sessionId: string
+  message: string
+  noReply?: boolean // when set to true, the message is sent without triggering agent reply
 }) => {
-  if (!client.session) { log(client, "warn", `Client session not available for sending message to session ${sessionId}.`); return }
+  if (!client.session) {
+    log(client, 'warn', `Client session not available for sending message to session ${sessionId}.`)
+    return
+  }
   const session = await client.session.get({ path: { id: sessionId } })
-  if (!session) { log(client, "warn", `Session ${sessionId} not found for injection.`); return }
+  if (!session) {
+    log(client, 'warn', `Session ${sessionId} not found for injection.`)
+    return
+  }
   const agent = await getSessionAgent(client, sessionId)
-  await client.session.prompt({ path: { id: sessionId }, body: { agent, noReply, parts: [{ type: "text", text: message }] } })
+  await client.session.prompt({ path: { id: sessionId }, body: { agent, noReply, parts: [{ type: 'text', text: message }] } })
 }
 
 export {

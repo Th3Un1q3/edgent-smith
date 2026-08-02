@@ -1,4 +1,4 @@
-import { Glob } from "bun"
+import { Glob } from 'bun'
 
 /**
  * Match a string against a glob pattern using Bun's built-in Glob.

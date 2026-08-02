@@ -11,7 +11,7 @@ import { vi } from 'vitest'
  * This setup file defines stub implementations for the Bun APIs used in tests,
  * allowing `vi.spyOn()` and other mock patterns to work in Node.js.
  */
- 
+
 if (typeof Bun === 'undefined') {
   Object.assign(globalThis, {
     Bun: {
@@ -32,4 +32,3 @@ if (typeof Bun === 'undefined') {
     },
   })
 }
- 

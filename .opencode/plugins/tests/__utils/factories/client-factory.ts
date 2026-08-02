@@ -1,10 +1,10 @@
-import { vi } from "vitest"
-import type { Todo } from "@opencode-ai/sdk"
+import { vi } from 'vitest'
+import type { Todo } from '@opencode-ai/sdk'
 
 type OpencodeClientFactoryParameters = {
-    agentName?: string
-    todoList?: Todo[]
-    agentList?: Array<{ name: string; steps?: number }>
+  agentName?: string
+  todoList?: Todo[]
+  agentList?: Array<{ name: string, steps?: number }>
 }
 
 /**
@@ -14,20 +14,20 @@ type OpencodeClientFactoryParameters = {
  * @returns A mock OpencodeClient with predefined methods and behaviors.
  */
 const opencodeClientFactory = (parameters?: OpencodeClientFactoryParameters) => {
-    const { agentName = "build", todoList = [] as Todo[], agentList } = parameters ?? {}
-    return {
-        session: {
-            get: vi.fn().mockResolvedValue({ data: { agent: agentName } }),
-            todo: vi.fn().mockResolvedValue({ data: todoList }),
-            prompt: vi.fn().mockResolvedValue({}),
-        },
-        app: {
-            /**
+  const { agentName = 'build', todoList = [] as Todo[], agentList } = parameters ?? {}
+  return {
+    session: {
+      get: vi.fn().mockResolvedValue({ data: { agent: agentName } }),
+      todo: vi.fn().mockResolvedValue({ data: todoList }),
+      prompt: vi.fn().mockResolvedValue({}),
+    },
+    app: {
+      /**
              * methods not implemented */
-            log: vi.fn(),
-            agents: vi.fn().mockResolvedValue({ data: agentList ?? [{ name: agentName }] }),
-        }
-    }
+      log: vi.fn(),
+      agents: vi.fn().mockResolvedValue({ data: agentList ?? [{ name: agentName }] }),
+    },
+  }
 }
 
 export { opencodeClientFactory, OpencodeClientFactoryParameters }

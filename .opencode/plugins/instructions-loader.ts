@@ -1,139 +1,139 @@
-import { Plugin } from "@opencode-ai/plugin"
-import { createIndex } from "./helpers/instruction-indexer"
-import { sendMessage } from "./helpers/session-helpers"
-import { log } from "./helpers/logger"
-import { SessionStorage, State } from "./helpers/kv-store"
-import { InstructionContextHelper } from "./helpers/instruction-context-helper"
-import { getSessionAgent } from "./helpers/agent-steps"
+import { Plugin } from '@opencode-ai/plugin'
+import { createIndex } from './helpers/instruction-indexer'
+import { sendMessage } from './helpers/session-helpers'
+import { log } from './helpers/logger'
+import { SessionStorage, State } from './helpers/kv-store'
+import { InstructionContextHelper } from './helpers/instruction-context-helper'
+import { getSessionAgent } from './helpers/agent-steps'
 
-const PLUGIN_ID = "instructions-loader"
+const PLUGIN_ID = 'instructions-loader'
 
 export type StateWithIdempotencyTokens = State & { idempotencyTokens?: Record<string, string> }
 
 export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) => {
-    const sessionStorage = new SessionStorage()
+  const sessionStorage = new SessionStorage()
 
-    const targetedTools = new Set([
-        'edit',
-        'write',
-        'read'
-    ])
+  const targetedTools = new Set([
+    'edit',
+    'write',
+    'read',
+  ])
 
-    const _helperCache: Record<string, InstructionContextHelper> = {};
+  const _helperCache: Record<string, InstructionContextHelper> = {}
 
-    const getHelper = async (sessionID: string) => {
-        const agent = await getSessionAgent(client, sessionID)
+  const getHelper = async (sessionID: string) => {
+    const agent = await getSessionAgent(client, sessionID)
 
-        if (Object.hasOwn(_helperCache, agent)) return _helperCache[agent]
+    if (Object.hasOwn(_helperCache, agent)) return _helperCache[agent]
 
-        // Create helper with factory that returns indexer's forFiles + loadBody
-        const index = await createIndex({ agent, instructionsGlob: ".opencode/instructions/*.instructions.md", currentWorkingDirectory: directory, type: "custom", log: (message) => log(client, "info", message, PLUGIN_ID) })
+    // Create helper with factory that returns indexer's forFiles + loadBody
+    const index = await createIndex({ agent, instructionsGlob: '.opencode/instructions/*.instructions.md', currentWorkingDirectory: directory, type: 'custom', log: message => log(client, 'info', message, PLUGIN_ID) })
 
-        const helper = new InstructionContextHelper({
-            indexerFactory: () => Promise.resolve({
-                forFiles: index.forFiles.bind(index),
-                loadBody: index.loadBody.bind(index),
-            }),
-        })
+    const helper = new InstructionContextHelper({
+      indexerFactory: () => Promise.resolve({
+        forFiles: index.forFiles.bind(index),
+        loadBody: index.loadBody.bind(index),
+      }),
+    })
 
-        _helperCache[agent] = helper
-        return helper
-    }
+    _helperCache[agent] = helper
+    return helper
+  }
 
-    return {
-        "tool.execute.before": async (input, output) => {
-            if (!targetedTools.has(input.tool) || !input.sessionID || !output.args?.filePath) return
+  return {
+    'tool.execute.before': async (input, output) => {
+      if (!targetedTools.has(input.tool) || !input.sessionID || !output.args?.filePath) return
 
-            const helper = await getHelper(input.sessionID)
-            const instructions = await helper.resolveInstructions([output.args.filePath])
+      const helper = await getHelper(input.sessionID)
+      const instructions = await helper.resolveInstructions([output.args.filePath])
 
-            // Read session state for existing tokens (now with :full/:ref suffixes)
-            const idempotencyTokens = sessionStorage.readState<StateWithIdempotencyTokens, Record<string, string>>(input.sessionID, (state) => {
-                if (!state.idempotencyTokens || Object.keys(state.idempotencyTokens).length === 0) return {}
-                return state.idempotencyTokens
-            }) ?? {};
+      // Read session state for existing tokens (now with :full/:ref suffixes)
+      const idempotencyTokens = sessionStorage.readState<StateWithIdempotencyTokens, Record<string, string>>(input.sessionID, (state) => {
+        if (!state.idempotencyTokens || Object.keys(state.idempotencyTokens).length === 0) return {}
+        return state.idempotencyTokens
+      }) ?? {}
 
-            // Count remaining full-content slots — only :full suffix consumes budget
-            const fullCount = Object.keys(idempotencyTokens).filter(k => k.endsWith(":full")).length
-            const remainingSlots = Math.max(0, 5 - fullCount)
+      // Count remaining full-content slots — only :full suffix consumes budget
+      const fullCount = Object.keys(idempotencyTokens).filter(k => k.endsWith(':full')).length
+      const remainingSlots = Math.max(0, 5 - fullCount)
 
-            // Idempotency check handles all three token formats: base key, :full, and :ref
-            const isAlreadyInjected = (path: string) => {
-                const baseKey = `instruction_load:${path}`
-                return Object.hasOwn(idempotencyTokens, baseKey) ||
-                    Object.hasOwn(idempotencyTokens, `${baseKey}:full`) ||
-                    Object.hasOwn(idempotencyTokens, `${baseKey}:ref`)
-            }
+      // Idempotency check handles all three token formats: base key, :full, and :ref
+      const isAlreadyInjected = (path: string) => {
+        const baseKey = `instruction_load:${path}`
+        return Object.hasOwn(idempotencyTokens, baseKey)
+          || Object.hasOwn(idempotencyTokens, `${baseKey}:full`)
+          || Object.hasOwn(idempotencyTokens, `${baseKey}:ref`)
+      }
 
-            // path is always set by resolveInstructions() but typed as optional in ResolvedInstruction
-            const nonSentInstructions = instructions.filter(instruction => {
-                const safePath = instruction.path ?? instruction.description;
-                if (!safePath) return true; // skip if neither path nor description exists
-                return !isAlreadyInjected(safePath);
-            })
+      // path is always set by resolveInstructions() but typed as optional in ResolvedInstruction
+      const nonSentInstructions = instructions.filter((instruction) => {
+        const safePath = instruction.path ?? instruction.description
+        if (!safePath) return true // skip if neither path nor description exists
+        return !isAlreadyInjected(safePath)
+      })
 
-            if (nonSentInstructions.length === 0) {
-                await log(client, "info", `No new instructions to send for session ${input.sessionID}.`, PLUGIN_ID)
-                return
-            }
+      if (nonSentInstructions.length === 0) {
+        await log(client, 'info', `No new instructions to send for session ${input.sessionID}.`, PLUGIN_ID)
+        return
+      }
 
-            // Separate full vs reference based on remaining slots
-            let slotsRemaining = remainingSlots
-            const instructionsWithFlag = nonSentInstructions.map((inst) => {
-                const isReference = slotsRemaining <= 0
-                if (!isReference) slotsRemaining--
-                return { ...inst, isReference }
-            })
+      // Separate full vs reference based on remaining slots
+      let slotsRemaining = remainingSlots
+      const instructionsWithFlag = nonSentInstructions.map((inst) => {
+        const isReference = slotsRemaining <= 0
+        if (!isReference) slotsRemaining--
+        return { ...inst, isReference }
+      })
 
-            const formattedBlocks = instructionsWithFlag.map(inst => {
-                if (inst.isReference) {
-                    const meta = inst.content
-                        ? ` lines="${inst.content.split('\n').length}" chars="${inst.content.length}"`
-                        : ''
-                    return [
-                        `<instruction>`,
-                        `  <description>${inst.description}</description>`,
-                        `  <path>${inst.path}</path>`,
-                        `  <meta${meta}/>`,
-                        `</instruction>`,
-                    ].join("\n")
-                }
-                return [
-                    `<instruction>`,
-                    `  <description>${inst.description}</description>`,
-                    `  <path>${inst.path}</path>`,
-                    `  <content>`,
-                    inst.content ?? '',
-                    `  </content>`,
-                    `</instruction>`,
-                ].join("\n")
-            }).join("\n\n")
-
-            await sendMessage({
-                client,
-                sessionId: input.sessionID,
-                message: `<steering priority="high" reason="relevant files touched" type="instructions">\n${formattedBlocks}\n</steering>`,
-                noReply: true
-            })
-
-            // Record tokens with appropriate suffixes
-            const newTokens = Object.fromEntries(
-                instructionsWithFlag.map(inst => [
-                    `instruction_load:${inst.path}:${inst.isReference ? 'ref' : 'full'}`,
-                    new Date().toISOString()
-                ])
-            )
-
-            sessionStorage.updateState<StateWithIdempotencyTokens>(input.sessionID, (state) => {
-                const existing = state.idempotencyTokens ?? {};
-                return {
-                    ...state,
-                    idempotencyTokens: {
-                        ...existing,
-                        ...newTokens,
-                    },
-                };
-            });
+      const formattedBlocks = instructionsWithFlag.map((inst) => {
+        if (inst.isReference) {
+          const meta = inst.content
+            ? ` lines="${inst.content.split('\n').length}" chars="${inst.content.length}"`
+            : ''
+          return [
+            `<instruction>`,
+            `  <description>${inst.description}</description>`,
+            `  <path>${inst.path}</path>`,
+            `  <meta${meta}/>`,
+            `</instruction>`,
+          ].join('\n')
         }
-    }
+        return [
+          `<instruction>`,
+          `  <description>${inst.description}</description>`,
+          `  <path>${inst.path}</path>`,
+          `  <content>`,
+          inst.content ?? '',
+          `  </content>`,
+          `</instruction>`,
+        ].join('\n')
+      }).join('\n\n')
+
+      await sendMessage({
+        client,
+        sessionId: input.sessionID,
+        message: `<steering priority="high" reason="relevant files touched" type="instructions">\n${formattedBlocks}\n</steering>`,
+        noReply: true,
+      })
+
+      // Record tokens with appropriate suffixes
+      const newTokens = Object.fromEntries(
+        instructionsWithFlag.map(inst => [
+          `instruction_load:${inst.path}:${inst.isReference ? 'ref' : 'full'}`,
+          new Date().toISOString(),
+        ]),
+      )
+
+      sessionStorage.updateState<StateWithIdempotencyTokens>(input.sessionID, (state) => {
+        const existing = state.idempotencyTokens ?? {}
+        return {
+          ...state,
+          idempotencyTokens: {
+            ...existing,
+            ...newTokens,
+          },
+        }
+      })
+    },
+  }
 }

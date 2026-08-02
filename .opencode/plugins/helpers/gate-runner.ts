@@ -44,7 +44,7 @@ export async function runGate(gate: GateConfig, shell: Shell): Promise<CommandRe
     const rawInvocation = shell(template)
     let invocation: ShellPromise
 
-    invocation = typeof rawInvocation.quiet === 'function' ? rawInvocation.quiet() : (rawInvocation as ShellPromise);
+    invocation = typeof rawInvocation.quiet === 'function' ? rawInvocation.quiet() : (rawInvocation as ShellPromise)
 
     if (typeof invocation.nothrow === 'function') {
       invocation = invocation.nothrow()
@@ -96,7 +96,7 @@ export function createDirtyGateBatcher(parameters: {
 
   function cancelTimer(): void {
     if (timer === undefined) {
-      return;
+      return
     }
 
     clearTimeout(timer)

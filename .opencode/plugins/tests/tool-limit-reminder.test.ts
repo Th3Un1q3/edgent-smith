@@ -1,699 +1,382 @@
-import { describe, it, expect, beforeEach, vi } from "vitest"
-import type { PluginInput } from "@opencode-ai/plugin"
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+import type { PluginInput } from '@opencode-ai/plugin'
 
 // Synchronous mock factories — no dynamic imports to avoid circular dependency issues.
-import { defaultCreateClient, makeLoggerMockFactory, makeSessionHelpersMockFactory } from "@tests/helpers/mock-utilities"
-import { makeKvStoreMockFactory, resetMockState } from "@tests/__utils/kv-store.mock"
+import { defaultCreateClient, makeLoggerMockFactory, makeSessionHelpersMockFactory } from '@tests/helpers/mock-utilities'
 
-vi.mock("@plugins/helpers/logger", () => makeLoggerMockFactory())
-vi.mock("@plugins/helpers/kv-store", () => makeKvStoreMockFactory())
-vi.mock("@plugins/helpers/session-helpers", () => makeSessionHelpersMockFactory())
+import type { ClientMock } from '@tests/helpers/mock-utilities'
 
-import { toolLimitReminder } from "@plugins/tool-limit-reminder"
-import { log } from "@plugins/helpers/logger"
-import { sendMessage } from "@plugins/helpers/session-helpers"
+import { makeKvStoreMockFactory, resetMockState } from '@tests/__utils/kv-store.mock'
+
+vi.mock('@plugins/helpers/logger', () => makeLoggerMockFactory())
+vi.mock('@plugins/helpers/kv-store', () => makeKvStoreMockFactory())
+vi.mock('@plugins/helpers/session-helpers', () => makeSessionHelpersMockFactory())
+
+import { toolLimitReminder } from '@plugins/tool-limit-reminder'
+
+import { log } from '@plugins/helpers/logger'
+
+import { sendMessage } from '@plugins/helpers/session-helpers'
+
+import { SessionStorage } from '@plugins/helpers/kv-store'
 
 const logMock = vi.mocked(log)
+
 const sendMessageMock = vi.mocked(sendMessage)
 
+// ── Types ────────────────────────────────────────────────────────
+// Looser than the SDK Hooks type: runtime handlers accept optional fields
+// (e.g. missing sessionID) that the SDK types require.
 
-type HookInput = { sessionID?: string; tool?: string }
-
-interface ToolLimitReminderPlugin {
-  dispose?: () => Promise<void>
-  "tool.execute.before": (input: HookInput, output?: { args: Record<string, unknown> }) => void | Promise<void | undefined>
-  "chat.message": (input: { sessionID?: string; agent?: string; messageID?: string }, output: { message: unknown; parts: { id: string; sessionID: string; messageID: string; type: string; text: string; synthetic?: boolean }[] }) => void | Promise<void | undefined>
+interface ChatPart {
+  id: string
+  sessionID: string
+  messageID: string
+  type: string
+  text: string
+  synthetic?: boolean
 }
 
-describe("toolLimitReminder plugin", () => {
+interface ChatMessageOutput {
+  message: { role: string, content: string }
+  parts: ChatPart[]
+}
 
-  // Init — plugin creation logs the exact init message
-  it("logs the exact init message on plugin creation", async () => {
-    const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin
-    expect(plugin).toBeDefined()
+interface ToolLimitReminderHooks {
+  'tool.execute.before': (input: { sessionID?: string, tool?: string }) => void | Promise<void>
+  'chat.message': (input: { sessionID?: string, agent?: string, messageID?: string }, output: ChatMessageOutput) => void | Promise<void>
+  'event': (input: { event: { type: string, properties?: Record<string, unknown> } }) => Promise<void>
+  'dispose': () => Promise<void>
+}
 
-    expect(logMock).toHaveBeenCalledWith(
-      expect.any(Object),
-      "info",
-      "init",
-      "tool-limit-reminder",
-    )
+// ClientMock's nested `client` type omits `app`, but the runtime object includes
+// it — that nested shape is what the plugin receives as PluginInput.client.
+type TestClient = ClientMock & { client: { app: { agents: ReturnType<typeof vi.fn> } } }
+
+interface PluginFixture {
+  hooks: ToolLimitReminderHooks
+  client: TestClient
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+/** Builds a plugin; the file's only casts live here so test bodies stay cast-free. */
+const makePlugin = async (options: {
+  agent?: string
+  agents?: Array<{ name: string, steps?: number }>
+  agentsMock?: ReturnType<typeof vi.fn>
+  client?: TestClient | ClientMock
+} = {}): Promise<PluginFixture> => {
+  const client = (options.client ?? defaultCreateClient({ agent: options.agent }, undefined, options.agents)) as TestClient
+  if (options.agentsMock) client.client.app.agents = options.agentsMock
+
+  const hooks = (await toolLimitReminder(client as unknown as PluginInput)) as unknown as ToolLimitReminderHooks
+  return { hooks, client }
+}
+
+const makeChatOutput = (parts: ChatPart[]): ChatMessageOutput => ({
+  message: { role: 'user', content: 'prompt' },
+  parts,
+})
+
+const getState = (sessionID: string): Record<string, unknown> =>
+  new SessionStorage().readState(sessionID, s => s as Record<string, unknown>) ?? {}
+
+const BUDGET_AGENTS = [{ name: 'test-agent', steps: 15 }]
+
+const AGENTS = [
+  { agent: 'rug-swe', limit: 20 }, // floor(25 * 0.8)
+  { agent: 'rug-mcp', limit: 8 }, // floor(10 * 0.8)
+  { agent: 'rug-expert', limit: 15 }, // floor(19 * 0.8)
+]
+
+describe('toolLimitReminder', () => {
+  let fixture: PluginFixture
+
+  beforeEach(async () => {
+    resetMockState({})
+    fixture = await makePlugin({ agent: 'rug-swe' })
   })
 
-  // Zero — missing sessionID logs warn and returns without any other side effects
-  it("logs warning when sessionID is absent in input", async () => {
-    const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin
-    const hook = plugin["tool.execute.before"]
-
-    await hook({})
-
-    expect(logMock).toHaveBeenCalledWith(
-      expect.any(Object),
-      "warn",
-      expect.stringContaining("missing sessionID"),
-      "tool-limit-reminder",
-    )
+  it('logs the init message on plugin creation', () => {
+    expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', 'init', 'tool-limit-reminder')
   })
 
-  // One — unlisted agent skips limit check entirely (logs info, no counter increment)
-  it("skips limit check for unlisted agents and logs info", async () => {
-    const plugin = (await toolLimitReminder(defaultCreateClient("build") as unknown as PluginInput)) as ToolLimitReminderPlugin
-    const hook = plugin["tool.execute.before"]
-
-    await hook({ sessionID: "sess-1" })
-
-    expect(logMock).toHaveBeenCalledWith(
-      expect.any(Object),
-      "info",
-      expect.stringContaining("not listed in TOOL_LIMITS"),
-      "tool-limit-reminder",
-    )
+  it('warns and returns when sessionID is missing', async () => {
+    await fixture.hooks['tool.execute.before']({})
+    expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'warn', expect.stringContaining('missing sessionID'), 'tool-limit-reminder')
+    expect(sendMessageMock).not.toHaveBeenCalled()
   })
 
-  // Many — known agents increment counter on first call without steering or error (green path)
-  describe.each([
-    { agent: "rug-swe", limit: 20 },
-    { agent: "rug-mcp", limit: 8 },
-    { agent: "rug-expert", limit: 15 },
-  ])("known agent $agent (limit=$limit)", ({ agent, limit: _limit }) => {
-    let plugin: ToolLimitReminderPlugin | undefined
-
-    beforeEach(async () => {
-      plugin = await toolLimitReminder(defaultCreateClient({ data: { agent } }) as unknown as PluginInput) as ToolLimitReminderPlugin
-    })
-
-    it("increments counter on first call without steering or error", async () => {
-      const hook = (plugin as ToolLimitReminderPlugin)["tool.execute.before"]
-
+  describe('tool.execute.before', () => {
+    it.each([
+      { name: 'the agent is absent from the list', agent: 'build', agents: undefined },
+      { name: 'the agent has no maxSteps', agent: 'unlimited-agent', agents: [{ name: 'unlimited-agent' }] },
+      { name: 'the agent list is empty', agent: 'rug-swe', agents: [] },
+    ])('skips the limit check when $name', async ({ agent, agents }) => {
+      fixture = await makePlugin({ agent, agents })
+      await fixture.hooks['tool.execute.before']({ sessionID: 'skip-sess' })
+      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('not listed in TOOL_LIMITS'), 'tool-limit-reminder')
       expect(sendMessageMock).not.toHaveBeenCalled()
-      await hook({ sessionID: "sess-many" })
-
-      expect(logMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        "warn",
-        expect.stringContaining("reached tool call limit"),
-        "tool-limit-reminder",
-      )
-    })
-  })
-
-  // Boundary — threshold behavior for rug-mcp (limit=8)
-  describe("threshold behavior for rug-mcp", () => {
-
-    it("approaching threshold does not throw (step 6)", async () => {
-      const plugin = (await toolLimitReminder(defaultCreateClient("build", "rug-mcp") as unknown as PluginInput)) as ToolLimitReminderPlugin
-      const hook = (plugin as ToolLimitReminderPlugin)["tool.execute.before"]
-
-      for (let index = 0; index < 5; index++) {
-        await hook({ sessionID: "sess-approach" })
-      }
-
-      // step 6 — currentCount === 5, which equals the threshold of 6
-      await expect(
-        (plugin as ToolLimitReminderPlugin)["tool.execute.before"]({ sessionID: "sess-approach-step6" }),
-      ).resolves.toBeUndefined()
     })
 
-    it("approaching threshold logs a warning for rug-mcp at step 6", async () => {
-      const plugin = (await toolLimitReminder(defaultCreateClient("build", "rug-mcp") as unknown as PluginInput)) as ToolLimitReminderPlugin
-      const hook = (plugin as ToolLimitReminderPlugin)["tool.execute.before"]
-
-      // Call 5 times then once more to reach the boundary
-      for (let index = 0; index < 5; index++) {
-        await hook({ sessionID: "sess-approach-warn" })
-      }
-      await expect(
-        (plugin as ToolLimitReminderPlugin)["tool.execute.before"]({ sessionID: "sess-approach-warn-final" }),
-      ).resolves.toBeUndefined()
-
-      expect(logMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        "warn",
-        expect.stringContaining("reached tool call limit"),
-        "tool-limit-reminder",
-      )
+    it('logs the session agent, count, and threshold for limited agents', async () => {
+      await fixture.hooks['tool.execute.before']({ sessionID: 'info-sess' })
+      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('sessionID: info-sess, agent: rug-swe'), 'tool-limit-reminder')
+      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'warn', expect.stringContaining('reached tool call limit of 20'), 'tool-limit-reminder')
     })
 
-    it("sends steering message (limit=8) when reaching exact threshold", async () => {
-      const plugin = (await toolLimitReminder(defaultCreateClient("build", "rug-mcp") as unknown as PluginInput)) as ToolLimitReminderPlugin
-      const hook = (plugin as ToolLimitReminderPlugin)["tool.execute.before"]
+    describe.each(AGENTS)('known agent $agent (limit $limit)', ({ agent, limit }) => {
+      beforeEach(async () => {
+        fixture = await makePlugin({ agent })
+      })
 
-      for (let index = 0; index < 9; index++) {
-        await expect(
-          hook({ sessionID: "sess-threshold" }),
-        ).resolves.toBeUndefined()
-      }
-
-      expect(sendMessageMock).toHaveBeenCalledTimes(1)
-      expect(sendMessageMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          client: expect.any(Object),
-          sessionId: "sess-threshold",
+      it('sends reminder steering at the exact threshold', async () => {
+        for (let index = 0; index <= limit; index++) {
+          await fixture.hooks['tool.execute.before']({ sessionID: 'sess-boundary' })
+        }
+        expect(sendMessageMock).toHaveBeenCalledTimes(1)
+        expect(sendMessageMock).toHaveBeenCalledWith(expect.objectContaining({
+          sessionId: 'sess-boundary',
           noReply: true,
-          message: expect.stringContaining("tool call limit reached"),
-        }),
-      )
-      expect(logMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        "warn",
-        expect.stringContaining("reached tool call limit"),
-        "tool-limit-reminder",
-      )
+          message: expect.stringContaining('tool call limit reached'),
+        }))
+        expect(logMock).not.toHaveBeenCalledWith(expect.anything(), 'info', expect.stringContaining('flagging session'), 'tool-limit-reminder')
+      })
+
+      it('flags the session for review above the threshold', async () => {
+        for (let index = 0; index <= limit + 1; index++) {
+          await fixture.hooks['tool.execute.before']({ sessionID: 'sess-boundary' })
+        }
+        expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('flagging session'), 'tool-limit-reminder')
+        expect(sendMessageMock).toHaveBeenLastCalledWith(expect.objectContaining({
+          message: expect.stringContaining('tool call limit exceeded'),
+        }))
+        expect(getState('sess-boundary')?.needsReview).toBe(true)
+      })
+
+      it('throws after calls exceed limit plus padding', async () => {
+        // limit + 3 calls resolve; the next call (currentCount = limit + 3)
+        // exceeds limit + PADDING_TILL_ERROR(2) and is blocked.
+        for (let index = 0; index < limit + 3; index++) {
+          await expect(fixture.hooks['tool.execute.before']({ sessionID: 'sess-boundary' })).resolves.toBeUndefined()
+        }
+
+        await expect(fixture.hooks['tool.execute.before']({ sessionID: 'sess-boundary' })).rejects.toThrow('STOP YOUR WORK.')
+        expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'error', expect.stringContaining('tool call limit exceeded'), 'tool-limit-reminder')
+      })
     })
 
-    it("returns without error within padding tolerance (limit=8)", async () => {
-      const plugin = (await toolLimitReminder(defaultCreateClient({ data: { agent: "rug-mcp" } }) as unknown as PluginInput)) as ToolLimitReminderPlugin
-      // Call hook 9 times — currentCount reaches 8 which is limit(8) + PADDING_TILL_ERROR(2) = 10, still within tolerance
-      for (let index = 0; index < 10; index++) {
-        await expect(
-          (plugin as ToolLimitReminderPlugin)["tool.execute.before"]({ sessionID: "sess-padding" }),
-        ).resolves.toBeUndefined()
+    it.each([
+      { maxSteps: 25, expectedLimit: 20 }, // floor(20) — integer result
+      { maxSteps: 13, expectedLimit: 10 }, // floor(10.4) — kills ceil mutants
+    ])('uses floor(maxSteps * 0.8) = $expectedLimit as the dynamic limit', async ({ maxSteps, expectedLimit }) => {
+      fixture = await makePlugin({ agent: 'dyn-agent', agents: [{ name: 'dyn-agent', steps: maxSteps }] })
+      for (let index = 0; index <= expectedLimit; index++) {
+        await fixture.hooks['tool.execute.before']({ sessionID: 'dyn-sess' })
       }
+      expect(sendMessageMock).toHaveBeenCalledTimes(1)
+      expect(sendMessageMock).toHaveBeenCalledWith(expect.objectContaining({
+        sessionId: 'dyn-sess',
+        message: expect.stringContaining('tool call limit reached'),
+      }))
+    })
 
+    it('applies dynamic limits only to agents with maxSteps', async () => {
+      fixture = await makePlugin({
+        agent: 'limited-agent',
+        agents: [
+          { name: 'limited-agent', steps: 30 },
+          { name: 'unlimited-agent' },
+        ],
+      })
+      await fixture.hooks['tool.execute.before']({ sessionID: 'mixed-sess' })
+      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('agent: limited-agent'), 'tool-limit-reminder')
+      expect(logMock).not.toHaveBeenCalledWith(expect.anything(), 'info', expect.stringContaining('not listed in TOOL_LIMITS'), 'tool-limit-reminder')
+    })
+
+    it('fetches the agent list only once and reuses the cached limits', async () => {
+      const hook = fixture.hooks['tool.execute.before']
+
+      await hook({ sessionID: 'cache-1' })
+      await hook({ sessionID: 'cache-2' })
+      await hook({ sessionID: 'cache-3' })
+      expect(vi.mocked(fixture.client.client.app.agents)).toHaveBeenCalledTimes(1)
+    })
+
+    it('logs the fetched agent list with exact prefix and mapped shape', async () => {
+      fixture = await makePlugin({ agent: 'shape-agent', agents: [{ name: 'shape-agent', steps: 12 }] })
+      await fixture.hooks['tool.execute.before']({ sessionID: 'shape-sess' })
       expect(logMock).toHaveBeenCalledWith(
         expect.any(Object),
-        "warn",
-        expect.stringContaining("reached tool call limit"),
-        "tool-limit-reminder",
+        'info',
+        expect.stringContaining('fetched agent list: [{"name":"shape-agent","maxSteps":12}]'),
+        'tool-limit-reminder',
       )
     })
 
-    it("throws DO NOT call any more tools error when exceeding limit+padding", async () => {
-      const plugin = (await toolLimitReminder(defaultCreateClient("build", "rug-mcp") as unknown as PluginInput)) as ToolLimitReminderPlugin
-      const hook = (plugin as ToolLimitReminderPlugin)["tool.execute.before"]
-      // Use a single sessionID so the counter accumulates across all calls.
-      // With rug-mcp (limit=6, PADDING_TILL_ERROR=2), currentCount must reach 9
-      // for the guard at line 78 to trigger: 9 > 6 + 2.
-      const sharedSession = "sess-hard-limit-accum"
+    it('handles an agents() response without a data property', async () => {
+      fixture = await makePlugin({ agentsMock: vi.fn().mockResolvedValue({}) })
 
-      const errorStartFromTurn = 8 + 2 // The 10th call should throw, as currentCount will be 9 at that point.
+      await expect(fixture.hooks['tool.execute.before']({ sessionID: 'no-data-sess' })).resolves.toBeUndefined()
+      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('not listed in TOOL_LIMITS'), 'tool-limit-reminder')
+    })
 
-      for (let index = 0; index <= errorStartFromTurn; index++) {
-        await expect(
-          hook({ sessionID: sharedSession }),
-        ).resolves.toBeUndefined()
-      }
+    it('treats an agents() failure as an empty list', async () => {
+      fixture = await makePlugin({ agentsMock: vi.fn().mockRejectedValue(new Error('agents down')) })
 
-      // The 10th call — currentCount is now 9, which exceeds limit(6) + padding(2) = 8.
-      // Should throw before incrementing the counter further.
-      await expect(
-        hook({ sessionID: sharedSession }),
-      ).rejects.toThrow("STOP YOUR WORK.")
-
-      expect(logMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        "error",
-        expect.stringContaining("tool call limit exceeded"),
-        "tool-limit-reminder",
-      )
+      await expect(fixture.hooks['tool.execute.before']({ sessionID: 'agents-fail-sess' })).resolves.toBeUndefined()
+      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('not listed in TOOL_LIMITS'), 'tool-limit-reminder')
     })
   })
 
-  // Simple — green path for below-threshold calls logs warn and info without extra behavior
-  it("logs warn + info and returns normally for below-threshold calls", async () => {
-    const plugin = (await toolLimitReminder(defaultCreateClient("build", "rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin
-    const hook = (plugin as ToolLimitReminderPlugin)["tool.execute.before"]
-
-    expect(sendMessageMock).not.toHaveBeenCalled()
-
-    await expect(
-      hook({ sessionID: "sess-simple" }),
-    ).resolves.toBeUndefined()
-
-    expect(logMock).toHaveBeenCalledWith(
-      expect.any(Object),
-      "warn",
-      expect.stringContaining("reached tool call limit"),
-      "tool-limit-reminder",
-    )
-    expect(sendMessageMock).not.toHaveBeenCalled()
-  })
-
-  // Dynamic — computes threshold from maxSteps via Math.floor(maxSteps * 0.8)
-  it("computes dynamic threshold from maxSteps using Math.floor(maxSteps * 0.8)", async () => {
-    const maxSteps = 25
-    const expectedThreshold = Math.floor(maxSteps * 0.8) // should be 20
-
-    const mockClient = defaultCreateClient(
-      "test-agent",
-      undefined,
-      [{ name: "test-agent", steps: maxSteps }],
-    ) as unknown as PluginInput
-
-    const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
-
-    expect(plugin["tool.execute.before"]).toBeDefined()
-
-    // Simulate calls up to threshold + 1 (pre-increment check needs one extra call)
-    for (let index = 0; index < expectedThreshold; index++) {
-      await ((plugin as ToolLimitReminderPlugin)["tool.execute.before"]({ sessionID: "test1", tool: "read_file" }))
-    }
-
-    expect(logMock).toHaveBeenCalledWith(
-      expect.any(Object),
-      "warn",
-      expect.stringContaining("reached tool call limit"),
-      "tool-limit-reminder",
-    )
-    // No steering message yet — threshold NOT exceeded
-    expect(sendMessageMock).not.toHaveBeenCalled()
-  })
-
-  // Dynamic — agent without maxSteps in list is unlimited (logs info)
-  it("treats agents without maxSteps as unlimited when present in agent list", async () => {
-    const mockClient = defaultCreateClient(
-      "unlimited-agent",
-      undefined,
-      [{ name: "unlimited-agent" }], // no maxSteps
-    ) as unknown as PluginInput
-
-    const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
-    await plugin["tool.execute.before"]({ sessionID: "sess-unlimited" })
-
-    expect(logMock).toHaveBeenCalledWith(
-      expect.any(Object),
-      "info",
-      expect.stringContaining("not listed in TOOL_LIMITS"),
-      "tool-limit-reminder",
-    )
-  })
-
-  // Dynamic — empty agent list makes all agents unlimited
-  it("treats all agents as unlimited when agent list is empty", async () => {
-    const mockClient = defaultCreateClient(
-      "rug-swe",
-      undefined,
-      [], // empty agent list
-    ) as unknown as PluginInput
-
-    const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
-    expect(plugin["tool.execute.before"]).toBeDefined()
-    await ((plugin as ToolLimitReminderPlugin)["tool.execute.before"]({ sessionID: "test-empty" }))
-
-    expect(logMock).toHaveBeenCalledWith(
-      expect.any(Object),
-      "info",
-      expect.stringContaining("not listed in TOOL_LIMITS"),
-      "tool-limit-reminder",
-    )
-  })
-
-  // Dynamic — mixed agent list applies thresholds only to agents with maxSteps
-  it("applies dynamic thresholds only to agents with maxSteps in mixed list", async () => {
-    const mockClient = defaultCreateClient(
-      "limited-agent",
-      undefined,
-      [
-        { name: "limited-agent", steps: 30 },
-        { name: "unlimited-agent" }, // no steps
-      ],
-    ) as unknown as PluginInput
-
-    const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
-
-    expect(plugin["tool.execute.before"]).toBeDefined()
-
-    // First call should NOT log 'not listed in TOOL_LIMITS' because limited-agent IS in TOOL_LIMITS
-    await ((plugin as ToolLimitReminderPlugin)["tool.execute.before"]({ sessionID: "test2", tool: "read_file" }))
-
-    expect(logMock).toHaveBeenCalledWith(
-      expect.any(Object),
-      "info",
-      expect.stringContaining("limited-agent"),
-      "tool-limit-reminder",
-    )
-    // Should NOT have the 'not listed' message for limited-agent
-    const notListedCalls = logMock.mock.calls.filter((c) =>
-      c[2] && typeof c[2] === "string" && c[2].includes("not listed in TOOL_LIMITS"),
-    )
-    expect(notListedCalls.length).toBe(0)
-  })
-
-  // Dynamic — correctly floors the threshold for non-integer maxSteps * 0.8 results
-  it("correctly floors the threshold for non-integer maxSteps * 0.8 results", async () => {
-    const maxSteps = 13
-    const expectedThreshold = Math.floor(maxSteps * 0.8) // floor(10.4) = 10
-
-    const mockClient = defaultCreateClient(
-      "round-agent",
-      undefined,
-      [{ name: "round-agent", steps: maxSteps }],
-    ) as unknown as PluginInput
-
-    const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
-
-    // Call exactly expectedThreshold times — should log warn but NOT throw or send steering
-    for (let index = 0; index < expectedThreshold; index++) {
-      await ((plugin as ToolLimitReminderPlugin)["tool.execute.before"]({ sessionID: "test3", tool: "read_file" }))
-    }
-
-    // Verify the threshold logged matches our expectation
-    const thresholdCalls = logMock.mock.calls.filter(
-      (c) => c[1] === "warn" && c[2] && typeof c[2] === "string" && c[2].includes("reached tool call limit"),
-    )
-    expect(thresholdCalls.length).toBeGreaterThan(0)
-
-    // No steering message yet
-    expect(sendMessageMock).not.toHaveBeenCalled()
-  })
-
-  // Cache — agent list fetched only once across multiple tool.execute.before calls
-  it("calls app.agents() only once across multiple tool.execute.before invocations", async () => {
-    const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin
-
-    await plugin["tool.execute.before"]({ sessionID: "cache-1" })
-    await plugin["tool.execute.before"]({ sessionID: "cache-2" })
-    await plugin["tool.execute.before"]({ sessionID: "cache-3" })
-
-    // "fetched agent list" log should appear exactly once (from first call; subsequent calls hit cache)
-    const fetchLogCalls = logMock.mock.calls.filter(
-      (c) => c[1] === "info" && typeof c[2] === "string" && c[2].includes("fetched agent list"),
-    )
-    expect(fetchLogCalls.length).toBe(1)
-  })
-
-  // Fetched agent list — exact log prefix and mapped object shape
-  it("logs fetched agent list with exact prefix and correct mapped agent shape", async () => {
-    const testAgentName = "shape-agent"
-    const testMaxSteps = 12
-    const mockClient = defaultCreateClient(
-      testAgentName,
-      undefined,
-      [{ name: testAgentName, steps: testMaxSteps }],
-    ) as unknown as PluginInput
-
-    const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
-    await plugin["tool.execute.before"]({ sessionID: "sess-shape" })
-
-    // Verify the exact log prefix (mutants: StringLiteral → "")
-    expect(logMock).toHaveBeenCalledWith(
-      expect.any(Object),
-      "info",
-      expect.stringContaining("fetched agent list: "),
-      "tool-limit-reminder",
-    )
-    // Verify mapped object includes correct name and maxSteps keys (mutants: ArrowFunction → undefined, ObjectLiteral → {})
-    expect(logMock).toHaveBeenCalledWith(
-      expect.any(Object),
-      "info",
-      expect.stringContaining('"name":"shape-agent"'),
-      "tool-limit-reminder",
-    )
-    expect(logMock).toHaveBeenCalledWith(
-      expect.any(Object),
-      "info",
-      expect.stringContaining('"maxSteps":12'),
-      "tool-limit-reminder",
-    )
-  })
-
-  // Optional chaining — missing data property on agents() response does not throw
-  it("handles missing data property from agents() response without throwing", async () => {
-    const agentsMock = vi.fn().mockResolvedValue({}) // no .data property
-    const sessionGetMock = vi.fn().mockResolvedValue({ data: { agent: "rug-swe" } })
-
-    const customClient = {
-      client: {
-        session: { get: sessionGetMock },
-        app: { agents: agentsMock },
-      },
-      "$": vi.fn(),
-      directory: "/workspace",
-    } as unknown as PluginInput
-
-    const plugin = (await toolLimitReminder(customClient)) as ToolLimitReminderPlugin
-
-    await expect(
-      plugin["tool.execute.before"]({ sessionID: "no-data-sess" }),
-    ).resolves.toBeUndefined()
-
-    // Empty agent list means all agents are "not listed" → unlimited → skip
-    expect(logMock).toHaveBeenCalledWith(
-      expect.any(Object),
-      "info",
-      expect.stringContaining("not listed in TOOL_LIMITS"),
-      "tool-limit-reminder",
-    )
-  })
-
-  // ── Event handler (session.idle) ─────────────────────────────────────────
-
-  describe("event handler", () => {
-    it("returns early for non-session.idle events", async () => {
-      const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
-
-      await plugin.event({ event: { type: "tool.execute.after" } })
-
-      // No idle-related logs should appear
-      const idleCalls = logMock.mock.calls.filter(
-        (c) => c[1] === "info" && typeof c[2] === "string" && c[2].includes("idle — cleared tool call counter"),
-      )
-      expect(idleCalls.length).toBe(0)
+  describe('chat.message', () => {
+    beforeEach(async () => {
+      fixture = await makePlugin({ agents: BUDGET_AGENTS })
     })
 
-    it("returns early when session.idle event has no sessionID", async () => {
-      const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
+    it('prepends the budget tag to the first text part', async () => {
+      const output = makeChatOutput([
+        { id: 'p1', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'first' },
+        { id: 'p2', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'second' },
+      ])
 
-      await plugin.event({ event: { type: "session.idle" } })
-
-      const idleCalls = logMock.mock.calls.filter(
-        (c) => c[1] === "info" && typeof c[2] === "string" && c[2].includes("idle — cleared tool call counter"),
-      )
-      expect(idleCalls.length).toBe(0)
+      await fixture.hooks['chat.message']({ sessionID: 'budget-sess', agent: 'test-agent' }, output)
+      expect(output.parts[0].text).toBe('<task-budget tool-calls="15" />\nfirst')
+      expect(output.parts[1].text).toBe('second')
     })
 
-    it("clears tool call counter when session goes idle", async () => {
-      const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
+    it('creates a synthetic text part when no text part exists', async () => {
+      const output = makeChatOutput([])
 
-      resetMockState({})
-
-      await plugin.event({ event: { type: "session.idle", properties: { sessionID: "idle-session" } } })
-
-      expect(logMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        "info",
-        expect.stringContaining("idle-session idle — cleared tool call counter"),
-        "tool-limit-reminder",
-      )
-    })
-
-    it("does not trigger export when idle session has no needsReview flag", async () => {
-      const mock$ = vi.fn()
-
-      const mockClient = {
-        client: {
-          session: { get: vi.fn() },
-          app: { agents: vi.fn().mockResolvedValue({ data: [] }) },
-        },
-        "$": mock$,
-        directory: "/workspace",
-      } as unknown as PluginInput
-
-      resetMockState({ "idle-no-flag": {} })
-
-      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
-
-      await plugin.event({ event: { type: "session.idle", properties: { sessionID: "idle-no-flag" } } })
-
-      expect(logMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        "info",
-        expect.stringContaining("idle-no-flag idle — cleared tool call counter"),
-        "tool-limit-reminder",
-      )
-
-      // Should not have triggered export
-      expect(mock$).not.toHaveBeenCalled()
-    })
-
-    it("triggers export and clears needsReview flag when idle session has needsReview flag set", async () => {
-      const mockNothrowQuietJson = {
-        nothrow: () => mockNothrowQuietJson,
-        quiet: () => mockNothrowQuietJson,
-        json: vi.fn().mockResolvedValue({ status: "ok" }),
-      }
-
-      const mock$ = vi.fn().mockReturnValue(mockNothrowQuietJson)
-
-      const mockClient = {
-        client: {
-          session: { get: vi.fn() },
-          app: { agents: vi.fn().mockResolvedValue({ data: [] }) },
-        },
-        "$": mock$,
-        directory: "/workspace",
-      } as unknown as PluginInput
-
-      resetMockState({ "idle-flagged": { needsReview: true } })
-
-      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
-
-      await plugin.event({ event: { type: "session.idle", properties: { sessionID: "idle-flagged" } } })
-
-      expect(logMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        "info",
-        expect.stringContaining("idle-flagged idle — cleared tool call counter"),
-        "tool-limit-reminder",
-      )
-
-      expect(logMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        "info",
-        expect.stringContaining("triggering export"),
-        "tool-limit-reminder",
-      )
-
-      expect(logMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        "info",
-        expect.stringContaining("export completed"),
-        "tool-limit-reminder",
-      )
-
-      expect(mock$).toHaveBeenCalledWith(
-        ["just agent_utils/export-opencode-session ", ""],
-        "idle-flagged",
-      )
-    })
-  })
-
-  // ── Budget tag injection ────────────────────────────────────────────
-
-  describe("budget tag injection", () => {
-    it("injects task-budget tag when agent has steps defined", async () => {
-      const agentList = [{ name: "test-agent", steps: 15 }]
-      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
-      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
-      const hook = plugin["chat.message"]
-      const output = { parts: [{ id: "p1", sessionID: "sess-budget", messageID: "m1", type: "text", text: "original prompt" }] }
-
-      await hook({ sessionID: "sess-budget", agent: "test-agent" }, output as never)
-
-      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
-    })
-
-    it("prepends budget tag to first text part without overwriting other parts", async () => {
-      const agentList = [{ name: "test-agent", steps: 15 }]
-      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
-      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
-      const hook = plugin["chat.message"]
-      const output = { parts: [
-        { id: "p1", sessionID: "sess-budget", messageID: "m1", type: "text", text: "first" },
-        { id: "p2", sessionID: "sess-budget", messageID: "m1", type: "text", text: "second" },
-      ] }
-
-      await hook({ sessionID: "sess-budget", agent: "test-agent" }, output as never)
-
-      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\nfirst')
-      expect((output.parts[1] as { text: string }).text).toBe("second")
-    })
-
-    it("creates a synthetic text part when no text part exists", async () => {
-      const agentList = [{ name: "test-agent", steps: 15 }]
-      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
-      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
-      const hook = plugin["chat.message"]
-      const output = { parts: [] }
-
-      await hook({ sessionID: "sess-budget", agent: "test-agent" }, output as never)
-
+      await fixture.hooks['chat.message']({ sessionID: 'budget-sess', agent: 'test-agent' }, output)
       expect(output.parts).toHaveLength(1)
       expect(output.parts[0]).toMatchObject({
-        id: "task-budget",
-        sessionID: "sess-budget",
-        messageID: "",
-        type: "text",
+        id: 'task-budget',
+        sessionID: 'budget-sess',
+        messageID: '',
+        type: 'text',
         text: '<task-budget tool-calls="15" />',
         synthetic: true,
       })
     })
 
-    it("does not inject budget tag when agent has no steps defined", async () => {
-      const agentList = [{ name: "no-steps-agent" }]
-      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
-      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
-      const hook = plugin["chat.message"]
-      const output = { parts: [{ id: "p1", sessionID: "sess-budget", messageID: "m1", type: "text", text: "original prompt" }] }
+    it('does not inject when the agent has no steps', async () => {
+      fixture = await makePlugin({ agents: [{ name: 'no-steps-agent' }] })
 
-      await hook({ sessionID: "sess-budget", agent: "no-steps-agent" }, output as never)
+      const output = makeChatOutput([{ id: 'p1', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'original prompt' }])
 
-      expect((output.parts[0] as { text: string }).text).toBe("original prompt")
+      await fixture.hooks['chat.message']({ sessionID: 'budget-sess', agent: 'no-steps-agent' }, output)
+      expect(output.parts[0].text).toBe('original prompt')
     })
 
-    it("does not inject budget tag when agent is missing", async () => {
-      const plugin = (await toolLimitReminder(defaultCreateClient("build") as unknown as PluginInput)) as ToolLimitReminderPlugin
-      const hook = plugin["chat.message"]
-      const output = { parts: [{ id: "p1", sessionID: "sess-budget", messageID: "m1", type: "text", text: "original prompt" }] }
+    it.each([
+      { name: 'sessionID is missing', input: { agent: 'test-agent' } },
+      { name: 'agent is missing', input: { sessionID: 'budget-sess' } },
+    ])('does not inject when $name', async ({ input }) => {
+      const output = makeChatOutput([{ id: 'p1', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'original prompt' }])
 
-      await hook({ sessionID: "sess-budget" }, output as never)
-
-      expect((output.parts[0] as { text: string }).text).toBe("original prompt")
+      await fixture.hooks['chat.message'](input, output)
+      expect(output.parts[0].text).toBe('original prompt')
     })
 
-    it("skips injection when sessionID is missing", async () => {
-      const agentList = [{ name: "test-agent", steps: 15 }]
-      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
-      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
-      const hook = plugin["chat.message"]
-      const output = { parts: [{ id: "p1", sessionID: "sess-budget", messageID: "m1", type: "text", text: "original prompt" }] }
+    it('injects the tag only once per session', async () => {
+      const input = { sessionID: 'budget-sess', agent: 'test-agent' }
 
-      await hook({ agent: "test-agent" }, output as never)
+      const output = makeChatOutput([{ id: 'p1', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'original prompt' }])
 
-      expect((output.parts[0] as { text: string }).text).toBe("original prompt")
+      await fixture.hooks['chat.message'](input, output)
+      expect(output.parts[0].text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
+      await fixture.hooks['chat.message'](input, output)
+      expect(output.parts[0].text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
     })
 
-    it("does not prepend budget tag to subsequent messages in the same session", async () => {
-      const agentList = [{ name: "test-agent", steps: 15 }]
-      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
-      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin
-      const hook = plugin["chat.message"]
-      const output = { parts: [{ id: "p1", sessionID: "sess-budget-subsequent", messageID: "m1", type: "text", text: "original prompt" }] }
+    it('re-injects the tag after the session goes idle', async () => {
+      const input = { sessionID: 'budget-sess', agent: 'test-agent' }
 
-      await hook({ sessionID: "sess-budget-subsequent", agent: "test-agent" }, output as never)
+      const output = makeChatOutput([{ id: 'p1', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'original prompt' }])
 
-      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
-
-      await hook({ sessionID: "sess-budget-subsequent", agent: "test-agent" }, output as never)
-
-      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
-    })
-
-    it("prepends budget tag again after session goes idle", async () => {
-      const agentList = [{ name: "test-agent", steps: 15 }]
-      const mockClient = defaultCreateClient("build", undefined, agentList) as unknown as PluginInput
-      const plugin = (await toolLimitReminder(mockClient)) as ToolLimitReminderPlugin & { event: (argument: unknown) => Promise<void> }
-      const hook = plugin["chat.message"]
-      const output = { parts: [{ id: "p1", sessionID: "sess-idle-reset", messageID: "m1", type: "text", text: "original prompt" }] }
-
-      await hook({ sessionID: "sess-idle-reset", agent: "test-agent" }, output as never)
-
-      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
-
-      await hook({ sessionID: "sess-idle-reset", agent: "test-agent" }, output as never)
-
-      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
-
-      await plugin.event({ event: { type: "session.idle", properties: { sessionID: "sess-idle-reset" } } })
-
-      await hook({ sessionID: "sess-idle-reset", agent: "test-agent" }, output as never)
-
-      expect((output.parts[0] as { text: string }).text).toBe('<task-budget tool-calls="15" />\n<task-budget tool-calls="15" />\noriginal prompt')
+      await fixture.hooks['chat.message'](input, output)
+      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'budget-sess' } } })
+      await fixture.hooks['chat.message'](input, output)
+      expect(output.parts[0].text).toBe('<task-budget tool-calls="15" />\n<task-budget tool-calls="15" />\noriginal prompt')
     })
   })
 
-  // ── Dispose ──────────────────────────────────────────────────────────────
+  describe('event', () => {
+    it.each([
+      { name: 'non-session.idle events', event: { type: 'tool.execute.after' } },
+      { name: 'session.idle events without a sessionID', event: { type: 'session.idle' } },
+    ])('ignores $name', async ({ event }) => {
+      await fixture.hooks.event({ event })
+      expect(logMock).not.toHaveBeenCalledWith(expect.anything(), 'info', expect.stringContaining('cleared tool call counter'), 'tool-limit-reminder')
+    })
 
-  it("logs dispose message on shutdown", async () => {
-    const plugin = (await toolLimitReminder(defaultCreateClient("rug-swe") as unknown as PluginInput)) as ToolLimitReminderPlugin
+    it('resets the tool call counter when the session goes idle', async () => {
+      fixture = await makePlugin({ agent: 'rug-mcp' }) // limit = floor(10 * 0.8) = 8
 
-    await plugin.dispose?.()
+      const hook = fixture.hooks['tool.execute.before']
+      for (let index = 0; index <= 8; index++) {
+        await hook({ sessionID: 'idle-sess' })
+      }
+      expect(sendMessageMock).toHaveBeenCalledTimes(1) // steering fired at the exact threshold
 
-    expect(logMock).toHaveBeenCalledWith(
-      expect.any(Object),
-      "info",
-      "dispose",
-      "tool-limit-reminder",
-    )
+      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'idle-sess' } } })
+      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('cleared tool call counter'), 'tool-limit-reminder')
+
+      await hook({ sessionID: 'idle-sess' })
+      expect(sendMessageMock).toHaveBeenCalledTimes(1) // counter was cleared — no new steering
+    })
+
+    it('does not export sessions without the review flag', async () => {
+      const client = defaultCreateClient({ agent: 'rug-swe' })
+
+      const shell = vi.fn()
+
+      client.$ = shell
+      fixture = await makePlugin({ client })
+      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'plain-sess' } } })
+      expect(shell).not.toHaveBeenCalled()
+    })
+
+    it('exports flagged sessions and clears the review flag', async () => {
+      resetMockState({ 'flagged-sess': { needsReview: true } })
+
+      const client = defaultCreateClient({ agent: 'rug-swe' })
+
+      const shell = vi.fn().mockReturnValue({
+        nothrow: () => ({ quiet: () => ({ json: vi.fn().mockResolvedValue({ status: 'ok' }) }) }),
+      })
+
+      client.$ = shell
+      fixture = await makePlugin({ client })
+
+      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'flagged-sess' } } })
+
+      expect(shell).toHaveBeenCalledWith(['just agent_utils/export-opencode-session ', ''], 'flagged-sess')
+      await vi.waitFor(() => expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('export completed'), 'tool-limit-reminder'))
+      expect(getState('flagged-sess')?.needsReview).toBeUndefined()
+    })
+
+    it('logs an error when the export fails', async () => {
+      resetMockState({ 'failed-sess': { needsReview: true } })
+
+      const client = defaultCreateClient({ agent: 'rug-swe' })
+
+      const shell = vi.fn().mockReturnValue({
+        nothrow: () => ({ quiet: () => ({ json: vi.fn().mockRejectedValue(new Error('export boom')) }) }),
+      })
+
+      client.$ = shell
+      fixture = await makePlugin({ client })
+      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'failed-sess' } } })
+      await vi.waitFor(() => expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'error', expect.stringContaining('failed to trigger export'), 'tool-limit-reminder'))
+    })
+  })
+
+  it('logs the dispose message on shutdown', async () => {
+    await fixture.hooks.dispose()
+    expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', 'dispose', 'tool-limit-reminder')
   })
 })

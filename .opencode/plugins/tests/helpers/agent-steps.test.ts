@@ -1,155 +1,103 @@
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect, vi } from 'vitest'
 
-import { fetchAgentList, getAgentSteps, getSessionAgent } from "@plugins/helpers/agent-steps"
+import { fetchAgentList, getAgentSteps, getSessionAgent } from '@plugins/helpers/agent-steps'
 
-// ── Helpers ───────────────────────────────────────────────────────
-
-function createMockClient(agentsResult: unknown) {
-    return {
-        app: {
-            agents: vi.fn().mockResolvedValue(agentsResult),
-        },
-    }
-}
-
-function createSessionMockClient(sessionResult: unknown) {
-    return {
-        session: {
-            get: vi.fn().mockResolvedValue(sessionResult),
-        },
-    }
-}
-
-// ── Tests ─────────────────────────────────────────────────────────
-
-describe("getAgentSteps", () => {
-    it("returns steps when agent exists and has steps", async () => {
-        const client = createMockClient({ data: [{ name: "rug-swe", steps: 25 }] })
-
-        const result = await getAgentSteps(client, "rug-swe")
-
-        expect(result).toBe(25)
-    })
-
-    it("returns undefined when agent not found in list", async () => {
-        const client = createMockClient({ data: [{ name: "build", steps: 10 }] })
-
-        const result = await getAgentSteps(client, "rug-swe")
-
-        expect(result).toBeUndefined()
-    })
-
-    it("returns undefined when agent found but has no steps property", async () => {
-        const client = createMockClient({ data: [{ name: "build" }] })
-
-        const result = await getAgentSteps(client, "build")
-
-        expect(result).toBeUndefined()
-    })
-
-    it("returns undefined when API throws error", async () => {
-        const client = {
-            app: {
-                agents: vi.fn().mockRejectedValue(new Error("API error")),
-            },
-        }
-
-        const result = await getAgentSteps(client, "rug-swe")
-
-        expect(result).toBeUndefined()
-    })
-
-    it("returns undefined when data is missing from response", async () => {
-        const client = createMockClient({})
-
-        const result = await getAgentSteps(client, "rug-swe")
-
-        expect(result).toBeUndefined()
-    })
-
-    it("returns undefined when agent has string steps instead of number", async () => {
-        const client = createMockClient({ data: [{ name: "rug-swe", steps: "hello" }] })
-
-        const result = await getAgentSteps(client, "rug-swe")
-
-        expect(result).toBeUndefined()
-    })
-
-    it("returns undefined when agent has null steps", async () => {
-        const client = createMockClient({ data: [{ name: "rug-swe", steps: null }] })
-
-        const result = await getAgentSteps(client, "rug-swe")
-
-        expect(result).toBeUndefined()
-    })
+const createMockClient = (agentsResult: unknown) => ({
+  app: { agents: vi.fn().mockResolvedValue(agentsResult) },
 })
 
-describe("fetchAgentList", () => {
-    it("returns [] when API throws error", async () => {
-        const client = {
-            app: { agents: vi.fn().mockRejectedValue(new Error("API error")) },
-        }
-
-        const result = await fetchAgentList(client)
-
-        expect(result).toEqual([])
-    })
-
-    it("returns [] when data is missing from response", async () => {
-        const client = createMockClient({})
-
-        const result = await fetchAgentList(client)
-
-        expect(result).toEqual([])
-    })
-
-    it("returns data array when response is valid", async () => {
-        const client = createMockClient({ data: [{ name: "rug-swe", steps: 25 }] })
-
-        const result = await fetchAgentList(client)
-
-        expect(result).toEqual([{ name: "rug-swe", steps: 25 }])
-    })
+const createSessionMockClient = (sessionResult: unknown) => ({
+  session: { get: vi.fn().mockResolvedValue(sessionResult) },
 })
 
-describe("getSessionAgent", () => {
-    it("returns agent name when valid string is present", async () => {
-        const client = createSessionMockClient({ data: { agent: "rug-swe" } })
+// ── getAgentSteps ────────────────────────────────────────────────
 
-        const result = await getSessionAgent(client, "session-1")
+describe('getAgentSteps', () => {
+  it('returns steps count when agent exists with numeric steps', async () => {
+    const client = createMockClient({ data: [{ name: 'rug-swe', steps: 25 }] })
 
-        expect(result).toBe("rug-swe")
-    })
+    const result = await getAgentSteps(client, 'rug-swe')
 
-    it("returns 'build' when agent is empty string", async () => {
-        const client = createSessionMockClient({ data: { agent: "" } })
+    expect(result).toBe(25)
+    expect(client.app.agents).toHaveBeenCalledOnce()
+  })
 
-        const result = await getSessionAgent(client, "session-1")
+  it.each([
+    { scenario: 'agent not found in list', data: [{ name: 'build', steps: 10 }] },
+    { scenario: 'agent has no steps property', data: [{ name: 'rug-swe' }] },
+    { scenario: 'steps is a string', data: [{ name: 'rug-swe', steps: 'hello' }] },
+    { scenario: 'steps is null', data: [{ name: 'rug-swe', steps: null }] },
+  ])('returns undefined when $scenario', async ({ data }) => {
+    const client = createMockClient({ data })
 
-        expect(result).toBe("build")
-    })
+    const result = await getAgentSteps(client, 'rug-swe')
 
-    it("returns 'build' when agent field is missing from data", async () => {
-        const client = createSessionMockClient({ data: {} })
+    expect(result).toBeUndefined()
+  })
 
-        const result = await getSessionAgent(client, "session-1")
+  it('returns undefined when API throws', async () => {
+    const client = {
+      app: { agents: vi.fn().mockRejectedValue(new Error('API error')) },
+    }
 
-        expect(result).toBe("build")
-    })
+    const result = await getAgentSteps(client, 'rug-swe')
 
-    it("returns 'build' when session.get returns null", async () => {
-        const client = createSessionMockClient(null)
+    expect(result).toBeUndefined()
+  })
+})
 
-        const result = await getSessionAgent(client, "session-1")
+// ── fetchAgentList ───────────────────────────────────────────────
 
-        expect(result).toBe("build")
-    })
+describe('fetchAgentList', () => {
+  it('returns data array on valid response', async () => {
+    const client = createMockClient({ data: [{ name: 'rug-swe', steps: 25 }] })
 
-    it("returns 'build' when agent is not a string", async () => {
-        const client = createSessionMockClient({ data: { agent: 42 } })
+    const result = await fetchAgentList(client)
 
-        const result = await getSessionAgent(client, "session-1")
+    expect(result).toEqual([{ name: 'rug-swe', steps: 25 }])
+  })
 
-        expect(result).toBe("build")
-    })
+  it('returns [] when API throws', async () => {
+    const client = {
+      app: { agents: vi.fn().mockRejectedValue(new Error('API error')) },
+    }
+
+    const result = await fetchAgentList(client)
+
+    expect(result).toEqual([])
+  })
+
+  it('returns [] when data is missing from response', async () => {
+    const client = createMockClient({})
+
+    const result = await fetchAgentList(client)
+
+    expect(result).toEqual([])
+  })
+})
+
+// ── getSessionAgent ──────────────────────────────────────────────
+
+describe('getSessionAgent', () => {
+  it('returns agent name when valid string is present', async () => {
+    const client = createSessionMockClient({ data: { agent: 'rug-swe' } })
+
+    const result = await getSessionAgent(client, 'session-1')
+
+    expect(result).toBe('rug-swe')
+    expect(client.session.get).toHaveBeenCalledWith({ path: { id: 'session-1' } })
+  })
+
+  it.each([
+    { scenario: 'agent is empty string', data: { data: { agent: '' } } },
+    { scenario: 'agent field missing', data: { data: {} } },
+    { scenario: 'session.get returns null', data: null },
+    { scenario: 'agent is not a string', data: { data: { agent: 42 } } },
+  ])('returns \'build\' when $scenario', async ({ data }) => {
+    const client = createSessionMockClient(data)
+
+    const result = await getSessionAgent(client, 'session-1')
+
+    expect(result).toBe('build')
+  })
 })

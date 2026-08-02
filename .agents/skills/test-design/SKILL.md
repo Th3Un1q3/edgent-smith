@@ -44,7 +44,7 @@ Load only the files relevant to the current task.
 ## High-Quality Test Checklist
 
 - [ ] Test file is scoped to a single module under test (one test per one tested file)
-- [ ] Test file is within 150% of the subject size maximum (e.g., 200 lines of code → 300 lines of test code). Some exceptions allowed in [general-principles.md](./references/general-principles.md) for complex modules, but avoid exceeding this limit.
+- [ ] Test file is within 150% of the source file size maximum (e.g., 200 lines of code → 300 lines of test code). Some exceptions allowed in [general-principles.md](./references/general-principles.md) for complex modules, but avoid exceeding this limit.
 - [ ] Test case names are descriptive and clearly indicate the expected behavior being tested
 - [ ] All setup and teardown logic is centralized in shared hooks (e.g., `beforeEach` for vitest, `@patch` decorators or fixtures for pytest)
 - [ ] Every test case is independent and does not rely on the state or order of other tests

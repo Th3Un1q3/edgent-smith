@@ -1,25 +1,25 @@
-import { Plugin } from "@opencode-ai/plugin"
-import type { OpencodeClient } from "@opencode-ai/sdk"
-import { loadQualityGates } from "./helpers/gate-config"
-import { runGate } from "./helpers/gate-runner"
-import { isGlobMatch } from "./helpers/glob-match"
-import type { CommandResult, Shell } from "./helpers/gate-runner"
-import { SessionStorage } from "./helpers/kv-store"
-import { sendMessage } from "./helpers/session-helpers"
-import { formatGateBatchResults } from "./helpers/gate-formatter"
-import { log } from "./helpers/logger"
-import type { GateConfig, GateResult, GateRunOutcome, GateStateEntry } from "./types/quality-gate"
+import { Plugin } from '@opencode-ai/plugin'
+import type { OpencodeClient } from '@opencode-ai/sdk'
+import { loadQualityGates } from './helpers/gate-config'
+import { runGate } from './helpers/gate-runner'
+import { isGlobMatch } from './helpers/glob-match'
+import type { CommandResult, Shell } from './helpers/gate-runner'
+import { SessionStorage } from './helpers/kv-store'
+import { sendMessage } from './helpers/session-helpers'
+import { formatGateBatchResults } from './helpers/gate-formatter'
+import { log } from './helpers/logger'
+import type { GateConfig, GateResult, GateRunOutcome, GateStateEntry } from './types/quality-gate'
 
 function extractFilePath(input: { args?: { filePath?: string } }, workspaceRoot: string): string | undefined {
-  if (typeof input.args?.filePath !== "string") return undefined
+  if (typeof input.args?.filePath !== 'string') return undefined
   const absPath = input.args.filePath
-  const prefix = workspaceRoot.endsWith("/") ? workspaceRoot : workspaceRoot + "/"
+  const prefix = workspaceRoot.endsWith('/') ? workspaceRoot : workspaceRoot + '/'
   return absPath.startsWith(prefix) ? absPath.slice(prefix.length) : absPath
 }
 
 function findMatchingGates(gates: GateConfig[], filePath: string): GateConfig[] {
-  return gates.filter((gate) =>
-    gate.patterns.some((pattern) => isGlobMatch(pattern, filePath)),
+  return gates.filter(gate =>
+    gate.patterns.some(pattern => isGlobMatch(pattern, filePath)),
   )
 }
 
@@ -31,22 +31,23 @@ async function sendTransitionMessage(
 ): Promise<void> {
   if (outcomes.length === 0) return
   const message = formatGateBatchResults(outcomes, isPreChange)
-  void log(client, "info", `Sending transition message for ${outcomes.length} gate(s)`, "quality-gate-enforcer")
+  void log(client, 'info', `Sending transition message for ${outcomes.length} gate(s)`, 'quality-gate-enforcer')
   if (sessionID) {
     await sendMessage({ client, sessionId: sessionID, message, noReply: true })
-  } else {
-    void log(client, "info", message)
+  }
+  else {
+    void log(client, 'info', message)
   }
 }
 
 export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
   const gatesState: Record<string, GateStateEntry> = {}
 
-  const resolvedDirectory = directory ?? "/workspace"
+  const resolvedDirectory = directory ?? '/workspace'
   const qualityGatesConfig = await loadQualityGates(resolvedDirectory, client)
   const gates = qualityGatesConfig.gates
   const sessionStorage = new SessionStorage()
-  const targetedTools = new Set(["edit", "write"])
+  const targetedTools = new Set(['edit', 'write'])
 
   const readGateStatuses = (
     sessionID: string | undefined,
@@ -57,9 +58,9 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
       result[name] = entry.lastStatus
     }
     if (sessionID) {
-      const state = sessionStorage.readState(sessionID, (s) => s as Record<string, unknown>)
+      const state = sessionStorage.readState(sessionID, s => s as Record<string, unknown>)
       const statuses = state?.qualityGateStatuses as
-        Record<string, { dirty?: boolean; status: GateResult }> | undefined
+        Record<string, { dirty?: boolean, status: GateResult }> | undefined
       if (statuses) {
         for (const [name, entry] of Object.entries(statuses)) {
           if (!Object.hasOwn(result, name)) {
@@ -84,16 +85,18 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
     const execute = async (): Promise<CommandResult> => {
       try {
         const raw = await runGate(gate, $ as unknown as Shell)
-        return raw ?? { exitCode: 1, stdout: "", stderr: "Gate returned no result" }
-      } catch (error: unknown) {
-        return { exitCode: 1, stdout: "", stderr: String(error) }
-      } finally {
+        return raw ?? { exitCode: 1, stdout: '', stderr: 'Gate returned no result' }
+      }
+      catch (error: unknown) {
+        return { exitCode: 1, stdout: '', stderr: String(error) }
+      }
+      finally {
         pendingRuns.delete(gate.name)
       }
     }
 
     const promise: Promise<CommandResult> = debounceMs > 0
-      ? new Promise(resolve => {
+      ? new Promise((resolve) => {
           const timer = debounceTimers.get(gate.name)
           if (timer) clearTimeout(timer)
           debounceTimers.set(gate.name, setTimeout(async () => {
@@ -108,11 +111,11 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
   }
 
   return {
-    "tool.execute.before": async (
+    'tool.execute.before': async (
       input,
       output,
     ) => {
-      if (typeof input.tool !== "string" || !targetedTools.has(input.tool)) return
+      if (typeof input.tool !== 'string' || !targetedTools.has(input.tool)) return
 
       const filePath = extractFilePath(
         { args: output?.args as { filePath?: string } | undefined },
@@ -128,11 +131,11 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
       const outcomes: GateRunOutcome[] = []
 
       for (const gate of matchedGates) {
-        const currentStatus = gateStatuses[gate.name] ?? "unknown"
-        if (currentStatus !== "unknown") continue
+        const currentStatus = gateStatuses[gate.name] ?? 'unknown'
+        if (currentStatus !== 'unknown') continue
 
         const result = await runGatePooled(gate)
-        const newStatus: "pass" | "fail" = result.exitCode === 0 ? "pass" : "fail"
+        const newStatus: 'pass' | 'fail' = result.exitCode === 0 ? 'pass' : 'fail'
 
         if (sessionID) {
           gatesState[gate.name] = {
@@ -141,7 +144,7 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
             lastStdOut: result.stdout,
             affectedSessions: [sessionID],
           }
-          if (newStatus === "pass") {
+          if (newStatus === 'pass') {
             gatesState[gate.name].affectedSessions = []
           }
         }
@@ -156,26 +159,26 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
         await sendTransitionMessage(outcomes, sessionID, client, true)
       }
     },
-    "tool.execute.after": async (input, output) => {
-      if (input.tool === "task") {
+    'tool.execute.after': async (input, output) => {
+      if (input.tool === 'task') {
         const childSessionID = (output.metadata as Record<string, unknown> | undefined)?.sessionId as string | undefined
         if (!childSessionID) return
 
-        const state = sessionStorage.readState(childSessionID, (s) => s as Record<string, unknown>)
+        const state = sessionStorage.readState(childSessionID, s => s as Record<string, unknown>)
         if (!state) return
 
         const gateStatuses = state.qualityGateStatuses as
-          Record<string, { dirty: boolean; status: string }> | undefined
+          Record<string, { dirty: boolean, status: string }> | undefined
         if (!gateStatuses) return
 
         const failingGates = Object.entries(gateStatuses)
-          .filter(([_, info]) => info.status === "fail")
+          .filter(([_, info]) => info.status === 'fail')
           .map(([name]) => name)
 
         if (failingGates.length === 0) return
 
-        const failMessage = `\n\n⚠️ FAILING QUALITY GATES: ${failingGates.join(", ")}`
-        output.output = (output.output || "") + failMessage
+        const failMessage = `\n\n⚠️ FAILING QUALITY GATES: ${failingGates.join(', ')}`
+        output.output = (output.output || '') + failMessage
         return
       }
 
@@ -192,22 +195,24 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
       const outcomes: GateRunOutcome[] = []
 
       for (const gate of matchedGates) {
-        const oldStatus = gateStatuses[gate.name] ?? "unknown"
+        const oldStatus = gateStatuses[gate.name] ?? 'unknown'
 
         const result = await runGatePooled(gate)
 
-        const newStatus: "pass" | "fail" = result.exitCode === 0 ? "pass" : "fail"
+        const newStatus: 'pass' | 'fail' = result.exitCode === 0 ? 'pass' : 'fail'
 
         gatesState[gate.name] = {
           lastStatus: newStatus,
           lastExecutedAt: new Date(),
           lastStdOut: result.stdout,
-          affectedSessions: sessionID ? [...(gatesState[gate.name]?.affectedSessions ?? []), sessionID].filter(
-            (s, index, array) => array.indexOf(s) === index,
-          ) : [],
+          affectedSessions: sessionID
+            ? [...(gatesState[gate.name]?.affectedSessions ?? []), sessionID].filter(
+                (s, index, array) => array.indexOf(s) === index,
+              )
+            : [],
         }
 
-        if (newStatus === "pass") {
+        if (newStatus === 'pass') {
           gatesState[gate.name].affectedSessions = []
         }
 

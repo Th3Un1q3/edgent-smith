@@ -1,6 +1,6 @@
 import type { GateConfig, QualityGatesConfig } from '../types/quality-gate'
 import { log } from './logger'
-import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { OpencodeClient } from '@opencode-ai/sdk'
 
 const DEFAULT_DEBOUNCE_MS = 300
 
@@ -9,7 +9,7 @@ function isString(value: unknown): value is string {
 }
 
 function isArrayOfStrings(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => isString(item))
+  return Array.isArray(value) && value.every(item => isString(item))
 }
 
 function isValidGateConfig(value: unknown): value is GateConfig {
@@ -20,12 +20,12 @@ function isValidGateConfig(value: unknown): value is GateConfig {
   const gate = value as Partial<GateConfig>
 
   return (
-    typeof gate.name === 'string' &&
-    gate.name.length > 0 &&
-    isArrayOfStrings(gate.patterns) &&
-    gate.patterns.length > 0 &&
-    isArrayOfStrings(gate.commands) &&
-    gate.commands.length > 0
+    typeof gate.name === 'string'
+    && gate.name.length > 0
+    && isArrayOfStrings(gate.patterns)
+    && gate.patterns.length > 0
+    && isArrayOfStrings(gate.commands)
+    && gate.commands.length > 0
   )
 }
 
@@ -37,7 +37,7 @@ export async function loadQualityGates(directory: string, client: OpencodeClient
     const config = await file.json() as QualityGatesConfig
 
     if (!Array.isArray(config.gates) || !config.gates.every(isValidGateConfig)) {
-      log(client, "warn", `Invalid quality-gates config at ${directory}/.opencode/quality-gates.json`)
+      log(client, 'warn', `Invalid quality-gates config at ${directory}/.opencode/quality-gates.json`)
       return fallback
     }
 
@@ -45,14 +45,16 @@ export async function loadQualityGates(directory: string, client: OpencodeClient
       gates: config.gates,
       debounceMs: typeof config.debounceMs === 'number' ? config.debounceMs : DEFAULT_DEBOUNCE_MS,
     }
-  } catch (error: unknown) {
+  }
+  catch (error: unknown) {
     const isFileNotFound = error instanceof Error && (error as Error & { code?: string }).code === 'ENOENT'
 
     if (isFileNotFound) {
-      log(client, "warn", `No quality-gates config found at ${directory}/.opencode/quality-gates.json`)
-    } else {
+      log(client, 'warn', `No quality-gates config found at ${directory}/.opencode/quality-gates.json`)
+    }
+    else {
       const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-      log(client, "warn", `Failed to load quality-gates config at ${directory}/.opencode/quality-gates.json: ${message}`)
+      log(client, 'warn', `Failed to load quality-gates config at ${directory}/.opencode/quality-gates.json: ${message}`)
     }
 
     return fallback

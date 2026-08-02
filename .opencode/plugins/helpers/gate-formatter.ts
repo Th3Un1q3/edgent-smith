@@ -18,7 +18,7 @@ export function formatGateFailure(
 export function formatGateBatchResults(outcomes: GateRunOutcome[], isPreChange?: boolean): string {
   if (outcomes.length === 0) return ''
 
-  const passed = outcomes.filter((o) => o.newStatus === 'pass').length
+  const passed = outcomes.filter(o => o.newStatus === 'pass').length
   const failed = outcomes.length - passed
   const isAnyFail = failed > 0
 

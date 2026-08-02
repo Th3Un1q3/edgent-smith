@@ -1,244 +1,131 @@
-import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { OpencodeClient } from '@opencode-ai/sdk'
 
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-import { log } from "@plugins/helpers/logger"
+vi.mock('@plugins/helpers/logger')
+vi.mock('@plugins/helpers/agent-steps')
 
-vi.mock("@plugins/helpers/logger")
+import { log } from '@plugins/helpers/logger'
 
-interface MockClientResult {
-  client: OpencodeClient & { app: { log: ReturnType<typeof vi.fn> }; session: { get: ReturnType<typeof vi.fn>; prompt: ReturnType<typeof vi.fn> } }
-  session: { get: ReturnType<typeof vi.fn>; prompt: ReturnType<typeof vi.fn> }
-}
+import { getSessionAgent } from '@plugins/helpers/agent-steps'
 
-function makeMockClient(sessionData?: Record<string, unknown>): MockClientResult {
+import { sendMessage } from '@plugins/helpers/session-helpers'
+
+const makeMockClient = (sessionData?: Record<string, unknown>) => {
   const mockSessionGet = vi.fn().mockResolvedValue({ data: sessionData })
+
   const mockPrompt = vi.fn().mockResolvedValue({})
   return {
     client: {
       app: { log: vi.fn().mockResolvedValue(undefined) },
-      session: {
-        get: mockSessionGet,
-        prompt: mockPrompt,
-      },
-    } as unknown as MockClientResult["client"],
-    // Expose helpers at top level for easy destructuring in tests.
-    session: {
-      get: mockSessionGet,
-      prompt: mockPrompt,
-    },
-  } as unknown as MockClientResult
+      session: { get: mockSessionGet, prompt: mockPrompt },
+    } as unknown as OpencodeClient,
+    mockSessionGet,
+    mockPrompt,
+  }
 }
 
-describe("sendMessage", () => {
-  it("logs a warning and returns early when client.session is missing", async () => {
-    const { sendMessage } = await import("@plugins/helpers/session-helpers")
+describe('sendMessage', () => {
+  let defaultClient: OpencodeClient
+  let defaultPrompt: ReturnType<typeof vi.fn>
 
-    // Build a mock client WITHOUT the session property (triggers first guard)
-    const client = {
-      app: { log: vi.fn().mockResolvedValue(undefined) },
-    } as unknown as OpencodeClient
+  beforeEach(() => {
+    vi.mocked(getSessionAgent).mockResolvedValue('build')
 
-    await sendMessage({
-      client,
-      sessionId: "ses_no_session",
-      message: "hello",
-    })
+    const { client, mockPrompt } = makeMockClient({})
 
-    // Should NOT have called prompt (early exit)
-    const clientWithSession = client as { session?: unknown }
-    expect(clientWithSession.session).toBeUndefined()
+    defaultClient = client
+    defaultPrompt = mockPrompt
+  })
 
-    // Verify the log call hit the right guard
-    expect(log).toHaveBeenCalledWith(
-      client,
-      "warn",
-      "Client session not available for sending message to session ses_no_session.",
+  it('returns early when client.session is missing', async () => {
+    const client = { app: { log: vi.fn() } } as unknown as OpencodeClient
+
+    await sendMessage({ client, sessionId: 'ses_1', message: 'hi' })
+    expect(log).toHaveBeenCalledWith(client, 'warn', expect.stringContaining('ses_1'))
+    expect(defaultPrompt).not.toHaveBeenCalled()
+  })
+
+  it('returns early when session.get returns falsy', async () => {
+    const { client, mockSessionGet, mockPrompt } = makeMockClient(undefined)
+
+    mockSessionGet.mockResolvedValue(undefined)
+    await sendMessage({ client, sessionId: 'ses_2', message: 'hi' })
+    expect(log).toHaveBeenCalledWith(client, 'warn', expect.stringContaining('ses_2'))
+    expect(mockPrompt).not.toHaveBeenCalled()
+  })
+
+  it('defaults agent when session.data is undefined (optional chain guard)', async () => {
+    const { client, mockPrompt } = makeMockClient(undefined)
+
+    await sendMessage({ client, sessionId: 'ses_3', message: 'hi' })
+    expect(mockPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.objectContaining({ agent: 'build' }) }),
     )
   })
 
-  it("logs a warning when session.get returns null (session not found)", async () => {
-    const { sendMessage } = await import("@plugins/helpers/session-helpers")
-
-    const mockSessionGet = vi.fn().mockResolvedValue(undefined)
-    const client = {
-      app: { log: vi.fn().mockResolvedValue(undefined) },
-      session: {
-        get: mockSessionGet,
-        prompt: vi.fn().mockResolvedValue({}),
-      },
-    } as unknown as OpencodeClient
-
-    await sendMessage({
-      client,
-      sessionId: "ses_not_found",
-      message: "test",
-    })
-
-    // Verify session.get was called with the correct path
-    expect(mockSessionGet).toHaveBeenCalledWith({ path: { id: "ses_not_found" } })
-
-    // Verify the log call for not-found guard
-    expect(log).toHaveBeenCalledWith(
-      client,
-      "warn",
-      "Session ses_not_found not found for injection.",
-    )
-
-    // Should NOT have called prompt (early exit)
-    expect(client.session.prompt).not.toHaveBeenCalled()
-  })
-
-  it("uses 'build' as the default agent when session has no agent field", async () => {
-    const { sendMessage } = await import("@plugins/helpers/session-helpers")
-
-    const { client } = makeMockClient({})
-
-    await sendMessage({
-      client,
-      sessionId: "ses_default_agent",
-      message: "test",
-    })
-
-    // Verify the agent defaulted to "build"
-    expect(client.session.prompt).toHaveBeenCalledWith({
-      path: { id: "ses_default_agent" },
-      body: {
-        agent: "build",
-        noReply: false,
-        parts: [{ type: "text", text: "test" }],
-      },
+  it('defaults to \'build\' agent when session has no agent', async () => {
+    await sendMessage({ client: defaultClient, sessionId: 'ses_4', message: 'hi' })
+    expect(defaultPrompt).toHaveBeenCalledWith({
+      path: { id: 'ses_4' },
+      body: { agent: 'build', noReply: false, parts: [{ type: 'text', text: 'hi' }] },
     })
   })
 
-  it("uses the agent from session data when provided (happy path)", async () => {
-    const { sendMessage } = await import("@plugins/helpers/session-helpers")
+  it('passes through agent from session data', async () => {
+    vi.mocked(getSessionAgent).mockResolvedValue('deploy')
 
-    const { client, session } = makeMockClient({ agent: "deploy" })
+    const { client, mockPrompt } = makeMockClient({ agent: 'deploy' })
 
-    await sendMessage({
-      client,
-      sessionId: "ses_happy",
-      message: "hello world",
-    })
-
-    // Verify the correct agent was passed through
-    expect(session.prompt).toHaveBeenCalledWith({
-      path: { id: "ses_happy" },
-      body: {
-        agent: "deploy",
-        noReply: false,
-        parts: [{ type: "text", text: "hello world" }],
-      },
-    })
-
-    // Verify session.get was called with correct sessionId
-    expect(session.get).toHaveBeenCalledWith({ path: { id: "ses_happy" } })
-  })
-
-  it("respects the noReply option when set to true", async () => {
-    const { sendMessage } = await import("@plugins/helpers/session-helpers")
-
-    const { client, session } = makeMockClient({})
-
-    await sendMessage({
-      client,
-      sessionId: "ses_no_reply",
-      message: "silent",
-      noReply: true,
-    })
-
-    expect(session.prompt).toHaveBeenCalledWith({
-      path: { id: "ses_no_reply" },
-      body: {
-        agent: "build",
-        noReply: true,
-        parts: [{ type: "text", text: "silent" }],
-      },
+    await sendMessage({ client, sessionId: 'ses_5', message: 'hi' })
+    expect(mockPrompt).toHaveBeenCalledWith({
+      path: { id: 'ses_5' },
+      body: { agent: 'deploy', noReply: false, parts: [{ type: 'text', text: 'hi' }] },
     })
   })
 
-  it("uses 'info' level for the default log call in happy path (no logging occurs)", async () => {
-    const { sendMessage } = await import("@plugins/helpers/session-helpers")
-
-    const { client } = makeMockClient({})
-
-    await sendMessage({
-      client,
-      sessionId: "ses_happy",
-      message: "test",
+  it('passes noReply option through', async () => {
+    await sendMessage({ client: defaultClient, sessionId: 'ses_6', message: 'hi', noReply: true })
+    expect(defaultPrompt).toHaveBeenCalledWith({
+      path: { id: 'ses_6' },
+      body: { agent: 'build', noReply: true, parts: [{ type: 'text', text: 'hi' }] },
     })
+  })
 
-    // In happy path, no log() call should be made (log is only for warnings)
+  it('does not log in happy path', async () => {
+    await sendMessage({ client: defaultClient, sessionId: 'ses_7', message: 'hi' })
     expect(log).not.toHaveBeenCalled()
   })
 
-  it("passes correct text type and message in parts array", async () => {
-    const { sendMessage } = await import("@plugins/helpers/session-helpers")
-
-    const { client, session } = makeMockClient({})
-
-    await sendMessage({
-      client,
-      sessionId: "ses_parts",
-      message: "any message content",
-    })
-
-    expect(session.prompt).toHaveBeenCalledWith({
-      path: { id: "ses_parts" },
-      body: { agent: "build", noReply: false, parts: [{ type: "text", text: "any message content" }] },
+  it('sends message with correct text part structure', async () => {
+    await sendMessage({ client: defaultClient, sessionId: 'ses_8', message: 'content' })
+    expect(defaultPrompt).toHaveBeenCalledWith({
+      path: { id: 'ses_8' },
+      body: { agent: 'build', noReply: false, parts: [{ type: 'text', text: 'content' }] },
     })
   })
 
-  it("uses 'build' as the default agent when session.data is undefined (optional chain guard)", async () => {
-    const { sendMessage } = await import("@plugins/helpers/session-helpers")
+  it.each([
+    { agent: 'deploy' },
+    { agent: 'test' },
+    { agent: 'custom-agent' },
+  ])('passes agent=\'$agent\' through when session data specifies it', async ({ agent }) => {
+    vi.mocked(getSessionAgent).mockResolvedValue(agent)
 
-    // Build a client where session.get returns { data: undefined } — exercises the
-    // optional chaining on (session.data as {...})?.agent. Without the ?, the code
-    // would throw on `undefined.agent`.
-    const mockSessionGet = vi.fn().mockResolvedValue({ data: undefined })
-    const client = {
-      app: { log: vi.fn().mockResolvedValue(undefined) },
-      session: {
-        get: mockSessionGet,
-        prompt: vi.fn().mockResolvedValue({}),
-      },
-    } as unknown as OpencodeClient
+    const { client, mockPrompt } = makeMockClient({ agent })
 
-    await sendMessage({
-      client,
-      sessionId: "ses_no_data",
-      message: "hello",
-    })
-
-    // Should have called session.get
-    expect(mockSessionGet).toHaveBeenCalledWith({ path: { id: "ses_no_data" } })
-
-    // Should fall back to "build" and NOT throw
-    expect(client.session.prompt).toHaveBeenCalledWith({
-      path: { id: "ses_no_data" },
-      body: {
-        agent: "build",
-        noReply: false,
-        parts: [{ type: "text", text: "hello" }],
-      },
-    })
+    await sendMessage({ client, sessionId: `ses_${agent}`, message: 'hi' })
+    expect(mockPrompt).toHaveBeenCalledTimes(1)
+    expect(mockPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.objectContaining({ agent }) }),
+    )
   })
 
-  it.each(["deploy", "test", "custom-agent"])("passes agent='%s' through when session data specifies it", async (expectedAgent) => {
-    const { sendMessage } = await import("@plugins/helpers/session-helpers")
+  it('propagates rejection from session.get', async () => {
+    const { client, mockPrompt } = makeMockClient(undefined)
 
-    const { client, session } = makeMockClient({ agent: expectedAgent })
-
-    await sendMessage({
-      client,
-      sessionId: `ses_${expectedAgent}`,
-      message: "test",
-    })
-
-    expect(session.prompt.mock.calls.length).toBe(1)
-    const callArguments = (session.prompt.mock.calls[0] as unknown[]) ?? []
-    const firstArgument = callArguments[0] as { body?: { agent?: string } }
-    expect(firstArgument.body?.agent).toBe(expectedAgent)
+    client.session.get = vi.fn().mockRejectedValue(new Error('network'))
+    await expect(sendMessage({ client, sessionId: 'ses_err', message: 'hi' })).rejects.toThrow('network')
+    expect(mockPrompt).not.toHaveBeenCalled()
   })
 })

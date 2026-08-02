@@ -1,33 +1,33 @@
-import { vi } from "vitest"
+import { vi } from 'vitest'
 
 // ── Type definitions for client mock ────────────────────────────────────────
 
 export interface ClientMock {
-  session: { get(path: unknown): Promise<{ data?: Record<string, unknown> }>; todo?(path: { id: string }): Promise<{ data?: Array<{ content: unknown; status: unknown }> }> };
-  client: { session: { get(path: unknown): Promise<{ data?: Record<string, unknown> }> } };
+  session: { get(path: unknown): Promise<{ data?: Record<string, unknown> }>, todo?(path: { id: string }): Promise<{ data?: Array<{ content: unknown, status: unknown }> }> }
+  client: { session: { get(path: unknown): Promise<{ data?: Record<string, unknown> }> } }
   project: (...arguments_: unknown[]) => unknown
   directory: string
   worktree: string
   experimental_workspace: { register: ReturnType<typeof vi.fn> }
   serverUrl: URL
-  app: { log?: ReturnType<typeof vi.fn>; agents(): Promise<{ data: Array<{ name: string; steps?: number }> }> }
+  app: { log?: ReturnType<typeof vi.fn>, agents(): Promise<{ data: Array<{ name: string, steps?: number }> }> }
   $: ReturnType<typeof vi.fn>
 }
 
 /** Default agents for plugin tests when no override is provided. */
-const DEFAULT_AGENTS: Array<{ name: string; steps?: number }> = [
-  { name: "rug-swe", steps: 25 },    // floor(25*0.8) = 20
-  { name: "rug-mcp", steps: 10 },    // floor(10*0.8) = 8
-  { name: "rug-expert", steps: 19 }, // floor(19*0.8) = 15
+const DEFAULT_AGENTS: Array<{ name: string, steps?: number }> = [
+  { name: 'rug-swe', steps: 25 }, // floor(25*0.8) = 20
+  { name: 'rug-mcp', steps: 10 }, // floor(10*0.8) = 8
+  { name: 'rug-expert', steps: 19 }, // floor(19*0.8) = 15
 ]
 
 /** Default client factory for tests that need a minimal session.get mock. */
 export function defaultCreateClient(
-  options?: string | { agent?: string; data?: Record<string, unknown> },
+  options?: string | { agent?: string, data?: Record<string, unknown> },
   agentOverride?: string,
-  agentListOverride?: Array<{ name: string; steps?: number }>,
+  agentListOverride?: Array<{ name: string, steps?: number }>,
 ) {
-  const resolved = typeof options === "string" ? { agent: options } : options ?? {}
+  const resolved = typeof options === 'string' ? { agent: options } : options ?? {}
   return {
     // Top-level .session.get for tests that pass defaultCreateClient() directly and destructure { client } from PluginInput.
     session: {
@@ -41,12 +41,12 @@ export function defaultCreateClient(
       app: { agents: vi.fn().mockResolvedValue({ data: agentListOverride ?? DEFAULT_AGENTS }) },
     },
     project: vi.fn(),
-    directory: "/workspace",
-    worktree: "/workspace/.git",
+    directory: '/workspace',
+    worktree: '/workspace/.git',
     experimental_workspace: { register: vi.fn() },
-    serverUrl: new URL("http://localhost"),
+    serverUrl: new URL('http://localhost'),
     app: { agents: vi.fn().mockResolvedValue({ data: agentListOverride ?? DEFAULT_AGENTS }) },
-    "$": vi.fn(),
+    $: vi.fn(),
   } as unknown as ClientMock
 }
 
@@ -69,24 +69,25 @@ export function makeMockIndexer(
   bodyMap: Record<string, string> = {},
 ) {
   return {
-    forFiles: async () => entries.map((entry) => ({ ...entry })),
-    loadBody: async (path: string) => bodyMap[path] ?? "",
+    forFiles: async () => entries.map(entry => ({ ...entry })),
+    loadBody: async (path: string) => bodyMap[path] ?? '',
   } as const
 }
 
 /** Default options used by createIndex fixture helper. */
 const DEFAULT_CREATE_INDEX_OPTS = {
-  type: "copilot" as const,
-  instructionsGlob: ".opencode/plugins/tests/fixtures/copilot-instructions/*.instructions.md",
-  currentWorkingDirectory: "/workspace",
+  type: 'copilot' as const,
+  instructionsGlob: '.opencode/plugins/tests/fixtures/copilot-instructions/*.instructions.md',
+  currentWorkingDirectory: '/workspace',
 }
 
 /** Creates a real indexer fixture for tests that need actual file-based behavior. */
 export async function createIndex(options?: Partial<typeof DEFAULT_CREATE_INDEX_OPTS>) {
   try {
-    const m = await import("@plugins/helpers/instruction-indexer")
+    const m = await import('@plugins/helpers/instruction-indexer')
     return m.createIndex({ ...DEFAULT_CREATE_INDEX_OPTS, ...options } as Parameters<typeof m.createIndex>[0])
-  } catch (error) {
+  }
+  catch (error) {
     throw new Error(`Failed to load instruction indexer: ${error}`)
   }
 }

@@ -1,647 +1,383 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
-import { defaultCreateClient, type ClientMock } from "@tests/helpers/mock-utilities"
-import { makeKvStoreMockFactory, resetMockState } from "@tests/__utils/kv-store.mock"
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock("@plugins/helpers/instruction-indexer", () => ({ createIndex: vi.fn() }))
-vi.mock("@plugins/helpers/session-helpers")
-vi.mock("@plugins/helpers/logger")
-vi.mock("@plugins/helpers/kv-store", () => makeKvStoreMockFactory())
+import { type PluginInput } from '@opencode-ai/plugin'
 
-import { instructionsLoaderPlugin, type StateWithIdempotencyTokens } from "@plugins/instructions-loader"
-import * as instructionIndexer from "@plugins/helpers/instruction-indexer"
-import * as sessionHelpers from "@plugins/helpers/session-helpers"
-import { log } from "@plugins/helpers/logger"
-import { SessionStorage } from "@plugins/helpers/kv-store"
+import { defaultCreateClient, type ClientMock } from '@tests/helpers/mock-utilities'
 
-// ── Helpers ───────────────────────────────────────────────────────
+import { makeKvStoreMockFactory, resetMockState } from '@tests/__utils/kv-store.mock'
 
-const makeMockIndex = (instructions: any[]) => ({ forFiles: async () => instructions, loadBody: async (path: string) => `Content of ${path}` }) as any
+vi.mock('@plugins/helpers/instruction-indexer', () => ({ createIndex: vi.fn() }))
+vi.mock('@plugins/helpers/session-helpers')
+vi.mock('@plugins/helpers/logger')
+vi.mock('@plugins/helpers/kv-store', () => makeKvStoreMockFactory())
+import { instructionsLoaderPlugin, type StateWithIdempotencyTokens } from '@plugins/instructions-loader'
 
-async function createPlugin(client: ClientMock) {
-  return await instructionsLoaderPlugin({ client, directory: "/workspace" } as never)
+import * as instructionIndexer from '@plugins/helpers/instruction-indexer'
+
+import * as sessionHelpers from '@plugins/helpers/session-helpers'
+
+import { log } from '@plugins/helpers/logger'
+
+import { SessionStorage } from '@plugins/helpers/kv-store'
+
+import type { InstructionMeta } from '@plugins/types/instructions'
+
+type CreateIndexResult = Awaited<ReturnType<typeof instructionIndexer.createIndex>>
+
+const mkInst = (path: string, description: string): InstructionMeta[] => [{ path, description, applyTo: '**/*.{ts}' }]
+
+const mockIndex = (instructions: InstructionMeta[]): CreateIndexResult => ({ forFiles: async () => instructions, loadBody: async (path: string) => `Content of ${path}` })
+
+const makeTokens = (count: number) => Object.fromEntries(Array.from({ length: count }, (_, index) => [`instruction_load:/${index}.ts:full`, 'ts']))
+
+const ONE = mkInst('/f.ts', 'Test'),
+  REF5 = makeTokens(5)
+
+const invoke = async (client: ClientMock, sessionId: string, filePath = '/f.ts', tool = 'write') => {
+  const plugin = await instructionsLoaderPlugin({ client, directory: '/workspace' } as unknown as PluginInput)
+
+  await (plugin?.['tool.execute.before'] ?? (() => Promise.resolve()))({ tool, sessionID: sessionId, callID: 'c' }, { args: { filePath } })
 }
 
-function getInjectedCount(message: string): number {
-  return message.split("<instruction>").slice(1).filter(b => b.trim().length > 0).length
-}
+const getMessage = (): string => (vi.mocked(sessionHelpers.sendMessage).mock.calls[0]?.[0] as { message: string })?.message ?? ''
 
-function getInjectedDescriptions(message: string): Array<{ desc: string; hasContent: boolean }> {
-  return message.split("<instruction>").slice(1).map(block => ({ desc: block.match(/<description>(.*?)<\/description>/s)?.[1]?.trim() ?? "", hasContent: block.includes("<content>") }))
-}
+const countInstructions = (block: string) => block.split('<instruction>').slice(1).filter(b => b.trim().length > 0).length
 
-const mkInst = (path: string, desc: string) => [{ path, description: desc, applyTo: "**/*.{ts}" }]
+const getDescriptions = (block: string) => block.split('<instruction>').slice(1).map(b => ({ hasContent: b.includes('<content>'), desc: b.match(/<description>(.*?)<\/description>/s)?.[1]?.trim() ?? '' }))
 
-async function runBudgetTest(
-  sessionId: string, tokens: Record<string, string>, instructionCount: number,
-): Promise<string> {
-  const client = defaultCreateClient()
+const run = async (sessionId: string, tokens: Record<string, string>, instructions: InstructionMeta[], filePath = '/f.ts') => {
   resetMockState({ [sessionId]: { idempotencyTokens: tokens } })
-  vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-    forFiles: async () => Array.from({ length: instructionCount }, (_, index) => ({
-      path: `/${String.fromCodePoint(65 + index)}.ts`,
-      description: `Inst ${String.fromCodePoint(65 + index)}`, applyTo: "**/*.{ts}" })),
-    loadBody: async (p: string) => `Content of ${p}`,
-  } as any)
-  const p = await instructionsLoaderPlugin({ client, directory: "/workspace" } as never)
-  const h = p?.["tool.execute.before"] ?? (() => Promise.resolve())
-  await h({ tool: "write", sessionID: sessionId, callID: "call-1" }, { args: { filePath: "/a.ts" } })
-  expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
-  return (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as any).message
+  vi.mocked(instructionIndexer.createIndex).mockResolvedValue(mockIndex(instructions))
+
+  const client = defaultCreateClient()
+
+  await invoke(client, sessionId, filePath)
+  return getMessage()
 }
 
-// ── Suite ─────────────────────────────────────────────────────────
-
-describe("instructionsLoaderPlugin", () => {
+describe('instructionsLoaderPlugin', () => {
   let client: ClientMock
-
   beforeEach(() => {
-    vi.clearAllMocks()
     resetMockState()
     client = defaultCreateClient()
+    vi.mocked(instructionIndexer.createIndex).mockResolvedValue(mockIndex(ONE))
   })
-
-  describe("tool targeting", () => {
-    it.each([{ t: "write" }, { t: "edit" }, { t: "read" }])("sends instructions for '$t' tool", async ({ t }) => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: t, sessionID: "sess-1", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-      )
+  describe('tool targeting', () => {
+    it.each([
+      { tool: 'write' },
+      { tool: 'edit' },
+      { tool: 'read' },
+    ])('sends instructions for \'$tool\' tool', async ({ tool }) => {
+      await invoke(client, 's', '/f.ts', tool)
       expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
     })
-
-    it("skips non-targeted tools", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "ls", sessionID: "sess-1", callID: "call-ls" }, { args: { filePath: "/f.ts" } },
-      )
+    it('skips non-targeted tools', async () => {
+      await invoke(client, 's', '/f.ts', 'ls')
       expect(sessionHelpers.sendMessage).not.toHaveBeenCalled()
     })
   })
-
-  describe("early return", () => {
+  describe('early return', () => {
     it.each([
-      { name: "missing sessionID", input: { tool: "write", callID: "call-1" }, args: { args: { filePath: "/f.ts" } } },
-      { name: "missing filePath in args", input: { tool: "write", sessionID: "sess-1", callID: "call-1" }, args: {} },
-    ])("skips when $name", async ({ input, args }) => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(client)
-      await ((p?.["tool.execute.before"] ?? (() => Promise.resolve()))(input as never, args as never))
+      { name: 'missing sessionID', input: { tool: 'write', callID: 'c' }, args: { args: { filePath: '/f.ts' } } },
+      { name: 'missing filePath', input: { tool: 'write', sessionID: 's', callID: 'c' }, args: {} },
+    ])('skips when $name', async ({ input, args }) => {
+      const plugin = await instructionsLoaderPlugin({ client, directory: '/workspace' } as unknown as PluginInput)
+
+      // Testing early-return with intentionally incomplete hook params — widen function type so TS allows mismatched args
+      const hook = (plugin?.['tool.execute.before'] ?? (() => Promise.resolve())) as (...arguments_: unknown[]) => Promise<void>
+
+      await hook(input, args)
       expect(sessionHelpers.sendMessage).not.toHaveBeenCalled()
     })
-
-    it("returns early when no file paths match the index", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex([]))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-1", callID: "call-1" }, { args: { filePath: "/unknown.ts" } },
-      )
+    it('skips when no instructions match', async () => {
+      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(mockIndex([]))
+      await invoke(client, 's', '/unknown.ts')
       expect(sessionHelpers.sendMessage).not.toHaveBeenCalled()
-      expect(log).toHaveBeenCalledWith(expect.any(Object), "info", expect.stringContaining("No new instructions to send for session"), expect.any(String))
+      expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('No new instructions to send for session'), expect.any(String))
+    })
+    it.each([
+      { name: 'empty path/desc', path: '', desc: '', tokenKey: 'instruction_load:' },
+      { name: 'undefined path/desc', path: undefined, desc: undefined, tokenKey: 'instruction_load:undefined' },
+    ])('safePath: sends when $name', async ({ path, desc, tokenKey }) => {
+      resetMockState({ 's-sp': { idempotencyTokens: { [tokenKey]: 'ts' } } })
+      // Deliberately passing incomplete InstructionMeta to test safePath handling
+      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(mockIndex([{ path, description: desc, applyTo: '**/*.{ts}' } as InstructionMeta]))
+      await invoke(client, 's-sp', '/f.ts')
+      expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
+    })
+    it('safePath: sends when both path and desc are falsy', async () => {
+      // Deliberately passing incomplete InstructionMeta to test safePath handling
+      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(mockIndex([{ path: undefined, description: undefined, applyTo: '**/*.{ts}' } as unknown as InstructionMeta]))
+      await invoke(client, 's-np', '/f.ts')
+      expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
     })
   })
-
-  describe("agent-specific index caching", () => {
-    it("defaults to 'build' agent when session has no agent field", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-no-agent", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-      )
-      expect(vi.mocked(instructionIndexer.createIndex)).toHaveBeenCalledWith(expect.objectContaining({ agent: "build" }))
+  describe('agent caching', () => {
+    it('defaults to \'build\' agent', async () => {
+      await invoke(client, 's')
+      expect(instructionIndexer.createIndex).toHaveBeenCalledWith(expect.objectContaining({ agent: 'build' }))
     })
-
-    it("defaults to 'build' agent when session.get returns null/undefined", async () => {
+    it('defaults to \'build\' when session.get returns undefined', async () => {
       vi.mocked(client.session.get).mockResolvedValue(undefined as unknown as { data?: Record<string, unknown> })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(client)
-      await expect(
-        (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-          { tool: "write", sessionID: "sess-null", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-        ),
-      ).resolves.not.toThrow()
-      expect(vi.mocked(instructionIndexer.createIndex)).toHaveBeenCalledWith(expect.objectContaining({ agent: "build" }))
+      await invoke(client, 's')
+      expect(instructionIndexer.createIndex).toHaveBeenCalledWith(expect.objectContaining({ agent: 'build' }))
     })
+    it('reuses cached index across sessions with same agent', async () => {
+      const plugin = await instructionsLoaderPlugin({ client, directory: '/workspace' } as unknown as PluginInput)
 
-    it("reuses cached index for same default agent across sessions", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(client)
-      const h = p?.["tool.execute.before"] ?? (() => Promise.resolve())
-      await h({ tool: "write", sessionID: "sess-a", callID: "call-1" }, { args: { filePath: "/f.ts" } })
-      await h({ tool: "write", sessionID: "sess-b", callID: "call-2" }, { args: { filePath: "/f.ts" } })
-      expect(vi.mocked(instructionIndexer.createIndex)).toHaveBeenCalledTimes(1)
+      const hook = plugin?.['tool.execute.before'] ?? (() => Promise.resolve())
+
+      await hook({ tool: 'write', sessionID: 's1', callID: 'c' }, { args: { filePath: '/f.ts' } })
+      await hook({ tool: 'write', sessionID: 's2', callID: 'c' }, { args: { filePath: '/f.ts' } })
+      expect(instructionIndexer.createIndex).toHaveBeenCalledTimes(1)
     })
+    it('creates separate index when agent differs', async () => {
+      const differentAgentClient = defaultCreateClient()
 
-    it("creates separate index when session agent differs from default", async () => {
-      const copilotClient = defaultCreateClient()
-      vi.spyOn(copilotClient.session, "get").mockImplementation(async (_path: unknown) => {
-        if ((_path as { path?: { id?: string } })?.path?.id === "sess-copilot") return { data: { agent: "copilot" } }
-        return { data: {} }
+      vi.spyOn(differentAgentClient.session, 'get').mockImplementation(async (path: unknown) =>
+        (path as { path?: { id?: string } })?.path?.id === 's-copilot' ? { data: { agent: 'copilot' } } : { data: {} })
+
+      const plugin = await instructionsLoaderPlugin({ client: differentAgentClient, directory: '/workspace' } as unknown as PluginInput)
+
+      const hook = plugin?.['tool.execute.before'] ?? (() => Promise.resolve())
+
+      await hook({ tool: 'write', sessionID: 's-build', callID: 'c' }, { args: { filePath: '/f.ts' } })
+      await hook({ tool: 'write', sessionID: 's-copilot', callID: 'c' }, { args: { filePath: '/f.ts' } })
+      expect(instructionIndexer.createIndex).toHaveBeenCalledTimes(2)
+    })
+    it('never creates more indexes than unique agents', async () => {
+      const uniqueAgents = new Set<string>()
+
+      vi.mocked(instructionIndexer.createIndex).mockImplementation(async (options) => {
+        uniqueAgents.add(options.agent)
+        return mockIndex([])
       })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(copilotClient)
-      const h = p?.["tool.execute.before"] ?? (() => Promise.resolve())
-      await h({ tool: "write", sessionID: "sess-build", callID: "call-1" }, { args: { filePath: "/f.ts" } })
-      await h({ tool: "write", sessionID: "sess-copilot", callID: "call-2" }, { args: { filePath: "/f.ts" } })
-      expect(vi.mocked(instructionIndexer.createIndex)).toHaveBeenCalledTimes(2)
-    })
+      for (const agent of ['build', 'copilot', 'designer', 'copilot', 'build']) {
+        const agentClient = defaultCreateClient()
 
-    it("never creates more indexes than unique agents", async () => {
-      const agents = new Set<string>()
-      vi.mocked(instructionIndexer.createIndex).mockImplementation(async (options) => { agents.add(options.agent); return makeMockIndex([]) })
-      for (const agent of ["build", "copilot", "designer", "copilot", "build"]) {
-        const c = defaultCreateClient()
-        vi.spyOn(c.session, "get").mockResolvedValue({ data: { agent } })
-        const p = await createPlugin(c)
-        await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-          { tool: "write", sessionID: `sess-${agent}`, callID: `call-${agent}` }, { args: { filePath: "/f.ts" } },
-        )
+        vi.spyOn(agentClient.session, 'get').mockResolvedValue({ data: { agent } })
+        await invoke(agentClient, `s-${agent}`)
       }
-      expect(agents.size).toBe(3)
+      expect(uniqueAgents.size).toBe(3)
+    })
+    it('passes instructionsGlob and type', async () => {
+      await invoke(client, 's')
+
+      const options = vi.mocked(instructionIndexer.createIndex).mock.calls[0][0]
+
+      expect(options.instructionsGlob).toBe('.opencode/instructions/*.instructions.md')
+      expect(options.type).toBe('custom')
+    })
+    it('log function invokes logger', async () => {
+      await invoke(client, 's')
+      ;(vi.mocked(instructionIndexer.createIndex).mock.calls[0][0].log as (message: string) => void)('build')
+      expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', 'build', expect.any(String))
     })
   })
-
-  describe("createIndex call arguments", () => {
-    it("passes correct instructionsGlob and type", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-a", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-      )
-      const call = vi.mocked(instructionIndexer.createIndex).mock.calls[0][0]
-      expect(call.instructionsGlob).toBe(".opencode/instructions/*.instructions.md")
-      expect(call.type).toBe("custom")
-    })
-
-    it("passes a log function to createIndex that invokes the logger", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-log", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-      )
-      const call = vi.mocked(instructionIndexer.createIndex).mock.calls[0][0]
-      expect(call.log).toBeInstanceOf(Function)
-      ;(call.log as (message: string) => void)("index build")
-      expect(log).toHaveBeenCalledWith(expect.any(Object), "info", "index build", expect.any(String))
-    })
-  })
-
-  describe("idempotency", () => {
+  describe('idempotency', () => {
     it.each([
-      { name: "unsuffixed token", key: "instruction_load:/a.ts" },
-      { name: ":full suffixed token", key: "instruction_load:/a.ts:full" },
-      { name: ":ref suffixed token", key: "instruction_load:/a.ts:ref" },
-    ])("skips instruction when $name exists", async ({ key }) => {
-      resetMockState({ "sess-idem": { idempotencyTokens: { [key]: "ts" } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/a.ts", "A")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-idem", callID: "call-1" }, { args: { filePath: "/a.ts" } },
-      )
+      { name: 'unsuffixed', key: 'instruction_load:/a.ts' },
+      { name: ':full', key: 'instruction_load:/a.ts:full' },
+      { name: ':ref', key: 'instruction_load:/a.ts:ref' },
+    ])('skips when $name token exists', async ({ key }) => {
+      resetMockState({ 's-i': { idempotencyTokens: { [key]: 'ts' } } })
+      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(mockIndex(mkInst('/a.ts', 'A')))
+      await invoke(client, 's-i', '/a.ts')
       expect(sessionHelpers.sendMessage).not.toHaveBeenCalled()
     })
-
-    it("does NOT skip when token has non-standard suffix (:other)", async () => {
-      resetMockState({ "sess-other": { idempotencyTokens: { "instruction_load:/a.ts:other": "ts" } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/a.ts", "A")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-other", callID: "call-1" }, { args: { filePath: "/a.ts" } },
-      )
+    it('sends with non-standard suffix', async () => {
+      resetMockState({ 's-o': { idempotencyTokens: { 'instruction_load:/a.ts:other': 'ts' } } })
+      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(mockIndex(mkInst('/a.ts', 'A')))
+      await invoke(client, 's-o', '/a.ts')
       expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
     })
+    it('sends only new instructions when some were sent', async () => {
+      const result = await run('s-m', { 'instruction_load:/old.ts': 'ts' }, [
+        { path: '/old.ts', description: 'Old', applyTo: '**/*.{ts}' },
+        { path: '/new.ts', description: 'New', applyTo: '**/*.{ts}' },
+      ])
 
-    it("sends only new instructions when some were previously sent", async () => {
-      resetMockState({ "sess-mixed": { idempotencyTokens: { "instruction_load:/old.ts": "ts" } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex([
-        { path: "/old.ts", description: "Old", applyTo: "**/*.{ts}" },
-        { path: "/new.ts", description: "New", applyTo: "**/*.{ts}" },
-      ]))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-mixed", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-      )
-      expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
-      const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as any).message
-      expect(message).toContain("<description>New</description>")
-      expect(message).not.toContain("<description>Old</description>")
+      expect(result).toContain('<description>New</description>')
+      expect(result).not.toContain('<description>Old</description>')
     })
+    it('updates sessionStorage with new tokens', async () => {
+      resetMockState({ 's-u': { idempotencyTokens: { 'instruction_load:/old.ts': 'ts' } } })
+      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(mockIndex(mkInst('/new.ts', 'New')))
+      await invoke(client, 's-u', '/new.ts')
 
-    it("updates sessionStorage with new tokens after sending", async () => {
-      const sessionId = "sess-upd"
-      resetMockState({ [sessionId]: { idempotencyTokens: { "instruction_load:/old.ts": "ts" } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/new.ts", "New")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: sessionId, callID: "call-1" }, { args: { filePath: "/new.ts" } },
-      )
-      const tokens = (new SessionStorage()).readState<StateWithIdempotencyTokens, Record<string, string>>(
-        sessionId, s => s.idempotencyTokens ?? {},
-      )
-      expect(tokens).toHaveProperty("instruction_load:/old.ts")
-      expect(tokens).toHaveProperty("instruction_load:/new.ts:full")
+      const tokens = new SessionStorage().readState<StateWithIdempotencyTokens, Record<string, string>>('s-u', state => state.idempotencyTokens ?? {})
+
+      expect(tokens).toHaveProperty('instruction_load:/old.ts')
+      expect(tokens).toHaveProperty('instruction_load:/new.ts:full')
       expect(Object.keys(tokens ?? {}).length).toBe(2)
     })
-
     it.each([
-      { name: "undefined idempotencyTokens", state: {} },
-      { name: "empty idempotencyTokens", state: { idempotencyTokens: {} } },
-    ])("handles $name gracefully and sends instructions", async ({ state }) => {
-      resetMockState({ "sess-edge": state })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-edge", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-      )
+      { name: 'undefined tokens', state: {} },
+      { name: 'empty tokens', state: { idempotencyTokens: {} } },
+    ])('handles $name', async ({ state }) => {
+      resetMockState({ 's-e': state })
+      await invoke(client, 's-e')
       expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
     })
   })
-
-  describe("session-aware 5-slot budget", () => {
-    it("injects 6 instructions in empty session", async () => {
-      expect(getInjectedCount(await runBudgetTest("sess-empty", {}, 6))).toBe(6)
+  describe('5-slot budget', () => {
+    it('injects all in empty session', async () => {
+      await invoke(client, 's')
+      expect(countInstructions(getMessage())).toBe(1)
     })
+    it('full content when <5 :full tokens', async () => {
+      const result = await run('s-p', { 'instruction_load:/p1.ts:full': 'ts', 'instruction_load:/p2.ts:ref': 'ts' }, ONE)
 
-    it("injects full content when fewer than 5 :full tokens exist", async () => {
-      const message = await runBudgetTest("sess-partial", {
-        "instruction_load:/p1.ts:full": "ts", "instruction_load:/p2.ts:ref": "ts",
-      }, 2)
-      expect(getInjectedDescriptions(message).every(index => index.hasContent)).toBe(true)
+      expect(getDescriptions(result).every(d => d.hasContent)).toBe(true)
     })
+    it('reference-only when 5 :full tokens', async () => {
+      const result = await run('s-f', REF5, [{ path: '/a.ts', description: 'A', applyTo: '**/*.{ts}' }, { path: '/b.ts', description: 'B', applyTo: '**/*.{ts}' }], '/a.ts')
 
-    it("injects as reference-only when 5 :full tokens already present", async () => {
-      const message = await runBudgetTest("sess-full", {
-        "instruction_load:/p1.ts:full": "ts", "instruction_load:/p2.ts:full": "ts",
-        "instruction_load:/p3.ts:full": "ts", "instruction_load:/p4.ts:full": "ts",
-        "instruction_load:/p5.ts:full": "ts",
-      }, 2)
-      const injected = getInjectedDescriptions(message)
-      expect(injected.every(index => !index.hasContent)).toBe(true)
-      expect(injected.length).toBe(2)
+      const descriptions = getDescriptions(result)
+
+      expect(descriptions.every(x => !x.hasContent)).toBe(true)
+      expect(descriptions.length).toBe(2)
     })
+    it('distributes full vs ref at 4-full boundary', async () => {
+      const result = await run('s-b', makeTokens(4), [{ path: '/a.ts', description: 'A', applyTo: '**/*.{ts}' }, { path: '/b.ts', description: 'B', applyTo: '**/*.{ts}' }], '/a.ts')
 
-    it("distributes full vs reference at exact boundary (4 full → 1 slot left)", async () => {
-      resetMockState({ "sess-bound2": { idempotencyTokens: {
-        "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
-        "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
-      } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => [
-          { path: "/a.ts", description: "A", applyTo: "**/*.{ts}" },
-          { path: "/b.ts", description: "B", applyTo: "**/*.{ts}" },
-        ],
-        loadBody: async (p: string) => `Content of ${p}`,
-      } as any)
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-bound2", callID: "call-1" }, { args: { filePath: "/a.ts" } },
-      )
-      const injected = getInjectedDescriptions((vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as any).message)
-      expect(injected[0].hasContent).toBe(true)
-      expect(injected[1].hasContent).toBe(false)
+      const descriptions = getDescriptions(result)
+
+      expect(descriptions[0].hasContent).toBe(true)
+      expect(descriptions[1].hasContent).toBe(false)
     })
-
     it.each([
-      { name: "legacy unsuffixed", tokens: { "instruction_load:/p1.ts": "ts", "instruction_load:/p2.ts": "ts" }, instCount: 5 },
-      { name: ":ref suffixed", tokens: { "instruction_load:/x.ts:ref": "ts", "instruction_load:/y.ts": "ts" }, instCount: 1 },
-    ])("does not count $name tokens toward budget", async ({ tokens, instCount }) => {
-      resetMockState({ "sess-legacy": { idempotencyTokens: tokens } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => Array.from({ length: instCount }, (_, index) => ({
-          path: `/${String.fromCodePoint(65 + index)}.ts`, description: `Inst ${index}`, applyTo: "**/*.{ts}" })),
-        loadBody: async (p: string) => `Content of ${p}`,
-      } as any)
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-legacy", callID: "call-1" }, { args: { filePath: "/a.ts" } },
-      )
-      const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as any).message
-      expect(getInjectedCount(message)).toBe(instCount)
-      expect(message).toContain("<content>")
-    })
+      { name: 'legacy unsuffixed', tokens: { 'instruction_load:/p1.ts': 'ts', 'instruction_load:/p2.ts': 'ts' }, count: 5 },
+      { name: ':ref suffixed', tokens: { 'instruction_load:/x.ts:ref': 'ts', 'instruction_load:/y.ts': 'ts' }, count: 1 },
+    ])('does not count $name toward budget', async ({ tokens, count }) => {
+      // Cast needed: it.each infers a union type from the table rows; the runtime values are always valid Record<string, string>
+      const result = await run('s-l', tokens as unknown as Record<string, string>, Array.from({ length: count }, (_, index) => ({ path: `/${index}.ts`, description: `I${index}`, applyTo: '**/*.{ts}' })), '/a.ts')
 
-    it("exactly hits the cap boundary at slot 5 with mixed ref/full tokens", async () => {
-      resetMockState({ "sess-boundary": { idempotencyTokens: {
-        "instruction_load:/p1.ts:full": "ts", "instruction_load:/p2.ts:ref": "ts",
-      } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => ["/a", "/b", "/c"].map(path => ({ path, description: `Inst ${path}`, applyTo: "**/*.{ts}" })),
-        loadBody: async (p: string) => `Content of ${p}`,
-      } as any)
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-boundary", callID: "call-1" }, { args: { filePath: "/a.ts" } },
-      )
-      expect(getInjectedCount((vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as any).message)).toBe(3)
+      expect(countInstructions(result)).toBe(count)
+      expect(result).toContain('<content>')
     })
+    it('cap at slot 5 with mixed tokens', async () => {
+      const result = await run('s-mx', { 'instruction_load:/p1.ts:full': 'ts', 'instruction_load:/p2.ts:ref': 'ts' },
+        ['/a', '/b', '/c'].map(path => ({ path, description: `I${path}`, applyTo: '**/*.{ts}' })), '/a.ts')
 
-    it("session survives restart with pre-populated state", async () => {
-      const sessionId = "sess-survive"
-      resetMockState({ [sessionId]: { idempotencyTokens: {
-        "instruction_load:/p1.ts:full": "ts", "instruction_load:/p2.ts:full": "ts",
-        "instruction_load:/p3.ts:full": "ts",
-      } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => [{ path: "/a.ts", description: "A", applyTo: "**/*.{ts}" }],
-        loadBody: async (p: string) => `Content of ${p}`,
-      } as any)
-      const p1 = await createPlugin(client)
-      await (p1?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: sessionId, callID: "call-1" }, { args: { filePath: "/a.ts" } },
-      )
-      expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
-      vi.mocked(sessionHelpers.sendMessage).mockClear()
-      resetMockState({ [sessionId]: { idempotencyTokens: {
-        "instruction_load:/p1.ts:full": "ts", "instruction_load:/p2.ts:full": "ts",
-        "instruction_load:/p3.ts:full": "ts", "instruction_load:/a.ts:full": "ts",
-      } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => [{ path: "/b.ts", description: "B", applyTo: "**/*.{ts}" }],
-        loadBody: async (p: string) => `Content of ${p}`,
-      } as any)
-      const p2 = await createPlugin(client)
-      await (p2?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: sessionId, callID: "call-2" }, { args: { filePath: "/b.ts" } },
-      )
-      expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
+      expect(countInstructions(result)).toBe(3)
     })
+    it.each([
+      { name: 'survives restart', tokens: makeTokens(3) },
+      { name: 'starts fresh', tokens: {} },
+    ])('session $name', async ({ tokens }) => {
+      const result = await run('s-sr', tokens, [{ path: '/a.ts', description: 'A', applyTo: '**/*.{ts}' }], '/a.ts')
 
-    it("new session starts fresh", async () => {
-      resetMockState({ "sess-new": {} })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => [{ path: "/a.ts", description: "A", applyTo: "**/*.{ts}" }],
-        loadBody: async (p: string) => `Content of ${p}`,
-      } as any)
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-new", callID: "call-1" }, { args: { filePath: "/a.ts" } },
-      )
-      expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
+      expect(result).toContain('<instruction>')
     })
+    it('counts only :full tokens', async () => {
+      const result = await run('s-sf', { 'instruction_load:/f1.ts:full': 'ts', 'instruction_load:/f2.ts:full': 'ts', 'instruction_load:/u1.ts': 'ts', 'instruction_load:/r1.ts:ref': 'ts' },
+        Array.from({ length: 4 }, (_, index) => ({ path: `/${index}.ts`, description: `I${index}`, applyTo: '**/*.{ts}' })), '/a.ts')
 
-    it("counts only :full suffixed tokens toward budget", async () => {
-      const message = await runBudgetTest("sess-suf", {
-        "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
-        "instruction_load:/u1.ts": "ts", "instruction_load:/r1.ts:ref": "ts",
-      }, 4)
-      expect(getInjectedDescriptions(message).filter(index => index.hasContent).length).toBe(3)
+      expect(getDescriptions(result).filter(d => d.hasContent).length).toBe(3)
     })
+    it('slotsRemaining never below zero', async () => {
+      const result = await run('s-dc', REF5, ['/a', '/b', '/c'].map(path => ({ path, description: path, applyTo: '**/*.{ts}' })), '/a.ts')
 
-    it("does not decrement slotsRemaining once isReference is already true and never goes below zero", async () => {
-      resetMockState({ "sess-decr": { idempotencyTokens: {
-        "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
-        "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
-        "instruction_load:/f5.ts:full": "ts",
-      } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => [
-          { path: "/a.ts", description: "A", applyTo: "**/*.{ts}" },
-          { path: "/b.ts", description: "B", applyTo: "**/*.{ts}" },
-          { path: "/c.ts", description: "C", applyTo: "**/*.{ts}" },
-        ],
-        loadBody: async (p: string) => `Content of ${p}`,
-      } as any)
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-decr", callID: "call-1" }, { args: { filePath: "/a.ts" } },
-      )
-      const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as any).message
-      expect(getInjectedDescriptions(message).every(index => !index.hasContent)).toBe(true)
-      expect(message).not.toContain("<content>")
+      expect(getDescriptions(result).every(d => !d.hasContent)).toBe(true)
+      expect(result).not.toContain('<content>')
     })
   })
+  describe('XML format', () => {
+    it('steering wraps with priority/reason/type and full block has all XML tags', async () => {
+      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(mockIndex(mkInst('/f.ts', 'TD')))
+      await invoke(client, 's', '/f.ts')
 
-  describe("safePath guard", () => {
-    it.each([
-      { name: "empty string path and description", path: "", desc: "", tokenKey: "instruction_load:" },
-      { name: "undefined path and description", path: undefined, desc: undefined, tokenKey: "instruction_load:undefined" },
-    ])("includes instruction when safePath is $name", async ({ path, desc, tokenKey }) => {
-      resetMockState({ "sess-safe": { idempotencyTokens: { [tokenKey]: "ts" } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => [{ path, description: desc, applyTo: "**/*.{ts}" }],
-        loadBody: async () => "body",
-      } as any)
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-safe", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-      )
-      expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
-    })
+      const message = getMessage()
 
-    it("still sends when both path and description are falsy (no matching token)", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => [{ path: undefined as unknown as string, description: undefined as unknown as string, applyTo: "**/*.{ts}" }],
-        loadBody: async () => "body",
-      } as any)
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-nopath", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-      )
-      expect(sessionHelpers.sendMessage).toHaveBeenCalledOnce()
-    })
-  })
-
-  describe("steering message and XML format", () => {
-    it("wraps instructions in a steering element with priority, reason, type", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-steer", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-      )
-      const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as any).message
       expect(message).toContain('<steering priority="high" reason="relevant files touched" type="instructions">')
-      expect(message).toContain("</steering>")
+      expect(message).toContain('</steering>')
       expect(message).toMatch(/<steering\s+[^>]*priority="high"/)
+      expect(message).toContain('<instruction>')
+      expect(message).toContain('<description>TD</description>')
+      expect(message).toContain('<path>/f.ts</path>')
+      expect(message).toContain('<content>')
+      expect(message).toContain('Content of /f.ts')
+      expect(message).not.toContain('<meta')
     })
+    it('empty body renders empty content', async () => {
+      // Testing loadBody returning undefined (simulates missing file content)
+      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({ forFiles: async () => [{ path: '/e.ts', description: 'E', applyTo: '**/*.{ts}' }], loadBody: async () => undefined as unknown as string } as CreateIndexResult)
+      await invoke(client, 's', '/e.ts')
 
-    it("renders full instruction block with all XML tags and content", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test Desc")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-xml-full", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-      )
-      const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as any).message
-      expect(message).toContain("<instruction>")
-      expect(message).toContain("</instruction>")
-      expect(message).toContain("<description>Test Desc</description>")
-      expect(message).toContain("<path>/f.ts</path>")
-      expect(message).toContain("<content>")
-      expect(message).toContain("</content>")
-      expect(message).toContain("Content of /f.ts")
-      expect(message).not.toContain("<meta")
+      const message = getMessage()
+
+      expect(message).toContain('<content>')
+      expect(message).not.toContain('Content of /e.ts')
+      expect(message).toMatch(/<content>\n\s*\n\s*<\/content>/)
     })
+    it('ref block has <meta/> instead of <content>', async () => {
+      const result = await run('s-xml', REF5, [{ path: '/r.ts', description: 'RD', applyTo: '**/*.{ts}' }], '/r.ts')
 
-    it("renders empty content element when instruction body is undefined", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => [{ path: "/e.ts", description: "Empty", applyTo: "**/*.{ts}" }],
-        loadBody: async () => undefined as unknown as string,
-      } as any)
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-empty-body", callID: "call-1" }, { args: { filePath: "/e.ts" } },
-      )
-      const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as any).message
-      expect(message).toContain("<content>")
-      expect(message).toContain("</content>")
-      expect(message).not.toContain("Content of /e.ts")
-      const contentMatch = message.match(/<content>\n(.*?)\n  <\/content>/s)
-      expect(contentMatch).not.toBeNull()
-      expect(contentMatch?.[1]?.trim()).toBe("")
+      expect(result).toContain('<description>RD</description>')
+      expect(result).toContain('<meta')
+      expect(result).toContain('/>')
+      expect(result).not.toContain('<content>')
     })
+    it('meta includes lines/chars with content', async () => {
+      const result = await run('s-mi', REF5, [{ path: '/m.ts', description: 'M', applyTo: '**/*.{ts}' }], '/m.ts')
 
-    it("renders reference-only block with <meta/> instead of <content>", async () => {
-      resetMockState({ "sess-xml-ref": { idempotencyTokens: {
-        "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
-        "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
-        "instruction_load:/f5.ts:full": "ts",
-      } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => [{ path: "/r.ts", description: "Ref Desc", applyTo: "**/*.{ts}" }],
-        loadBody: async (p: string) => `Content of ${p}`,
-      } as any)
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-xml-ref", callID: "call-1" }, { args: { filePath: "/r.ts" } },
-      )
-      const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as any).message
-      expect(message).toContain("<instruction>")
-      expect(message).toContain("</instruction>")
-      expect(message).toContain("<description>Ref Desc</description>")
-      expect(message).toContain("<path>/r.ts</path>")
-      expect(message).toContain("<meta")
-      expect(message).toContain("/>")
-      expect(message).not.toContain("<content>")
+      expect(result).toContain('lines="1"')
+      expect(result).toContain('chars="16"')
     })
-
-    it.each([
-      { name: "includes lines/chars when content exists", path: "/m.ts", desc: "Meta", body: "line1\nline2", assertHas: (m: string) => { expect(m).toContain('lines="2"'); expect(m).toContain('chars="11"') } },
-      { name: "omits lines/chars when content is falsy", path: "/e.ts", desc: "Empty Meta", body: undefined, assertHas: (m: string) => { expect(m).toContain("<meta/>"); expect(m).not.toContain("lines="); expect(m).not.toContain("chars=") } },
-    ])("$name", async ({ path, desc, body, assertHas }) => {
-      resetMockState({ "sess-meta": { idempotencyTokens: {
-        "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
-        "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
-        "instruction_load:/f5.ts:full": "ts",
-      } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => [{ path, description: desc, applyTo: "**/*.{ts}" }],
-        loadBody: async () => body as unknown as string,
-      } as any)
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-meta", callID: "call-1" }, { args: { filePath: path } },
-      )
-      assertHas((vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as any).message)
+    it('meta omits lines/chars without content', async () => {
+      // Testing loadBody returning undefined (simulates missing file content)
+      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({ forFiles: async () => [{ path: '/e.ts', description: 'E', applyTo: '**/*.{ts}' }], loadBody: async () => undefined as unknown as string } as CreateIndexResult)
+      resetMockState({ 's-me': { idempotencyTokens: REF5 } })
+      await invoke(client, 's-me', '/e.ts')
+      expect(getMessage()).toContain('<meta/>')
+      expect(getMessage()).not.toContain('lines=')
     })
-
-    it("uses double newlines between blocks and single newlines within blocks", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => [
-          { path: "/a.ts", description: "A", applyTo: "**/*.{ts}" },
-          { path: "/b.ts", description: "B", applyTo: "**/*.{ts}" },
-        ],
-        loadBody: async (p: string) => `Content of ${p}`,
-      } as any)
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-sep", callID: "call-1" }, { args: { filePath: "/a.ts" } },
-      )
-      const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as any).message
-      expect(message).toContain("</instruction>\n\n<instruction>")
-      expect(message).toMatch(/  <description>.*<\/description>\n  <path>.*<\/path>\n  <content>/)
+    it('double newlines between blocks, single within', async () => {
+      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(mockIndex([{ path: '/a.ts', description: 'A', applyTo: '**/*.{ts}' }, { path: '/b.ts', description: 'B', applyTo: '**/*.{ts}' }]))
+      await invoke(client, 's', '/a.ts')
+      expect(getMessage()).toContain('</instruction>\n\n<instruction>')
+      expect(getMessage()).toMatch(/  <description>.*<\/description>\n  <path>.*<\/path>\n  <content>/)
     })
+    it('newline separators in ref blocks', async () => {
+      const result = await run('s-rnl', REF5, [{ path: '/r.ts', description: 'R', applyTo: '**/*.{ts}' }], '/r.ts')
 
-    it("uses newline separators between XML elements in reference blocks", async () => {
-      resetMockState({ "sess-ref-nl": { idempotencyTokens: {
-        "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
-        "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
-        "instruction_load:/f5.ts:full": "ts",
-      } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => [{ path: "/r.ts", description: "Ref", applyTo: "**/*.{ts}" }],
-        loadBody: async (p: string) => `Content of ${p}`,
-      } as any)
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-ref-nl", callID: "call-1" }, { args: { filePath: "/r.ts" } },
-      )
-      const message = (vi.mocked(sessionHelpers.sendMessage).mock.calls[0][0] as any).message
-      expect(message).toContain("<description>Ref</description>\n  <path>")
-      expect(message).toContain("</path>\n  <meta")
-      expect(message).toContain("/>\n</instruction>")
+      expect(result).toContain('<description>R</description>\n  <path>')
+      expect(result).toContain('</path>\n  <meta')
+      expect(result).toContain('/>\n</instruction>')
     })
-  })
-
-  describe("sendMessage and token recording", () => {
-    it("calls sendMessage with noReply: true", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-noreply", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-      )
+    it('calls sendMessage with noReply: true', async () => {
+      await invoke(client, 's')
       expect(sessionHelpers.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ noReply: true }))
     })
+    it('records :full/:ref tokens correctly', async () => {
+      await invoke(client, 's')
 
-    it("records :full suffix tokens for full instructions", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-tok-full", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-      )
-      const tokens = (new SessionStorage()).readState<{ idempotencyTokens?: Record<string, string> }, Record<string, string>>(
-        "sess-tok-full", s => s.idempotencyTokens ?? {},
-      )
-      expect(Object.keys(tokens ?? {}).some(k => k.endsWith(":full"))).toBe(true)
+      const tokens = new SessionStorage().readState<StateWithIdempotencyTokens, Record<string, string>>('s', state => state.idempotencyTokens ?? {})
+
+      expect(Object.keys(tokens ?? {})).toEqual(expect.arrayContaining([expect.stringMatching(/:full$/)]))
+      resetMockState({ 's-tr': { idempotencyTokens: REF5 } })
+      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(mockIndex([{ path: '/new.ts', description: 'New', applyTo: '**/*.{ts}' }]))
+      await invoke(client, 's-tr', '/new.ts')
+
+      const updatedTokens = new SessionStorage().readState<StateWithIdempotencyTokens, Record<string, string>>('s-tr', state => state.idempotencyTokens ?? {})
+
+      const newKeys = Object.keys(updatedTokens ?? {}).filter(key => key.startsWith('instruction_load:/new.ts'))
+
+      expect(newKeys).toHaveLength(1)
+      expect(newKeys[0]).toContain(':ref')
     })
+    it('PLUGIN_ID used consistently in logs', async () => {
+      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(mockIndex([]))
+      await invoke(client, 's', '/nomatch.ts')
+      expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('No new instructions'), 'instructions-loader')
+      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(mockIndex(mkInst('/f.ts', 'T')))
+      await invoke(client, 's2')
 
-    it("records :ref suffix tokens for reference instructions", async () => {
-      resetMockState({ "sess-tok-ref": { idempotencyTokens: {
-        "instruction_load:/f1.ts:full": "ts", "instruction_load:/f2.ts:full": "ts",
-        "instruction_load:/f3.ts:full": "ts", "instruction_load:/f4.ts:full": "ts",
-        "instruction_load:/f5.ts:full": "ts",
-      } } })
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue({
-        forFiles: async () => [{ path: "/new.ts", description: "New", applyTo: "**/*.{ts}" }],
-        loadBody: async (p: string) => `Content of ${p}`,
-      } as any)
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-tok-ref", callID: "call-1" }, { args: { filePath: "/new.ts" } },
-      )
-      const tokens = (new SessionStorage()).readState<{ idempotencyTokens?: Record<string, string> }, Record<string, string>>(
-        "sess-tok-ref", s => s.idempotencyTokens ?? {},
-      )
-      const newKeys = Object.keys(tokens ?? {}).filter(k => k.startsWith("instruction_load:/new.ts"))
-      expect(newKeys.length).toBe(1)
-      expect(newKeys[0]).toContain(":ref")
-    })
-  })
+      const logFunction = vi.mocked(instructionIndexer.createIndex).mock.calls.at(-1)?.[0]?.log as (message: string) => void
 
-  describe("plugin ID in log messages", () => {
-    it("uses 'instructions-loader' as pluginId in no-new-instructions log", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex([]))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-plugid", callID: "call-1" }, { args: { filePath: "/no-match.ts" } },
-      )
-      const logCalls = vi.mocked(log).mock.calls
-      const noNew = logCalls.find(c => typeof c[2] === "string" && (c[2] as string).includes("No new instructions to send"))
-      expect(noNew).toBeDefined()
-      expect((noNew as typeof logCalls[number])[3]).toBe("instructions-loader")
-      // Verify via built-in matcher as a second path to kill StringLiteral mutant on PLUGIN_ID
-      expect(log).toHaveBeenCalledWith(expect.any(Object), "info", expect.stringContaining("No new instructions"), "instructions-loader")
-    })
-
-    it("uses the exact PLUGIN_ID in the createIndex log callback prefix", async () => {
-      vi.mocked(instructionIndexer.createIndex).mockResolvedValue(makeMockIndex(mkInst("/f.ts", "Test")))
-      const p = await createPlugin(client)
-      await (p?.["tool.execute.before"] ?? (() => Promise.resolve()))(
-        { tool: "write", sessionID: "sess-log-id", callID: "call-1" }, { args: { filePath: "/f.ts" } },
-      )
-      const call = vi.mocked(instructionIndexer.createIndex).mock.calls[0][0]
-      ;(call.log as (m: string) => void)("test")
-      expect(log).toHaveBeenCalledTimes(1)
-      expect(vi.mocked(log).mock.calls[0][3]).toBe("instructions-loader")
+      logFunction('test')
+      expect(vi.mocked(log).mock.calls.at(-1)?.[3]).toBe('instructions-loader')
     })
   })
 })

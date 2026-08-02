@@ -1,68 +1,67 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expectTypeOf, it } from 'vitest'
 
-// Import the new types that should exist after the fix.
-// These imports will fail at compile time until quality-gate.ts is updated.
 import type { GateConfig, GateKVState, GateResult, GateRunOutcome } from '@plugins/types/quality-gate'
+
 import type { CommandResult } from '@plugins/helpers/gate-runner'
 
 describe('GateResult', () => {
-  it('accepts all valid status values', () => {
-    const values: GateResult[] = ['unknown', 'pass', 'fail']
-    expect(values).toHaveLength(3)
+  it('is a union of three string literals', () => {
+    expectTypeOf<GateResult>().toEqualTypeOf<'unknown' | 'pass' | 'fail'>()
+  })
+
+  it('does not accept arbitrary strings', () => {
+    expectTypeOf<GateResult>().not.toEqualTypeOf<'running'>()
+
+    // @ts-expect-error — 'running' is not a valid GateResult
+    const _invalid: GateResult = 'running'
   })
 })
 
 describe('GateKVState', () => {
-  it('has the correct shape', () => {
-    const state: GateKVState = { dirty: false, status: 'unknown' }
-    expect(state.dirty).toBe(false)
-    expect(state.status).toBe('unknown')
+  it('has boolean dirty and GateResult status', () => {
+    expectTypeOf<GateKVState>().toHaveProperty('dirty')
+    expectTypeOf<GateKVState['dirty']>().toBeBoolean()
+    expectTypeOf<GateKVState['status']>().toEqualTypeOf<GateResult>()
   })
 
-  it('accepts dirty=true with pass status', () => {
-    const state: GateKVState = { dirty: true, status: 'pass' }
-    expect(state.dirty).toBe(true)
-    expect(state.status).toBe('pass')
+  it('exactly matches its declared shape', () => {
+    expectTypeOf<GateKVState>().toEqualTypeOf<{ dirty: boolean, status: GateResult }>()
   })
 
-  it('accepts dirty=false with fail status', () => {
-    const state: GateKVState = { dirty: false, status: 'fail' }
-    expect(state.dirty).toBe(false)
-    expect(state.status).toBe('fail')
+  it('rejects extra properties', () => {
+    expectTypeOf<GateKVState>().not.toHaveProperty('extra')
+
+    // @ts-expect-error — { dirty: boolean; status: GateResult; extra: number } is not assignable
+    const _invalid: GateKVState = { dirty: false, status: 'unknown', extra: 42 }
   })
 })
 
 describe('GateRunOutcome', () => {
-  it('has gate, previousStatus, newStatus, and result fields', () => {
-    const gate: GateConfig = { name: 'lint', patterns: ['*.ts'], commands: ['just lint'] }
-    const result: CommandResult = { exitCode: 0, stdout: '', stderr: '' }
-
-    const outcome: GateRunOutcome = {
-      gate,
-      previousStatus: 'unknown',
-      newStatus: 'pass',
-      result,
-    }
-
-    expect(outcome.gate.name).toBe('lint')
-    expect(outcome.previousStatus).toBe('unknown')
-    expect(outcome.newStatus).toBe('pass')
-    expect(outcome.result.exitCode).toBe(0)
+  it('has the correct field types', () => {
+    expectTypeOf<GateRunOutcome['gate']>().toEqualTypeOf<GateConfig>()
+    expectTypeOf<GateRunOutcome['previousStatus']>().toEqualTypeOf<GateResult>()
+    expectTypeOf<GateRunOutcome['newStatus']>().toEqualTypeOf<GateResult>()
+    expectTypeOf<GateRunOutcome['result']>().toEqualTypeOf<CommandResult>()
   })
 
-  it('captures transition from fail to pass', () => {
-    const gate: GateConfig = { name: 'test', patterns: ['*.ts'], commands: ['just test'] }
-    const result: CommandResult = { exitCode: 0, stdout: '', stderr: '' }
+  it('exactly matches its declared shape', () => {
+    expectTypeOf<GateRunOutcome>().toEqualTypeOf<{
+      gate: GateConfig
+      previousStatus: GateResult
+      newStatus: GateResult
+      result: CommandResult
+    }>()
+  })
 
-    const outcome: GateRunOutcome = {
-      gate,
-      previousStatus: 'fail',
+  it('rejects a string where GateConfig is expected', () => {
+    expectTypeOf<GateConfig>().not.toEqualTypeOf<string>()
+
+    const _invalid: GateRunOutcome = {
+      // @ts-expect-error — string is not assignable to GateConfig
+      gate: 'lint',
+      previousStatus: 'unknown',
       newStatus: 'pass',
-      result,
+      result: { exitCode: 0, stdout: '', stderr: '' },
     }
-
-    expect(outcome.previousStatus).toBe('fail')
-    expect(outcome.newStatus).toBe('pass')
-    expect(outcome.result.exitCode).toBe(0)
   })
 })
