@@ -119,9 +119,6 @@ CONSTRAINTS:
 - Do NOT [constraint 2]
 - Do NOT use any technology/framework/language other than what is specified above
 
-INJECTED SKILLS:
-If a `<task_skills>` block is present in your prompt, the skills listed there have been injected for this task. Follow their guidance, patterns, and quality standards throughout your work. You do not need to load them — they are already in your context. If no `<task_skills>` block is present, no task-specific skills were assigned.
-
 WHEN DONE: Report back with:
 1. List of all files created/modified
 2. Summary of changes made
@@ -211,7 +208,7 @@ Every todo item description MUST use pattern `#{task_type}: {task_description} (
 
 ```markdown
 # Example Todo List
-- #preparation: Explore relevant well-known workflows and agent cards
+- #preparation: Figure out what skills are relevant to the task execution
 - #preparation: Update todo with rightsized tasks
 - #discovery: Find latest version of library X (context-gathering)
 - #execute: install library X with latest version (installing-libraries)

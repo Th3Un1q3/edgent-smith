@@ -13,7 +13,7 @@ When consolidating split test files back into a single file:
 
 - **Table-driven `it.each`** for scenarios that differ only by input state (tool names, token suffixes, boundary values).
 - **Inline small helpers** (<15 lines) rather than separate helper files. Saves a file and cross-file import complexity.
-- **Single preamble** — one set of imports, one `vi.mock` block, one `beforeEach`. Saves ~30-40 lines per previously-split file.
+- **Single preamble** — one set of imports, one `vi.mock` block, one `beforeEach`, with nested `describe` overrides where behavior differs. Recovers the boilerplate each split file duplicated.
 - **Merge mutation-only near-duplicates** into parameterized tests that vary only the mock state.
 
 ## What NOT to Do

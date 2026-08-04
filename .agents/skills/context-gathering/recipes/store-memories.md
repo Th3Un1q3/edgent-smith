@@ -144,11 +144,24 @@ if (typeof writeResult === "string" && writeResult.indexOf("written") > 0) {
 
 When a domain grows beyond a single memory, use the **domain/about/index** convention to keep it navigable.
 
+### Pre-Step: Check Existing Domains
+
+Before creating any new domain, collect relevant memories from ALL existing domains and attempt to place new knowledge in an existing one. See [Memory Convention](../recipes/memory-convention.md) — "PRE-EXISTING DOMAINS FIRST" and [Memory Quality Checklist](../references/memory-quality.md).
+
+```javascript
+// List all existing domains to find the best fit
+var allMemories = list_memories({});
+// Parse to get domains, then read each domain's /about entry
+// to find one whose scope covers the new knowledge.
+```
+
+Create a new domain ONLY when no existing domain can reasonably contain the new knowledge AND the knowledge is systematically useful.
+
 ### Steps
 
 1. **Write or update `domain/about`** if adding a new domain. This entry describes the domain's scope and purpose. Use memory name `my-domain/about`.
 2. **Write or update `domain/index`** to include the new memory in the table of contents. The index lists all topic memories in the domain with `mem:` cross-references. Memory name: `my-domain/index`.
-3. **Write the topic memory** as `domain/topic-name`. Add `mem:` cross-references from the topic back to its domain index (e.g., `mem:my-domain/index`).
+3. **Write the topic memory** as `domain/topic-name`. Add `mem:` cross-references from the topic back to its domain index (e.g., `mem:my-domain/index`). Validate the memory against the [Memory Quality Checklist](../references/memory-quality.md) before writing.
 4. **Add `mem:` cross-references** from the domain index to the new topic, and from the topic to the domain index.
 
 ### Example structure

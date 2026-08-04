@@ -9,6 +9,12 @@ reviewer: ""
 status: "in-progress"  # in-progress | completed
 ---
 
+## 0. Reported Threshold Violations
+
+<!-- FILL: problems.md -->
+
+_This section lists threshold violations reported when the session went idle. If none were reported, it says so. Investigate each problem during the review._
+
 ## 1. Session Identity
 
 <!-- SOURCE: jq '{id, agent, model: .model.id, provider: .model.providerID, created: .time.created, updated: .time.updated}' <<< "$(jq .info session.json)" -->

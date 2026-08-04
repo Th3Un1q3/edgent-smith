@@ -1,20 +1,12 @@
-# Testing Domain Memory Index
+# Testing Memories
 
-The testing domain covers all testing knowledge — methodology, infrastructure, patterns, and pitfalls for Python (pytest) and TypeScript (Vitest) testing.
+Landing page for all testing domain memories — mutation scoping, test consolidation, plugin mock patterns, and Bun sandbox pitfalls.
 
-## Memories
+## Topics
 
-| Memory | Description |
-|--------|-------------|
-| `testing/python-testing` | Python testing with pytest — fixtures, mocking, test-driven development, test structure |
-| `testing/typescript-testing` | TypeScript testing with Vitest — unit testing, configuration, test organization |
-| `testing/mutation-testing` | Stryker mutation testing configuration, scoping, threshold interaction, equivalent mutants |
-| `testing/coverage` | Coverage strategies, measuring test effectiveness, gap analysis |
-| `testing/consolidation` | Test file consolidation strategy — pre-analysis, techniques, anti-patterns |
-| `testing/bun-sandbox` | Bun-specific API calls vulnerable in Stryker sandbox — root cause and fixes |
-
-## Cross-References
-
-- `mem:refactoring/meta-lessons` — process insights from refactoring
-- `mem:refactoring/side-effect-cascades` — cascade failures from test-related changes
-- `mem:quality-gates/configuration` — mutation threshold in quality gates
+| Topic | Memory |
+|---|---|
+| bun-sandbox | [mem:testing/bun-sandbox](mem:testing/bun-sandbox) |
+| mutation-scoping | [mem:testing/mutation-scoping](mem:testing/mutation-scoping) |
+| plugin-mock-patterns | [mem:testing/plugin-mock-patterns](mem:testing/plugin-mock-patterns) |
+| test-consolidation | [mem:testing/test-consolidation](mem:testing/test-consolidation) |

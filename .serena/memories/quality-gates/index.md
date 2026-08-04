@@ -1,15 +1,9 @@
-# Quality Gates Domain Memory Index
+# Quality Gates Memories
 
-The quality-gates domain documents the automated quality gate system — configuration schema, gate definitions, runtime behavior, and design rules.
+Landing page for all quality-gates domain memories — configuration schema, gate definitions, and design rules.
 
-## Memories
+## Topics
 
-| Memory | Description |
-|--------|-------------|
-| `quality-gates/configuration` | Quality gate schema, existing gates for Python/TypeScript/Justfile targets, design rules |
-| `quality-gates/design-rules` | Design rules for quality gates — narrow triggers, appropriate checks, sequential execution |
-
-## Cross-References
-
-- `mem:refactoring/plugin-imports` — lint gates that catch import violations
-- `mem:skills/architecture` — how quality gates fit in the skill system
+| Topic | Memory |
+|---|---|
+| configuration | [mem:quality-gates/configuration](mem:quality-gates/configuration) |

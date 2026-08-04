@@ -1,9 +1,15 @@
-# Quality Gates Domain
+# Quality Gates
 
-This domain covers quality gate design, configuration, and rules — the automated checks that run when relevant files are modified during editing sessions.
+Covers the automated quality gate system — configuration schema, gate definitions for Python, TypeScript, and Justfile targets, and design rules for narrow triggers and appropriate checks.
 
-## Scope
-- Quality gate configuration schema
-- Gate definition for Python, TypeScript, and Justfile targets
-- Design rules for narrow triggers and appropriate checks
-- Runtime behavior and steering message patterns
+## Key Concepts
+
+- **gate-configuration**: Quality gate schema and existing gates for Python, TypeScript, and Justfile targets.
+- **design-rules**: Narrow triggers, appropriate checks, and sequential execution for gates that run on relevant file changes.
+- **steering-messages**: Runtime behavior and steering message patterns when gates fail.
+
+## Related Domains
+
+- mem:refactoring/plugin-imports — Lint gates that catch import violations.
+- mem:testing/mutation-scoping — How the mutation threshold gate is scoped to changed modules.
+- mem:skills/architecture — How quality gates fit in the skill system.

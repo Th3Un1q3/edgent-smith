@@ -17,7 +17,7 @@ Changing `log(client, level, message)` to `log(client, level, message, pluginId?
 ## 3. Mock Factory Dependency Chain
 
 Removing `SessionStorage.reset()` from the real class caused cascading failures through:
-- The mock factory (`kv-store.mock.ts`) that implemented `reset`
+- The mock factory module that implemented `reset`
 - All 6 test files that called `SessionStorage.reset()` in `beforeEach`
 - Each test file had a different import pattern for the reset method
 

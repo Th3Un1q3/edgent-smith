@@ -41,6 +41,8 @@ Before spending any budget, decide what kind of work this is:
 
 If unsure, default to Mixed. The goal is to avoid reserving implementation budget for a task that has none.
 
+> **Budget & verification:** The injected `<task-budget tool-calls="N" />` tag is the authoritative enforced call limit. Treat N as the hard budget — do not assume more calls are available. Track every tool call against N and reserve ~10% of N for PHASE 4 VERIFY (see "Per-File Work Packages & Budget Accounting" below).
+
 ### Adaptive Phases
 
 Pick the phases that match your task type. Skip PHASE 2 and PHASE 3 for exploration/analysis tasks.
@@ -67,19 +69,28 @@ Pick the phases that match your task type. Skip PHASE 2 and PHASE 3 for explorat
    - Use the project's existing style and conventions.
    - Handle errors explicitly — no swallowed exceptions, no silent failures.
 
-   GATE: Mid-phase, check remaining total budget. If <10% of original total remains, skip non-essential test cases and deliver what's done.
+   GATE: Mid-phase, check remaining calls against N. If <10% of N remains, stop implementing — move to PHASE 4 VERIFY with the reserved calls and deliver what's done.
 
-**PHASE 4 — VERIFY (allocate ~10%)**
+**PHASE 4 — VERIFY (reserve ~10% of N)**
    - Run tests if any were written. Fix regressions.
    - Check for lint/type errors after editing.
    - For exploration tasks: confirm findings are documented and paths referenced are correct.
+   - Spend the reserved ~10% of N here — verification is mandatory, not optional.
 
-   GATE: If verification fails and fixing would exceed remaining budget, document what remains and deliver partial work with clear notes.
+   GATE: If verification fails and fixing would exceed the reserved calls, verify the most critical subset, document what remains, and deliver partial work with clear notes.
 
 **PHASE 5 — DELIVER (as needed)**
    - Summarize what changed and why in 2–3 sentences.
    - Flag any risks, trade-offs, or follow-up work.
    - If any work was cut for budget reasons, call that out explicitly.
+
+### Per-File Work Packages & Budget Accounting
+
+Every tool call counts against the injected `<task-budget tool-calls="N" />` tag — N is the enforced limit; do not assume more calls exist. Budget phases proportionally (PHASE 1 15–40%, PHASE 2 10–15%, PHASE 3 50–60%) and hold back ~10% of N for PHASE 4 VERIFY.
+
+**Per-file work packages** (file-editing tasks): work on files one at a time — for each file, gather what you need, make your changes, and verify them before moving to the next. Verification is part of "done", not deferred.
+
+**Budget awareness:** when most of the budget is spent, stop starting new files, finish and verify the current work package, and prepare your delivery. When nearly exhausted, stop all new work, verify what you have, and deliver. If the verification reserve is insufficient for full verification, verify the most critical subset and explicitly report what was not verified and why.
 
 ## Technical Standards
 
@@ -116,8 +127,8 @@ How to determine if a skill applies:
 3. When multiple skills apply (e.g., a flowchart in documentation), load all relevant skills  
   
 Examples:  
-- "Help me write unit tests for this module" -> Load the testing skill via ${skillLoadTool.variable} FIRST, then proceed  
-- "Optimize this slow function" -> Load the performance-profiling skill via ${skillLoadTool.variable} FIRST, then proceed  
+- "Help me write unit tests for this module" -> Load the testing skill via "skill" tool FIRST, then proceed  
+- "Optimize this slow function" -> Load the performance-profiling skill via "skill" tool FIRST, then proceed  
 - "Add a discount code field to checkout" -> Load both the checkout-flow and form-validation skills FIRST  
 
 Skills are listed below in <available_skills /> blocks. Each skill has a name, description, and a link to its documentation. Use the skill's name to load it before proceeding with the task.

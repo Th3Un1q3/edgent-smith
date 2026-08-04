@@ -16,6 +16,22 @@ metadata:
 
 Every domain follows a strict **domain/about/index** pattern where each domain has an `about` entry (scope overview) and an `index` entry (table of contents). This recipe documents that convention and provides templates for creating and updating domain entries via `write_memory`. All memory names are used as identifiers — never as file paths.
 
+## PRE-EXISTING DOMAINS FIRST
+
+Before creating a new domain, you MUST attempt to place the knowledge in an existing domain:
+
+1. **Collect relevant memories from ALL existing domains** — use `list_memories({})` to see every domain, then read the `about` entry for each relevant one.
+2. **Find the best-fitting domain** — does an existing domain's scope already cover this topic? Even partially?
+3. **Contribute to an existing domain** when possible — extend its `index` and add a topic memory. Do NOT create a new domain just because a topic is new.
+4. **Create a new domain ONLY when** no existing domain can reasonably contain the new knowledge AND the knowledge is systematically useful (see [Memory Quality Checklist](../references/memory-quality.md)).
+
+A new domain is justified when:
+- The knowledge crosses multiple existing domains without fitting cleanly into any one of them.
+- The knowledge covers a distinct system, framework, or convention that would be misleading to place elsewhere.
+- The domain would contain at least 3+ topic memories (not just one or two).
+
+When a topic fits an existing domain, contribute to it — extending its `index` and adding a topic memory. Do NOT create a new domain just because a topic is new.
+
 ## Convention Specification
 
 Each domain is identified by a name prefix (e.g., `my-domain`). Every domain must have two mandatory entries at its root:

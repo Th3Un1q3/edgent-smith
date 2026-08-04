@@ -8,7 +8,7 @@ How the Docker MCP Gateway, code-mode sandboxes, Serena MCP server, and skill de
 |-----------|------|
 | Docker MCP Gateway | Hosts MCP servers (Serena, Tavily, DeepWiki, Context7) and makes their tools available via a unified interface |
 | code-mode Sandbox | JavaScript sandbox that exposes selected server tools as synchronous JS functions for scripting |
-| Serena MCP Server | Persistent memory storage; 6 tools (write/read/list/edit/rename/delete), stores as Markdown files in `.serena/memories/` |
+| Serena MCP Server | Persistent memory store; 6 tools (write/read/list/edit/rename/delete), persists memories as Markdown files |
 | Skill Definitions | Structured Markdown files (recipes + workflows + SKILL.md) documenting reusable patterns |
 | Context-Gathering Skill | Meta-skill that combines all above into a tested methodology for research and memory management |
 
@@ -20,14 +20,8 @@ How the Docker MCP Gateway, code-mode sandboxes, Serena MCP server, and skill de
 4. For memory operations, the sandbox calls Serena tools (write_memory, read_memory, etc.)
 5. Recipes store durable knowledge; multiple recipes can reference shared workflows
 
-## Integration Points
+## Related
 
-- `mem:` cross-references in memory content create navigable links between stored knowledge
-- Hierarchical naming (using `/`) organizes memories into topic trees
-- Recipe SKILL.md routing tables map triggers to actions and recipe files
-
-## Reference
-
-- `mem:skills/memory-system/overview` - the 6 Serena memory tools in detail
 - `mem:skills/recipe-structure` - how recipes are structured and organized
-- `mem:skills/memory-system/conventions` - naming and cross-reference conventions
+- The 6 Serena memory tools in detail: `recipes/store-memories.md` and `recipes/manage-memories.md` in the context-gathering skill
+- Naming and cross-reference conventions: `recipes/memory-convention.md` in the context-gathering skill

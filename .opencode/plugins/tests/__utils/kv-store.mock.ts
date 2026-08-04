@@ -39,6 +39,7 @@ interface MockSessionStorageInstance {
 /** Factory for kv-store vi.mock — creates fresh mocks inline, returns both the module object and direct mock references. */
 export function makeKvStoreMockFactory(): {
   SessionStorage: { new(): MockSessionStorageInstance, prototype: MockSessionStorageInstance }
+  FileSystemSessionStorageAdapter: { new(_basePath?: string): object }
   _mockReadState: ReturnType<typeof vi.fn>
   _mockUpdateState: ReturnType<typeof vi.fn>
   SESSION_FIELDS?: Record<string, string>
@@ -56,6 +57,10 @@ export function makeKvStoreMockFactory(): {
     updateState = functionUpdateState
   }
 
+  class FileSystemSessionStorageAdapter {
+    constructor(_basePath?: string) {}
+  }
+
   const SESSION_FIELDS = {
     startedAt: 'startedAt',
     cancelledAt: 'cancelledAt',
@@ -66,5 +71,5 @@ export function makeKvStoreMockFactory(): {
     needsReview: 'needsReview',
   }
 
-  return { SessionStorage: MockSessionStorage, _mockReadState: functionReadState, _mockUpdateState: functionUpdateState, SESSION_FIELDS }
+  return { SessionStorage: MockSessionStorage, FileSystemSessionStorageAdapter, _mockReadState: functionReadState, _mockUpdateState: functionUpdateState, SESSION_FIELDS }
 }

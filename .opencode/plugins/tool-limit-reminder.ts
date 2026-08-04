@@ -4,6 +4,8 @@ import type { Plugin } from '@opencode-ai/plugin'
 
 import { SessionStorage, SESSION_FIELDS } from './helpers/kv-store'
 import { fetchAgentList, getSessionAgent, getAgentSteps, AgentInfo } from './helpers/agent-steps'
+import { addProblem, agentProblemStatement, readProblems, writeProblemsMarkdown, clearReviewState } from './helpers/review'
+import { harnessConfig } from './config/harness.config'
 
 /**
  * Per-agent tool call limits.
@@ -21,8 +23,31 @@ interface ToolExecuteBeforeInput {
   callID?: string
 }
 
+// ── Config loading (real plumbing — reads harness.config.ts section) ─────────
+
+/** Fallback constants when the 'tool-limit-reminder' section is absent from harness.config.ts */
+const DEFAULT_BUDGET_FACTOR = 0.8
+
+/** 2 extra calls beyond the threshold to account for the current call still being in-flight */
+const DEFAULT_PADDING_TILL_ERROR = 2
+
+/**
+ * Reads the 'tool-limit-reminder' section from .opencode/plugins/config/harness.config.ts
+ * (modular eslint-style config). Falls back to the historical hardcoded constants when
+ * the section is absent, keeping the budget math behavior-identical.
+ */
+function loadToolLimitConfig(): { factor: number, padding: number } {
+  const section = harnessConfig.plugins['tool-limit-reminder']
+  return {
+    factor: section?.factor ?? DEFAULT_BUDGET_FACTOR,
+    padding: section?.padding ?? DEFAULT_PADDING_TILL_ERROR,
+  }
+}
+
 export const toolLimitReminder: Plugin = async ({ client, $ }) => {
   await log(client, 'info', 'init', 'tool-limit-reminder')
+
+  const { factor: BUDGET_FACTOR, padding: PADDING_TILL_ERROR } = loadToolLimitConfig()
 
   /**
    * Per-agent tool call limits — dynamically resolved from client.app.agents().
@@ -46,15 +71,12 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
         .filter(a => typeof (a as { steps?: number }).steps === 'number')
         .map((a: AgentInfo) => {
           const s = a.steps as number
-          return [a.name, Math.floor(s * 0.8)]
+          return [a.name, Math.floor(s * BUDGET_FACTOR)]
         }),
     ) as Record<string, number>
     _toolLimitsCache = toolLimits
     return toolLimits
   }
-
-  // 2 extra calls beyond the threshold to account for the current call still being in-flight
-  const PADDING_TILL_ERROR = 2
 
   /**
    * In-memory per-session counter tracking.
@@ -70,17 +92,24 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
   const sessionStorage = new SessionStorage()
 
   /**
-    * Triggers an asynchronous export of the session using the shell helper.
+    * Triggers an export of the session using the shell helper.
     * Runs `just agent_utils/export-opencode-session <sessionId>` from workspace root.
+    * Returns true when the export command exits 0, false otherwise (failures are logged).
     */
-  const triggerExport = async (sessionId: string) => {
+  const triggerExport = async (sessionId: string): Promise<boolean> => {
     try {
-      const result = await ($`just agent_utils/export-opencode-session ${sessionId}`).nothrow().quiet().json()
-      void log(client, 'info', `export completed for session ${sessionId}: ${JSON.stringify(result)}`, 'tool-limit-reminder')
+      const result = await ($`just agent_utils/export-opencode-session ${sessionId}`).nothrow().quiet()
+      if (result.exitCode !== 0) {
+        void log(client, 'error', `failed to trigger export for session ${sessionId}: exit code ${result.exitCode}`, 'tool-limit-reminder')
+        return false
+      }
+      void log(client, 'info', `export completed for session ${sessionId} (exit code ${result.exitCode})`, 'tool-limit-reminder')
+      return true
     }
     catch (error: unknown) {
       const errorString = (error as Error)?.message ?? String(error)
       void log(client, 'error', `failed to trigger export for session ${sessionId}: ${errorString}`, 'tool-limit-reminder')
+      return false
     }
   }
 
@@ -96,29 +125,30 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
 
       const idleSessionId = event.properties.sessionID as string
 
-      // Check if this session was flagged for review
+      // Single collector: gather every plugin's reported problems plus the
+      // needsReview flag, then export exactly once when either is present.
+      const problems = readProblems(sessionStorage, idleSessionId)
       const hasReviewFlag = sessionStorage.readState(
         idleSessionId,
         state => state[SESSION_FIELDS.needsReview] === true,
       )
 
-      if (!hasReviewFlag) {
-        return // Session not flagged; no export needed
+      if (problems.length === 0 && !hasReviewFlag) {
+        return // Nothing to review; no export needed
       }
 
-      await log(client, 'info', `session ${idleSessionId} idle with needsReview flag — triggering export`, 'tool-limit-reminder')
+      await log(client, 'info', `session ${idleSessionId} idle with review state — triggering export`, 'tool-limit-reminder')
 
-      try {
-        triggerExport(idleSessionId)
-        // Clear the review flag after triggering (so we don't re-export on subsequent idle events)
-        sessionStorage.updateState(idleSessionId, (state) => {
-          const { [SESSION_FIELDS.needsReview]: _, ...next } = state as Record<string, unknown>
-          return next
-        })
+      const exported = await triggerExport(idleSessionId)
+
+      if (!exported) {
+        // Keep the review state so the next session.idle retries the export.
+        await log(client, 'error', `export failed for session ${idleSessionId} — review state retained for retry`, 'tool-limit-reminder')
+        return
       }
-      catch (error) {
-        await log(client, 'error', `failed to trigger export for session ${idleSessionId}: ${(error as Error).message}`, 'tool-limit-reminder')
-      }
+
+      await writeProblemsMarkdown(idleSessionId, problems)
+      clearReviewState(sessionStorage, idleSessionId)
     },
     'dispose': async () => {
       void log(client, 'info', 'dispose', 'tool-limit-reminder')
@@ -168,6 +198,9 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
         // NEEDS REVIEW: above threshold but within padding tolerance
         await log(client, 'info', `flagging session ${sessionID} for review`, 'tool-limit-reminder')
         sessionStorage.updateState(sessionID, state => ({ ...state, [SESSION_FIELDS.needsReview]: true }))
+        // Crossing-time problem: the agent exceeded its budget. addProblem dedupes by
+        // `source:thresholdName`, so repeated crossings are safe no-ops.
+        addProblem(sessionStorage, sessionID, agentProblemStatement(agentName, agentReminderThreshold, currentCount))
         const message = `<steering priority="warning" reason="tool call limit exceeded" type="instructions">
 STOP!
 You have exceeded the tool call limit for this agent. Current count: ${currentCount + 1}, Limit: ${agentReminderThreshold}
@@ -227,7 +260,12 @@ Output the summary:
         return
       }
 
-      const budgetTag = `<task-budget tool-calls="${steps}" />`
+      // Advertised budget MUST equal the enforced limit computed in
+      // getToolLimits() (Math.floor(steps * BUDGET_FACTOR)). Advertising the
+      // raw steps value overstates the budget and lets agents plan for tool
+      // calls that the enforcer will block — causing mid-task budget gaps.
+      const budget = Math.floor(steps * BUDGET_FACTOR)
+      const budgetTag = `<task-budget tool-calls="${budget}" />`
 
       const firstTextPart = output.parts.find((p: { type: string }) => p.type === 'text')
 

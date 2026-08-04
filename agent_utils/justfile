@@ -92,6 +92,19 @@ review-start session_id="":
         sed -i "s|<!-- FILL: .info.model.id (provider: .info.model.providerID) -->|$MODEL (provider: $PROVIDER)|" "$REVIEW_MD"
         sed -i "s|<!-- FILL: .info.time.created -->|$CREATED|" "$REVIEW_MD"
         sed -i "s|<!-- FILL: .info.time.updated -->|$UPDATED|" "$REVIEW_MD"
+        # Merge reported threshold violations (problems.md) into Section 0.
+        # Multi-line content: awk replaces the placeholder line with the file's lines
+        # (sed with inline content would break on newlines — never use it here).
+        PROBLEMS_FILE="$SESSION_DIR/problems.md"
+        if [ -f "$PROBLEMS_FILE" ]; then
+            awk '
+                NR==FNR { problems[NR]=$0; n=NR; next }
+                $0 == "<!-- FILL: problems.md -->" { for (i=1; i<=n; i++) print problems[i]; next }
+                { print }
+            ' "$PROBLEMS_FILE" "$REVIEW_MD" > "$REVIEW_MD.tmp" && mv "$REVIEW_MD.tmp" "$REVIEW_MD"
+        else
+            sed -i "s|<!-- FILL: problems.md -->|*The session took way too many steps.*|" "$REVIEW_MD"
+        fi
         echo "STATUS=new"
         echo "MESSAGE=New review started"
         echo "SESSION_ID=$REVIEW_DIR"

@@ -65,5 +65,5 @@ registry:
     description: "HTTP fetch tool for retrieving and parsing publicly available web page content. Handles HTML rendering, text extraction, and resource loading."
     title: "Fetch - Public Web Page Content Fetcher MCP"
     type: server
-    image: mcp/fetch@sha256:d9907377c03da91e49cf02c3dd6f0f83d1e0183e1222850f92595089f2c9a59d
+    image: mcp/fetch:latest
 

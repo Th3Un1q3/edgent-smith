@@ -12,6 +12,7 @@ import { makeKvStoreMockFactory, resetMockState } from '@tests/__utils/kv-store.
 vi.mock('@plugins/helpers/logger', () => makeLoggerMockFactory())
 vi.mock('@plugins/helpers/kv-store', () => makeKvStoreMockFactory())
 vi.mock('@plugins/helpers/session-helpers', () => makeSessionHelpersMockFactory())
+vi.mock('node:fs/promises', () => ({ mkdir: vi.fn(), writeFile: vi.fn() }))
 
 import { toolLimitReminder } from '@plugins/tool-limit-reminder'
 
@@ -20,6 +21,10 @@ import { log } from '@plugins/helpers/logger'
 import { sendMessage } from '@plugins/helpers/session-helpers'
 
 import { SessionStorage } from '@plugins/helpers/kv-store'
+
+import { readProblems, agentProblemStatement, skillProblemStatement } from '@plugins/helpers/review'
+
+import { writeFile } from 'node:fs/promises'
 
 const logMock = vi.mocked(log)
 
@@ -83,6 +88,12 @@ const makeChatOutput = (parts: ChatPart[]): ChatMessageOutput => ({
 const getState = (sessionID: string): Record<string, unknown> =>
   new SessionStorage().readState(sessionID, s => s as Record<string, unknown>) ?? {}
 
+/** Builds a $ shell mock whose export command resolves with the given exit code. */
+const makeExportShellMock = (exitCode: number) =>
+  vi.fn().mockReturnValue({
+    nothrow: () => ({ quiet: vi.fn().mockResolvedValue({ exitCode }) }),
+  })
+
 const BUDGET_AGENTS = [{ name: 'test-agent', steps: 15 }]
 
 const AGENTS = [
@@ -96,6 +107,7 @@ describe('toolLimitReminder', () => {
 
   beforeEach(async () => {
     resetMockState({})
+    vi.mocked(writeFile).mockClear()
     fixture = await makePlugin({ agent: 'rug-swe' })
   })
 
@@ -154,6 +166,10 @@ describe('toolLimitReminder', () => {
           message: expect.stringContaining('tool call limit exceeded'),
         }))
         expect(getState('sess-boundary')?.needsReview).toBe(true)
+        // The crossing writes an agent problem into the shared sessionReview key.
+        expect(readProblems(new SessionStorage(), 'sess-boundary')).toEqual([
+          agentProblemStatement(agent, limit, limit + 1),
+        ])
       })
 
       it('throws after calls exceed limit plus padding', async () => {
@@ -181,6 +197,45 @@ describe('toolLimitReminder', () => {
         sessionId: 'dyn-sess',
         message: expect.stringContaining('tool call limit reached'),
       }))
+    })
+
+    it('writes the agent problem with the exact expectedMax and actual at the crossing', async () => {
+      // 21 calls land at the reminder tier (currentCount = 20); the 22nd call
+      // crosses into NEEDS REVIEW (currentCount = 21 > 20).
+      const hook = fixture.hooks['tool.execute.before']
+      for (let index = 0; index <= 21; index++) {
+        await hook({ sessionID: 'cross-sess' })
+      }
+
+      const problems = readProblems(new SessionStorage(), 'cross-sess')
+
+      expect(problems).toEqual([
+        agentProblemStatement('rug-swe', 20, 21),
+      ])
+      expect(problems[0]?.message).toBe(
+        'The session took 21 tool calls for agent \'rug-swe\', exceeding the agent\'s budget of 20 steps. Investigate why the agent exceeded its step budget.',
+      )
+    })
+
+    it('writes the agent problem only once across repeated crossings (dedupe)', async () => {
+      const hook = fixture.hooks['tool.execute.before']
+      // currentCount 21 and 22 both land in the NEEDS REVIEW tier; BLOCK only starts at 23.
+      for (let index = 0; index <= 22; index++) {
+        await hook({ sessionID: 'dedupe-sess' })
+      }
+
+      const problems = readProblems(new SessionStorage(), 'dedupe-sess')
+
+      expect(problems).toHaveLength(1)
+      expect(problems[0]).toEqual(agentProblemStatement('rug-swe', 20, 21))
+
+      const reviewWrites = vi.mocked(new SessionStorage().updateState).mock.calls.filter(([sessionID, updater]) =>
+        sessionID === 'dedupe-sess'
+        && typeof updater === 'function'
+        && Object.hasOwn((updater as (s: Record<string, unknown>) => Record<string, unknown>)({}), 'sessionReview'),
+      )
+
+      expect(reviewWrites).toHaveLength(1)
     })
 
     it('applies dynamic limits only to agents with maxSteps', async () => {
@@ -243,8 +298,21 @@ describe('toolLimitReminder', () => {
       ])
 
       await fixture.hooks['chat.message']({ sessionID: 'budget-sess', agent: 'test-agent' }, output)
-      expect(output.parts[0].text).toBe('<task-budget tool-calls="15" />\nfirst')
+      expect(output.parts[0].text).toBe('<task-budget tool-calls="12" />\nfirst')
       expect(output.parts[1].text).toBe('second')
+    })
+
+    it.each([
+      { steps: 13, expected: 10 }, // floor(10.4) — kills ceil mutants
+      { steps: 16, expected: 12 }, // floor(12.8) — kills round/ceil mutants
+      { steps: 25, expected: 20 }, // rug-swe — advertised tag matches the enforced floor(25 * 0.8)
+    ])('advertises floor(steps * 0.8) = $expected as the budget tag for steps=$steps', async ({ steps, expected }) => {
+      fixture = await makePlugin({ agents: [{ name: 'test-agent', steps }] })
+
+      const output = makeChatOutput([{ id: 'p1', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'first' }])
+
+      await fixture.hooks['chat.message']({ sessionID: 'budget-sess', agent: 'test-agent' }, output)
+      expect(output.parts[0].text).toBe(`<task-budget tool-calls="${expected}" />\nfirst`)
     })
 
     it('creates a synthetic text part when no text part exists', async () => {
@@ -257,7 +325,7 @@ describe('toolLimitReminder', () => {
         sessionID: 'budget-sess',
         messageID: '',
         type: 'text',
-        text: '<task-budget tool-calls="15" />',
+        text: '<task-budget tool-calls="12" />',
         synthetic: true,
       })
     })
@@ -287,9 +355,9 @@ describe('toolLimitReminder', () => {
       const output = makeChatOutput([{ id: 'p1', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'original prompt' }])
 
       await fixture.hooks['chat.message'](input, output)
-      expect(output.parts[0].text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
+      expect(output.parts[0].text).toBe('<task-budget tool-calls="12" />\noriginal prompt')
       await fixture.hooks['chat.message'](input, output)
-      expect(output.parts[0].text).toBe('<task-budget tool-calls="15" />\noriginal prompt')
+      expect(output.parts[0].text).toBe('<task-budget tool-calls="12" />\noriginal prompt')
     })
 
     it('re-injects the tag after the session goes idle', async () => {
@@ -300,7 +368,7 @@ describe('toolLimitReminder', () => {
       await fixture.hooks['chat.message'](input, output)
       await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'budget-sess' } } })
       await fixture.hooks['chat.message'](input, output)
-      expect(output.parts[0].text).toBe('<task-budget tool-calls="15" />\n<task-budget tool-calls="15" />\noriginal prompt')
+      expect(output.parts[0].text).toBe('<task-budget tool-calls="12" />\n<task-budget tool-calls="12" />\noriginal prompt')
     })
   })
 
@@ -329,7 +397,7 @@ describe('toolLimitReminder', () => {
       expect(sendMessageMock).toHaveBeenCalledTimes(1) // counter was cleared — no new steering
     })
 
-    it('does not export sessions without the review flag', async () => {
+    it('does not export sessions without review state (no flag, no problems)', async () => {
       const client = defaultCreateClient({ agent: 'rug-swe' })
 
       const shell = vi.fn()
@@ -338,16 +406,17 @@ describe('toolLimitReminder', () => {
       fixture = await makePlugin({ client })
       await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'plain-sess' } } })
       expect(shell).not.toHaveBeenCalled()
+      expect(writeFile).not.toHaveBeenCalled()
+      expect(getState('plain-sess')?.needsReview).toBeUndefined()
+      expect(getState('plain-sess')?.sessionReview).toBeUndefined()
     })
 
-    it('exports flagged sessions and clears the review flag', async () => {
+    it('exports flagged sessions, writes problems.md, and clears the review flag', async () => {
       resetMockState({ 'flagged-sess': { needsReview: true } })
 
       const client = defaultCreateClient({ agent: 'rug-swe' })
 
-      const shell = vi.fn().mockReturnValue({
-        nothrow: () => ({ quiet: () => ({ json: vi.fn().mockResolvedValue({ status: 'ok' }) }) }),
-      })
+      const shell = makeExportShellMock(0)
 
       client.$ = shell
       fixture = await makePlugin({ client })
@@ -355,23 +424,141 @@ describe('toolLimitReminder', () => {
       await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'flagged-sess' } } })
 
       expect(shell).toHaveBeenCalledWith(['just agent_utils/export-opencode-session ', ''], 'flagged-sess')
-      await vi.waitFor(() => expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('export completed'), 'tool-limit-reminder'))
+      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('export completed'), 'tool-limit-reminder')
+      expect(writeFile).toHaveBeenCalledWith('/workspace/.tmp/session-review/flagged-sess/problems.md', '# Reported Threshold Violations\n\n*None reported.*\n')
       expect(getState('flagged-sess')?.needsReview).toBeUndefined()
+      expect(getState('flagged-sess')?.sessionReview).toBeUndefined()
     })
 
-    it('logs an error when the export fails', async () => {
+    it('exports sessions that have problems even without a needsReview flag', async () => {
+      resetMockState({
+        'prob-sess': { sessionReview: [agentProblemStatement('rug-swe', 20, 21)] },
+      })
+
+      const client = defaultCreateClient({ agent: 'rug-swe' })
+
+      const shell = makeExportShellMock(0)
+
+      client.$ = shell
+      fixture = await makePlugin({ client })
+
+      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'prob-sess' } } })
+
+      expect(shell).toHaveBeenCalledTimes(1)
+      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('export completed'), 'tool-limit-reminder')
+      expect(writeFile).toHaveBeenCalledWith(
+        '/workspace/.tmp/session-review/prob-sess/problems.md',
+        expect.stringContaining('## agent: rug-swe'),
+      )
+
+      const state = getState('prob-sess')
+
+      expect(state?.sessionReview).toBeUndefined()
+      expect(state?.needsReview).toBeUndefined()
+    })
+
+    it('exports flagged sessions with no problems and writes the none-reported markdown', async () => {
+      resetMockState({ 'flag-only-sess': { needsReview: true } })
+
+      const client = defaultCreateClient({ agent: 'rug-swe' })
+
+      const shell = makeExportShellMock(0)
+
+      client.$ = shell
+      fixture = await makePlugin({ client })
+
+      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'flag-only-sess' } } })
+
+      expect(shell).toHaveBeenCalledTimes(1)
+      expect(writeFile).toHaveBeenCalledWith('/workspace/.tmp/session-review/flag-only-sess/problems.md', '# Reported Threshold Violations\n\n*None reported.*\n')
+      expect(getState('flag-only-sess')?.needsReview).toBeUndefined()
+    })
+
+    it('clears both sessionReview and needsReview after a successful export', async () => {
+      resetMockState({
+        'clear-sess': { sessionReview: [agentProblemStatement('rug-swe', 20, 21)], needsReview: true },
+      })
+
+      const client = defaultCreateClient({ agent: 'rug-swe' })
+
+      const shell = makeExportShellMock(0)
+
+      client.$ = shell
+      fixture = await makePlugin({ client })
+
+      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'clear-sess' } } })
+
+      const state = getState('clear-sess')
+
+      expect(state?.sessionReview).toBeUndefined()
+      expect(state?.needsReview).toBeUndefined()
+    })
+
+    it('exports both agent and skill problems in a single problems.md', async () => {
+      resetMockState({
+        'mixed-sess': {
+          sessionReview: [
+            skillProblemStatement('test-design', 10, 13),
+            agentProblemStatement('rug-swe', 20, 21),
+          ],
+        },
+      })
+
+      const client = defaultCreateClient({ agent: 'rug-swe' })
+
+      const shell = makeExportShellMock(0)
+
+      client.$ = shell
+      fixture = await makePlugin({ client })
+
+      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'mixed-sess' } } })
+
+      expect(writeFile).toHaveBeenCalledWith(
+        '/workspace/.tmp/session-review/mixed-sess/problems.md',
+        expect.stringContaining('## skill: test-design'),
+      )
+      expect(writeFile).toHaveBeenCalledWith(
+        '/workspace/.tmp/session-review/mixed-sess/problems.md',
+        expect.stringContaining('## agent: rug-swe'),
+      )
+      expect(getState('mixed-sess')?.sessionReview).toBeUndefined()
+    })
+
+    it('retains review state when the export fails and does not write problems.md', async () => {
       resetMockState({ 'failed-sess': { needsReview: true } })
 
       const client = defaultCreateClient({ agent: 'rug-swe' })
 
-      const shell = vi.fn().mockReturnValue({
-        nothrow: () => ({ quiet: () => ({ json: vi.fn().mockRejectedValue(new Error('export boom')) }) }),
-      })
+      const shell = makeExportShellMock(1)
 
       client.$ = shell
       fixture = await makePlugin({ client })
       await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'failed-sess' } } })
-      await vi.waitFor(() => expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'error', expect.stringContaining('failed to trigger export'), 'tool-limit-reminder'))
+      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'error', expect.stringContaining('failed to trigger export'), 'tool-limit-reminder')
+      expect(writeFile).not.toHaveBeenCalled()
+      expect(getState('failed-sess')?.needsReview).toBe(true)
+    })
+
+    it('logs the caught error, retains review state, and resolves when the export command throws', async () => {
+      resetMockState({ 'throw-sess': { needsReview: true } })
+
+      const client = defaultCreateClient({ agent: 'rug-swe' })
+
+      // The shell rejects with null: errorString falls back to String(null) ('null'),
+      // and `(error as Error)?.message` without the optional chain would throw on null.
+      const shell = vi.fn().mockReturnValue({
+        nothrow: () => ({ quiet: vi.fn().mockRejectedValue(null) }),
+      })
+
+      client.$ = shell
+      fixture = await makePlugin({ client })
+
+      await expect(fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'throw-sess' } } })).resolves.toBeUndefined()
+
+      expect(shell).toHaveBeenCalledTimes(1)
+      expect(logMock).toHaveBeenCalledWith(expect.anything(), 'error', 'failed to trigger export for session throw-sess: null', 'tool-limit-reminder')
+      expect(writeFile).not.toHaveBeenCalled()
+      expect(getState('throw-sess')?.needsReview).toBe(true)
     })
   })
 

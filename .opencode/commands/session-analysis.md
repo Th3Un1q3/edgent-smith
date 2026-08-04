@@ -40,9 +40,38 @@ The output contains KEY=VALUE lines:
 
 **STATUS=resumed**: The review document already exists at `$REVIEW_MD`. Read the existing review.md to identify completed sections, then continue from where it left off (skip already-filled sections).
 
-**STATUS=new**: A fresh review document was created at `$REVIEW_MD` with frontmatter and Section 1 pre-filled. Proceed with Step 2.
+**STATUS=new**: A fresh review document was created at `$REVIEW_MD` with frontmatter, Section 1 pre-filled, and Section 0 seeded from `problems.md` (or `*None reported.*`). Proceed with Step 2.
 
-## Step 2: Extract Session Data
+## Step 2: Investigate Reported Threshold Violations
+
+Read `$REVIEW_MD` Section 0 (Reported Threshold Violations). If it contains problem statements, the session went idle with reported breaches — do NOT skip this section. Delegate investigation of each problem to a subagent before answering the audit questions.
+
+For EACH problem statement in Section 0:
+- Identify the step in session.json where the count crossed the threshold (use jq against `$SESSION_JSON`; never read the whole file).
+- Determine what the agent was doing at that point.
+- For skill problems (`## skill: <name>`): verify the skill was actually loaded and used; check whether its instructions were followed.
+- For agent problems (`## agent: <name>`): identify which tool calls exhausted the budget and why the agent kept working past the reminder.
+- Record what could have prevented the breach (tighter budget, clearer instructions, better skill guidance).
+
+Record findings under the corresponding problem in Section 0 (e.g., a "Findings" list) and reference them when filling Section 8 recommendations.
+
+Prompt:
+```text
+Task: Investigate the reported threshold violation(s) in review.md Section 0 against the session at {path_to_session_json}.
+
+Instructions:
+Read schema.md to learn how to extract fields from session.json.
+Read review.md Section 0 to get each problem statement (source, threshold, actual count, message).
+For each problem, use jq to locate the crossing step, what the agent was doing, and whether the skill/agent guidance was followed. Do NOT read the whole session.json — use jq for targeted extraction.
+Write your findings under the corresponding problem in review.md Section 0.
+
+References:
+- {path_to_session_json}
+- {path_to_schema_md}
+- {path_to_review_md}
+```
+
+## Step 3: Extract Session Data
 
 Here is a list of analysis questions to answer. Loop through the list, delegating 1 question per subagent.
 
@@ -69,15 +98,15 @@ References:
 - {path_to_review_md}
 ```
 
-## Step 3: Validate Review Document
+## Step 4: Validate Review Document
 
-Read the review.md to ensure all questions have been answered. If any section is incomplete, return to Step 2 and delegate the missing questions to subagents.
+Read the review.md to ensure all questions have been answered and Section 0 problems have findings. If any section is incomplete, return to Step 3 and delegate the missing questions to subagents.
 
-## Step 4: Identify Improvement Patterns
+## Step 5: Identify Improvement Patterns
 
 Read the report and match it to the patterns in `references/agentic-system.md`. For each pattern that applies, propose a concrete change to the agentic system. Populate Section 8 of review.md with the findings.
 
-## Step 5: Prioritize Improvements
+## Step 6: Prioritize Improvements
 
 Use question tool to prioritize the proposed improvements in Section 8 of review.md. For each improvement, specify the exact file path and concrete change to be made.
 

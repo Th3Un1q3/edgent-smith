@@ -1,6 +1,6 @@
 # Quality Gates Configuration
 
-Quality gates are defined in `.opencode/quality-gates.json`. They auto-run checks when relevant files are modified during an editing session.
+Quality gates are defined in a JSON config file in the OpenCode workspace. They auto-run checks when relevant files are modified during an editing session.
 
 ## Schema
 
@@ -20,18 +20,18 @@ Quality gates are defined in `.opencode/quality-gates.json`. They auto-run check
 ## Existing Gates
 
 ### OpenCode Plugins (TypeScript)
-| Gate | Patterns | Command |
-|------|----------|---------|
-| `opencode-typecheck` | `.opencode/plugins/**/*.ts` | `cd /workspace/.opencode && just typecheck` |
-| `opencode-lint` | `.opencode/plugins/**/*.ts` | `cd /workspace/.opencode && just lint` |
-| `opencode-test` | `.opencode/plugins/**/*.ts` | `cd /workspace/.opencode && just test --coverage ...` |
+| Gate | Triggers On | Command |
+|------|-------------|---------|
+| `opencode-typecheck` | OpenCode plugin sources (TypeScript) | `just typecheck` |
+| `opencode-lint` | OpenCode plugin sources (TypeScript) | `just lint` |
+| `opencode-test` | OpenCode plugin sources (TypeScript) | `just test --coverage` |
 
-### Python Directories
-| Gate | Patterns | Command | Triggers On |
-|------|----------|---------|-------------|
-| `python-lint` | `cli/**/*.py`, `agents/**/*.py`, `evals/**/*.py`, `scripts/**/*.py` | `cd /workspace && just lint` | Python source changes (ruff) — excludes tests |
-| `python-typecheck` | `cli/**/*.py`, `agents/**/*.py`, `evals/**/*.py` | `cd /workspace && just typecheck` | Core Python module changes (mypy) — excludes scripts and tests |
-| `python-test` | `cli/**/*.py`, `agents/**/*.py`, `evals/**/*.py`, `scripts/**/*.py`, `tests/**/*.py` | `cd /workspace && just test` | Any Python source or test change |
+### Python Source and Tests
+| Gate | Triggers On | Command |
+|------|-------------|---------|
+| `python-lint` | CLI command modules, agent runtimes, eval infrastructure, scripts (ruff) — excludes tests | `just lint` |
+| `python-typecheck` | Core Python modules: CLI command modules, agent runtimes, eval infrastructure (mypy) — excludes scripts and tests | `just typecheck` |
+| `python-test` | Any Python source or test change (CLI, agents, evals, scripts, tests) | `just test` |
 
 ### Justfiles
 | Gate | Patterns | Command |
@@ -48,9 +48,9 @@ Quality gates are defined in `.opencode/quality-gates.json`. They auto-run check
 
 ## Runtime Behavior
 
-- Triggered by `tool.execute.after` hook in `quality-gate-enforcer.ts`
+- Triggered by the `tool.execute.after` hook in the quality-gate enforcer plugin
 - Matches changed files against gate patterns using Bun's `Glob`
-- Runs matched gates sequentially via `runGate()`
-- Tracks results in per-session KV store (`sessions/ses_<id>.json`)
+- Runs matched gates sequentially
+- Tracks results in a per-session KV store (keyed by session id)
 - Sends `<steering priority="warning">` messages on status transitions (pass→fail or unknown→fail)
-- Subagent tasks report child session gate failures via `task-gate-reporter.ts`
+- Subagent tasks report child-session gate failures via the gate reporter plugin

@@ -54,13 +54,7 @@ If the real behavior differs from assumptions:
 
 ## Key Discoveries from Live Testing
 
-| Assumption | Reality | Discovery Method |
-|------------|---------|-----------------|
-| write_memory returns JSON | Returns plain text with "written" | Tried JSON.parse, got error |
-| list_memories returns bare array | Returns wrapped JSON object | Parsed and inspected structure |
-| read_memory throws on missing | Returns error string | Called with non-existent name, got string |
-| edit_memory returns error on missing | Throws FileNotFoundError | Wrapped in try/catch, caught exception |
-| delete_memory throws on missing | Returns error string | Called with non-existent name, got string back |
+Return-format and error behavior of the memory tools is documented in `recipes/store-memories.md` and `recipes/manage-memories.md` in the context-gathering skill.
 
 ## Anti-Cheat Patterns
 
@@ -68,6 +62,3 @@ If the real behavior differs from assumptions:
 - **Delete then read**: After deleting, read to verify the memory is gone.
 - **Cross-tool verification**: Verify memory operations using both read_memory and list_memories.
 - **Independent assertion**: Never trust that the tool's success message is sufficient. Verify with a separate call.
-
-See `mem:skills/memory-system/overview` for tool reference.
-See `mem:skills/memory-system/write-patterns` for write patterns.

@@ -1,10 +1,6 @@
 # Enforcing Import Alias Rules Between Source and Test Files
 
-OpenCode plugin projects use a split convention:
-- **Source files** (in `plugins/` and `plugins/helpers/`): MUST use relative imports (`./foo`, `../types/bar`)
-- **Test files** (in `plugins/tests/`): MAY use alias imports (`@plugins/foo`, `@tests/bar`)
-
-This is because the OpenCode runtime does NOT resolve `tsconfig.json` path aliases, but Vitest + tsconfig-paths does in test mode.
+The source-relative / test-alias import split is part of the plugin import architecture — see mem:refactoring/plugin-imports. This memory covers enforcement: why the split gets violated and how to detect and prevent violations.
 
 ## Why This Rule Is Violated
 
@@ -16,12 +12,12 @@ This is because the OpenCode runtime does NOT resolve `tsconfig.json` path alias
 
 Manually grep for `from '@plugins/` in source files (not test files):
 ```
-grep -rn "from '@plugins/" plugins/*.ts plugins/helpers/
+grep -rn "from '@plugins/" <plugins-dir>/*.ts <plugins-dir>/helpers/
 ```
 
 ## How to Fix
 
-Simply replace `@plugins/types/quality-gate` with the relative equivalent: `../types/quality-gate`.
+Replace the alias import with its relative equivalent, based on the importing file's location — e.g., a plugin module importing a helper module uses `./helpers/<name>` instead of `@plugins/helpers/<name>`; shared types use `../types/<name>`.
 
 ## Prevention
 

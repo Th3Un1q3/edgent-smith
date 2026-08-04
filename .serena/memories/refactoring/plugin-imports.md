@@ -17,7 +17,7 @@ A critical architectural finding: the OpenCode plugin system does NOT resolve Ty
 
 ## Documentation
 
-The rule is now codified in:
-- `opencode-plugin-interfaces.instructions.md` (Import Conventions section)
-- `plugin-tests-imports.instructions.md` (warning callout)
-- `plugins/AGENTS.md` (brief note)
+The rule is codified in the project's instruction files and plugin module docs:
+- `.opencode/instructions/opencode-plugin-interfaces.instructions.md` (Import Conventions section)
+- `.opencode/instructions/plugin-tests-imports.instructions.md` (warning callout)
+- `.opencode/plugins/AGENTS.md` (brief note)

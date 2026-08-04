@@ -28,7 +28,4 @@ Validation gates (`just typecheck`, `just lint`, `just test`) should be run afte
 
 ## 5. Dead Code Removal Is Never Just "One Method"
 
-Removing an exported symbol (even a dead one) that appears in test files cascades across mock factories and every test file that uses those mocks. Before removing any export, search for:
-- Direct imports in test files
-- References in mock factories (`__mocks__/`, `__utils/`)
-- References in mock setup (`vi.mock`, `vi.spyOn`)
+The dead-code removal cascade lesson — including the mock-factory dependency chain example — is documented in mem:refactoring/side-effect-cascades.
