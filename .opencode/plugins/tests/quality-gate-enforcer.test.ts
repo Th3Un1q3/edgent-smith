@@ -75,7 +75,7 @@ describe('qualityGateEnforcer', () => {
     }
 
     resetMockState()
-    vi.mocked(loadQualityGates).mockResolvedValue(fixtureConfig)
+    vi.mocked(loadQualityGates).mockReturnValue(fixtureConfig)
     vi.mocked(sendMessage).mockResolvedValue(undefined)
     vi.mocked(runGate).mockResolvedValue(successResult)
 
@@ -313,7 +313,7 @@ describe('qualityGateEnforcer', () => {
 
   describe('edge cases', () => {
     it('empty gates config does nothing', async () => {
-      vi.mocked(loadQualityGates).mockResolvedValue({ gates: [] })
+      vi.mocked(loadQualityGates).mockReturnValue({ gates: [] })
       plugin = await (qualityGateEnforcer as (context: unknown) => Promise<Record<string, unknown>>)(mockContext)
 
       await (plugin['tool.execute.after'] as PluginHook)(
@@ -325,7 +325,7 @@ describe('qualityGateEnforcer', () => {
     })
 
     it('normalizes absolute paths and trailing slashes for glob matching', async () => {
-      vi.mocked(loadQualityGates).mockResolvedValue({
+      vi.mocked(loadQualityGates).mockReturnValue({
         gates: [{ name: 'opencode-typecheck', patterns: ['.opencode/plugins/**/*.ts'], commands: ['just typecheck'] }],
       })
       plugin = await (qualityGateEnforcer as (context: unknown) => Promise<Record<string, unknown>>)(mockContext)
@@ -338,7 +338,7 @@ describe('qualityGateEnforcer', () => {
       expect(runGate).toHaveBeenCalled()
 
       // Trailing slash in workspaceRoot
-      vi.mocked(loadQualityGates).mockResolvedValue({
+      vi.mocked(loadQualityGates).mockReturnValue({
         gates: [{ name: 'lint', patterns: ['src/**/*.ts'], commands: ['just lint'] }],
       })
       mockContext.directory = '/workspace/'
@@ -385,7 +385,7 @@ describe('qualityGateEnforcer', () => {
 
     it('consolidates same-gate runs under a single promise with debounce', async () => {
       vi.useFakeTimers()
-      vi.mocked(loadQualityGates).mockResolvedValue({
+      vi.mocked(loadQualityGates).mockReturnValue({
         gates: fixtureConfig.gates,
         debounceMs: 100,
       })
@@ -540,7 +540,7 @@ describe('qualityGateEnforcer', () => {
     })
 
     it('matches gate when only one pattern matches (some vs every)', async () => {
-      vi.mocked(loadQualityGates).mockResolvedValue({
+      vi.mocked(loadQualityGates).mockReturnValue({
         gates: [
           { name: 'mixed', patterns: ['**/*.test.ts', '**/*.spec.ts'], commands: ['just test'] },
         ],
@@ -667,7 +667,6 @@ describe('qualityGateEnforcer', () => {
         directory: undefined,
       })
 
-      expect(vi.mocked(loadQualityGates)).toHaveBeenCalledWith('/workspace', expect.anything())
       await (fallbackPlugin['tool.execute.before'] as PluginHook)(
         { tool: 'edit', sessionID: 'ses_dir_undef', args: { filePath: '/workspace/src/main.ts' } },
         { args: { filePath: '/workspace/src/main.ts' } },

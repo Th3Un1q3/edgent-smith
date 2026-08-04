@@ -1,0 +1,7 @@
+# Python pytest Patterns (repo-specific)
+
+The Python suite lives in flat `tests/test_*.py` files at the repo root — one file per CLI command, service, or agent (e.g. `test_cli_init.py`, `test_command_context.py`, `test_edge_agent.py`). Do NOT mirror a nested package tree; this differs from the generic `python-testing-patterns` skill, which shows a nested `test_unit/`/`test_integration/` layout. Command behavior is implemented in `cli/commands/<name>.py` `run_*()` functions, so tests target that logic directly or drive the full command through Click's `CliRunner` against the root `cli` group — asserting on `exit_code`, `output`, and side effects rather than the Click decorator layer.
+
+Agent runtime must stay isolated from external services. `agents/edge.py` tests back the agent with pydantic-ai's `TestModel`, set `models.ALLOW_MODEL_REQUESTS = False`, and `monkeypatch` `build_edge_agent` (and tracing helpers) so runs never reach Ollama or the network; tool functions like `calculator` are also unit-tested in isolation. External process calls (e.g. `subprocess.run`) and service clients (`CopilotSessionService`) are replaced with `unittest.mock` so tests assert wiring without real side effects.
+
+Run the suite with `just test` (which invokes `uv run pytest`); the `python-test` quality gate in `.opencode/plugins/config/harness.config.ts` (under `plugins['quality-gate-enforcer']`) fires on any Python source or test change. For cross-cutting consolidation guidance that also applies to these files, see `mem:testing/test-consolidation`.

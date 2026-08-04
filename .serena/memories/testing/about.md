@@ -1,13 +1,14 @@
 # Testing
 
-Covers project testing knowledge — Stryker mutation testing scoping, test file consolidation, OpenCode plugin mock patterns, and Bun sandbox pitfalls.
+Scope: This domain covers project testing knowledge for BOTH the TypeScript stack (Vitest, Stryker mutation testing, Bun sandbox) AND the Python stack (pytest).
+
+Knowledge here spans how test suites are structured and isolated, how mutation runs are scoped and tuned, and how sandbox-specific failures are diagnosed.
 
 ## Key Concepts
 
-- **mutation-scoping**: Scoping Stryker mutation runs to changed modules; threshold interaction and equivalent mutants.
-- **test-consolidation**: Pre-consolidation analysis, consolidation techniques (it.each, single preamble), and anti-patterns.
-- **plugin-mock-patterns**: Mock SessionStorage patterns, phase-based TDD for plugins, and hook-related testing pitfalls.
-- **bun-sandbox**: Bun-specific API calls vulnerable in the Stryker sandbox — root cause and fixes.
+- **TypeScript plugin testing**: Vitest suites for OpenCode plugins — mock SessionStorage seams, phase-based TDD, hook pitfalls, and Bun APIs that break inside the Stryker sandbox.
+- **Python testing**: pytest layout, the Click CLI invocation seam, agent isolation, and how the suite is executed.
+- **Mutation and consolidation strategy**: scoping Stryker runs to changed modules, threshold interaction with equivalent mutants, and merging overlapping test files without losing coverage.
 
 ## Related Domains
 

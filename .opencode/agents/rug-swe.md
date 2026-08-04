@@ -2,7 +2,7 @@
 name: rug-swe
 mode: subagent
 steps: 50
-permissions:
+permission:
   task: deny
   question: deny
   webfetch: deny
@@ -10,6 +10,8 @@ permissions:
   grep: deny
   list_mcp_*: deny
   read_mcp_*: deny
+  read:
+   ".serena/memories/*": deny
 ---
 
 ## Identity

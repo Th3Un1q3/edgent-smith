@@ -12,7 +12,53 @@
  * helpers/ and types/ subdirs already prove this.)
  *
  * Test reference: .opencode/plugins/tests/skill-usage-tracker.test.ts L262
+ * Test reference: .opencode/plugins/tests/helpers/gate-config.test.ts
  */
+
+import type { GateConfig } from '../types/quality-gate'
+
+/**
+ * Declared as a typed `GateConfig[]` (not an inline literal) so the `as const`
+ * on `harnessConfig` does not widen it into a `readonly` tuple, which would not
+ * satisfy `GateConfig.patterns: string[]`.
+ */
+const qualityGates: GateConfig[] = [
+  {
+    name: 'opencode-typecheck',
+    patterns: ['.opencode/plugins/**/*.ts'],
+    commands: ['cd /workspace/.opencode && just typecheck'],
+  },
+  {
+    name: 'opencode-lint',
+    patterns: ['.opencode/plugins/**/*.ts'],
+    commands: ['cd /workspace/.opencode && just lint'],
+  },
+  {
+    name: 'opencode-test',
+    patterns: ['.opencode/plugins/**/*.ts'],
+    commands: ['cd /workspace/.opencode && just test --coverage --coverage.thresholds.branches 85 --coverage.thresholds.functions 85 --coverage.thresholds.lines 85 --coverage.thresholds.statements 85'],
+  },
+  {
+    name: 'python-lint',
+    patterns: ['cli/**/*.py', 'agents/**/*.py', 'evals/**/*.py', 'scripts/**/*.py'],
+    commands: ['cd /workspace && just lint'],
+  },
+  {
+    name: 'python-typecheck',
+    patterns: ['cli/**/*.py', 'agents/**/*.py', 'evals/**/*.py'],
+    commands: ['cd /workspace && just typecheck'],
+  },
+  {
+    name: 'python-test',
+    patterns: ['cli/**/*.py', 'agents/**/*.py', 'evals/**/*.py', 'scripts/**/*.py', 'tests/**/*.py'],
+    commands: ['cd /workspace && just test'],
+  },
+  {
+    name: 'justfile-fmt',
+    patterns: ['justfile', '**/justfile'],
+    commands: ['for f in $(find /workspace -name justfile -not -path \'*/node_modules/*\' -not -path \'*/.git/*\' -not -path \'*/.stryker-tmp/*\'); do cd "$(dirname "$f")" && just --unstable --fmt --check || exit 1; done'],
+  },
+]
 
 export const harnessConfig = {
   plugins: {
@@ -28,8 +74,11 @@ export const harnessConfig = {
       factor: 0.8, // agent budget = floor(steps * factor)
       padding: 2, // PADDING_TILL_ERROR — extra calls for the in-flight current call
     },
+    'quality-gate-enforcer': {
+      gates: qualityGates,
+      debounceMs: 300,
+    },
     // Future plugin sections:
-    // 'quality-gate-enforcer': { ... },   // gates from .opencode/quality-gates.json
     // 'todo-enforcer': { ... },
   },
 } as const

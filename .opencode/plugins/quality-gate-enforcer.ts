@@ -44,7 +44,7 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
   const gatesState: Record<string, GateStateEntry> = {}
 
   const resolvedDirectory = directory ?? '/workspace'
-  const qualityGatesConfig = await loadQualityGates(resolvedDirectory, client)
+  const qualityGatesConfig = loadQualityGates()
   const gates = qualityGatesConfig.gates
   const sessionStorage = new SessionStorage()
   const targetedTools = new Set(['edit', 'write'])

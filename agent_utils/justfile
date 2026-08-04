@@ -111,3 +111,50 @@ review-start session_id="":
         echo "SESSION_JSON=$SESSION_DIR/session.json"
         echo "REVIEW_MD=$REVIEW_MD"
     fi
+
+# ---------------------------------------------------------------------------
+# AFK mode (permission auto-reject support)
+# ---------------------------------------------------------------------------
+# Toggle AFK mode via a flag file. When the flag exists, permission requests
+# are auto-rejected; when absent, permissions are prompted as usual.
+# Outputs machine-parseable status lines for the command to consume.
+# Usage: just agent_utils/afk [on|off|status]   (default: status)
+
+# Override the flag file path with the AFK_FLAG_FILE env var (default: .tmp/is_afk)
+afk action="status":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd /workspace
+    FLAG="${AFK_FLAG_FILE:-.tmp/is_afk}"
+    case "{{ action }}" in
+        on)
+            mkdir -p "$(dirname "$FLAG")"
+            touch "$FLAG"
+            echo "STATUS=afk_on"
+            echo "MESSAGE=AFK mode is ON — permissions will be auto-rejected."
+            echo "FLAG_FILE=$FLAG"
+            ;;
+        off)
+            if [ -f "$FLAG" ]; then
+                rm "$FLAG"
+            fi
+            echo "STATUS=available"
+            echo "MESSAGE=AFK mode is OFF — permissions will be prompted as usual."
+            echo "FLAG_FILE=$FLAG"
+            ;;
+        status)
+            if [ -f "$FLAG" ]; then
+                echo "STATUS=afk"
+                echo "MESSAGE=AFK mode is ON — permissions will be auto-rejected."
+            else
+                echo "STATUS=available"
+                echo "MESSAGE=AFK mode is OFF — permissions will be prompted as usual."
+            fi
+            echo "FLAG_FILE=$FLAG"
+            ;;
+        *)
+            echo "STATUS=error"
+            echo "MESSAGE=Usage: just agent_utils/afk [on|off|status]"
+            exit 1
+            ;;
+    esac

@@ -5,9 +5,8 @@ Covers the context-gathering skill system — reusable skill definitions, recipe
 ## Key Concepts
 
 - **skill-architecture**: How Docker MCP Gateway, code-mode, and skill definitions interconnect.
-- **recipe-structure**: Standard template for context-gathering skill recipes — overview tables, prerequisites, scripts, best practices, pitfalls.
 - **live-testing**: Verifying skill recipes, MCP server interactions, and memory operations against real servers.
-- **memory-conventions**: Domain/about/index pattern, `mem:` cross-referencing, and quality checklist for persisted knowledge.
+- **memory-conventions**: Convention details live in the context-gathering skill; this domain stores only project-specific deltas.
 
 ## Related Domains
 

@@ -9,4 +9,5 @@ Landing page for all testing domain memories — mutation scoping, test consolid
 | bun-sandbox | [mem:testing/bun-sandbox](mem:testing/bun-sandbox) |
 | mutation-scoping | [mem:testing/mutation-scoping](mem:testing/mutation-scoping) |
 | plugin-mock-patterns | [mem:testing/plugin-mock-patterns](mem:testing/plugin-mock-patterns) |
+| python-patterns | [mem:testing/python-patterns](mem:testing/python-patterns) |
 | test-consolidation | [mem:testing/test-consolidation](mem:testing/test-consolidation) |

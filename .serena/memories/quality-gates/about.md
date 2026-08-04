@@ -1,15 +1,15 @@
 # Quality Gates
 
-Covers the automated quality gate system — configuration schema, gate definitions for Python, TypeScript, and Justfile targets, and design rules for narrow triggers and appropriate checks.
+Covers the automated quality-gate system that runs checks against changed files during an editing session: the typed gate schema, the rules deciding which check runs on which file type, and how gate results reach the agent at runtime.
 
 ## Key Concepts
 
-- **gate-configuration**: Quality gate schema and existing gates for Python, TypeScript, and Justfile targets.
-- **design-rules**: Narrow triggers, appropriate checks, and sequential execution for gates that run on relevant file changes.
-- **steering-messages**: Runtime behavior and steering message patterns when gates fail.
+- **gate-configuration**: The `gates[]` TypeScript schema — gate name, trigger patterns, and the command sequence each gate runs.
+- **design-rules**: How to decide which check belongs on which target — narrow triggers, no irrelevant checks, early exit, debounce.
+- **runtime-behavior**: How gates fire on file changes, how results are tracked per session, and when a steering message is emitted.
 
 ## Related Domains
 
-- mem:refactoring/plugin-imports — Lint gates that catch import violations.
-- mem:testing/mutation-scoping — How the mutation threshold gate is scoped to changed modules.
-- mem:skills/architecture — How quality gates fit in the skill system.
+- `mem:refactoring/restructure-patterns` — Restructuring trips the lint and typecheck gates first; gate output drives the fix order.
+- `mem:testing/test-consolidation` — Shapes what the test gate actually executes when source or test files change.
+- `mem:refactoring/plugin-imports` — The class of import violation the lint gate is expected to catch.

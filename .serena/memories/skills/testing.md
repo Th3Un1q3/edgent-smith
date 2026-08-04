@@ -5,7 +5,7 @@ Live-testing approach for verifying skill recipes, MCP server interactions, and 
 ## Core Principles
 
 1. **Test against actual servers**: Never assume API behavior. Test every script against the real MCP server.
-2. **Check actual return formats**: Documented behavior may differ from reality. Verify return types (JSON string vs plain text, array vs wrapped object).
+2. **Check actual return formats**: Documented behavior may differ from reality. Verify return types (JSON string vs plain text, array vs wrapped object) — the verified return formats and error behavior of the memory tools are documented in `recipes/store-memories.md` and `recipes/manage-memories.md` in the context-gathering skill.
 3. **Anti-cheat validation**: Independently verify results using a different tool or path.
 4. **Iterate on findings**: When a test reveals unexpected behavior, fix the recipe and re-test.
 
@@ -51,10 +51,6 @@ If the real behavior differs from assumptions:
 1. Document the actual behavior in the recipe
 2. Fix the recipe code to handle the real format
 3. Re-test to confirm the fix
-
-## Key Discoveries from Live Testing
-
-Return-format and error behavior of the memory tools is documented in `recipes/store-memories.md` and `recipes/manage-memories.md` in the context-gathering skill.
 
 ## Anti-Cheat Patterns
 

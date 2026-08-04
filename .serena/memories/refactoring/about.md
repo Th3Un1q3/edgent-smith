@@ -10,6 +10,9 @@ Captures refactoring patterns, architectural decisions, and migration findings d
 - **Static-analysis tradeoffs**: Lint-rule decisions that expose architectural constraints rather than style preferences (e.g., max-line violations).
 - **Plugin runtime behavior**: Hook lifecycle, SessionStorage-backed state, and test harness configuration.
 - **Process lessons**: Meta-insights from past refactoring sessions on how to run them effectively.
+- **Python module moves**: Relocating a module between layers behind a re-export shim, pinned by a guard test.
+
+NOTE: topics prefixed `plugin-*`/`alias-*` and the closure/lint items are TypeScript + OpenCode-plugin specific; Python topics are prefixed `python-*`.
 
 ## Related Domains
 

@@ -22,6 +22,6 @@ How the Docker MCP Gateway, code-mode sandboxes, Serena MCP server, and skill de
 
 ## Related
 
-- `mem:skills/recipe-structure` - how recipes are structured and organized
+- Skill recipes should record verified live return formats (e.g. `write_memory` returns plain text, `list_memories` returns a wrapped JSON object), learned from real-server testing — see `mem:skills/testing`.
 - The 6 Serena memory tools in detail: `recipes/store-memories.md` and `recipes/manage-memories.md` in the context-gathering skill
 - Naming and cross-reference conventions: `recipes/memory-convention.md` in the context-gathering skill
