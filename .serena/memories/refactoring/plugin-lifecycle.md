@@ -18,15 +18,15 @@ Plugin-specific config lives in the plugin harness configuration file under a `p
 
 ## Permission Gating
 
-A plugin can veto any tool or permission request from the `permission.ask` hook by setting `output.status = 'deny'`.
+Permission interception runs on the `event` hook for `permission.asked` — NOT the `permission.ask` hook, which is typed but never dispatched at runtime in opencode 1.18.4 (see mem:refactoring/permission-hooks).
 
+- **Reject** with `client.postSessionIdPermissionsPermissionId({ path: { id: sessionID, permissionID: requestID }, body: { response: 'reject' } })` — the SDK body type has NO `message` field, so the rationale is delivered separately via `sendMessage({ noReply: true })`.
 - **Gate on an out-of-band flag file**, not in-memory state, so the mode toggles from outside a running session. Default `.tmp/is_afk`, overridable via a plugin option (`flagPath`).
-- **Pair the deny with `sendMessage({ noReply: true })`** so the agent learns why it was denied without spawning a reply turn.
 - **Emit an automated `<steering priority="warning">` message**, not a plain string — plugins follow the schema in `.opencode/instructions/steering-message.md`. The body must be actionable and noise-free: state that the permission was auto-denied because the user is AFK, and instruct the agent not to retry but to stop and report the blocked step. The constant is exported (`AFK_MESSAGE`) so tests assert against it instead of a hardcoded literal.
 - **Operator toggle**: `just agent_utils/afk [on|off|status]`; path overridable via the `AFK_FLAG_FILE` env var.
 - **Blanket deny**: while the flag file exists every permission request is denied — this is not a per-tool denylist.
 
-Reference implementation: `.opencode/plugins/afk-enforcer.ts`.
+Reference implementation: `.opencode/plugins/afk-enforcer.ts`. Hook-dispatch pitfall and SDK method details: mem:refactoring/permission-hooks.
 
 ## References
 

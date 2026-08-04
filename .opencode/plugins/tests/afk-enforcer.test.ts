@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import type { PluginInput, PluginOptions } from '@opencode-ai/plugin'
 
-import type { Permission } from '@opencode-ai/sdk'
+import type { Event, Permission } from '@opencode-ai/sdk'
 
 import type { ClientMock } from '@tests/helpers/mock-utilities'
 
@@ -26,56 +26,80 @@ import { afkEnforcer } from '@plugins/afk-enforcer'
 import { AFK_MESSAGE } from '@plugins/helpers/afk'
 
 const DEFAULT_FLAG_PATH = '/workspace/.tmp/is_afk'
+const REQUEST_ID = 'perm_afk_test'
 
 interface AfkEnforcerPlugin {
+  'event': (input: { event: Event }) => Promise<void>
   'permission.ask': (input: Permission, output: { status: 'ask' | 'deny' | 'allow' }) => Promise<void>
 }
 
-const makePermissionInput = (sessionID: string): Permission => ({
-  id: 'perm_afk_test',
-  type: 'bash',
-  sessionID,
-  messageID: 'msg_afk_test',
-  title: 'Run command',
-  metadata: {},
-  time: { created: 1_700_000_000_000 },
+/**
+ * Mirrors `EventPermissionAsked` from
+ * `@opencode-ai/sdk/dist/v2/gen/types.gen.d.ts`. The v1 `Event` union exported
+ * from the package root predates this member, hence the cast.
+ */
+const makePermissionAskedEvent = (sessionID: string): Event => ({
+  id: 'evt_afk_test',
+  type: 'permission.asked',
+  properties: {
+    id: REQUEST_ID,
+    sessionID,
+    permission: 'bash',
+    patterns: ['*'],
+    metadata: {},
+    always: [],
+  },
+} as unknown as Event)
+
+const makeClient = () => ({
+  ...opencodeClientFactory(),
+  postSessionIdPermissionsPermissionId: vi.fn().mockResolvedValue({}),
 })
 
 describe('afkEnforcer', () => {
-  let client: ReturnType<typeof opencodeClientFactory>
+  let client: ReturnType<typeof makeClient>
   let plugin: AfkEnforcerPlugin
 
   const makePlugin = async (options?: PluginOptions): Promise<void> => {
-    client = opencodeClientFactory()
+    client = makeClient()
     plugin = (await afkEnforcer(
       pluginContextBuilder({ clientFactory: () => client as unknown as ClientMock }) as unknown as PluginInput,
       options,
-    )) as AfkEnforcerPlugin
+    )) as unknown as AfkEnforcerPlugin
   }
 
   beforeEach(async () => {
     await makePlugin()
   })
 
-  describe('permission.ask', () => {
+  describe('event — permission.asked', () => {
     describe('when the afk flag file exists', () => {
       beforeEach(() => {
         vi.mocked(access).mockResolvedValue(undefined)
       })
 
-      it('denies the permission and posts the afk message with noReply', async () => {
-        const output = { status: 'ask' as const }
+      it('rejects the pending permission request via the client', async () => {
+        await plugin.event({ event: makePermissionAskedEvent('ses_afk') })
+        expect(client.postSessionIdPermissionsPermissionId).toHaveBeenCalledWith({
+          path: { id: 'ses_afk', permissionID: REQUEST_ID },
+          body: { response: 'reject' },
+        })
+      })
 
-        await plugin['permission.ask'](makePermissionInput('ses_afk'), output)
-        expect(output.status).toBe('deny')
+      it('posts the steering afk message into the session with noReply', async () => {
+        await plugin.event({ event: makePermissionAskedEvent('ses_afk') })
         expect(sendMessage).toHaveBeenCalledWith({ client, sessionId: 'ses_afk', message: AFK_MESSAGE, noReply: true })
       })
 
       it('checks the default flag path under the workspace directory when no options are given', async () => {
-        const output = { status: 'ask' as const }
-
-        await plugin['permission.ask'](makePermissionInput('ses_default'), output)
+        await plugin.event({ event: makePermissionAskedEvent('ses_default') })
         expect(vi.mocked(access)).toHaveBeenCalledWith(DEFAULT_FLAG_PATH)
+      })
+
+      it('ignores events that are not permission.asked', async () => {
+        await plugin.event({ event: { type: 'session.idle', properties: { sessionID: 'ses_idle' } } as unknown as Event })
+        expect(client.postSessionIdPermissionsPermissionId).not.toHaveBeenCalled()
+        expect(sendMessage).not.toHaveBeenCalled()
       })
     })
 
@@ -84,11 +108,13 @@ describe('afkEnforcer', () => {
         vi.mocked(access).mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }))
       })
 
-      it('leaves the permission status unchanged and does not send a message', async () => {
-        const output = { status: 'ask' as const }
+      it('does not reject the permission request', async () => {
+        await plugin.event({ event: makePermissionAskedEvent('ses_present') })
+        expect(client.postSessionIdPermissionsPermissionId).not.toHaveBeenCalled()
+      })
 
-        await plugin['permission.ask'](makePermissionInput('ses_present'), output)
-        expect(output.status).toBe('ask')
+      it('does not send a message', async () => {
+        await plugin.event({ event: makePermissionAskedEvent('ses_present') })
         expect(sendMessage).not.toHaveBeenCalled()
       })
     })
@@ -100,27 +126,25 @@ describe('afkEnforcer', () => {
       })
 
       it('checks the custom flag path instead of the default', async () => {
-        const output = { status: 'ask' as const }
-
-        await plugin['permission.ask'](makePermissionInput('ses_custom'), output)
+        await plugin.event({ event: makePermissionAskedEvent('ses_custom') })
         expect(vi.mocked(access)).toHaveBeenCalledWith('/custom/path/is_afk')
         expect(vi.mocked(access)).not.toHaveBeenCalledWith(DEFAULT_FLAG_PATH)
       })
     })
+  })
 
-    describe('when the permission input lacks a sessionID', () => {
-      beforeEach(() => {
-        vi.mocked(access).mockResolvedValue(undefined)
-      })
+  describe('permission.ask placeholder', () => {
+    beforeEach(() => {
+      vi.mocked(access).mockResolvedValue(undefined)
+    })
 
-      it('still denies the permission without sending a message or throwing', async () => {
-        const input = { ...makePermissionInput('ses_missing'), sessionID: undefined } as unknown as Permission
-        const output = { status: 'ask' as const }
+    it('is a no-op that leaves the permission status unchanged', async () => {
+      const input = { id: REQUEST_ID, sessionID: 'ses_placeholder' } as unknown as Permission
+      const output = { status: 'ask' as const }
 
-        await expect(plugin['permission.ask'](input, output)).resolves.toBeUndefined()
-        expect(output.status).toBe('deny')
-        expect(sendMessage).not.toHaveBeenCalled()
-      })
+      await expect(plugin['permission.ask'](input, output)).resolves.toBeUndefined()
+      expect(output.status).toBe('ask')
+      expect(sendMessage).not.toHaveBeenCalled()
     })
   })
 })

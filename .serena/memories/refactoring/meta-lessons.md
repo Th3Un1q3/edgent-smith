@@ -29,3 +29,11 @@ Validation gates (`just typecheck`, `just lint`, `just test`) should be run afte
 ## 5. Dead Code Removal Is Never Just "One Method"
 
 The dead-code removal cascade lesson — including the mock-factory dependency chain example — is documented in mem:refactoring/side-effect-cascades.
+
+## 6. Typed API Surface ≠ Runtime Dispatch
+
+A hook or method present in the type surface may never be invoked by the runtime. Before debugging behavior, prove dispatch with runtime logs — count hook invocations vs runtime events in one process. The AFK enforcer lost the most time assuming `permission.ask` fired because the types said it existed; the runtime never dispatched it (details: mem:refactoring/permission-hooks).
+
+## 7. After Switching API Methods, Remove Orphaned Constants
+
+Changing from one API to another orphans constants and doc comments referencing the removed API (e.g., `AFK_REPLY_MESSAGE` after moving off `permission.reply`). Grep for the old symbol and delete it with its comment as part of the same refactor.

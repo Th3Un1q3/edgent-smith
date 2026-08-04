@@ -23,8 +23,13 @@ Implement each phase fully before starting the next. Do not implement detection 
 - **Test ordering bugs**: Real-world event sequence is prompt-first, then tool. Reversing this order breaks guard logic that rejects re-parsing when state already exists.
 - **Mock factory gaps**: A mock factory that doesn't export every dependency will cause silent failures — verify coverage before starting TDD.
 
+## Permission-Rejection Tests
+
+Drive the `event` hook directly: dispatch a `permission.asked` payload (`{ type: 'permission.asked', properties: { id, sessionID } }`), then assert the reject method was called with the exact nested shape (`{ path: { id, permissionID }, body: { response: 'reject' } }`). Also assert it is NOT called for other event types and when the gate (flag file) is absent.
+
 ## References
 
 - `mem:testing/mutation-scoping` — scoping mutation tests to changed modules
 - `mem:testing/bun-sandbox` — Bun API calls vulnerable in Stryker sandbox
 - `mem:refactoring/plugin-lifecycle` — plugin hook lifecycle patterns
+- mem:refactoring/permission-hooks — permission interception pitfalls

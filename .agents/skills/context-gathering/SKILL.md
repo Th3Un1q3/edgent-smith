@@ -91,7 +91,13 @@ return {
 - **Using async functions**: All tool calls must be synchronous.
 - **Using curl or webfetch**: Terminal tools are less effective than code-mode tools, and often fail to fetch or parse results. Use
   code-mode tools instead. MCP tools are already authenticated.
-- **Using `read` and `grep` tools for research**: "read" and "grep" tools fine to read exact files. For context gathering gateway_* tools and recipies much more token efficent and advanced for context gathering. Load recepis instead and follow them. 
+- **Using `read`/`grep` on the Serena memory store**: NEVER read `.serena/memories/*`
+  with `read`, `grep`, `glob`, `ls`, or shell tools — direct access is DENIED by
+  permission and wastes a round. Project memories are accessible ONLY through the
+  `serena` MCP server via `gateway_mcp-find` → `gateway_code-mode` → `gateway_mcp-exec`
+  (recipes: store-memories, collect-relevant-memories).
+- **Using `read` and `grep` for other research**: fine to read exact files; for
+  broader context gathering the gateway_* tools are more token-efficient.
 
 ## Task Routing Table
 

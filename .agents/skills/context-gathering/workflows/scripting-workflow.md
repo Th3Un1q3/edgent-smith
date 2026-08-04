@@ -14,7 +14,7 @@ Make sure to perform servers discovery and code mode activation steps in the [Se
 
 - ReferenceError for a tool name indicates the tool is not provided by any server, used to activate `code_mode`. Verify tool names match names returned when activating code mode, and that the correct servers are included in the `servers` list in the `code_mode` call.
 - Setup Error handlers on every tool call and processing stage, ensure to exit early, and provide information required to troubleshoot the issue. (if parsing failed, output raw response, and previous steps responses, to understand what was supplied to parsing, and what exactly the error was)
-- Perform multiple smaller mcp_exec calls with intermediate outputs if needed, rather than one big script, to simplify debugging and error handling.
+- Prefer ONE `mcp_exec` call for a fixed batch of writes or reads: per-op try/catch, per-op success checks, a per-op status report, no early abort. Split into multiple calls only when debugging a failing write/read, when the payload is exploratory and you need intermediate output to decide the next step, or when a later call depends on an earlier call's result. See the store-memories recipe's "Batch multiple writes in one call" section for the pattern.
 
 
 ## JSON Escaping in mcp-exec Scripts
@@ -26,12 +26,13 @@ When writing scripts for `mcp-exec`, the script string is embedded in JSON. This
 - Use **array-join** to build multi-line strings: `['line1', 'line2'].join('\\n')` — JSON-level `\\n` becomes JS newline
 - For literal double quotes in the final output content: use `\\\"` triple escaping
 - Avoid embedding raw `\n` or `\"` inside the JSON script string — they corrupt JSON parsing
+- When content mixes single and double quotes (e.g., `'reject'` and `priority="warning"`), pick the JS quote per line: double-quoted JS elements for lines containing single quotes; escape content double quotes only (`\\\"`).
 
 **Common failure symptoms:**
 - `JSON Parse error: Unterminated string` — you used `"` inside a JS string and the JSON parser grabbed it
 - `Unexpected token ILLEGAL` — the script had `\"` that the JSON parser consumed, breaking JS syntax
 
-**Always wrap every tool call in try/catch** and verify success via return-value checks (e.g., `result.indexOf('written')` for write_memory).
+**Always wrap every tool call in try/catch** and verify success via return-value checks (e.g., `result.indexOf('written')` for `write_memory`, `result.indexOf('edited')` for `edit_memory`).
 
 ### Broken pattern (raw double quotes in JS strings)
 

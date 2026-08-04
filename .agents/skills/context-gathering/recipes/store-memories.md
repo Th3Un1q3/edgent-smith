@@ -1,6 +1,7 @@
 # Store Memories
 
 All recipes use the **serena** MCP server via a code-mode environment (`code-mode-memory-store`).
+Serena memories are gateway-only: never read `.serena/memories/*` on disk — the `read` tool is denied there, and bypassing it (cat/sed/shell) is prohibited.
 
 ## Store a single memory
 
@@ -139,6 +140,61 @@ if (typeof writeResult === "string" && writeResult.indexOf("written") > 0) {
   return "Error writing memory: " + writeResult;
 }
 ```
+
+## Batch multiple writes in one call
+
+Prefer ONE `mcp-exec` call for a fixed batch of related writes (several memories in a
+domain, or an index plus its topics). Batching saves round trips and context: one script,
+one per-memory status report, no intermediate returns to inspect. Each write gets its own
+defensive check, and a failure does NOT abort sibling writes — the script continues and
+reports per-memory status so a retry re-sends only the failed operation.
+
+```javascript
+// Defensive helpers. read_memory may return plain Markdown or JSON-wrapped content.
+// write_memory returns "...written."; edit_memory returns "...edited successfully." — NOT "written."
+function readMem(name) {
+  try {
+    var raw = read_memory({ memory_name: name });
+    try { var parsed = JSON.parse(raw); return parsed.content || raw; } catch (e) { return raw; }
+  } catch (e) { return 'ERROR: ' + e.message; }
+}
+function ok(res) {
+  return typeof res === 'string' && (res.indexOf('written') >= 0 || res.indexOf('edited') >= 0);
+}
+var report = [];
+function w(name, content) {
+  try {
+    var r = write_memory({ memory_name: name, content: content });
+    report.push((ok(r) ? 'OK   ' : 'FAIL ') + name + ': ' + r);
+    return ok(r);
+  } catch (e) { report.push('ERROR ' + name + ': ' + e.message); return false; }
+}
+function e(name, mode, needle, repl) {
+  try {
+    var r = edit_memory({ memory_name: name, mode: mode, needle: needle, repl: repl });
+    report.push((ok(r) ? 'OK   ' : 'FAIL ') + name + ': ' + r);
+    return ok(r);
+  } catch (e) { report.push('ERROR ' + name + ': ' + e.message); return false; }
+}
+
+// 0. read-before-write lives INSIDE the script
+var index = readMem('my-domain/index');
+
+// 1. write topic memories FIRST so the index never references a missing memory
+w('my-domain/topic-a', ['# Topic A', '', 'Content about A.'].join('\n'));
+w('my-domain/topic-b', ['# Topic B', '', 'Content about B.'].join('\n'));
+
+// 2. then update the index (literal edit; write_memory OVERWRITES, so prefer edit_memory for partial updates)
+e('my-domain/index', 'literal', '| topic-a |',
+  '| topic-a | [mem:my-domain/topic-a](mem:my-domain/topic-a) |');
+
+// 3. return the per-memory status report — never abort the batch on one failure
+return report.join('\n');
+```
+
+Notes:
+- Write topic memories BEFORE the index row so the index never points at a missing memory.
+- Split into separate calls only when debugging a failing write, or when a later call depends on an earlier call's output.
 
 ## Domain-Based Writing
 
@@ -285,6 +341,8 @@ var r = writeMemoryDefensive("my-domain/topic", "# Topic\n\nContent here.\n");
 if (!r.ok) { return r.error; }
 ```
 
+For `edit_memory` (literal/regex partial updates), the success string is `"...edited successfully."`, not `"written."` — check `res.indexOf('edited') >= 0` (the `ok()` helper in "Batch multiple writes in one call" handles both).
+
 ## Best practices
 
 - **Use hierarchical naming** (`topic/subtopic/name`) so memories are discoverable via `list_memories({ topic: "..." })`. A flat list of names becomes unmanageable as the project grows.
@@ -292,6 +350,7 @@ if (!r.ok) { return r.error; }
 - **Cross-reference with `mem:` prefix** so anyone reading one memory can navigate to related ones without searching. Serena has no semantic search — cross-references are the only navigation aid.
 - **Start with an overview memory** that lists child memories and their cross-references. Treat it as a table of contents for a topic subtree.
 - **Group related memories under shared topic prefixes**. For example, all auth-related memories under `auth/`, all API endpoint docs under `api/`.
+- **Prefer one `mcp-exec` call for a batch of related writes** (index + its topics, or several memories in one domain): fewer round trips, one per-memory status report, no intermediate returns. Each write gets its own defensive check and a failure does not abort siblings — split calls only when debugging a failing write.
 
 ## Common pitfalls
 
