@@ -21,7 +21,9 @@ import { sendMessage } from '@plugins/helpers/session-helpers'
 
 import { access } from 'node:fs/promises'
 
-import { afkEnforcer, AFK_MESSAGE } from '@plugins/afk-enforcer'
+import { afkEnforcer } from '@plugins/afk-enforcer'
+
+import { AFK_MESSAGE } from '@plugins/helpers/afk'
 
 const DEFAULT_FLAG_PATH = '/workspace/.tmp/is_afk'
 

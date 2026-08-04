@@ -5,6 +5,56 @@ import stylistic from "@stylistic/eslint-plugin"
 
 const allFiles = ["**/plugins/**/*.ts", "**/helpers/**/*.ts", "**/types/**/*.ts"]
 
+// Custom rule: plugin root files (plugins/*.ts, NOT helpers/ tests/ types/) must only
+// export Plugin-typed values. Exporting unrelated constants/variables from a plugin
+// entry file breaks plugin loading (see the FIXME historically present in afk-enforcer.ts).
+const pluginExportGuard = {
+  rules: {
+    "no-non-plugin-export": {
+      meta: {
+        type: "problem",
+        docs: {
+          description:
+            "Plugin root files must only export Plugin-typed values. Move unrelated constants to helpers/.",
+        },
+        messages: {
+          nonPluginExport:
+            "Plugin files must only export Plugin-typed values. Move unrelated constants/variables (e.g. '{{ name }}') to a helpers/ module.",
+        },
+        schema: [],
+      },
+      create(ctx) {
+        return {
+          ExportNamedDeclaration(node) {
+            const declaration = node.declaration
+            if (!declaration || declaration.type !== "VariableDeclaration") return
+            for (const decl of declaration.declarations) {
+              if (decl.id.type !== "Identifier") continue
+              const annotation = decl.id.typeAnnotation
+              const isPluginAnnotated =
+                annotation?.type === "TSTypeAnnotation" &&
+                annotation.typeAnnotation.type === "TSTypeReference" &&
+                annotation.typeAnnotation.typeName.type === "Identifier" &&
+                annotation.typeAnnotation.typeName.name === "Plugin"
+              const init = decl.init
+              const isFunction =
+                init != null &&
+                (init.type === "ArrowFunctionExpression" || init.type === "FunctionExpression")
+              if (!isPluginAnnotated && !isFunction) {
+                ctx.report({
+                  node: decl,
+                  messageId: "nonPluginExport",
+                  data: { name: decl.id.name },
+                })
+              }
+            }
+          },
+        }
+      },
+    },
+  },
+}
+
 export default [
   ...tseslint.configs.recommended.map((c) => ({
     ...c,
@@ -66,6 +116,13 @@ export default [
       }
     },
     rules: { "ban-disable/no-eslint-disable": "error" },
+  },
+  {
+    // Plugin root files (direct children of a plugins/ dir) must only export
+    // Plugin-typed values. helpers/, tests/, and types/ are exempt.
+    files: ["**/plugins/*.ts"],
+    plugins: { "plugin-export-guard": pluginExportGuard },
+    rules: { "plugin-export-guard/no-non-plugin-export": "error" },
   },
   {
     files: ["**/plugins/**/*.ts", "**/helpers/**/*.ts", "**/types/**/*.ts"],

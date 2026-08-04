@@ -3,10 +3,9 @@ import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { log } from './helpers/logger'
 import { sendMessage } from './helpers/session-helpers'
+import { AFK_MESSAGE } from './helpers/afk'
 
 const PLUGIN_ID = 'afk-enforcer'
-
-export const AFK_MESSAGE = '<steering priority="warning" reason="user is away from keyboard — permission auto-denied by afk-enforcer plugin">Permission auto-denied: the user is AFK and cannot approve this request. Do not retry; continue with available tools or stop and report the blocked step.</steering>'
 
 type AfkEnforcerOptions = { flagPath?: string } & PluginOptions
 
