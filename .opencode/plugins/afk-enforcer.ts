@@ -27,6 +27,8 @@ export const afkEnforcer: Plugin = async ({ client, directory }, options?) => {
 
   return {
     'permission.ask': async (input, output) => {
+      await log(client, 'info', `permission requested ${JSON.stringify({ input, output })}`, PLUGIN_ID)
+
       const isAfk = await checkAfk()
 
       await log(client, 'info', `afk evaluatied as ${isAfk ? 'true' : 'false'}`, PLUGIN_ID)
