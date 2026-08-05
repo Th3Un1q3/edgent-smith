@@ -3,6 +3,12 @@
 All recipes use the **serena** MCP server via a code-mode environment (`code-mode-memory-store`).
 Serena memories are gateway-only: never read `.serena/memories/*` on disk — the `read` tool is denied there, and bypassing it (cat/sed/shell) is prohibited.
 
+## BLOCKING GATE — Run Before Any `write_memory`
+
+If ANY box is unchecked, DO NOT WRITE. Fix the item or skip the write. Writing with an unchecked box corrupts the store.
+
+The 6 checks and the AFTER-WRITING verify step live in the [Memory Management Checklist](../references/memory-management-checklist.md) — open it and run the gate before EVERY write (including edits and rewrites; for a batch of related memories, run it once on the planned set, then verify the set).
+
 ## Store a single memory
 
 Writes a markdown document describing one concept.
@@ -108,16 +114,7 @@ return "OK — wrote auth/overview, auth/login, auth/tokens, auth/permissions/ro
 Use `write_memory` with `max_chars` to read, append content, and write back. Note that `edit_memory` (regex/literal replacement) is the preferred way for partial updates.
 
 ```javascript
-// Helper: get memory content, handling both JSON-wrapped and plain-text returns
-function readMemoryContent(name) {
-  var raw = read_memory({ memory_name: name });
-  try {
-    var parsed = JSON.parse(raw);
-    return parsed.content || raw;
-  } catch (e) {
-    return raw;
-  }
-}
+// Helper: readMemoryContent / parseJson / success checks — see ../references/serena-memory-api.md
 
 // Read the current memory content.
 var currentContent = readMemoryContent("build-setup");
@@ -144,23 +141,13 @@ if (typeof writeResult === "string" && writeResult.indexOf("written") > 0) {
 ## Batch multiple writes in one call
 
 Prefer ONE `mcp-exec` call for a fixed batch of related writes (several memories in a
-domain, or an index plus its topics). Batching saves round trips and context: one script,
+domain, or a domain `about` plus its topic memories). Batching saves round trips and context: one script,
 one per-memory status report, no intermediate returns to inspect. Each write gets its own
 defensive check, and a failure does NOT abort sibling writes — the script continues and
 reports per-memory status so a retry re-sends only the failed operation.
 
 ```javascript
-// Defensive helpers. read_memory may return plain Markdown or JSON-wrapped content.
-// write_memory returns "...written."; edit_memory returns "...edited successfully." — NOT "written."
-function readMem(name) {
-  try {
-    var raw = read_memory({ memory_name: name });
-    try { var parsed = JSON.parse(raw); return parsed.content || raw; } catch (e) { return raw; }
-  } catch (e) { return 'ERROR: ' + e.message; }
-}
-function ok(res) {
-  return typeof res === 'string' && (res.indexOf('written') >= 0 || res.indexOf('edited') >= 0);
-}
+// Helper: ok() success checks — see ../references/serena-memory-api.md
 var report = [];
 function w(name, content) {
   try {
@@ -177,48 +164,37 @@ function e(name, mode, needle, repl) {
   } catch (e) { report.push('ERROR ' + name + ': ' + e.message); return false; }
 }
 
-// 0. read-before-write lives INSIDE the script
-var index = readMem('my-domain/index');
+// 0. ensure/update the domain about (description + scope + boundaries)
+w('my-domain/about', ['# My Domain', '', 'Covers [domain purpose].', '', '## Scope', '', '- What belongs in this domain.', '', '## Boundaries (out of scope)', '', '- What does not belong here — overlap rules with sibling domains.'].join('\n'));
 
-// 1. write topic memories FIRST so the index never references a missing memory
-w('my-domain/topic-a', ['# Topic A', '', 'Content about A.'].join('\n'));
-w('my-domain/topic-b', ['# Topic B', '', 'Content about B.'].join('\n'));
+// 1. write topic memories with self-describing <domain>/<subdomain>/<topic> names
+w('my-domain/general/topic-a', ['# Topic A', '', 'Content about A.'].join('\n'));
+w('my-domain/general/topic-b', ['# Topic B', '', 'Content about B.', '', 'Related: mem:my-domain/general/topic-a.'].join('\n'));
 
-// 2. then update the index (literal edit; write_memory OVERWRITES, so prefer edit_memory for partial updates)
-e('my-domain/index', 'literal', '| topic-a |',
-  '| topic-a | [mem:my-domain/topic-a](mem:my-domain/topic-a) |');
+// 2. add mem: cross-references between related memories where useful
+e('my-domain/general/topic-a', 'literal', 'Content about A.', 'Content about A. See mem:my-domain/general/topic-b.');
 
 // 3. return the per-memory status report — never abort the batch on one failure
 return report.join('\n');
 ```
 
 Notes:
-- Write topic memories BEFORE the index row so the index never points at a missing memory.
+- Write the domain `about` before topic memories so the domain is always documented.
 - Split into separate calls only when debugging a failing write, or when a later call depends on an earlier call's output.
 
 ## Domain-Based Writing
 
-When a domain grows beyond a single memory, use the **domain/about/index** convention to keep it navigable.
+When a domain grows beyond a single memory, use the **domain/about** convention (defined in [Memory Convention](../references/memory-convention.md)): every domain has one `about` (description, scope, boundaries; not a table of contents; no index memory) — write it before topic memories.
 
 ### Pre-Step: Check Existing Domains
 
-Before creating any new domain, collect relevant memories from ALL existing domains and attempt to place new knowledge in an existing one. See [Memory Convention](../recipes/memory-convention.md) — "PRE-EXISTING DOMAINS FIRST" and [Memory Quality Checklist](../references/memory-quality.md).
-
-```javascript
-// List all existing domains to find the best fit
-var allMemories = list_memories({});
-// Parse to get domains, then read each domain's /about entry
-// to find one whose scope covers the new knowledge.
-```
-
-Create a new domain ONLY when no existing domain can reasonably contain the new knowledge AND the knowledge is systematically useful.
+PRE-EXISTING DOMAINS FIRST (rule + steps in [Memory Convention](../references/memory-convention.md)): before creating a new domain, collect relevant memories from ALL existing domains and place the knowledge in the best fit. Create a new domain ONLY when no existing domain can reasonably contain the knowledge AND it is systematically useful.
 
 ### Steps
 
-1. **Write or update `domain/about`** if adding a new domain. This entry describes the domain's scope and purpose. Use memory name `my-domain/about`.
-2. **Write or update `domain/index`** to include the new memory in the table of contents. The index lists all topic memories in the domain with `mem:` cross-references. Memory name: `my-domain/index`.
-3. **Write the topic memory** as `domain/topic-name`. Add `mem:` cross-references from the topic back to its domain index (e.g., `mem:my-domain/index`). Validate the memory against the [Memory Quality Checklist](../references/memory-quality.md) before writing.
-4. **Add `mem:` cross-references** from the domain index to the new topic, and from the topic to the domain index.
+1. **Write or update `domain/about`** — the `about` must describe the domain, its SCOPE (what belongs), and BOUNDARIES (what does not belong). The `about` is the domain's single entry point. Use memory name `my-domain/about`.
+2. **Write the topic memory** as `<domain>/<subdomain>/<topic>` with a self-describing, action-oriented name (e.g., `troubleshooting/software/finding-known-github-issues`). Run the [BLOCKING GATE](../references/memory-management-checklist.md) before writing.
+3. **Add `mem:` cross-references** between related memories where useful.
 
 ### Example structure
 
@@ -226,9 +202,8 @@ Use memory names with hierarchical `/` separators:
 
 | Memory Name | Purpose |
 |---|---|
-| `my-domain/about` | Domain scope overview |
-| `my-domain/index` | Table of contents listing all topics |
-| `my-domain/topic-name` | Individual topic memory |
+| `my-domain/about` | Domain scope + boundaries |
+| `my-domain/<subdomain>/<topic>` | Self-describing topic memory (e.g., testing/typescript/mutation-testing) |
 
 ## Domain Writing Template
 
@@ -237,7 +212,7 @@ Use this template when writing code-mode scripts that create or update domain me
 ### Creating a new domain
 
 ```javascript
-// 1. Write the domain's about entry (memory name: my-domain/about)
+// 1. Write the domain's about entry (memory name: my-domain/about) — description + scope + boundaries
 var about = write_memory({
   memory_name: "my-domain/about",
   content: [
@@ -245,9 +220,13 @@ var about = write_memory({
     "",
     "Covers [domain purpose].",
     "",
-    "## Subtopics",
+    "## Scope",
     "",
-    "- [Topic Name](mem:my-domain/topic-name)"
+    "- What belongs in this domain.",
+    "",
+    "## Boundaries (out of scope)",
+    "",
+    "- What does not belong here — overlap rules with sibling domains."
   ].join("\n")
 });
 
@@ -255,68 +234,57 @@ if (typeof about !== "string" || about.indexOf("written") < 0) {
   return "Error writing about: " + about;
 }
 
-// 2. Write the domain's index entry (memory name: my-domain/index)
-var index = write_memory({
-  memory_name: "my-domain/index",
+// 2. Write topic memories with self-describing <domain>/<subdomain>/<topic> names
+var topic = write_memory({
+  memory_name: "my-domain/general/topic-name",
   content: [
-    "# My Domain Index",
+    "# Topic Name",
     "",
-    "| Topic | Description |",
-    "|---|---|",
-    "| [topic-name](mem:my-domain/topic-name) | Brief description of the topic |"
+    "Content about the topic.",
+    "",
+    "Related: mem:my-domain/general/other-topic."
   ].join("\n")
 });
 
-if (typeof index !== "string" || index.indexOf("written") < 0) {
-  return "Error writing index: " + index;
+if (typeof topic !== "string" || topic.indexOf("written") < 0) {
+  return "Error writing topic: " + topic;
 }
 ```
 
 ### Adding a memory to an existing domain
 
 ```javascript
-// Helper: read memory content defensively
-function readMemoryContent(name) {
-  var raw = read_memory({ memory_name: name });
-  try {
-    var parsed = JSON.parse(raw);
-    return parsed.content || raw;
-  } catch (e) {
-    return raw;
-  }
-}
+// Helper: readMemoryContent / parseJson / success checks — see ../references/serena-memory-api.md
 
-// 1. Read the existing domain index
-var currentIndex = readMemoryContent("my-domain/index");
+// 1. Check the domain about's scope and boundaries before placing the new memory
+var about = readMemoryContent("my-domain/about");
 
-// 2. Append the new topic entry to the index
-var updatedIndex = currentIndex + "\n| [new-topic](mem:my-domain/new-topic) | Description of new topic |";
-
-// 3. Write the updated index back
-var indexResult = write_memory({
-  memory_name: "my-domain/index",
-  content: updatedIndex,
-  max_chars: 5000
-});
-
-if (typeof indexResult !== "string" || indexResult.indexOf("written") < 0) {
-  return "Error updating index: " + indexResult;
-}
-
-// 4. Write the new topic memory with a cross-reference to the domain index
+// 2. Write the new topic memory with a self-describing <domain>/<subdomain>/<topic> name
 var topic = write_memory({
-  memory_name: "my-domain/new-topic",
+  memory_name: "my-domain/general/new-topic",
   content: [
     "# New Topic",
     "",
     "Content about the new topic.",
     "",
-    "See mem:my-domain/index for an overview of all domain topics."
+    "Related: mem:my-domain/general/other-topic."
   ].join("\n")
 });
 
 if (typeof topic !== "string" || topic.indexOf("written") < 0) {
   return "Error writing topic: " + topic;
+}
+
+// 3. Update the domain about if the new memory changes the domain's scope or boundaries
+var updatedAbout = about + "\n\n- New topic extends the scope to cover ...";
+var aboutResult = write_memory({
+  memory_name: "my-domain/about",
+  content: updatedAbout,
+  max_chars: 5000
+});
+
+if (typeof aboutResult !== "string" || aboutResult.indexOf("written") < 0) {
+  return "Error updating about: " + aboutResult;
 }
 
 return "OK — added new-topic to my-domain";
@@ -327,16 +295,7 @@ return "OK — added new-topic to my-domain";
 Wrap every `write_memory` call with a success check. `write_memory` returns plain text like `"Memory <name> written."` — not JSON. Do not call `JSON.parse` on its return value.
 
 ```javascript
-function writeMemoryDefensive(name, content, maxChars) {
-  var opts = { memory_name: name, content: content };
-  if (maxChars) { opts.max_chars = maxChars; }
-  var result = write_memory(opts);
-  if (typeof result !== "string" || result.indexOf("written") < 0) {
-    return { ok: false, error: "Failed to write memory " + name + ": " + result };
-  }
-  return { ok: true, message: result };
-}
-
+// Helper: writeMemoryDefensive(name, content, maxChars) — success-checked write wrapper; see ../references/serena-memory-api.md
 var r = writeMemoryDefensive("my-domain/topic", "# Topic\n\nContent here.\n");
 if (!r.ok) { return r.error; }
 ```
@@ -345,12 +304,12 @@ For `edit_memory` (literal/regex partial updates), the success string is `"...ed
 
 ## Best practices
 
-- **Use hierarchical naming** (`topic/subtopic/name`) so memories are discoverable via `list_memories({ topic: "..." })`. A flat list of names becomes unmanageable as the project grows.
+- **Use schema-driven self-describing naming** — `<domain>/<subdomain>/<topic>`, action-oriented, judgeable from the list (rule + examples in [Memory Convention](../references/memory-convention.md)).
 - **Keep each memory granular** — one concept per file. If a memory describes both login flow and token expiry, split it into `auth/login` and `auth/tokens`.
 - **Cross-reference with `mem:` prefix** so anyone reading one memory can navigate to related ones without searching. Serena has no semantic search — cross-references are the only navigation aid.
 - **Start with an overview memory** that lists child memories and their cross-references. Treat it as a table of contents for a topic subtree.
-- **Group related memories under shared topic prefixes**. For example, all auth-related memories under `auth/`, all API endpoint docs under `api/`.
-- **Prefer one `mcp-exec` call for a batch of related writes** (index + its topics, or several memories in one domain): fewer round trips, one per-memory status report, no intermediate returns. Each write gets its own defensive check and a failure does not abort siblings — split calls only when debugging a failing write.
+- **Group related topics under shared subdomain prefixes** (e.g., `testing/typescript/*`). A flat list of names becomes unmanageable as the project grows.
+- **Prefer one `mcp-exec` call for a batch of related writes** (e.g., a domain `about` plus its topic memories): fewer round trips, one per-memory status report, no intermediate returns. Each write gets its own defensive check and a failure does not abort siblings — split calls only when debugging a failing write.
 
 ## Common pitfalls
 

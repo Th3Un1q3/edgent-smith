@@ -10,23 +10,6 @@ sudo chown -R $(id -u):$(id -g) /home/vscode/.local/
 # Ensure opencode bin directory is in PATH for this script
 export PATH="/home/vscode/.opencode/bin:$PATH"
 
-if ! command -v opencode &> /dev/null; then
-  echo "Installing opencode..."
-  OPENCODE_VERSION="1.18.4"
-  for i in 1 2 3; do
-    if curl -fsSL https://opencode.ai/install | bash -s -- --version "$OPENCODE_VERSION"; then
-      echo "opencode v$OPENCODE_VERSION installed successfully"
-      break
-    else
-      echo "Attempt $i/3 failed. Retrying in $((i * 2)) seconds..."
-      sleep $((i * 2))
-    fi
-  done
-  if ! command -v opencode &> /dev/null; then
-    echo "Warning: opencode installation failed after 3 attempts. Continuing..."
-  fi
-fi
-
 if ! command -v rtk &> /dev/null; then
   echo "Installing rtk..."
   curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh

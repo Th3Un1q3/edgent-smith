@@ -24,5 +24,5 @@ When consolidating split test files back into a single file:
 
 ## Cross-References
 
-- mem:skills/testing - general testing methodology
-- mem:refactoring/meta-lessons - process insights from earlier refactoring
+- mem:skills/general/live-testing-against-real-servers - general testing methodology
+- mem:refactoring/process/running-refactoring-sessions - process insights from earlier refactoring

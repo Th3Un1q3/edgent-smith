@@ -148,3 +148,19 @@ describe('afkEnforcer', () => {
     })
   })
 })
+
+describe('AFK_MESSAGE', () => {
+  it('is wrapped in a steering element with warning priority and a reason attribute', () => {
+    expect(AFK_MESSAGE).toMatch(/^<steering\s+priority="warning"\s+reason="[^"]+"[^>]*>[\s\S]*<\/steering>$/)
+  })
+
+  it('pushes the agent to continue with alternative tools when not completely blocked', () => {
+    expect(AFK_MESSAGE).toContain('continue')
+    expect(AFK_MESSAGE).toContain('alternative')
+  })
+
+  it('tells the agent to report progress and the exact blockage when fully blocked', () => {
+    expect(AFK_MESSAGE).toContain('report')
+    expect(AFK_MESSAGE).toContain('blockage')
+  })
+})

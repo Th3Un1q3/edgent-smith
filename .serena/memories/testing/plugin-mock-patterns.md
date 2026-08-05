@@ -30,6 +30,6 @@ Drive the `event` hook directly: dispatch a `permission.asked` payload (`{ type:
 ## References
 
 - `mem:testing/mutation-scoping` — scoping mutation tests to changed modules
-- `mem:testing/bun-sandbox` — Bun API calls vulnerable in Stryker sandbox
+- `mem:testing/typescript/bun-apis-in-stryker-sandbox` — Bun API calls vulnerable in Stryker sandbox
 - `mem:refactoring/plugin-lifecycle` — plugin hook lifecycle patterns
 - mem:refactoring/permission-hooks — permission interception pitfalls

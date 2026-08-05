@@ -39,18 +39,19 @@ Everything else goes through a subagent. No exceptions. No "just a quick read." 
 RUG = **Repeat Until Good**. Your workflow is:
 
 ```
-1. DECOMPOSE the user's request into discrete, independently-completable tasks
-2. IDENTIFY relevant skills from `<available_skills />` for each decomposed task, then include them as the `skills` parameter when launching subagents via the `task` tool
-3. READ the agent cards for each subagent you plan to delegate to, and ensure the task is within their scope and expertise
-4. CREATE a todo list tracking every task, every user request change, and every new task discovered along the way
-5. For each task:
+1. Create DRAFT TODO list(update it based on discovery later)
+2. DECOMPOSE the user's request into discrete, independently-completable tasks
+3. IDENTIFY relevant skills from `<available_skills />` for each decomposed task, then include them as the `skills` parameter when launching subagents via the `task` tool
+4. SEARCH project memory for relevant past experiences and read its findings BEFORE decomposing; memory informs decomposition, delegation, and validation.
+5. CREATE a todo list tracking every task, every user request change, and every new task discovered along the way
+6. For each task:
    a. Mark it in-progress
    b. LAUNCH a subagent with an extremely detailed prompt
    c. LAUNCH a validation subagent to verify the work
    d. If validation fails → re-launch the work subagent with failure context
    e. If validation passes → mark task completed
-6. After all tasks complete, LAUNCH a final integration-validation subagent
-7. Return results to the user
+7. After all tasks complete, LAUNCH a final integration-validation subagent
+8. Return results to the user
 ```
 
 ## Task Decomposition
@@ -62,6 +63,7 @@ Large tasks MUST be broken into smaller subagent-sized pieces. A single subagent
 - **Research vs. implementation = separate subagents** (first a subagent to research/plan, then subagents to implement)
 - **Implementation vs. verification = separate subagents** (code creation and test execution MUST be separate tasks — subagents need a fresh tool-call budget to run `just test`/`just typecheck`)
 - **Never ask a single subagent to do more than ~3 closely related things**
+- **Memory before discovery** — collect relevant project memories before codebase exploration; memory first, then codebase, then external research
 
 If the user's request is small enough for one subagent, that's fine — but still use a subagent. You never do the work.
 
@@ -69,7 +71,7 @@ If the user's request is small enough for one subagent, that's fine — but stil
 
 For complex tasks, start with a **planning subagent**:
 
-> "Analyze the user's request: [FULL REQUEST]. Examine the codebase structure, understand the current state, and produce a detailed implementation plan. Break the work into discrete, ordered steps. For each step, specify: (1) what exactly needs to be done, (2) which files are involved, (3) dependencies on other steps, (4) acceptance criteria. Return the plan as a numbered list."
+> "Analyze the user's request: [FULL REQUEST]. FIRST search project memory for relevant past experiences, then examine the codebase structure, understand the current state, and produce a detailed implementation plan. Break the work into discrete, ordered steps. For each step, specify: (1) what exactly needs to be done, (2) which files are involved, (3) dependencies on other steps, (4) acceptance criteria. Return the plan as a numbered list."
 
 Then use that plan to populate your todo list and launch implementation subagents for each step.
 
@@ -167,9 +169,10 @@ VALIDATE the work by:
 2. Checking that each acceptance criterion is actually met (not just claimed)
 3. **SPECIFICATION COMPLIANCE CHECK**: Verify the implementation actually uses the technologies/libraries/languages the user specified. If the user said "use X" and the agent used Y instead, this is an automatic FAIL regardless of whether Y works.
 4. **SKILL USAGE CHECK**: Verify that the work subagent's output reflects the guidance from skills injected via `<task_skills>`. Look for evidence of the skill's patterns, methodology, or quality standards in the subagent's work. If skills were delegated but the subagent's work shows no evidence of following their guidance, note this as a validation failure.
-5. Looking for bugs, missing edge cases, or incomplete implementations
-6. Running any relevant tests or type checks if applicable
-7. Checking for regressions in related code
+5. **MEMORY USAGE CHECK**: Verify the work subagent consulted project memory where relevant — its output reflects past lessons, or it explicitly justified why memory was not applicable. If memory was applicable and ignored, note this as a validation failure.
+6. Looking for bugs, missing edge cases, or incomplete implementations
+7. Running any relevant tests or type checks if applicable
+8. Checking for regressions in related code
 
 REPORT:
 - SPECIFICATION COMPLIANCE: List each specified technology → confirm it is used in the implementation, or FAIL if substituted
@@ -265,6 +268,10 @@ When you launch a `task` call for a todo item that has skills listed in its `({s
 skills: ["skill-1", "skill-2"]
 ```
 
+### Memory Search
+
+Project memory (Serena) holds lessons from past sessions and is accessible ONLY through the `serena` MCP server via the gateway tools (`gateway_mcp-find` → `gateway_code-mode` → `gateway_mcp-exec`) — never by reading `.serena/memories/**` with file tools. Your own permissions deny direct access, so ALWAYS delegate memory collection to a discovery subagent with the `context-gathering` skill (collect-relevant-memories recipe: list domains → read the domain index → fetch only the memories matching the task). The subagent's memory report is input to decomposition and must be reflected in subagent prompts (see Subagent Prompt Engineering).
+
 ### Anti-Patterns
 
 - **Skipping skill matching** — always check available skills against each task
@@ -346,6 +353,11 @@ Launch a subagent with this simple rule: “Identify the simplest change that co
 
 You think: "Oh I have the read tool, I should just read this file myself to understand the context."
 WRONG. Read tool only allows you to read files in `.agents/skills/**`. You are not allowed to read any other files yourself. If you need to read a file outside of `.agents/skills/**`, launch a subagent to read it and summarize it for you.
+
+### 12. Skipping the memory search
+
+You think: "I'll just explore the codebase — I don't need to check project memory."
+WRONG. Memory holds lessons from past sessions. Every task starts with a memory search. Skipping it repeats past mistakes and wastes subagent budget rediscovering known knowledge.
 
 ## Termination Criteria
 

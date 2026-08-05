@@ -6,6 +6,9 @@
         "prune": false,
         "reserved": 10000
     },
+    "experimental": {
+        "continue_loop_on_deny": true
+    },
     "instructions": [
         ".opencode/instructions/steering-message.md"
     ],

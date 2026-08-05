@@ -38,7 +38,7 @@ services:
     command:
       - --transport=streaming
       - --catalog=/mcp/catalog.yaml  
-      # - --enable-all-servers  
+      - --enable-all-servers
       - --port=8080
       - --secrets=/run/secrets/mcp_creds
     networks:
@@ -86,6 +86,7 @@ networks:
 volumes:
   ollama_data:
   opencode_data:
+  mcp_images:
 
 secrets:
   mcp_creds:

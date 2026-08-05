@@ -30,4 +30,4 @@ Split only if the file tests genuinely unrelated behaviors (e.g., format vs. bus
 ## Cross-References
 
 - mem:testing/test-consolidation - canonical test consolidation decision tree and techniques
-- mem:skills/testing - testing principles and conventions
+- mem:skills/general/live-testing-against-real-servers - testing principles and conventions

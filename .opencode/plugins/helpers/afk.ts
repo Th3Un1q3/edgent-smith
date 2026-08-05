@@ -7,4 +7,4 @@
  * file prevents the plugin from loading. This is guarded from recurring by the
  * `plugin-export-guard/no-non-plugin-export` rule in `eslint.config.js`.
  */
-export const AFK_MESSAGE = '<steering priority="warning" reason="user is away from keyboard — permission auto-denied by afk-enforcer plugin">Permission auto-denied: the user is AFK and cannot approve this request. Do not retry; continue with available tools or stop and report the blocked step.</steering>'
+export const AFK_MESSAGE = '<steering priority="warning" reason="user is away from keyboard — permission auto-denied by afk-enforcer plugin">Permission auto-denied: the user is AFK and cannot approve this request. If you are not completely blocked, continue the task using alternative tools or approaches. If the denied permission prevents all further progress, stop and report your progress so far and the exact blockage.</steering>'

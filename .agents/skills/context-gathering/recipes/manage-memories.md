@@ -137,10 +137,7 @@ Permanently remove a memory file. Check that the memory exists first and verify 
 
 ```javascript
 // Step 1: Confirm the memory exists by listing its parent topic.
-const parseJson = (str, src) => {
-  try { return JSON.parse(str); }
-  catch (e) { throw new Error("Failed to parse " + src + ": " + e.message); }
-};
+// Helper: parseJson — see ../references/serena-memory-api.md
 
 var listResult = list_memories({ topic: "auth" });
 var parsed = parseJson(listResult, "list_memories");
@@ -173,7 +170,7 @@ if (remaining.indexOf("auth/legacy-config") < 0) {
 - **Prefer literal mode over regex** — literal mode is safer because special characters need no escaping and there are no surprises from regex engine quirks.
 - **Verify each operation** — check the return value for success substrings (`"edited successfully"`, `"renamed from"`, `"deleted"`) immediately after each call.
 - **Rename instead of delete+rewrite** — renaming preserves `mem:` references in other memories. Delete+rewrite breaks those links.
-- **Use hierarchical naming** — `topic/subtopic/name` keeps memories discoverable and makes rename moves intuitive.
+- **Use hierarchical self-describing naming** — `<domain>/<subdomain>/<topic>` — per the [Memory Convention](../references/memory-convention.md).
 
 ## Common pitfalls
 
@@ -189,34 +186,27 @@ if (remaining.indexOf("auth/legacy-config") < 0) {
 
 ## Domain Maintenance
 
-Each domain has an `about` entry (domain overview) and an `index` entry (memory list + cross-references). Keep them consistent whenever memories change. Memory names use the format `my-domain/about` and `my-domain/index`.
+Each domain has one `about` (description + scope + boundaries); there is no `index` entry — see [Memory Convention](../references/memory-convention.md). Keep the `about` consistent whenever memories change.
 
 | Action | Required updates |
 |--------|-----------------|
-| **Add a memory** | Add a row to the `## Memories` table in the domain's `index` entry (memory name: `my-domain/index`) |
-| **Rename a domain** | Update all `mem:<domain>/...` references in every domain's index entry; update the new domain's `about` and `index` entries accordingly |
-| **Delete a memory** | Remove the row from the domain's `index` entry (memory name: `my-domain/index`) |
-| **Restructure a domain** | Update the `index` entry (reorder or split the `## Memories` table) and `about` entry (update the `## Scope` section); verify all `mem:` cross-references resolve via `read_memory` |
+| **Add a memory** | Add a self-describing `<domain>/<subdomain>/<topic>` memory; update the domain `about` if scope/boundaries change |
+| **Rename a domain** | Update all `mem:<domain>/...` references; update the new domain's `about` |
+| **Delete a memory** | Remove it; update the `about` if the deletion changes scope/boundaries |
+| **Restructure a domain** | Update the `about` (scope/boundaries); verify all `mem:` cross-references resolve via `read_memory` |
 
 ### Validate domain consistency
 
-Run this script against a domain to verify that its `about` entry exists and every memory listed in the `index` has a corresponding entry. Uses only memory-level tools — never filesystem I/O.
+Run this script against a domain to verify that its `about` entry exists, every memory name under the domain is self-describing and follows `<domain>/<subdomain>/<topic>`, no `index` memory exists, and all `mem:` references resolve. Uses only memory-level tools — never filesystem I/O.
 
 ```javascript
-// Validate that a domain's about entry exists and all memories in its index are present.
+// Validate a domain: about exists, names follow <domain>/<subdomain>/<topic>,
+// no index memory exists, and all mem: references resolve.
 // Uses list_memories + read_memory (never ioutil or file paths).
 var domain = "agents"; // Change to the domain you want to validate.
 
-const parseJson = (str, src) => {
-  try { return JSON.parse(str); }
-  catch (e) { throw new Error("Failed to parse " + src + ": " + e.message); }
-};
-
-function readMemoryContent(name) {
-  var raw = read_memory({ memory_name: name });
-  if (typeof raw === "string" && raw.indexOf("not found") >= 0) return null;
-  try { var parsed = JSON.parse(raw); return parsed.content || raw; } catch (e) { return raw; }
-}
+// Helpers: parseJson — see ../references/serena-memory-api.md
+// readMemoryContent here uses the NULL variant (returns null on "not found") — see ../references/serena-memory-api.md
 
 // Step 1: Check the domain's about entry exists.
 var aboutContent = readMemoryContent(domain + "/about");
@@ -224,46 +214,50 @@ if (aboutContent === null) {
   throw new Error("Missing " + domain + "/about — create it with write_memory or the store-memories recipe.");
 }
 
-// Step 2: Read the index and extract memory names from its ## Memories table.
-var indexContent = readMemoryContent(domain + "/index");
-if (indexContent === null) {
-  throw new Error("Missing " + domain + "/index — create it with write_memory or the store-memories recipe.");
-}
-
-// Extract memory names from backtick-quoted cells in table rows.
-var memoryNames = [];
-var lines = indexContent.split("\n");
-for (var i = 0; i < lines.length; i++) {
-  var line = lines[i];
-  if (line.indexOf("|") < 0) continue;
-  var parts = line.split("|");
-  if (parts.length < 3) continue;
-  var cell = parts[1].trim();
-  if (cell.indexOf("`") < 0) continue;
-  var m = cell.match(/`([^`]+)`/);
-  if (m) memoryNames.push(m[1]);
-}
-
-// Step 3: Check each listed memory exists via list_memories.
+// Step 2: Enumerate every memory under the domain prefix.
 var listResult = list_memories({ topic: domain });
 var parsed = parseJson(listResult, "list_memories");
-var existingMemories = (parsed.memories || []).reduce(function(acc, name) { acc[name] = true; return acc; }, {});
+var existingMemories = parsed.memories || [];
+if (!Array.isArray(existingMemories)) existingMemories = [];
 
-// Step 4: Report results.
-var missing = [];
-for (var j = 0; j < memoryNames.length; j++) {
-  if (!existingMemories[memoryNames[j]]) {
-    missing.push(memoryNames[j]);
+// Step 3: Every name must follow <domain>/<subdomain>/<topic>; `about` is the only root-level memory.
+var nameIssues = [];
+for (var i = 0; i < existingMemories.length; i++) {
+  var name = existingMemories[i];
+  var rest = name.slice((domain + "/").length);
+  if (rest === "about") continue;
+  if (rest.split("/").length < 2) {
+    nameIssues.push(name + " (needs a subdomain: <domain>/<subdomain>/<topic>)");
   }
 }
 
-if (missing.length > 0) {
-  var errMsg = "Domain " + domain + " has " + missing.length + " index entry(s) that don't exist: ";
-  for (var k = 0; k < missing.length; k++) {
-    errMsg += missing[k] + (k < missing.length - 1 ? ", " : "");
-  }
-  throw new Error(errMsg);
+// Step 4: No index memory may exist — report it as redundant.
+var indexFlag = "";
+if (readMemoryContent(domain + "/index") !== null) {
+  indexFlag = " WARNING: redundant " + domain + "/index memory found — delete it.";
 }
 
-return "OK — domain " + domain + " is consistent. " + memoryNames.length + " index entry(s) verified. about entry present.";
+// Step 5: All mem: references must resolve.
+var brokenRefs = [];
+var refRegex = /mem:([a-zA-Z0-9_\/.-]+)/g;
+for (var k = 0; k < existingMemories.length; k++) {
+  var content = readMemoryContent(existingMemories[k]);
+  if (content === null) { brokenRefs.push(existingMemories[k] + " (unreadable)"); continue; }
+  refRegex.lastIndex = 0;
+  var match;
+  while ((match = refRegex.exec(content)) !== null) {
+    if (readMemoryContent(match[1]) === null) {
+      brokenRefs.push(existingMemories[k] + " -> " + match[1]);
+    }
+  }
+}
+
+if (nameIssues.length > 0) {
+  throw new Error("Domain " + domain + " has names that do not follow <domain>/<subdomain>/<topic>: " + nameIssues.join(", "));
+}
+if (brokenRefs.length > 0) {
+  throw new Error("Domain " + domain + " has broken mem: references: " + brokenRefs.join(", "));
+}
+
+return "OK — domain " + domain + " is consistent. about present. " + existingMemories.length + " memory(s) verified." + indexFlag;
 ```

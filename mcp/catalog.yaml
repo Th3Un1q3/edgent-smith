@@ -67,3 +67,9 @@ registry:
     type: server
     image: mcp/fetch:latest
 
+  youtube-transcript:
+    description: "Fetch transcripts and subtitles for YouTube videos by URL."
+    title: "YouTube Transcript MCP"
+    type: server
+    image: mcp/youtube-transcript:latest
+
