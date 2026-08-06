@@ -2,7 +2,7 @@
 
 One gate governs every memory write. This checklist is the canonical, complete gate — [store-memories.md](../recipes/store-memories.md) points here instead of embedding a copy, so there is only one source of truth.
 
-## The Blocking Gate (6 checks, ~60 seconds)
+## The Blocking Gate (7 checks, ~60 seconds)
 
 Run BEFORE any `write_memory` call. If ANY box is unchecked, DO NOT WRITE — fix the item or skip the write. Writing with an unchecked box corrupts the store. For a batch of related memories, run the gate once on the planned set, then verify the set.
 
@@ -13,6 +13,8 @@ Run BEFORE any `write_memory` call. If ANY box is unchecked, DO NOT WRITE — fi
 - [ ] **Non-duplicative** — it adds knowledge not already in memories, skills, or AGENTS.md. *If not:* duplicate or contradictory entries mislead → extend the existing memory or skip.
 - [ ] **Discoverable** — scanning the memory list, the name alone tells a reader whether this memory helps their task. Name is self-describing: <domain>/<subdomain>/<topic>, action-oriented (e.g., troubleshooting/software/finding-known-github-issues), never a bare title (e.g., Issue & Docs Analysis). *If not:* a memory whose name hides its content is dead weight → rename to a self-describing <domain>/<subdomain>/<topic> name; if a title-style name cannot be made self-describing, split the memory.
 - [ ] **Right-size** — at the right abstraction level: no line numbers, exact paths, or code dumps that will stale; ≤ 3 paragraphs. *If not:* over-specific detail misleads after the code changes → raise the abstraction level.
+  - **Exemption — dated extraction caches**: `private/<site>/<task>-<YYYY-MM-DD>` listings (rows with links) are data memories by design. The prose/right-size limit ("≤ 3 paragraphs", "no data dumps") applies to recipe/knowledge memories, NOT to dated data caches — intermediate checkpoint caches (partial results written as work proceeds) are covered by this exemption. Note: legacy `browser-automation/...` dated caches predate the private namespace.
+- [ ] **Privacy** — only devtools-derived output from authenticated sessions, PII, or job/application data is private; such content is stored in `private/` (`private/about`, `private/{subdomain}/{topic}`, `private/cache/{source}/...`), never in a public domain; public memories never `mem:`-link into `private/*`. Public-source content (fetch/tavily/deepwiki/github/context7) stays public. *If not:* private data may be committed to version control → route to the private namespace or skip the write.
 
 ## After Writing — read the memory back once
 

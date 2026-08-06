@@ -1,0 +1,11 @@
+# Research with Caching Toolset
+
+Observed runtime behavior of the research servers (deepwiki, github, fetch) captured during a live cache-first research run; deltas that differ from or add to canonical docs. Canonical API shapes: .agents/skills/context-gathering/references/content-fetch-api.md; pipeline recipe: .agents/skills/context-gathering/recipes/research-with-caching.md.
+
+- deepwiki ask_question({repoName, question}) takes repoName = GitHub owner/repo (max 10) and returns a PLAIN-TEXT markdown answer — never JSON.parse it; treat the response as content directly.
+- github search_issues({query, perPage?, page?, sort?, order?, fields?, owner?, repo?}) accepts GitHub issue syntax (auto is:issue); pass fields (e.g. [number,title,state,html_url]) to trim payloads. Returns a JSON string {incomplete_results, items:[{number,state,title,html_url,...}]} — check error/incomplete_results before reading .items; follow up with issue_read({owner, repo, issue_number, method?}) for a specific known issue.
+- fetch({url, max_length?, start_index?, raw?}) returns a PLAIN-STRING markdown-simplified page prefixed `Contents of <url>:`. Every fetch probes robots.txt first — `Failed to fetch robots.txt ... connection issue` means the target is UNREACHABLE, not a content error; never cache failure strings.
+- mcp-exec batch gotcha: ONE monolithic batch with MANY tool calls can hit the gateway timeout (-32001) mid-loop — split by source into a few batches; per-op status lines keep context small.
+- Cache-key scheme is canonical: cache/{source}/{scope}/{descriptor} — deepwiki: cache/deepwiki/{topic-slug}/{question-slug}; github: cache/github/{owner}-{repo}/issue-{id} or search-{query-slug} (cross-repo: cache/github/general/search-{query-slug}); fetch: cache/fetch/{hostname-slug}/{path-slug} (+ short hash suffix when slug empty/ambiguous). Slug rules: lowercase, alphanumeric + hyphens, collapse repeats, trim dashes, cap ~60 chars.
+
+Source: observed output of the live cache-first research run on `connect local Chrome from devcontainer` — 17 cache entries across deepwiki/github/fetch, operator-verified.

@@ -47,6 +47,15 @@ Full-prefix examples: `troubleshooting/software/finding-known-github-issues`, `t
 
 Test: cover the name — would a reader with your task pick this memory from the list? BAD example: `Issue & Docs Analysis` (title-style; hides content).
 
+## Public vs Private Namespaces
+
+Domains are public by default — their memories are project knowledge and may be committed to version control. The `private` domain is the sole exception: content there never fits a public domain (exempt from PRE-EXISTING DOMAINS FIRST) and must never be committed.
+
+- PUBLIC info → `researches/{topic}` syntheses + `cache/{source}/...` raw caches (default for fetch/tavily/deepwiki/github/context7 on public content).
+- PRIVATE info → `private/{subdomain}/{topic}` + `private/cache/{source}/...` — ONLY devtools-derived output from authenticated sessions, PII, job/application data. When unsure whether devtools-derived content is public, default to private.
+- Extraction recipes (selectors, URL templates, quirks — no PII) are NOT private; they stay in `browser-automation/<site>/`.
+- Private memories remain readable by agents — the privacy concern is storage and version control, not read access. Public domains never `mem:`-reference `private/*`; private entries reference only `private/*`.
+
 ## about Entry Template
 
 Write via `write_memory({ memory_name: "my-domain/about", content: ... })`:

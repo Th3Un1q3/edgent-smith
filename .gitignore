@@ -80,3 +80,6 @@ secrets/
 
 # DevContainer auto-generated env files
 .devcontainer/.env
+
+# Serena private memory namespace (devtools-derived output, PII — never commit)
+.serena/memories/private/

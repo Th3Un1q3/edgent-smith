@@ -29,3 +29,4 @@ The Docker MCP Gateway acts as a mediator between the AI agent and various MCP s
 ## Known Issues & Caveats
 - **Header Forwarding**: Some gateways may strip headers. If a tool is unreachable, verify that the `Authorization` header is being correctly injected.
 - **Port Collisions**: When running multiple local Docker MCP servers, ensure the gateway assigns unique internal ports or handles the mapping correctly.
+- **Decision-Tree Coupling**: every catalog server added for context-gathering needs (search, fetch, docs Q&A, browse, GitHub, memory, files, transcripts) requires updating the context-gathering skill's `references/server-selection.md` matrix/heuristics/escalation and `references/content-fetch-api.md` tool formats; new capability families also need a routing row in its SKILL.md.

@@ -157,6 +157,7 @@ Domain structure — one `about` (scope + boundaries) plus self-describing `<dom
 2. **Read the domain `about`** for candidate domains — its SCOPE and BOUNDARIES confirm whether the domain covers your topic.
 3. **Follow `mem:` cross-references** from selected memories to find related ones across domains.
 4. **Prefix-filter** with `list_memories({ topic: "<prefix>" })` to narrow to a domain or subdomain.
+5. **Read `private/*` freely** — private memories are readable by agents; the `private` domain only means "never commit to version control". Discovery, gate, and `mem:` rules apply unchanged.
 
 ### Code-mode script
 

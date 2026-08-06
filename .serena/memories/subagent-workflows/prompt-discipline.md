@@ -13,4 +13,4 @@
 1. One task = one concern.
 2. End every prompt with an explicit output contract: "Your final message must contain ONLY: …".
 3. For multi-artifact work, split into parallel micro-tasks (tiny prompts with no skills complete reliably).
-4. Rightsize skill injection: inject a skill only when the task genuinely needs its domain knowledge and is large enough to use it.
+4. Rightsize skill injection: specify skills only when the task genuinely needs their domain knowledge.

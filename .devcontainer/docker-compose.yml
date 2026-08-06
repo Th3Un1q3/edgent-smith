@@ -7,6 +7,8 @@ services:
       - ..:/workspace:cached
       - opencode_data:/home/vscode/.local/share/opencode
     command: sleep infinity
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - ../.env
     environment:
@@ -33,6 +35,10 @@ services:
     volumes:
       - ../mcp/catalog.yaml:/mcp/catalog.yaml:ro
       - ../mcp/docker-config.json:/root/.docker/config.json:ro
+      - ..:/workspace:rw
+    environment:
+      MCP_GATEWAY_DOCKER_BIND_ALLOWED_PATHS: ${MCP_GATEWAY_DOCKER_BIND_ALLOWED_PATHS:-/workspace}
+      MCP_GATEWAY_DOCKER_BIND_ALLOW_WRITABLE_PATHS: ${MCP_GATEWAY_DOCKER_BIND_ALLOW_WRITABLE_PATHS:-/workspace}
     secrets:
       - mcp_creds
     command:
@@ -41,6 +47,8 @@ services:
       - --enable-all-servers
       - --port=8080
       - --secrets=/run/secrets/mcp_creds
+      - --block-secrets
+      - --log-calls
     networks:
       - edgent-dev
     develop:
@@ -48,7 +56,6 @@ services:
         - path: ../mcp
           action: restart
     restart: always
-
 
   jaeger:
     image: cr.jaegertracing.io/jaegertracing/jaeger:2.17.0

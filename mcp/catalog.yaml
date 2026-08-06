@@ -33,6 +33,14 @@ registry:
       url: "http://serena:9121/mcp"
       transport_type: http
 
+  devtools:
+    type: remote
+    description: "Chrome DevTools MCP - browser automation, DOM inspection, console, and performance tooling for the host Chrome instance, connected via --autoConnect to the host Chrome instance's CDP endpoint (--browserUrl, currently http://127.0.0.1:58184). chrome-devtools-mcp 1.6.0 is stdio-only; mcp-proxy 6.6.0 runs as a host-OS process (launched by devcontainer initializeCommand) and exposes it as streamable HTTP on /mcp, reachable from the gateway at host.docker.internal:9223."
+    title: "Chrome DevTools MCP - Browser Automation & Debugging"
+    remote:
+      url: "http://host.docker.internal:9223/mcp"
+      transport_type: http
+
   context7:  
     type: remote  
     description: "Structured documentation lookup for programming languages, frameworks, and libraries. Retrieves official docs, APIs, changelogs, and usage examples from authoritative sources."
@@ -72,4 +80,26 @@ registry:
     title: "YouTube Transcript MCP"
     type: server
     image: mcp/youtube-transcript:latest
+
+  filesystem:
+    type: server
+    description: "Local filesystem access via the Rust MCP filesystem server (rust-mcp-stack/rust-mcp-filesystem). Access scope limited by the server allowed-directories (command): .opencode/, agents/, agent_utils/, cli/, evals/, experiments/, mcp/, scripts/, tests/ — writable (ALLOW_WRITE=true). Paths outside this list are denied by the server (e.g., .env, secrets/, .serena/, .git/). digest-pinned; disableNetwork."
+    title: "Filesystem (Rust) - Workspace File Access"
+    image: "mcp/rust-mcp-filesystem@sha256:0a8d6879a67649fc9801c48e33e39c4f994e5fbfd9b5df8ba7260d63dbc1a242"
+    env:
+      - name: "ALLOW_WRITE"
+        value: "true"
+    command:
+      - "/workspace/.opencode"
+      - "/workspace/agents"
+      - "/workspace/agent_utils"
+      - "/workspace/cli"
+      - "/workspace/evals"
+      - "/workspace/experiments"
+      - "/workspace/mcp"
+      - "/workspace/scripts"
+      - "/workspace/tests"
+    volumes:
+      - "/workspace:/workspace:rw"
+    disableNetwork: true
 

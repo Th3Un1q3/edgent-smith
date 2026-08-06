@@ -16,3 +16,4 @@
 **Triage**: confirm the sandbox was attempted without adding the server first; check the agent toolset for `mcp-add`; check the gateway launch flags for `--enable-all-servers`.
 
 See mem:docker-mcp-gateway/image-pull-mechanics for the pull/start mechanism.
+When adding a server, apply the decision-tree rule: if it can serve a context-gathering need, update the context-gathering decision tree (see mem:docker-mcp-gateway/server-addition).

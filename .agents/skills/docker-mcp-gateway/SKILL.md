@@ -35,6 +35,7 @@ Do not use this skill for:
 - **Security First**: Prefer Docker Secrets over Environment Variables whenever possible to prevent credential leakage in logs.
 - **Explicit Configuration**: Always explicitly define `transport_type` to avoid gateway defaults that may not suit your network topology.
 - **Modular Catalog**: Break down complex catalogs into logical sections for remote, local, and cloud-based tools.
+- **Decision-Tree Coupling**: Adding a catalog server that can serve context-gathering needs requires updating the context-gathering skill's server-selection decision tree (see workflows/catalog.md).
 
 ## Task Routing Table
 
@@ -43,3 +44,4 @@ Do not use this skill for:
 | Set up the Docker MCP Gateway with Docker Compose and secrets | [workflows/setup.md](./workflows/setup.md) |
 | Configure `mcp/catalog.yaml` for remote and local servers | [workflows/catalog.md](./workflows/catalog.md) |
 | Review technical specs and secret injection patterns | [reference/docker-mcp-gateway.md](./reference/docker-mcp-gateway.md) |
+| Add a server without breaking the context-gathering decision tree | [workflows/catalog.md](./workflows/catalog.md) (Decision-Tree Impact section) |

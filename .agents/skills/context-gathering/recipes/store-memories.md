@@ -7,7 +7,7 @@ Serena memories are gateway-only: never read `.serena/memories/*` on disk — th
 
 If ANY box is unchecked, DO NOT WRITE. Fix the item or skip the write. Writing with an unchecked box corrupts the store.
 
-The 6 checks and the AFTER-WRITING verify step live in the [Memory Management Checklist](../references/memory-management-checklist.md) — open it and run the gate before EVERY write (including edits and rewrites; for a batch of related memories, run it once on the planned set, then verify the set).
+The 7 checks and the AFTER-WRITING verify step live in the [Memory Management Checklist](../references/memory-management-checklist.md) — open it and run the gate before EVERY write (including edits and rewrites; for a batch of related memories, run it once on the planned set, then verify the set).
 
 ## Store a single memory
 
@@ -189,6 +189,10 @@ When a domain grows beyond a single memory, use the **domain/about** convention 
 ### Pre-Step: Check Existing Domains
 
 PRE-EXISTING DOMAINS FIRST (rule + steps in [Memory Convention](../references/memory-convention.md)): before creating a new domain, collect relevant memories from ALL existing domains and place the knowledge in the best fit. Create a new domain ONLY when no existing domain can reasonably contain the knowledge AND it is systematically useful.
+
+### Private memories
+
+Only devtools-derived output from authenticated sessions (and PII / job / application data) is private. Such content goes to the `private` domain — never to a public domain. Public-source research and caches remain in `researches/{topic}` and `cache/{source}/...`. Write `private/about` first (see [Memory Convention](../references/memory-convention.md)), then `private/{subdomain}/{topic}` and `private/cache/{source}/...`. Run the same BLOCKING GATE before every write.
 
 ### Steps
 

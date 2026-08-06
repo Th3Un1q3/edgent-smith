@@ -40,3 +40,5 @@ Configure the gateway service to listen on the correct ports and mount necessary
 Run `docker compose up -d` and check the logs:
 `docker compose logs -f gateway`
 Verify that the gateway successfully initializes and the tools are listed.
+
+> When adding servers to the catalog (not just the gateway), follow the Decision-Tree Impact section in workflows/catalog.md — new context-gathering servers require updating the context-gathering skill's server-selection decision tree.

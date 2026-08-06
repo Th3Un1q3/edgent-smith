@@ -13,3 +13,6 @@ The project devcontainer has NO docker CLI and NO `/var/run/docker.sock` — the
 
 - Gateway endpoint from the devcontainer: `http://mcp_gateway:8080/mcp`; exercise catalog servers via `gateway_mcp-find` / `gateway_code-mode` / `gateway_mcp-exec` (a server must be enabled first — added via `mcp-add` or auto-started via `--enable-all-servers` — before a code-mode sandbox can exercise it).
 - A TLS-intercepting proxy is configured only on the `devcontainer` service, NOT on `mcp_gateway` — registry pulls from the embedded daemon can fail on network/TLS if the host routes through a proxy.
+- Aliveness probe from the devcontainer: `GET http://mcp_gateway:8080/mcp` returns HTTP 400 (server alive).
+- The catalog is not hot-reloaded: `gateway_mcp-find` reflects changes only after a host-side gateway restart (or host `docker compose watch`).
+An added server also triggers the decision-tree rule (mem:docker-mcp-gateway/server-addition) before the restart that loads it.

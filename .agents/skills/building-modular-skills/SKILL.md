@@ -75,7 +75,7 @@ Do not use this skill for:
    - Use relative links such as `./workflows/create.md` and `./references/options.md`.
 
 8. Validate.
-   - Root file must be loadable quickly — no workflow detail, no large code blocks.
+   - Root file must be loadable quickly — no workflow detail, no large code blocks, and never embed capability-specific principles in the root — routing row + sub-file only.
    - Each linked file must be independently loadable without needing the root.
    - Confirm the skill is narrow and does not solve unrelated tasks.
 
@@ -83,6 +83,7 @@ Do not use this skill for:
 
 - **Prefer multi-file layout.** Root file = index and router. Workflows and references = detail files.
 - Keep the root `SKILL.md` short: applicability, a routing table, and nothing else.
+- One row per capability: each capability appears in the root routing table as exactly one row linking to its sub-file; capability-specific principles and procedures live in that sub-file — never embedded in the root.
 - One workflow file per distinct user task or process step.
 - One reference file per API surface, option set, or comparison topic.
 - Prefer explicit applicability over broad heuristics.

@@ -33,6 +33,10 @@ local-docker-tool:
     command: ["--port", "8080"]
 ```
 
+## Before You Add a Server — Decision-Tree Impact
+
+**Update the context-gathering decision tree if this server can serve a context-gathering need.** If the new server can search the web, fetch URLs, answer docs questions, browse (auth/JS), access GitHub, memory, files, or transcripts, update `references/server-selection.md` in the context-gathering skill (capability matrix, category heuristics, escalation chain) and its tool-format reference (`references/content-fetch-api.md`); if it introduces a new capability family, add a routing row in the context-gathering `SKILL.md`. See the add-server checklist in the docker-mcp-gateway domain memory (mem:docker-mcp-gateway/server-addition).
+
 ## Best Practices
 - **Use Variable Expansion**: Use `${VAR_NAME}` for secrets to keep the catalog file clean and portable.
 - **Transport Types**: Always specify `transport_type` (e.g., `sse`, `http`) to ensure the gateway uses the correct connection logic.

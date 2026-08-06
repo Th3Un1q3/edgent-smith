@@ -44,7 +44,7 @@
     "OPENCODE_DATA_DIR": "/home/vscode/.local/share/opencode",
     "PATH": "/home/vscode/.opencode/bin:/home/vscode/.bun/bin:${localEnv:PATH}"
   },
-  "initializeCommand": "if [ \"${CI}\" != \"true\" ] && ! grep -q '^COMPOSE_PROFILES=' .devcontainer/.env 2>/dev/null; then echo 'COMPOSE_PROFILES=infra' >> .devcontainer/.env; fi",
+  "initializeCommand": "sh .devcontainer/init.sh",
   "postCreateCommand": "bash .devcontainer/setup-dev.sh",
   "remoteUser": "vscode",
   "forwardPorts": [
