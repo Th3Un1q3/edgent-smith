@@ -71,6 +71,7 @@ Every `fetch` call first probes `robots.txt`. `'Failed to fetch robots.txt ... c
 - **Transcript error strings**: rate limits, IP bans, and missing transcripts come back as plain-text strings starting `Error executing tool get_transcript` — they look like content unless you check the prefix; a transcript fetch loop must check (or catch the `JSON.parse` throw) before appending to the page list.
 - **Opaque cursors**: `next_cursor` values carry no parseable meaning; end-of-pagination is signaled by the cursor going absent or repeating — cap the loop (~9 pages) so a broken cursor cannot fetch forever.
 - **`max_chars` undocumented**: not in the documented serena surface — pass it large on cache writes; a small or omitted value may truncate multi-page content silently.
+- **Request full content for caching**: `fetch` returns only what fits `max_length` — pass a large value (e.g. 100000) and paginate via `start_index` to capture the whole page; combined with a large `max_chars` on `write_memory`, cache entries hold full content, not truncated excerpts.
 - **No cross-call state**: variables do not persist between mcp-exec calls — all loops and aggregation live inside one script per batch.
 - **Serena formats**: memory-name case sensitivity, `write_memory` overwrite semantics, and the `read_memory` dual return format are covered in [serena-memory-api.md](./serena-memory-api.md) — reference it, do not re-derive.
 

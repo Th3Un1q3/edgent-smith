@@ -10,7 +10,7 @@ Captures refactoring patterns, architectural decisions, and migration findings f
 - Static-analysis tradeoffs: lint-rule decisions that expose architectural constraints rather than style preferences.
 - Process lessons: how to run multi-file refactoring sessions (see mem:refactoring/process/running-refactoring-sessions).
 - Python module moves: relocating a module between layers behind a re-export shim, pinned by a guard test (topics prefixed `python-*`).
-- Plugin runtime behavior as it drives refactoring decisions: hook lifecycle, SessionStorage-backed state, and test harness configuration.
+- Plugin runtime behavior as it drives refactoring decisions: hook lifecycle, SessionStorage-backed state, in-memory envelope state, and test harness configuration.
 
 ## Boundaries (out of scope)
 
@@ -26,7 +26,7 @@ Captures refactoring patterns, architectural decisions, and migration findings f
 - **Dependency-change cascades**: How downstream code breaks when shared modules change (type declaration merges, logger signature changes, mock factory chains) and how to contain the fallout.
 - **Code restructuring**: Patterns for reshaping plugin code without behavior change — inner closures, boolean parameters, type narrowing, and fragile closure forward references.
 - **Static-analysis tradeoffs**: Lint-rule decisions that expose architectural constraints rather than style preferences (e.g., max-line violations).
-- **Plugin runtime behavior**: Hook lifecycle, SessionStorage-backed state, and test harness configuration.
+- **Plugin runtime behavior**: Hook lifecycle, SessionStorage-backed state, in-memory envelope state, and test harness configuration.
 - **Process lessons**: How to run multi-file refactoring sessions effectively (see mem:refactoring/process/running-refactoring-sessions).
 - **Python module moves**: Relocating a module between layers behind a re-export shim, pinned by a guard test.
 

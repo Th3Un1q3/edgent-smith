@@ -140,7 +140,7 @@ try {
 
 ### Fetch & cache: fetch doc pages
 
-`fetch({url}); check the 'Contents of' prefix (robots.txt pre-probe noise — a 'Failed to fetch robots.txt' result means the target is UNREACHABLE, not a content error; never cache failure strings); cache cache/fetch/{hostname-slug}/{path-slug}.`
+`fetch({url}); check the 'Contents of' prefix (robots.txt pre-probe noise — a 'Failed to fetch robots.txt' result means the target is UNREACHABLE, not a content error; never cache failure strings); cache one cache/fetch/{hostname-slug}/{path-slug} entry per fetched URL — full returned content under the deterministic key derived from the URL; pagination rounds of one URL consolidate into that URL's single entry (assembled content, note any truncation in the header).`
 
 ```javascript
 // fetch returns a plain string, markdown-simplified, prefixed 'Contents of <url>:'.
@@ -227,11 +227,12 @@ return report.join(NL) || 'OK   (no ops this run)';
 
 ## Generalized skeleton
 
-One compact script per SOURCE batch, phases labeled CHECK → FETCH → STORE → SYNTHESIZE. Split by source into a few `mcp-exec` calls — a monolithic batch with MANY tool calls can hit the gateway timeout (-32001) mid-loop. All loops live inside the script; no cross-call state is needed (variables do not persist between mcp-exec calls).
+One compact script per SOURCE batch, phases labeled CHECK → FETCH → STORE → SYNTHESIZE (canonical checkpoints: [SKILL.md](../SKILL.md)). Split by source into a few `mcp-exec` calls — a monolithic batch with MANY tool calls can hit the gateway timeout (-32001) mid-loop. All loops live inside the script; no cross-call state is needed (variables do not persist between mcp-exec calls).
 
 ```javascript
 // Generalized research-with-caching skeleton (sync-only, single-quoted strings).
-// Phases per source batch: CHECK (cache lookup) -> FETCH (on MISS) -> STORE -> REPORT.
+// Phases per source batch: CHECK (read checkpoint — cache hit = reuse, miss = proceed to fetch)
+// -> FETCH (on MISS) -> STORE (write checkpoint — mandatory on successful fetch) -> REPORT.
 // One mcp-exec per source (deepwiki / github / fetch) to avoid batch timeouts.
 var NL = String.fromCharCode(10);
 var report = [];
@@ -244,10 +245,10 @@ function store(name, content) {
   } catch (e) { report.push('FAIL ' + name + ': ' + e.message); }
 }
 try {
-  // CHECK — list_memories({topic: 'cache/<source>/<scope>'}) + read the exact key → HIT skips fetch
+  // CHECK (read checkpoint — cache hit = reuse, miss = proceed to fetch) — list_memories({topic: 'cache/<source>/<scope>'}) + read the exact key → HIT skips fetch
   // FETCH — per tool: deepwiki PLAIN TEXT (no JSON.parse); github JSON (check error/incomplete_results);
   //         fetch 'Contents of' prefix; robots.txt probe failure = unreachable host, never cached
-  // STORE — header (tool, query/URL, date, source line) + FULL raw response under the canonical key
+  // STORE (write checkpoint — mandatory on successful fetch) — one cache entry per fetched URL: header (tool, URL, date, source line) + FULL raw returned content under the deterministic key cache/fetch/{host-slug}/{path-slug}; pagination rounds of one URL consolidate into that URL's single entry (assembled content, note truncation in the header)
   // SYNTHESIZE — separate call: researches/about first, then researches/{topic-slug} with a
   //              '## Cached sources' list of mem: refs for every cache entry used
   report.push('OK   source batch done');
@@ -259,8 +260,11 @@ return report.join(NL); // tiny per-op status lines only — raw content never r
 
 ## Best practices
 
-- Cache-first ALWAYS: check `cache/{source}/...` before calling the tool — this is the default for every research, no reminding needed.
+- Cache-first ALWAYS: check `cache/{source}/...` before calling the tool — this is the default for every research, no reminding needed; research-only tasks are not exempt.
 - Deterministic keys: same tool+query → same key → cache-check hits; use the canonical `cache/{source}/{scope}/{descriptor}` scheme.
+- Cardinality: one cache entry per fetched URL — never aggregate multiple pages into one entry; the descriptor is the URL path slug, not the task name.
+- Ground truth: raw page content is the ground truth; extractions/syntheses go in `researches/` and `mem:`-reference the raw entries.
+- Count audit: the status report must state pages-fetched vs cache-entries-written counts; a mismatch means a page's raw content was not preserved.
 - Never cache error/failure strings (deepwiki non-answers, github `error` objects, fetch unreachable-host probes) — cache only successful raw responses.
 - Status-report-only return: HIT/MISS + OK/FAIL `<name> chars=<n>`; raw content never enters the model context.
 - Pass `max_chars` large (500000) on cache writes — it is undocumented and a small/omitted value may truncate long responses.

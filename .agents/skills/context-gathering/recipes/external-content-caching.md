@@ -279,7 +279,7 @@ try {
   if (search.error) { report.push('FAIL harvest: ' + search.error.message); return report.join(NL); }
   // VERIFY — get_video_info uploader filter, dedupe by id
   // FETCH — paginated full-text loop with hard page cap and plain-text error checks
-  // STORE — cache/about first, then cache/{source}/{channel}/{slug}_{id} per item
+  // STORE (write checkpoint — mandatory on successful fetch) — cache/about first, then cache/{source}/{channel}/{slug}_{id} per item
   report.push('OK   pipeline done');
 } catch (e) {
   report.push('ERROR: ' + e.message);

@@ -8,7 +8,7 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.11.0"
+  version: "1.13.0"
   author: Th3Un1qu3
   tools:
     - gateway_mcp-find
@@ -55,6 +55,23 @@ The pipeline is `mcp-find` (discover servers) → `code-mode` (initialize a sand
   issue/search, fetch) checks `cache/{source}/...` before calling the tool,
   writes the full raw response on miss, and cites entries with `mem:` refs in
   any `researches/{topic}` memory. This is the default — no reminding needed.
+
+### Cache read / write checkpoints
+
+**READ checkpoints (check these BEFORE acting):**
+- Before ANY external research fetch (deepwiki, github, fetch, tavily, youtube): list + read `cache/{source}/...` for the deterministic key — a HIT means reuse, do NOT re-fetch. Per-URL lookup: before fetching URL X, check `cache/fetch/{host-slug}/{path-slug}` — the key is derived deterministically from X (host and path slugs); HIT = reuse, do NOT re-fetch that URL.
+- Before synthesizing research findings: check existing `researches/{topic}` memories to build on, not duplicate.
+- Before answering from memory: run [collect-relevant-memories](./recipes/collect-relevant-memories.md) (list domains → read `about` → fetch matching) as step 0.
+
+**WRITE checkpoints (MUST write on these events):**
+- **Cardinality — one cache entry per fetched URL:** every successful fetch of a URL stores THAT page's full returned content under its own deterministic key `cache/fetch/{host-slug}/{path-slug}`. Never collapse multiple pages into a single entry. Pagination rounds of one URL consolidate into that URL's single entry (assembled content; note any truncation in the header).
+- Every research task → SYNTHESIZE `researches/about` first, then `researches/{topic-slug}` with a "## Cached sources" section of `mem:` refs to every cache entry used.
+- `cache/about` per source before that source's first write; about-first rule.
+- **Ground truth:** Raw fetched page content is the ground truth for cross-checking and revisiting. Syntheses and extractions belong in `researches/` and MUST `mem:`-reference the raw cache entries they derive from — never replace raw content with a summary.
+- **Status-report requirement:** Every research task's per-op status report MUST state the counts: "N pages fetched → N cache entries written" (match required), so ground-truth coverage is verifiable.
+
+**Precedence rule:** Cache and memory writes via the serena server are the skill's sanctioned research output channel and are NOT project-file modifications. The cache-first pipeline applies unchanged to research-only or 'do not modify project files' tasks. Only an explicit operator instruction forbidding memory writes overrides the STORE phase.
+
 - Public vs private: public research/cache → `researches/{topic}` + `cache/{source}/...`. Only devtools-derived output from authenticated sessions (and PII / job / application data) → `private/` namespace (gitignored, never committed). Extraction recipes stay public in `browser-automation/<site>/`.
 - **Start light, escalate on failure.** For every gathering need, pick the default server per category in [references/server-selection.md](./references/server-selection.md) — the most lightweight server that can do the job. Escalate to a heavier server only on a concrete failure signal (documented error shape, empty/insufficient result, auth/JS wall). devtools is the heaviest server — reach it only when a lighter server provably cannot deliver; never escalate speculatively.
 
@@ -99,7 +116,7 @@ for common context-gathering tasks.
 | No ready-made recipe exists — need to design a new approach | Map capabilities, hypothesize tool chains, test, capture as recipe | [workflows/refinement-discovery.md](./workflows/refinement-discovery.md) |
 | Need to explore local codebase — find symbols, references, patterns | Find referencing symbols, analyze file structure, search patterns | [recipes/codebase-exploration.md](./recipes/codebase-exploration.md) |
 | Need to fetch & cache external content — web-search results, library docs, YouTube transcripts — without flooding the model context: harvest targets, verify, paginate full fetch, write to cache/{source}/..., revisit later | Harvest → verify → fetch full content → write cache/about + cache/{source}/{channel}/{slug}_{id} memories → return per-op status report | [recipes/external-content-caching.md](./recipes/external-content-caching.md) |
-| Need to research a topic — answer questions from deepwiki, check known GitHub issues, fetch docs — cache tool responses first | Cache-check → per-tool fetch+cache → synthesize researches/{topic} with mem: refs → return per-op status report | [recipes/research-with-caching.md](./recipes/research-with-caching.md) |
+| Need to research a topic — answer questions from deepwiki, check known GitHub issues, fetch docs — cache tool responses first | Cache-check → per-tool fetch+cache → synthesize researches/{topic} with mem: refs → return per-op status report (required even for research-only tasks) | [recipes/research-with-caching.md](./recipes/research-with-caching.md) |
 | Need to read, list, search, or write files on disk through the gateway — restricted to the filesystem server's allowed directories | Verify allowed dirs, then read/list/search/tree/info files; writes need planned cleanup (no delete tool) | [recipes/filesystem-access.md](./recipes/filesystem-access.md) |
 | Need to understand a GitHub repository — codebase, issues, docs | Semantic Q&A on repo code; search and analyze repository issues | [recipes/github-insights.md](./recipes/github-insights.md) |
 | Need to automate a browser / drive Chrome via devtools MCP (extract, navigate, SPA click-through) | Activate devtools sandbox, verify auth, extract minimally, cache + memorize selectors, recover from drift | [workflows/browser-automation-devtools.md](./workflows/browser-automation-devtools.md) |

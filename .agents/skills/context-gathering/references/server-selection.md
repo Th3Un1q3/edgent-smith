@@ -12,7 +12,10 @@ For ANY external gathering, in order:
 
 0. **Check cache and memory first** — list `cache/{source}/...` and `researches/{topic}` via
    serena before any external server. Cache-first is the skill default
-   ([research-with-caching](../recipes/research-with-caching.md)).
+   ([research-with-caching](../recipes/research-with-caching.md)), and applies
+   unchanged to research-only / "do not modify project files" tasks — cache and
+   memory writes via serena are not project-file modifications (canonical
+   precedence rule: [SKILL.md](../SKILL.md)).
 1. **Pick the category default** — the most lightweight server that can do the job, from the
    category heuristics below.
 2. **Escalate only on a concrete failure signal** — a documented error shape, an empty or

@@ -228,6 +228,7 @@ Every todo item description MUST use pattern `#{task_type}: {task_description} (
 - #quality-gates: Run static analysis and code quality checks (static-analysis, code-quality)
 - #steering: Identify the best next step to take based on current progress and results (decision-making)
 - #plan: Update todo list with new tasks based on current progress and results (planning)
+- #retrospective: Analyze difficulties experienced, identify what to do differently when doing similar tasks, capture it as memories (context-gathering)
 ```
 
 ## Skill Enforcement (Required)
