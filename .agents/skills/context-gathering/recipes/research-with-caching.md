@@ -16,7 +16,7 @@ One `gateway_mcp-exec` loop per source batch: check `cache/{source}/...` → fet
 
 1. Follow [Setup](../workflows/setup.md) — discover servers, activate code-mode
 2. Follow [Scripting workflow](../workflows/scripting-workflow.md) — sync JS, error handling, mcp-exec patterns
-3. Activate code-mode: `code_mode({"name": "code-mode-research-cache", "servers": ["deepwiki", "github", "fetch", "serena"]})` — the tool is exposed to mcp-exec under the returned prefixed name
+3. Activate code-mode: `gateway_code-mode({"name": "code-mode-research-cache", "servers": ["deepwiki", "github", "fetch", "serena"]})` — the tool is exposed to mcp-exec under the returned prefixed name
 4. API facts: [content-fetch-api](../references/content-fetch-api.md); serena formats: [serena-memory-api](../references/serena-memory-api.md); cache convention: `mem:cache/about`
 
 ## Cache-key formation
@@ -216,7 +216,7 @@ When the source is devtools (authenticated session output) or the content may co
 
 ### Return the status report
 
-`per-op lines only: HIT/MISS, OK/FAIL <name> chars=<n>; never return raw content.`
+`per-op lines only: HIT/MISS, OK/FAIL <name> chars=<n>; never return raw content (≤2 KB return-cap enforcement: [truncation-examples.md §A](../references/truncation-examples.md)).`
 
 ```javascript
 // The ONLY thing returned to the model is the per-operation status report.
@@ -227,7 +227,7 @@ return report.join(NL) || 'OK   (no ops this run)';
 
 ## Generalized skeleton
 
-One compact script per SOURCE batch, phases labeled CHECK → FETCH → STORE → SYNTHESIZE (canonical checkpoints: [SKILL.md](../SKILL.md)). Split by source into a few `mcp-exec` calls — a monolithic batch with MANY tool calls can hit the gateway timeout (-32001) mid-loop. All loops live inside the script; no cross-call state is needed (variables do not persist between mcp-exec calls).
+One compact script per SOURCE batch, phases labeled CHECK → FETCH → STORE → SYNTHESIZE (canonical checkpoints: [caching-rules.md](../references/caching-rules.md)). Split by source into a few `mcp-exec` calls — a monolithic batch with MANY tool calls can hit the gateway timeout (-32001) mid-loop. All loops live inside the script; no cross-call state is needed (variables do not persist between mcp-exec calls).
 
 ```javascript
 // Generalized research-with-caching skeleton (sync-only, single-quoted strings).
@@ -264,9 +264,9 @@ return report.join(NL); // tiny per-op status lines only — raw content never r
 - Deterministic keys: same tool+query → same key → cache-check hits; use the canonical `cache/{source}/{scope}/{descriptor}` scheme.
 - Cardinality: one cache entry per fetched URL — never aggregate multiple pages into one entry; the descriptor is the URL path slug, not the task name.
 - Ground truth: raw page content is the ground truth; extractions/syntheses go in `researches/` and `mem:`-reference the raw entries.
-- Count audit: the status report must state pages-fetched vs cache-entries-written counts; a mismatch means a page's raw content was not preserved.
+- Count audit: the status report must state pages-fetched vs cache-entries-written counts; a mismatch means a page's raw content was not preserved (read-back verification pattern: [truncation-examples.md §B](../references/truncation-examples.md)).
 - Never cache error/failure strings (deepwiki non-answers, github `error` objects, fetch unreachable-host probes) — cache only successful raw responses.
-- Status-report-only return: HIT/MISS + OK/FAIL `<name> chars=<n>`; raw content never enters the model context.
+- Status-report-only return: HIT/MISS + OK/FAIL `<name> chars=<n>`; raw content never enters the model context (truncation helpers: [truncation-examples.md §A](../references/truncation-examples.md)).
 - Pass `max_chars` large (500000) on cache writes — it is undocumented and a small/omitted value may truncate long responses.
 - About-first: `researches/about` before topic memories; extend `cache/about` per new source before its first write.
 - Private branch (devtools-derived / PII only): route to private/ namespace (private/about, private/{subdomain}/{topic}, private/cache/{source}/...); never public researches/cache. Public-source content stays public.
@@ -284,3 +284,11 @@ return report.join(NL); // tiny per-op status lines only — raw content never r
 - **Never dump raw content** into the report — it defeats the whole pattern.
 
 Full API shapes and probed response formats: [content-fetch-api](../references/content-fetch-api.md).
+
+## Acceptance criteria
+
+- [ ] Cache cardinality: exactly one `cache/fetch/{host-slug}/{path-slug}` entry per fetched URL — pagination rounds of one URL consolidated into that URL's single entry, never aggregated across URLs.
+- [ ] Cache-first: every tool call was preceded by a cache check (`list_memories({topic: 'cache/<source>/<scope>'})` + exact-key read); HIT reused the stored response without fetching.
+- [ ] Count audit: the status report's pages-fetched count equals cache-entries-written count — a mismatch means raw content was not preserved; failure strings ('Failed to fetch robots.txt', github `error` objects) surfaced as FAIL lines, never cached.
+- [ ] No `JSON.parse` on plain-text tools: deepwiki `ask_question` and `fetch` responses treated as content; `JSON.parse` used only for `search_issues` (with `error`/`incomplete_results` checked) and `list_memories` JSON strings; `write_memory` confirmed via `indexOf('written')`.
+- [ ] Synthesis written about-first (`researches/about`), and `researches/{topic-slug}` contains a `## Cached sources` section with a `mem:` ref for every cache entry used; the return is per-op status lines only (HIT/MISS, OK/FAIL `<name> chars=<n>`), never raw content.

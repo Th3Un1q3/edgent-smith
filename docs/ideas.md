@@ -9,7 +9,6 @@ Summary: brief, actionable ideas discovered while surveying LangChain blog posts
 - Source: LangChain — "The Anatomy of an Agent Harness" (Mar 2026).
 - Evidence: ARIS (2605.03042) demonstrates a research harness with cross-model adversarial collaboration and a claim-auditing ledger; consider reviewer-model routing and integrity verification as harness extensions (revision).
 
-
 ## 2) Subagents & hierarchical/swarms
 - Idea: decompose tasks into background subagents or a swarm; delegate sensory processing and local decisions to small specialized agents.
 - Edge impact: spawn on-device subagents for sensing/ctrl loops; escalate to on-device larger agent or cloud when needed. Improves resilience and parallelism.
@@ -23,14 +22,12 @@ Summary: brief, actionable ideas discovered while surveying LangChain blog posts
 - Source: LangChain — "Evaluating Skills"; awesome-ai-architect (Evaluation & Observability).
 - Evidence: ARIS (2605.03042) includes a three-stage assurance process (integrity verification, result-to-claim mapping, claim auditing) that can be adapted as lightweight evaluator recipes for edge harnesses (revision).
 
-
 ## 4) Self-healing + continual learning (local + federated)
 - Idea: agents monitor their outputs, auto-roll back risky updates, and apply incremental model/skill updates via federated or differential bundles.
 - Edge impact: on-device adaptation to local distributions while ensuring safety (sandboxed model updates, signed update bundles).
 - Notes: enforce strict validation before applying updates; keep human-in-the-loop for high-risk changes.
 - Source: LangChain ("How My Agents Self-Heal", "Continual learning for AI agents").
 - Evidence: SDAR — Self-Distilled Agentic Reinforcement Learning (2605.15155): uses gated on-policy self-distillation as an auxiliary objective alongside RL to stabilize multi-turn agent training; edge relevance: reduces instability in long-horizon agent RL and improves success rates; repo impact: add gated-distillation training recipe and ablations to the agent training docs (new evidence).
-
 
 ## 5) Model routing & hybrid on-device/VM strategies
 - Idea: router that chooses between on-device tiny models, local medium models, or cloud models based on latency, cost, confidence, and privacy.
@@ -53,7 +50,6 @@ Summary: brief, actionable ideas discovered while surveying LangChain blog posts
   - Repo impact: adopt type-aware placeholder redaction in memory sync (cloud-safe summaries), add a local restoration policy, and include MemPrivacy-Bench entries for validation.
 - Evidence: GenericAgent (2604.17091) — hierarchical on-demand memory and context information density maximization; suggests default high-level summaries with on-demand detail to keep context budgets efficient (revision).
 
-
 ## 8) Guardrails & runtime safety
 - Idea: multi-layer guardrails (lightweight rule engines, prompt-injection detectors, optional LLM-based checks) that run before outputs reach actuators/users.
 - Edge impact: enforce safety and compliance locally with minimal latency; fall back to cloud checks when stricter verification needed.
@@ -70,9 +66,9 @@ Summary: brief, actionable ideas discovered while surveying LangChain blog posts
 ---
 
 References
-- LangChain Agent Architecture posts (Mar–Apr 2026): https://www.langchain.com/blog?category_equal=%5B%22Agent+Architecture%22%5D
-- Awesome AI Architect (topics): https://github.com/Alexey-Popov/awesome-ai-architect
-- Hugging Face — Papers (month=2026-04): https://huggingface.co/papers/month/2026-04
+- LangChain Agent Architecture posts (Mar–Apr 2026): <https://www.langchain.com/blog?category_equal=%5B%22Agent+Architecture%22%5D>
+- Awesome AI Architect (topics): <https://github.com/Alexey-Popov/awesome-ai-architect>
+- Hugging Face — Papers (month=2026-04): <https://huggingface.co/papers/month/2026-04>
 
 ---
 
@@ -85,13 +81,13 @@ Research: Hugging Face (May–Apr 2026) — retained high-signal papers
   - New vs revision: New — concretizes the self-healing/continual-learning pattern.
 
 - 2605.09530 — MemPrivacy: Privacy-Preserving Personalized Memory Management for Edge-Cloud Agents
-  - Key mechanism: on-device detection of privacy-sensitive spans, replacement with semantically structured type-aware placeholders for cloud-side memory formation, and local restoration when needed. Repo: https://github.com/MemTensor/MemPrivacy
+  - Key mechanism: on-device detection of privacy-sensitive spans, replacement with semantically structured type-aware placeholders for cloud-side memory formation, and local restoration when needed. Repo: <https://github.com/MemTensor/MemPrivacy>
   - Edge relevance: preserves memory utility while preventing sensitive data leakage during cloud sync; reported utility loss ~1.6% vs aggressive masking.
   - Repo impact: implement type-aware placeholder redaction in memory sync, local restoration policy, add MemPrivacy-Bench test vectors and privacy-utility regression checks in CI.
   - New vs revision: Revision — sharpened implementation guidance.
 
 - 2604.19859 — DR-Venus: Frontier Edge-Scale Deep Research Agents from Only 10K Open Data
-  - Key mechanism: two-stage recipe — agentic supervised fine-tuning (SFT) with long-horizon trajectory resampling, then agentic RL with turn-level information-gain (IG) rewards and format-aware regularization. Repo: https://github.com/inclusionAI/DR-Venus
+  - Key mechanism: two-stage recipe — agentic supervised fine-tuning (SFT) with long-horizon trajectory resampling, then agentic RL with turn-level information-gain (IG) rewards and format-aware regularization. Repo: <https://github.com/inclusionAI/DR-Venus>
   - Edge relevance: demonstrates that carefully curated SFT+agentic-RL recipes enable 4B-class agents to perform deep-research workflows with on-device deployment trade-offs.
   - Repo impact: add an SFT+agentic-RL training recipe, provide turn-level IG reward templates, and document test-time scaling guidance and replication notes for harness experiments.
   - New vs revision: Revision — strengthen small-model training guidance.
@@ -119,7 +115,6 @@ Research: Hugging Face (May–Apr 2026) — retained high-signal papers
   - Edge relevance: makes chain-of-thought and concise multi-step reasoning practical on-device.
   - Repo impact: add a "reasoning-on-edge" recipe: LoRA adapters, budget-forcing objective, dynamic adapter activation policy, and KV-cache-sharing design notes.
   - New vs revision: New — complements 'On-device optimizations' and 'Model routing'.
-
 
 <!-- instrumentation update -->
 

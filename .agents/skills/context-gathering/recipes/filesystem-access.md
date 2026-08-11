@@ -12,7 +12,7 @@
 
 1. Follow [Setup](../workflows/setup.md) — discover servers, activate code-mode
 2. Follow [Scripting workflow](../workflows/scripting-workflow.md) — sync JS, error handling, mcp-exec patterns
-3. Activate code-mode: `code_mode({"name": "code-mode-filesystem-access", "servers": ["filesystem"]})` — the tool is exposed to mcp-exec under the returned prefixed name
+3. Activate code-mode: `gateway_code-mode({"name": "code-mode-filesystem-access", "servers": ["filesystem"]})` — the tool is exposed to mcp-exec under the returned prefixed name
 
 ## Scripts
 
@@ -128,7 +128,7 @@ try {
 
 ### Directory tree
 
-`Gets a recursive listing as JSON. Cap max_depth to keep the output small. This is the ONLY filesystem tool that returns JSON — parse it.`
+`Gets a recursive listing as JSON. Cap max_depth to keep the output small — aggregate-cap enforcement: [truncation-examples.md §C](../references/truncation-examples.md). This is the ONLY filesystem tool that returns JSON — parse it.`
 
 ```javascript
 // Get a recursive tree view of a directory as JSON.
@@ -229,3 +229,11 @@ try {
 - **Sandbox name**: use a descriptive name when activating code-mode (e.g., `code-mode-filesystem-access`); the exposed tool name is prefixed — pass the full returned name to mcp-exec.
 - **Sync only**: no `async`/`await`; variables do not persist between mcp-exec calls.
 - **Single quotes**: use single quotes for all JS strings to survive JSON embedding.
+
+## Acceptance criteria
+
+- [ ] `list_allowed_directories()` called first; the response contains the `'Allowed directories:'` header and the target path sits under one of the returned dirs.
+- [ ] Every call's result checked for error substrings (`'Access denied'`, `'No such file or directory'`) via plain-text checks — try/catch alone would not catch them.
+- [ ] All paths absolute and resolving under an allowed directory; `read_multiple_text_files` entries show `<path>:` prefixes joined by `'---'` with per-file failures flagged `'Error -'`.
+- [ ] `JSON.parse` applied ONLY to `directory_tree` (with `max_depth` capped); all other responses treated as plain text (`[FILE] <name>`, `key: value`, paths-per-line).
+- [ ] `write_file` response contains `'Successfully wrote to'`; every written artifact path reported for host-side cleanup (the server has no delete tool).

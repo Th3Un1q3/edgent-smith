@@ -1,8 +1,8 @@
 # Workflow: Scripting for Context Gathering
 
-Follow this workflow to create and execute multi-tool JavaScript scripts for context gathering using the `code_mode` environment.
+Follow this workflow to create and execute multi-tool JavaScript scripts for context gathering using the `gateway_code-mode` environment.
 
-Make sure to perform servers discovery and code mode activation steps in the [Setup workflow](./setup) before following this workflow.
+Make sure to perform servers discovery and code mode activation steps in the [Setup workflow](./setup.md) before following this workflow.
 
 ## Rules
 
@@ -12,10 +12,9 @@ Make sure to perform servers discovery and code mode activation steps in the [Se
 
 ## Errors Handling
 
-- ReferenceError for a tool name indicates the tool is not provided by any server, used to activate `code_mode`. Verify tool names match names returned when activating code mode, and that the correct servers are included in the `servers` list in the `code_mode` call.
+- ReferenceError for a tool name indicates the tool is not provided by any server, used to activate `gateway_code-mode`. Verify tool names match names returned when activating code mode, and that the correct servers are included in the `servers` list in the `gateway_code-mode` call.
 - Setup Error handlers on every tool call and processing stage, ensure to exit early, and provide information required to troubleshoot the issue. (if parsing failed, output raw response, and previous steps responses, to understand what was supplied to parsing, and what exactly the error was)
 - Prefer ONE `mcp_exec` call for a fixed batch of writes or reads: per-op try/catch, per-op success checks, a per-op status report, no early abort. Split into multiple calls only when debugging a failing write/read, when the payload is exploratory and you need intermediate output to decide the next step, or when a later call depends on an earlier call's result. See the store-memories recipe's "Batch multiple writes in one call" section for the pattern.
-
 
 ## JSON Escaping in mcp-exec Scripts
 
@@ -113,4 +112,3 @@ const finalShortResult = parsedAnotherToolResponse.filter(item => item.is_active
 
 return finalShortResult;
 ```
-

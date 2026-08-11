@@ -270,15 +270,6 @@ Any script you create for evaluations, experiments, or diagnostics should live i
 | One-off experiment helper | `experiments/<name>.py` |
 | Build or CI helper | `scripts/<name>.sh` |
 
-## Tool and dependency assumptions
-
-When adding a CLI, binary, or external service to repo scripts, workflows, or the DevContainer, verify that it is available in the target environment. Do not add availability guards to ad-hoc terminal exploration unless the task needs them.
-
-- Use `command -v <tool>` in shell scripts when tool presence is a real requirement.
-- Prefer environment-provided services over host-installed binaries when both are available.
-- If a script genuinely requires a tool, fail fast with a clear message.
-- Test the absent-tool path only when you introduced such a guard.
-
 ## Design principles
 
 When integrating with an external provider or library, identify the constructs that are both available and recommended by that library using the tools at your disposal.

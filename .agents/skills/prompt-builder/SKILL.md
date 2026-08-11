@@ -25,10 +25,10 @@ I will ask you targeted questions to gather all necessary information. After col
 
 ### 2. **Persona Definition**
 - What role/expertise should Copilot embody? Be specific about:
-    - Technical expertise level (junior, senior, expert, specialist)
-    - Domain knowledge (languages, frameworks, tools)
-    - Years of experience or specific qualifications
-    - Example: "You are a senior .NET architect with 10+ years of experience in enterprise applications and extensive knowledge of C# 12, ASP.NET Core, and clean architecture patterns"
+  - Technical expertise level (junior, senior, expert, specialist)
+  - Domain knowledge (languages, frameworks, tools)
+  - Years of experience or specific qualifications
+  - Example: "You are a senior .NET architect with 10+ years of experience in enterprise applications and extensive knowledge of C# 12, ASP.NET Core, and clean architecture patterns"
 
 ### 3. **Task Specification**
 - What is the primary task this prompt performs? Be explicit and measurable

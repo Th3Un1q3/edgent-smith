@@ -1,0 +1,437 @@
+title: Architecting Agent Memory: Principles, Patterns, and Best Practices
+url: https://www.youtube.com/watch?v=W2HVdB4Jbjs
+date: fetched 2026-08-07
+channel: AI Engineer (@aiDotEngineer)
+source: youtube-transcript get_transcript
+
+[Music]
+[Music]
+In the next 10 to 15 minutes, here's uh
+I guess my promise to you. I'm going to
+give you some information
+that will be high level. There will be
+some practical component to it. But this
+information I'll give you within the
+next 6 months will be very relevant and
+it will put you in the best position to
+build the best AI applications to build
+the best agents that are believable,
+capable, and reliable.
+I know we we going to get there.
+You know what? Just for you. There we
+go. You're welcome. So, we're going to
+be talking about a memory. Um,
+we're going to be talking
+about the stateless applications that
+we're bu building today and how we can
+make them stateful. We're going to be
+talking about the prompt engineering
+that we're doing today and how we can
+reduce that by focusing on persistence.
+We're going to be turning the responses
+in our AI application and making our
+agents build relationship with our
+customers and all of it is going to be
+centered around memory.
+So I'm going to do a very quick
+evolution of what we've been seeing for
+the past two to three years.
+We started off with chat bots. LMN power
+chatbots. They were great. Chat GPT came
+out November 2022 and yeah exploded.
+Then we went into rag. We gave this chat
+bots more domain specific relevant
+knowledge and it gave us more
+personalized responses. Then we begin to
+scale the compute, the data we're giving
+to the LLMs and they gave us emerging
+capabilities, right? Reasoning uh tool
+use. Now we're in the world of AI agents
+and agentic systems
+and the big debate is what is an agent,
+right? What is an AI agent? I don't like
+to go into that debate because that's
+like asking what is consciousness
+um is a spectrum. the agenticity and
+that's a word now agenticity
+of uh of an agent is is a spectrum so
+they're different levels
+I came here and I saw Whimo and to me
+was pure sorcery we don't have that in
+the UK and they're different levels of
+um self-driving so you can look at the
+genetic spectrum in that respect we have
+a minimal agent whereas an LLM running
+the loop great then you have a level
+four is autonomous agent a bunch of
+agents that have access to tools you
+they can do whatever they want. They're
+not prompted in any way or a minimal
+way. But this is how I see things is a
+spectrum. So what is an AI agent? It's a
+computational entity with awareness of
+his environment through perception,
+cognitive abilities through an LLM and
+also can take action through tool use.
+But the most important bit is there is
+some form of memory short-term or
+long-term.
+Memory is important. It's important
+because we're trying to make our agents
+reflective, interactive, proactive, and
+reactive and autonomous. And every most
+of this, if not all, can be solved with
+memory.
+Um, I work at MongoDB and we're going to
+make we're going to connect the dots,
+don't worry. So, this is all nice and
+good. This is what what you look at if
+you um double click into one AI agent
+is. But the most important bit to me is
+I'll go slide. People are taking
+pictures. Sorry.
+All right, let's go. The most important
+bit is memory. And when we talk about
+memory, the easy way you can think about
+it is short-term, long-term, but there
+al other distinct forms, right? Um,
+conversational entity memory, knowledge,
+data, store, cache, working memory.
+We're going to be talking about all of
+that today. So, these are the high level
+concepts.
+But let me go a little bit metal.
+why we're all here um today in this
+conference is because of AI, right?
+We're all architects of intelligence.
+The whole point of AI is to build some
+form of computational entity that
+surpasses human intelligence or mimics
+it. Then AGI,
+we're focused on making that
+intelligence surpass humans in all tasks
+we can think of. And if you think about
+the most intelligent humans, you know,
+what determines the intelligence is
+their ability to recall. It's their
+memory. So if we if AI or AGI is meant
+to mimic human intelligence is a
+no-brainer, no pun intended, that we
+need memory within the agents that we're
+building today. Does anyone disagree?
+Good. I would have kicked you out. Um,
+okay, let's go. So humans, you in your
+brain right now, you have these, you
+have this. This is not what it looks
+like, but it's close enough. You have
+different forms of memory, and that's
+what makes you intelligent. That's what
+makes you retain some of the information
+I'm going to be giving you today. There
+is short-term, long-term, working
+memory, semantic, episodic, procedural
+memory. Um, in your brain right now,
+there is something called a cerebellum.
+I always get the word wrong, but that's
+where you store most of the routines and
+skills you can do. Can anyone here do a
+backflip?
+Really? Wow. You just see my excitement.
+Um
+your the information or the knowledge of
+that bat flip is actually stored in that
+part of your brain. So I heard it's 90%
+confidence by the way
+that is actually it is right. I'm not
+going to do one but but it's stored in
+that part of your brain. Now you can
+actually mimic this in agents and I'm
+going to show you how. But now we're
+talking about agent memory.
+Agent memory is the mechanisms that we
+are implementing to actually make sure
+that states persist in our AI
+application.
+Our agents are able to accumulate
+information, turn data into memory and
+have it inform the next ex execution
+step. But the goal is to make them more
+reliable, believable, and capable.
+Those are the key things.
+And the core topic that we are going to
+be working on as AI memory engineers is
+on memory management. We're going to be
+building memory management systems. And
+memory management is a systematic
+process of organizing all the
+information that you're putting into the
+context window. Yes, we have like large
+context window, but that's not for you
+to stuff all your data in. That's for
+you to pull in the relevant memory and
+structure them in a way that is
+effective that allows for the response
+um to be relevant.
+So these are the core components of
+memory management. Generation, storage,
+retrieval, integration, updating,
+deletion. There's a lie here because you
+you don't delete memories. Humans don't
+delete their memories except traumatic
+one and you want to forget. But we
+really should be looking at implementing
+forgetting mechanisms within the memory
+management systems that we're building.
+You don't want to delete memories. And a
+different research papers are looking at
+how to implement some form of forgetting
+within agents.
+But the most important bit is retrieval.
+And I'm getting to the MongoDB part.
+This moving around um this is rag. It's
+very simple, right? because we've been
+doing it as AI engineers. Um, MongoDB
+is that one database that is core to rag
+pipelines because it gives you all the
+retrieval mechanisms. Rag is not just
+vector. Vector search is not all you
+need. You need other type of search and
+we have that with MongoDB. Anything you
+can think of, you're going to be hearing
+a lot about MongoDB in this um in this
+conference today. But this is what rag
+is and you level up. You go into the
+world of agentic rag, right? You give
+the retrieval capability to the agent as
+a tool. And now we can choose when to
+call on information.
+There's a lot going on. I I'll send this
+somehow to you guys or you can come to
+me and I'll um LinkedIn it to you. Add
+me on LinkedIn
+and just ask for the slice and I'll send
+it to you. Richmond on LinkedIn. Um this
+is memory.
+MongoDB
+is the memory provider for Aentic
+systems. And when you understand that we
+provide the developer, the AI memory
+engineer, the AI engineer all the
+features that they need to turn data
+into memory to make the agents
+believable, capable, and reliable. You
+begin to understand the importance of
+having a technology partner like MongoDB
+on your AI stack.
+So these are this is the same um image
+but just a bit more focused and not a
+different memory. So I'm going to skip
+through this slide because I go into a
+bit of detail. Um I'm also going to give
+you a library. I'm working on an open
+source library. I'm ashamed of the name.
+I was trying to be cool when I came up
+with it. It's called Memoriz.
+Um
+you can type that on Google. You'll find
+it. But it has all the design patterns
+of all of this memory that I'm showing
+you. for this memory types and that I
+will show you as well. But there are
+different forms of memory and AI agents
+and how we make them work. So let's
+start with persona who's is anyone here
+from open AI
+leave. I'm joking. Um well a couple a
+couple months ago right so they they
+gave chat GBT a bit of personality right
+um and they didn't do a good job but
+they are going in the right direction
+which is we are trying to make our
+systems more believable right we're
+trying to make them more human we're
+trying to make them create relationship
+with the consumer with the users of our
+systems persona memory helps with that
+and you can model that in MongoD DB,
+right? This is memories. You if you spin
+up the library, it helps you um spin up
+all of this um different type of memory
+types. So, this is persona. Um I have a
+little demo if we have time. Um
+but this is persona memory. This is what
+it will look like in MongoDB. Then
+there's toolbox.
+Um the guidance from OpenAI is you
+should only put uh the schema of maybe
+10 to 21 tools in the context window.
+But when you use your database as a
+toolbox where you're storing the JSON
+schema of your tools in MongoDB, you can
+scale because just before you hit the
+LLM, you can just get the relevant tool
+using any form of search. So that's
+toolbox that's me that's a toolbox
+memory and that's what it would look
+like right you would store all this is
+how you model it in uh MongoDB you store
+all the information of your JSON schema
+now you'll begin to understand that
+MongoDB gives you that flexible data
+model the document data model is very
+flexible it can adapt to wherever data
+wherever model you want your data to
+take wherever structure and you have all
+of the retrieval capabilities graph
+vector text geospatial query
+in one database.
+Conversation memory is a bit obvious,
+right? Back and forth conversation with
+uh chat GPT with Claude. You can store
+that in your database as well in MongoDB
+as conversational memory. And this is
+what that would look like. Time stamp,
+time stamp, and you have a conversation
+ID and you can see something there
+called recall recency and associate
+conversation ID. And that's my attempt
+at implementing some memory signals. Um
+but and that's goes into the forgetting
+mechanism that I'm trying to implement
+in my very famous library memories. Um
+I'm going to go through the next slides
+a bit quicker because I want to get to
+the end of this.
+Workflow memory is very important. You
+build your agentic system, they execute
+a certain step. Step one, step two, step
+three, it fails. But one thing you could
+do is the failure is experience. It's
+learning experience. You can store that
+in your database. I see you nodding.
+You're like, "Yeah." um you can store
+that in your database and you can then
+pull that in in the next execution to
+inform the LLM to not take this step or
+explore other paths. You can store that
+in MongoDB as well. You can model that
+because what you have with MongoDB is
+that memory provider for your agentic
+system and that's what this is what that
+looks like when you model it. An example
+of it anyway. So we have episodic
+memory, we have long-term memory, we
+have an agent registry, you can store
+the information of your agent as well.
+Um, and this is how I do it. Uh, you can
+see the agent has tools, persona, all
+the good stuff. There's entity memory as
+well. So, there's different forms of
+memory. And the memory the memoriz
+library is very experimental and
+educational, but it it encapsulates some
+of the memory and implementation and
+design patterns that I'm thinking of on
+an everyday basis that we're thinking of
+in MongoDB. So, MongoDB, you probably
+get the point now, the memory provider
+for Agent Tech systems. There are tools
+out there that focus on memory
+management. Um, MEGPT, ME Zero, Zep,
+they're great tools, but after speaking
+to some of you folks and some of our
+partners and customers here, there is
+not there is there is not one way to
+solve memory. and you need a memory
+provider to build your custom solution
+to make sure the memory management
+systems that you're able to implement
+are effective. So we really understand
+the importance of managing data and
+managing memory and that's why earlier
+this year we acquired Voyage AI. Now
+they create the best
+no offense open AI embedding models in
+the market today. Voyage AI embedded
+models are we have a text multimodel we
+have re-rankers and this allows you to
+really solve the problem or at least
+reduce AI hall elucination within your
+rag and aentic systems and what we're
+doing and what we're focused on the
+mission for MongoDB is to make the
+developer more productive by taking away
+the considerations and all the concerns
+around managing different data and all
+the process of chunking in retrieval
+strategies. We we pull that into the
+database. We are redefining the
+database. And that's why in a few months
+we're going to be pulling in Voyage AI,
+the embedded models and the rerankers
+into MongoDB Atlas and you will not have
+to be writing chunking strategies for
+your um for your data. I see a lot of
+people nodding. Yeah, that's good. So,
+MongoDB is a is a household name to be
+honest. with um I watched MongoDB IPO
+back when back when I was in university.
+I bought the stocks when I was in
+university um free just free. I already
+had about £100. Um I was broke but
+we are very focused and we take it very
+seriously making sure that you guys can
+build the best AI products, AI features
+very quickly in a secure way. So MongoDB
+is built for the change that we are
+going to experience now, tomorrow, in
+the next couple years. I want to end
+with this. You know who these two guys
+are?
+Damn. Okay, this is Hob and Wiso. They
+won a Nobel Prize um in the late 90s,
+but they did some research on the visual
+cortex of cats. um they experimented
+with cats that this probably wouldn't
+fly now, but back in the 50s and 60s
+things were a bit more relaxed. But they
+found out that the visual cortex of the
+brains between cats and humans actually
+worked by learning different hierarchies
+of representation. So edges, contours
+and abstract shapes. Now people that are
+in deep learning would know that this is
+how convol convolutional neural network
+works. And the research that these guy
+these guys did inspired and informed
+convolutional neural networks. That's
+face detection, object detection. It's
+it all comes from neuroscience. So we
+are architects of intelligence. But
+there is a better architect of
+intelligence. It's nature. Nature's
+created our brains. It's the most
+effective form of intelligence and well
+some humans that I meet. But it's the
+most effective form of intelligence that
+we have today. and we could look inwards
+to build this agentic system. So last
+week Saturday myself and Tenu is the
+chief AI scientist at MongoDB also the
+founder of Voyage AI. We sat with this
+three guys in the middle are
+neuroscientists. Kenneth has been
+exploring human brain and memory for
+over 20 years and and over here is
+Charles Parker. He's the creator of
+MEGPT your letter and we are having
+these conversation and once again we're
+mirroring how we're bringing
+neuroscientists and application
+developers together to solve and push us
+on the path of AGI. So that's my talk
+done. Check out memories and you can
+come talk to me about memory. Add me on
+LinkedIn if you want this presentation.
+Thank you for your time.
+[Music]

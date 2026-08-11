@@ -7,8 +7,8 @@
  * in-place part.text mutation.
  */
 import { Plugin } from '@opencode-ai/plugin'
+import type { PluginInput } from '@opencode-ai/plugin'
 import Bun from 'bun'
-import { readdir } from 'node:fs/promises'
 import { createEnvelope, resolveEnvelope } from './helpers/envelope-store'
 import type { EnvelopeMetadata } from './helpers/envelope-store'
 import { log } from './helpers/logger'
@@ -24,21 +24,21 @@ import { log } from './helpers/logger'
  */
 const ENVELOPE_TAG_PATTERN = /<envelope\b[^>]*\bid="([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"[^>]*\/>/
 
-async function buildSkillIndex(name: string, directory: string): Promise<string> {
+async function buildSkillIndex(name: string, directory: string, $: PluginInput['$']): Promise<string> {
   const skillDirectory = `${directory}/.agents/skills/${name}`
   try {
-    const entries = await readdir(skillDirectory)
-    const files = entries.filter((entry): entry is string => typeof entry === 'string')
-    const sorted = [...files].sort((a, b) => a.localeCompare(b))
-    const lines = sorted.map(f => `.agents/skills/${name}/${f}`)
-    return `<skill_index>\n${lines.join('\n')}\n</skill_index>`
+    // `ls -R` prints the skill directory as a nested tree, which reads better
+    // in prompts than a flat path list.
+    const result = await ($`ls -R .`).cwd(skillDirectory).nothrow().quiet()
+    if (result.exitCode !== 0) throw new Error(`ls -R failed: ${result.stderr?.toString() ?? ''}`)
+    return `<skill_index>\n${result.stdout.toString()}\n</skill_index>`
   }
   catch {
     return `<skill_index>\n.agents/skills/${name}/SKILL.md\n</skill_index>`
   }
 }
 
-export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
+export const skillsLoaderPlugin: Plugin = async ({ client, directory, $ }) => {
   return {
     'tool.definition': async (input, output) => {
       // Guard: only modify the task tool
@@ -121,7 +121,7 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
           // Build resolved skill blocks with path attribute and skill_index
           const resolvedBlocks: string[] = []
           for (const s of sortedResolved) {
-            const index = await buildSkillIndex(s.name, directory)
+            const index = await buildSkillIndex(s.name, directory, $)
             const path = `.agents/skills/${s.name}/SKILL.md`
             resolvedBlocks.push(
               `<skill name="${s.name}" path="${path}">\n${index}\n${s.content}\n</skill>`,
@@ -146,19 +146,12 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
           const key = await createEnvelope(payload, metadata)
 
           // Inject ONLY a tiny generic self-closing envelope tag; the recipient
-          // unwraps it into the full payload. The description attribute lists
-          // every requested skill name (resolved + unresolved, final ordering)
-          // so the parent sees a minimalistic but descriptive sign of what it
-          // sent. Skill names are XML-escaped for safe embedding in the
-          // double-quoted attribute (& → &amp;, " → &quot;, ' → &apos;, > → &gt;
-          // — & first so escapes are not double-processed; ' is escaped for
-          // symmetric single-quote-safe names inside the JS-array-like repr; >
-          // must be escaped because ENVELOPE_TAG_PATTERN's [^>]* ends at the
-          // first literal '>' and a raw one would break tag matching/unwrapping).
-          const allNames = [...sortedResolved.map(s => s.name), ...unresolved]
-          const escapeAttribute = (value: string): string =>
-            value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('\'', '&apos;').replaceAll('>', '&gt;')
-          const description = `Skills specified by skills array: [${allNames.map(n => `'${escapeAttribute(n)}'`).join(', ')}]. Subagent will unpack full skills content.`
+          // unwraps it into the full payload. The description is a constant —
+          // skill names/content travel inside the payload itself, and a static
+          // description cannot be misread by the model as a directive to
+          // re-create, echo, or expand anything (the previous per-name array
+          // description was hallucinated back into prompts as a fake tag).
+          const description = 'System-managed envelope; skill content is attached automatically. Do not modify.'
           prefix = `<envelope id="${key}" description="${description}"/>`
         }
       }
@@ -207,11 +200,13 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory }) => {
           const id = match[1]
           const payload = await resolveEnvelope(id)
 
+          // Envelope already consumed, stale, or never existed (AI
+          // hallucination) — strip the tag so the model never sees (and
+          // never re-creates) a fake envelope. The warn is the only runtime
+          // diagnostic signal that a placeholder was removed.
           if (payload === undefined) {
-            // Envelope already consumed or unknown key — leave the placeholder
-            // tag in place (one-time unwrap; never strip or re-create).
-            await log(client, 'warn', `Envelope ${id} not found — leaving placeholder.`)
-            result += part.text.slice(lastIndex, match.index) + tag
+            await log(client, 'warn', `Envelope ${id} not found — removing placeholder.`)
+            result += part.text.slice(lastIndex, match.index)
           }
           else {
             result += part.text.slice(lastIndex, match.index) + payload

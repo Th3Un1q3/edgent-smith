@@ -226,7 +226,7 @@ describe("auth", () => {
 })
 ```
 
-Never initiate repetitive spies or mocks inside individual tests. Always configure them in the nearest ancestor's `beforeEach` so that they are reset between tests. This ensures that each test runs in isolation and does not depend on the state left by previous tests. 
+Never initiate repetitive spies or mocks inside individual tests. Always configure them in the nearest ancestor's `beforeEach` so that they are reset between tests. This ensures that each test runs in isolation and does not depend on the state left by previous tests.
 
 ### Pattern Selection Guide (Principle 4)
 
@@ -354,9 +354,7 @@ describe('email', () => {
 
 ## Anti-Pattern: Using inline imports/requires
 
-
 Inline imports are negatively impacting readability, test isolation, they produce duplicates and have no advantages over file-top imports. They should be avoided in test files.
-
 
 ```typescript
 // GOOD: import at file top
@@ -395,7 +393,7 @@ describe('myFunction', () => {
 
 ## Anti-Pattern: Clearing and reseting mocks by hand
 
-Infrastructure already clears and resets mocks between tests. Clearing and resetting mocks by hand is unnecessary and can lead to confusion and errors. It should be avoided in test files. 
+Infrastructure already clears and resets mocks between tests. Clearing and resetting mocks by hand is unnecessary and can lead to confusion and errors. It should be avoided in test files.
 
 ```typescript
 // GOOD: no manual clearing or resetting of mocks
@@ -427,7 +425,6 @@ vi.mock("dep", () => import("./factories").then(f => f.makeMock()))
 import { makeMock } from "./factories"
 vi.mock("dep", () => makeMock())
 ```
-
 
 ## Anti-Pattern: Excessive Type Assertions (`as any`)
 

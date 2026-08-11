@@ -54,6 +54,7 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 ```
 
 ## WHERE TO LOOK
+
 | Task | Location | Notes |
 |------|----------|-------|
 | Core Agent Logic | `agents/` | runtime implementations of pydantic-ai agents. |

@@ -12,7 +12,7 @@
 
 1. Follow [Setup](../workflows/setup.md) — discover servers, activate code-mode
 2. Follow [Scripting workflow](../workflows/scripting-workflow.md) — sync JS, error handling, mcp-exec patterns
-3. Activate code-mode: `code_mode({"name": "github-insights", "servers": ["deepwiki", "github"]})`
+3. Activate code-mode: `gateway_code-mode({"name": "github-insights", "servers": ["deepwiki", "github"]})`
 
 ## Scripts
 
@@ -118,7 +118,7 @@ if (issues.length === 0) return "No matching issues found.";
 
 // Take the top issue title as context for deepwiki analysis.
 var topIssue = issues[0];
-var issueContext = topIssue.title + (topIssue.body ? " — " + topIssue.body.slice(0, 500) : "");
+var issueContext = topIssue.title + (topIssue.body ? " — " + topIssue.body.slice(0, 500) : ""); // truncate before return: [truncation-examples.md §A](../references/truncation-examples.md)
 
 // Step 2: analyze against codebase.
 try {
@@ -148,3 +148,11 @@ try {
 - `ask_question` does not accept file paths or line numbers — it answers based on its indexed understanding of the whole repository. For file-level questions, use the `codebase-exploration` recipe with `serena` instead.
 - All tool calls must be **synchronous** — no `async/await`.
 - `deepwiki` may not have indexed private repositories or very new public repos. If `ask_question` returns an empty or generic answer, fall back to `tavily` web search or `context7` for documentation-based research.
+
+## Acceptance criteria
+
+- [ ] `github_search_issues` output parsed with `JSON.parse` before `.issues` is accessed; zero issues returns `"No matching issues found."`.
+- [ ] Every `ask_question` call uses full `"owner/repo"` format; its plain-text answer is never `JSON.parse`d.
+- [ ] Combined script passes the top issue's title + body snippet (capped at 500 chars — truncation pattern: [truncation-examples.md §A](../references/truncation-examples.md)) as deepwiki context and returns `"Top issue: <url>"` followed by the analysis.
+- [ ] Every issue query includes a `repo:owner/name` scope term.
+- [ ] All tool calls are synchronous; each is wrapped in try/catch with failures returned as `ERROR: ...` strings (no unhandled exceptions).

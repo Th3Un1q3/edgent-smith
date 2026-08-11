@@ -1,9 +1,9 @@
 ---
 id: ADR-002
 title: Memory system and structure: serena store with domain/about organization
-status: draft
+status: accepted
 date: 2026-08-06
-scope: project memory system and structure — how knowledge is persisted, organized, and accessed
+scope: opencode accessible project memory system and structure — how knowledge is persisted, organized, and accessed
 ---
 
 # ADR-002: Memory system and structure

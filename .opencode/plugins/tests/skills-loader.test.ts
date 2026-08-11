@@ -12,12 +12,9 @@ vi.mock('bun', () => {
   return { default: { file: f }, Glob: vi.fn() }
 })
 vi.mock('@plugins/helpers/logger')
-vi.mock('node:fs/promises', () => ({ readdir: vi.fn() }))
 import Bun from 'bun'
 
 import { log } from '@plugins/helpers/logger'
-
-import { readdir } from 'node:fs/promises'
 
 import { __peekEnvelopeForTests, __resetStoreForTests, createEnvelope, resolveEnvelope } from '@plugins/helpers/envelope-store'
 
@@ -44,10 +41,22 @@ const chatMessageHook = (p: Awaited<ReturnType<typeof skillsLoaderPlugin>>) => p
 
 /**
  * Builds the envelope tag exactly as tool.execute.before injects it.
- * Mirrors the implementation's description template for plain skill names.
+ * Mirrors the implementation's constant description.
  */
-const envelopeTag = (key: string, names: string[] = ['skill-a']): string =>
-  `<envelope id="${key}" description="Skills specified by skills array: [${names.map(n => `'${n}'`).join(', ')}]. Subagent will unpack full skills content."/>`
+const envelopeTag = (key: string): string =>
+  `<envelope id="${key}" description="System-managed envelope; skill content is attached automatically. Do not modify."/>`
+
+/** Constant description used by the plugin's envelope tag. */
+const ENVELOPE_DESCRIPTION = 'System-managed envelope; skill content is attached automatically. Do not modify.'
+
+/**
+ * Builds a $ shell mock whose `ls -R .` invocation in the skill directory
+ * resolves with the given output (tool-limit-reminder-style chainable mock).
+ */
+const makeLsShellMock = (exitCode: number, stdout: string): ReturnType<typeof vi.fn> =>
+  vi.fn().mockReturnValue({
+    cwd: () => ({ nothrow: () => ({ quiet: vi.fn().mockResolvedValue({ exitCode, stdout: Buffer.from(stdout), stderr: Buffer.from('') }) }) }),
+  })
 
 /** Extracts the envelope key from the injected envelope tag; '' when absent. */
 const envelopeKeyFromPrompt = (prompt: string): string => prompt.match(/<envelope\s+id="([^"]+)"/)?.[1] ?? ''
@@ -70,7 +79,7 @@ describe('skillsLoaderPlugin', () => {
   beforeEach(async () => {
     __resetStoreForTests()
     client = createMockClient()
-    vi.mocked(readdir).mockRejectedValue(new Error('readdir not configured'))
+    // No $ shell mock configured → buildSkillIndex's `ls -R` fails → fallback index
     plugin = await skillsLoaderPlugin({ client, directory: '/workspace' } as unknown as PluginInput)
   })
   afterEach(() => {
@@ -90,7 +99,7 @@ describe('skillsLoaderPlugin', () => {
     const prompt = output.args.prompt as string
 
     // Prompt carries ONLY the small self-closing envelope tag — never the full skill content
-    expect(prompt).toMatch(/^<envelope id="[^"]+" description="Skills specified by skills array: \['skill-a', 'skill-b'\]. Subagent will unpack full skills content."\/>/)
+    expect(prompt).toMatch(/^<envelope id="[^"]+" description="System-managed envelope; skill content is attached automatically\. Do not modify\."\/>/)
     expect(prompt).not.toContain('<skill name=')
     expect(prompt).not.toContain('Body of skill A.')
     expect(prompt).not.toContain('Body of skill B.')
@@ -100,6 +109,7 @@ describe('skillsLoaderPlugin', () => {
     expect(prompt).toMatch(/<envelope id="[^"]+"[^>]*\/>\n<user_request>\noriginal prompt/)
 
     // The stored payload is byte-identical to the old direct-injection format
+    // (the unconfigured $ shell falls back to the flat SKILL.md-only index)
     const payload = await resolvePayloadFromPrompt(prompt)
 
     expect(payload).toBe(`<task_skills>
@@ -130,7 +140,8 @@ describe('skillsLoaderPlugin', () => {
 
     const prompt2 = output2.args.prompt as string
 
-    expect(prompt2).toContain('[\'skill-a\', \'skill-b\', \'skill-c\']')
+    // The tag description is constant — skill names appear only in the payload
+    expect(prompt2).toContain(`description="${ENVELOPE_DESCRIPTION}"`)
 
     const payload2 = await resolvePayloadFromPrompt(prompt2)
 
@@ -224,7 +235,7 @@ describe('skillsLoaderPlugin', () => {
     expect(output.args.skills).toBeUndefined()
     expect(output.args.prompt).not.toContain('Skill A')
     expect(output.args.prompt).not.toContain('<skill name=')
-    expect(output.args.prompt).toContain('[\'skill-a\', \'skill-c\', \'skill-b\']')
+    expect(output.args.prompt).toContain(`description="${ENVELOPE_DESCRIPTION}"`)
     expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('Load the skill "skill-b" by the name.'))
     vi.mocked(log).mockClear()
 
@@ -243,7 +254,7 @@ describe('skillsLoaderPlugin', () => {
     expect(output2.args.prompt).toContain('<envelope ')
     expect(output2.args.prompt).not.toContain('<task_skills>')
     expect(output2.args.prompt).not.toContain('skill name="no-such-skill"')
-    expect(output2.args.prompt).toContain('[\'no-such-skill\']')
+    expect(output2.args.prompt).toContain(`description="${ENVELOPE_DESCRIPTION}"`)
     expect(output2.args.prompt).toContain('<user_request>\nprompt\n</user_request>')
     expect(output2.args.skills).toBeUndefined()
     expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('Load the skill "no-such-skill" by the name.'))
@@ -264,7 +275,7 @@ describe('skillsLoaderPlugin', () => {
     expect(output.args.prompt).toContain('<envelope ')
     expect(output.args.prompt).not.toContain('<task_skills>')
     expect(output.args.prompt).not.toContain('<skill_envelope')
-    expect(output.args.prompt).toContain('[\'only-skill\']')
+    expect(output.args.prompt).toContain(`description="${ENVELOPE_DESCRIPTION}"`)
     expect(output.args.prompt).not.toContain('Single body.')
     expect(output.args.prompt).toContain('<user_request>\noriginal prompt\n</user_request>')
     expect(output.args.prompt).toMatch(/<envelope id="[^"]+"[^>]*\/>\n<user_request>\noriginal prompt/)
@@ -342,7 +353,7 @@ describe('skillsLoaderPlugin', () => {
 
     expect(payload).toContain('Skill A')
   })
-  it('escapes XML-special characters (including >) in skill names inside the description attribute and still unwraps', async () => {
+  it('uses the constant description for XML-special-character skill names and still unwraps', async () => {
     registerSkillFiles({
       'a&b': makeSkillFile({ content: '# A&B', mtimeMs: 100 }),
       'c"d': makeSkillFile({ content: '# C"D', mtimeMs: 150 }),
@@ -357,7 +368,10 @@ describe('skillsLoaderPlugin', () => {
 
     const prompt = output.args.prompt as string
 
-    expect(prompt).toContain(`description="Skills specified by skills array: ['a&amp;b', 'c&quot;d', 'o&apos;brien', 'foo&gt;bar', 'a&gt;b&amp;c&quot;d&apos;e']. Subagent will unpack full skills content."`)
+    // The description is constant — special characters in skill names never
+    // reach the attribute, so no XML escaping is needed.
+    expect(prompt).toContain(`description="${ENVELOPE_DESCRIPTION}"`)
+    expect(prompt).not.toContain('&amp;')
 
     // No literal '>' may appear inside the description: ENVELOPE_TAG_PATTERN's
     // [^>]* terminates at the first literal '>', so a raw '>' would make the
@@ -379,7 +393,7 @@ describe('skillsLoaderPlugin', () => {
     expect(unwrapped).toContain('# Combo')
     expect(unwrapped).not.toContain('<envelope ')
   })
-  it('regression: an envelope tag built from a >-containing skill name matches the UUID-precise pattern with the real key', async () => {
+  it('regression: the injected envelope tag matches the UUID-precise pattern with the real key even for awkward skill names', async () => {
     registerSkillFiles({ 'foo>bar': makeSkillFile({ content: '# FooBar', mtimeMs: 100 }) })
 
     const output = { args: { prompt: 'prompt', skills: ['foo>bar'] } }
@@ -400,15 +414,15 @@ describe('skillsLoaderPlugin', () => {
     expect(match?.[1]).toBe(key)
   })
   describe('skill path and index', () => {
-    beforeEach(() => {
-      vi.mocked(readdir as unknown as (path: string) => Promise<string[]>).mockImplementation(async (path) => {
-        const filePath = String(path)
-        if (filePath.endsWith('.agents/skills/skill-a')) return ['SKILL.md', 'workflows/create.md', 'references/options.md']
-        if (filePath.endsWith('.agents/skills/skill-b')) return ['SKILL.md', 'extra.md']
-        throw new Error('ENOENT')
-      })
+    // `ls -R .` pretty-print: section headers (workflows:, references:) followed
+    // by their bare file names — no full .agents/skills/... paths.
+    const treeStdout = '.:\nreferences  SKILL.md  workflows\n\n./references:\noptions.md\n\n./workflows:\ncreate.md\n'
+    let lsShellMock: ReturnType<typeof vi.fn>
+    beforeEach(async () => {
+      lsShellMock = makeLsShellMock(0, treeStdout)
+      plugin = await skillsLoaderPlugin({ client, directory: '/workspace', $: lsShellMock } as unknown as PluginInput)
     })
-    it('includes path, skill_index, and ordering for resolved skills inside the payload', async () => {
+    it('includes path, skill_index, and the ls -R tree for resolved skills inside the payload', async () => {
       registerSkillFiles({ 'skill-a': makeSkillFile({ content: 'UNIQUE_CONTENT_XYZ', mtimeMs: 100 }) })
 
       const output = { args: { prompt: 'prompt', skills: ['skill-a'] } }
@@ -423,11 +437,19 @@ describe('skillsLoaderPlugin', () => {
 
       const narrowedPayload = payload as string
 
+      // The shell is invoked with `ls -R .` for the skill directory
+      expect(lsShellMock).toHaveBeenCalledWith(['ls -R .'])
       expect(narrowedPayload).toContain('path=".agents/skills/skill-a/SKILL.md"')
       expect(narrowedPayload).toContain('<skill_index>')
-      expect(narrowedPayload).toContain('.agents/skills/skill-a/SKILL.md')
-      expect(narrowedPayload).toContain('.agents/skills/skill-a/workflows/create.md')
-      expect(narrowedPayload).toContain('.agents/skills/skill-a/references/options.md')
+      // ls -R tree content: bare file names and section headers
+      expect(narrowedPayload).toContain('SKILL.md')
+      expect(narrowedPayload).toContain('create.md')
+      expect(narrowedPayload).toContain('options.md')
+      expect(narrowedPayload).toContain('workflows:')
+      expect(narrowedPayload).toContain('references:')
+      // Tree order is preserved: each section header precedes its file
+      expect(narrowedPayload.indexOf('references:')).toBeLessThan(narrowedPayload.indexOf('options.md'))
+      expect(narrowedPayload.indexOf('workflows:')).toBeLessThan(narrowedPayload.indexOf('create.md'))
       expect(narrowedPayload.indexOf('<skill_index>')).toBeLessThan(narrowedPayload.indexOf('UNIQUE_CONTENT_XYZ'))
     })
     it('does not add path or skill_index to unresolved skills', async () => {
@@ -449,58 +471,22 @@ describe('skillsLoaderPlugin', () => {
       expect(unresolved).toBeDefined()
       expect(unresolved).not.toContain('path=')
     })
-    it('processes directory entries and falls back gracefully when readdir fails', async () => {
-      vi.mocked(readdir as unknown as (path: string) => Promise<string[]>).mockImplementation(async (path) => {
-        const filePath = String(path)
-        // Intentionally non-string entry to verify readdir filtering skips non-string directory entries
-        if (filePath.endsWith('.agents/skills/skill-a')) return ['SKILL.md', { name: 'extra.md' } as unknown as string, 'references/options.md']
-        throw new Error('ENOENT')
-      })
+    it('falls back to a flat SKILL.md-only index when ls -R exits non-zero', async () => {
+      plugin = await skillsLoaderPlugin({ client, directory: '/workspace', $: makeLsShellMock(1, '') } as unknown as PluginInput)
       registerSkillFiles({ 'skill-a': makeSkillFile({ content: '# Skill A', mtimeMs: 100 }) })
-      let output = { args: { prompt: 'prompt', skills: ['skill-a'] } }
-      await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
-      let payload = await resolvePayloadFromPrompt(output.args.prompt as string)
 
+      const output = { args: { prompt: 'prompt', skills: ['skill-a'] } }
+
+      await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
+
+      const payload = await resolvePayloadFromPrompt(output.args.prompt as string)
+
+      expect(payload).toContain('Skill A')
+      expect(payload).toContain('path=".agents/skills/skill-a/SKILL.md"')
+      expect(payload).toContain('<skill_index>')
+      // Fallback index is the flat path, not the ls -R tree
       expect(payload).toContain('.agents/skills/skill-a/SKILL.md')
-      expect(payload).toContain('.agents/skills/skill-a/references/options.md')
-      vi.mocked(readdir as unknown as (path: string) => Promise<string[]>).mockImplementation(async (path) => {
-        const filePath = String(path)
-        if (filePath.endsWith('.agents/skills/skill-a')) return ['workflows/create.md', 'references/options.md', 'SKILL.md']
-        throw new Error('ENOENT')
-      })
-      output = { args: { prompt: 'prompt', skills: ['skill-a'] } }
-      await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
-      payload = await resolvePayloadFromPrompt(output.args.prompt as string)
-
-      const indexMatch = (payload ?? '').match(/<skill_index>[\s\S]*?<\/skill_index>/)
-
-      expect(indexMatch).not.toBeNull()
-
-      const index = indexMatch?.[0] ?? ''
-
-      const reference = index.indexOf('.agents/skills/skill-a/references/options.md')
-
-      const skillIndex = index.indexOf('.agents/skills/skill-a/SKILL.md')
-
-      const workflowFile = index.indexOf('.agents/skills/skill-a/workflows/create.md')
-
-      expect(reference).toBeGreaterThan(-1)
-      expect(skillIndex).toBeGreaterThan(reference)
-      expect(workflowFile).toBeGreaterThan(skillIndex)
-      expect(index).toContain('.agents/skills/skill-a/references/options.md\n.agents/skills/skill-a/SKILL.md')
-      expect(index).toContain('.agents/skills/skill-a/SKILL.md\n.agents/skills/skill-a/workflows/create.md')
-      vi.mocked(readdir).mockRejectedValue(new Error('ENOENT'))
-
-      const output2 = { args: { prompt: 'prompt', skills: ['skill-a'] } }
-
-      await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output2)
-
-      const fallbackPayload = await resolvePayloadFromPrompt(output2.args.prompt as string)
-
-      expect(fallbackPayload).toContain('Skill A')
-      expect(fallbackPayload).toContain('path=".agents/skills/skill-a/SKILL.md"')
-      expect(fallbackPayload).toContain('<skill_index>')
-      expect(fallbackPayload).toContain('.agents/skills/skill-a/SKILL.md')
+      expect(payload).not.toContain('workflows:')
     })
   })
   describe('chat.message — envelope unwrap', () => {
@@ -529,7 +515,7 @@ describe('skillsLoaderPlugin', () => {
       expect((dispatched[0].text as string)).toContain('Body of skill A.')
     })
 
-    it('unwraps exactly once: a second dispatch with the same tag leaves it in place and warns', async () => {
+    it('unwraps exactly once: a second dispatch with the same tag removes the tag and warns', async () => {
       const payload = '<task_skills>\n<skill name="skill-a" reference="true">Load the skill "skill-a" by the name.</skill>\n</task_skills>'
       const key = await createEnvelope(payload, { skills: [], unresolved: ['skill-a'] })
       const parts: Array<Record<string, unknown>> = [{ type: 'text', text: envelopeTag(key) }]
@@ -542,18 +528,30 @@ describe('skillsLoaderPlugin', () => {
       const parts2: Array<Record<string, unknown>> = [{ type: 'text', text: envelopeTag(key) }]
 
       await dispatch(parts2)
-      expect(parts2[0]).toEqual({ type: 'text', text: envelopeTag(key) })
+      // The consumed placeholder is stripped (not left in place) with a warn
+      expect(parts2[0]).toEqual({ type: 'text', text: '' })
       expect(log).toHaveBeenCalledWith(expect.any(Object), 'warn', expect.stringContaining(key))
     })
 
-    it('leaves the tag in place and warns when the key is unknown (real UUID format)', async () => {
+    it('removes the tag and warns when the key is unknown (real UUID format)', async () => {
       const tag = envelopeTag('00000000-0000-4000-8000-000000000000')
       const parts: Array<Record<string, unknown>> = [{ type: 'text', text: tag }]
 
       await dispatch(parts)
 
-      expect(parts[0]).toEqual({ type: 'text', text: tag })
+      expect(parts[0]).toEqual({ type: 'text', text: '' })
       expect(log).toHaveBeenCalledWith(expect.any(Object), 'warn', expect.stringContaining('00000000-0000-4000-8000-000000000000'))
+    })
+
+    it('removes only the hallucinated tag, preserving surrounding text, and warns', async () => {
+      const key = '11111111-1111-4111-8111-111111111111'
+      const tag = envelopeTag(key)
+      const parts: Array<Record<string, unknown>> = [{ type: 'text', text: `prefix text\n${tag}\nsuffix text` }]
+
+      await dispatch(parts)
+
+      expect(parts[0]).toEqual({ type: 'text', text: 'prefix text\n\nsuffix text' })
+      expect(log).toHaveBeenCalledWith(expect.any(Object), 'warn', expect.stringContaining(key))
     })
 
     it('is a no-op when no text part contains an envelope tag, leaving the parts array untouched', async () => {
@@ -612,7 +610,7 @@ describe('skillsLoaderPlugin', () => {
       const payloadB = '<task_skills>\n<skill name="skill-b">BBB</skill>\n</task_skills>'
       const keyA = await createEnvelope(payloadA, { skills: [], unresolved: [] })
       const keyB = await createEnvelope(payloadB, { skills: [], unresolved: [] })
-      const text = `pre\ntext\n${envelopeTag(keyA, ['skill-a'])}\nmid\ntext\n${envelopeTag(keyB, ['skill-b'])}\npost\ntext`
+      const text = `pre\ntext\n${envelopeTag(keyA)}\nmid\ntext\n${envelopeTag(keyB)}\npost\ntext`
       const parts: Array<Record<string, unknown>> = [{ type: 'text', text }]
 
       await dispatch(parts)
@@ -623,7 +621,7 @@ describe('skillsLoaderPlugin', () => {
     it('resolves an envelope regardless of attribute order', async () => {
       const payload = '<task_skills>\n<skill name="skill-a">AAA</skill>\n</task_skills>'
       const key = await createEnvelope(payload, { skills: [], unresolved: [] })
-      const text = `pre\n<envelope description="Skills specified by skills array: ['skill-a']. Subagent will unpack full skills content." id="${key}"/>\npost`
+      const text = `pre\n<envelope description="${ENVELOPE_DESCRIPTION}" id="${key}"/>\npost`
       const parts: Array<Record<string, unknown>> = [{ type: 'text', text }]
 
       await dispatch(parts)

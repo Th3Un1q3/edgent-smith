@@ -12,7 +12,6 @@
 | `sessions/` | Runtime JSON state files (1000+ files, auto-generated), contains plugin metadata, not actual sessions. | Pattern: `ses_<timestamp>_<random>.json` — do not create manually |
 | `tests/` | Unit and integration tests for the plugin | Structure and file names map 1:1 to source files. eg. source file `todo-enforcer.ts` -> test file `tests/todo-enforcer.test.ts`. Same naming and folder structure with `tests/` directory and `.test.ts` suffix |
 
-
 ### Quality Gates
 
 All these quality gates need to pass to conclude that the plugin is valid and ready for use.

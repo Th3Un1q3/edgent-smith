@@ -49,7 +49,6 @@ rug-puppet handles atomic, single-shot operations that produce clear bounded out
 
 ## BAD: Reading Full File Contents
 
-
 ```markdown
 CONTEXT: ESLint violations have been fixed. Now I need the CURRENT contents of the TypeScript-erroring files to produce precise type fix instructions. The line numbers may have shifted due to previous edits.
 
@@ -75,4 +74,3 @@ TASK: Read and report the table with the line numbers and answers for these 2 fi
 1. `/workspace/.opencode/plugins/rug-team.ts` - quote the lines that implement session status tracking.
 2. `/workspace/.opencode/plugins/tests/__utils__/kv-store.mock.ts` - What lines are annotated with eslint ignore comment, show them in context of 2 lines before and after
 ```
-

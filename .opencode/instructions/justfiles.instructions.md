@@ -125,7 +125,7 @@ test *ARGS="tests/":
   ```
 - Parameter values can be exported to the environment if the underlying command expects them.
 
- - Example: keep the recipe simple by forwarding wildcard flags to the Python runner and declare a prior dependency for model setup.
+- Example: keep the recipe simple by forwarding wildcard flags to the Python runner and declare a prior dependency for model setup.
 
    ```just
    pull-ollama-model:
@@ -145,7 +145,6 @@ test *ARGS="tests/":
    ```
 
    This is a simpler interface because only prompt is required.
-
 
    This avoids `--set` and keeps the common case very simple.
 

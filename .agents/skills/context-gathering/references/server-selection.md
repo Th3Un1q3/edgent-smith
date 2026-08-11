@@ -14,8 +14,7 @@ For ANY external gathering, in order:
    serena before any external server. Cache-first is the skill default
    ([research-with-caching](../recipes/research-with-caching.md)), and applies
    unchanged to research-only / "do not modify project files" tasks — cache and
-   memory writes via serena are not project-file modifications (canonical
-   precedence rule: [SKILL.md](../SKILL.md)).
+    memory writes via serena are not project-file modifications (canonical: [SKILL.md](../SKILL.md) Principles — 'Store research output in memory, not files').
 1. **Pick the category default** — the most lightweight server that can do the job, from the
    category heuristics below.
 2. **Escalate only on a concrete failure signal** — a documented error shape, an empty or
@@ -55,7 +54,7 @@ adding servers later costs a re-activation ([setup](../workflows/setup.md),
 | Local file access (workspace) | filesystem (list_allowed_directories first) | path denied | direct read and grep tools; code semantics → serena |
 | YouTube transcripts | youtube-transcript (get_video_info, then get_transcript) | rate limit or IP ban (plain-text error prefix) | back off and retry once, then tavily_search alternate source, then devtools (last resort) |
 | Research synthesis + caching | cache-first pipeline ([research-with-caching](../recipes/research-with-caching.md) or [external-content-caching](../recipes/external-content-caching.md)) | batch timeout -32001 | split by source; never return raw content to the model |
-| No ready-made recipe | refinement-discovery workflow, starting from the closest row above | — | map capabilities via mcp_find, test individually, capture a recipe |
+| No ready-made recipe | refinement-discovery workflow, starting from the closest row above | — | map capabilities via gateway_mcp-find, test individually, capture a recipe |
 
 Rows 12–13 are pipeline and meta exceptions: their default is a workflow or pipeline rather than a single server. Rows 3–4 start with the cheapest probe (fetch) and move the second server into the escalation column.
 
@@ -79,6 +78,8 @@ IF/THEN escalation rules:
 - github API lacks a view (web-only feature, private-repo web page) or is rate-limited → devtools on github.com.
 - youtube-transcript errors on all candidates → tavily_search alternate source, then devtools (last resort).
 - Any server returns its documented error shape (tavily 429 error key; get_transcript plain-text prefix; github error or incomplete_results) → surface as a FAIL line, retry once, then escalate. Never cache failure strings.
+- **YouTube targets:** default = youtube-transcript MCP server (get_video_info for metadata, then get_transcript for content). If ANY tool (tavily_search, tavily_extract, fetch) fails on a YouTube URL 2×, SWITCH to youtube-transcript — it is the dedicated, consent-wall-free path. Never retry a failing tool more than 2× before switching. Alternatives: tavily_search ↔ youtube-transcript ↔ fetch. **youtube-transcript is for KNOWN video IDs ONLY — it cannot enumerate a channel's videos; for enumeration use yt-dlp flat-playlist, the channel RSS feed, or search+verify (see [recipes/external-content-caching.md](../recipes/external-content-caching.md) HARVEST).**
+- **Retry cap (hard):** never attempt the same tool more than 2× total on the same target (URL/video ID) in one session. After 2 failures, STOP, record the target in the persistent retry list (e.g., the catalog memory), and move on. Repeated probes (e.g., get_available_languages, alternate endpoints) are allowed ONLY as cheap existence checks — they do not replace the 2× cap on the failing call (worked example: [truncation-examples.md](./truncation-examples.md) §D — `withRetryCap`).
 
 ## Cost note
 

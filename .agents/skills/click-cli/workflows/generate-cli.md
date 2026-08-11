@@ -21,7 +21,7 @@ Step-by-step workflow to scaffold a reusable Click CLI, add tests, and validate 
    - Emit progress/status lines to `stderr` with `click.echo(..., err=True)`.
    - Use one stable schema, for example:
        - `[task=<name> phase=<phase> attempt=<n>/<total>] <message>`
-    - Include `task`, `phase`, and attempt fraction for retry-capable operations.
+   - Include `task`, `phase`, and attempt fraction for retry-capable operations.
    - Keep messages short and grep-friendly.
    - Use `click.secho()`/`click.style()` only for optional emphasis.
    - Avoid `click.progressbar()` for non-iterative phases.

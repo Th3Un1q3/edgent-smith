@@ -50,6 +50,7 @@ run_check() {
 
 run_check format-check just format-check
 run_check lint just lint
+run_check markdownlint just md-lint
 run_check typecheck just typecheck
 run_check test just test
 run_check workflow-security uv run python scripts/validate_workflow_security.py

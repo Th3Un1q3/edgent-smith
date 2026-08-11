@@ -143,3 +143,11 @@ clean:
 
 git_todos:
     sh scripts/git_todos.sh
+
+# Lint Markdown files with markdownlint-cli2 (Node >= 22).
+md-lint:
+    npm exec --yes --package=markdownlint-cli2@0.23.2 -- markdownlint-cli2
+
+# Auto-fix fixable Markdown lint issues.
+md-fix:
+    npm exec --yes --package=markdownlint-cli2@0.23.2 -- markdownlint-cli2 --fix

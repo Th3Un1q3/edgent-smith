@@ -12,10 +12,10 @@ You must follow Test-Driven Development (TDD) for **every** code change; do not 
 
 ## The Workflow
 
-1.  **RED**: Write the simplest test case that demonstrates the bug or defines the feature clearly, focusing on a single behavior or condition.
-2.  **VERIFY**: Run the test and confirm it **fails** for the expected reason (this verifies the test reproduces the issue).
-3.  **GREEN**: Implement only the code necessary to make the test pass; avoid adding unrelated functionality.
-4.  **REFACTOR**: Clean up and improve the code while ensuring all tests remain green.
+1. **RED**: Write the simplest test case that demonstrates the bug or defines the feature clearly, focusing on a single behavior or condition.
+2. **VERIFY**: Run the test and confirm it **fails** for the expected reason (this verifies the test reproduces the issue).
+3. **GREEN**: Implement only the code necessary to make the test pass; avoid adding unrelated functionality.
+4. **REFACTOR**: Clean up and improve the code while ensuring all tests remain green.
 
 ## Mandatory TDD Constraints
 
@@ -23,10 +23,10 @@ These rules support the core TDD workflow above. Follow them in order, with the 
 
 ### Priority 1: Strict Sequence
 If you modify implementation code before writing a failing test:
-1.  **STOP** immediately.
-2.  **ROLLBACK** or discard the implementation changes and return to the last known good state.
-3.  **WRITE** the failing test first.
-4.  **PROCEED** only after the test fails when run.
+1. **STOP** immediately.
+2. **ROLLBACK** or discard the implementation changes and return to the last known good state.
+3. **WRITE** the failing test first.
+4. **PROCEED** only after the test fails when run.
 
 Example: If you find a bug, do not change the implementation before creating a focused test that reproduces the failure.
 
@@ -37,10 +37,10 @@ Example: If you find a bug, do not change the implementation before creating a f
 
 ### Constraint 3: Avoid Antipatterns
 Avoid the following practices, as they violate TDD principles:
- - Creating or modifying implementation files before writing a failing test.
- - Writing tests only after the implementation is complete.
- - Changing implementation code to make a test pass without first writing a failing test.
- - Skipping tests for "trivial" changes.
+- Creating or modifying implementation files before writing a failing test.
+- Writing tests only after the implementation is complete.
+- Changing implementation code to make a test pass without first writing a failing test.
+- Skipping tests for "trivial" changes.
 
 ## Constraint 4: Debug Artifact Cleanup
 

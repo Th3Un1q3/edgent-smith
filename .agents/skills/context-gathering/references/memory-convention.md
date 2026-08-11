@@ -1,47 +1,60 @@
 # Memory Convention
 
-Every domain follows a strict **domain/about** pattern. Every domain has exactly one `about` memory (`my-domain/about`) with three parts: (1) a description of the domain (what it covers, why it exists); (2) SCOPE — what belongs in the domain; (3) BOUNDARIES — what does NOT belong (out-of-scope, overlap rules with sibling domains). The `about` is NOT a table of contents — there is no index memory; discoverability comes from self-describing memory names plus the `about` scope/boundaries. This recipe documents that convention and provides templates for creating and updating domain entries via `write_memory`. All memory names are used as identifiers — never as file paths.
+The memory is organized around domains, subdomains, and topics. Each domain has an `about` entry that describes its scope and boundaries. Topics are grouped under subdomains or directly under the domain root. Memory names follow the pattern `<domain>/<subdomain>/<topic>` or `<domain>/<topic>` when the subdomain is skipped. Memories can cross-reference each other using the `mem:` protocol.
 
 ## PRE-EXISTING DOMAINS FIRST
 
 Before creating a new domain, you MUST attempt to place the knowledge in an existing domain:
 
 1. **Collect relevant memories from ALL existing domains** — use `list_memories({})` to see every domain, then read the `about` entry for each relevant one.
-2. **Find the best-fitting domain** — does an existing domain's scope already cover this topic? Even partially?
+2. **Find the best-fitting domain** — does an existing domain's scope already cover this topic, even partially? When several existing domains plausibly cover it, prefer the more specific domain; if still tied, prefer the domain whose `about` names the topic's primary concept. Record the decision in both domains' overlap rules.
 3. **Contribute to an existing domain** when possible — extend its `about` if the new knowledge changes the domain's scope or boundaries, and add a topic memory. Do NOT create a new domain just because a topic is new.
-4. **Create a new domain ONLY when** no existing domain can reasonably contain the new knowledge AND the knowledge is systematically useful (see [Memory Management Checklist](./memory-management-checklist.md)).
+4. **Create a new domain ONLY when** no existing domain can reasonably contain the new knowledge, even partially, AND the knowledge is systematically useful (see [Memory Management Checklist](./memory-management-checklist.md)). A partial fit in an existing domain always takes precedence over the justifications below.
 
-A new domain is justified when:
+A new domain is justified when ANY of the following holds (a partial fit in an existing domain still wins over all of them):
 - The knowledge crosses multiple existing domains without fitting cleanly into any one of them.
 - The knowledge covers a distinct system, framework, or convention that would be misleading to place elsewhere.
-- The domain would contain at least 3+ topic memories (not just one or two).
-
-When a topic fits an existing domain, contribute to it — add a topic memory, updating its `about` only if the scope or boundaries change. Do NOT create a new domain just because a topic is new.
+- The domain would contain at least 3+ topic memories (not just one or two) — count topic memories only, not `about`; treat the threshold as a guideline, so a distinctly useful domain with two topics is still acceptable when another justification applies.
 
 ## Convention Specification
 
 Each domain is identified by a name prefix (e.g., `my-domain`). Every domain must have exactly one mandatory entry at its root:
 
-| Entry | Memory Name | Purpose |
-|---|---|---|
-| **about** | `my-domain/about` | Describes the domain — what it covers, its scope (what belongs), and its boundaries (what does NOT belong, overlap rules with sibling domains). |
-
-There is no `index` memory. The `about` is not a table of contents; discoverability comes from self-describing memory names plus the `about` scope/boundaries.
-
-Topics within a domain use hierarchical naming with `/` as a separator. Memory names follow this pattern:
-
 | Memory Name Pattern | Purpose |
 |---|---|
-| `my-domain/about` | Domain description, scope, boundaries |
-| `my-domain/<subdomain>/<topic>` | Self-describing topic memory |
+| `my-domain/about` | Domain description, scope, boundaries (always sits at the domain root) |
+| `my-domain/<subdomain>/<topic>` | Topic memory grouped under a subdomain |
+| `my-domain/<topic>` | Topic memory sitting directly at the domain root (subdomain grouping is optional) |
+
+Subdomains are an optional grouping level; use them when topics span distinct areas/techs. The `/` hierarchy — not a fixed segment count — defines the structure, so topics may sit directly at the domain root or at any depth below it.
+
+A well-formed domain looks like this:
+
+```
+testing
+├── about                      (testing/about)
+├── typescript
+│   ├── mocking-best-practices (testing/typescript/mocking-best-practices)
+│   ├── table-testing          (testing/typescript/table-testing)
+│   ├── running-commands       (testing/typescript/running-commands)
+│   └── mutation-testing       (testing/typescript/mutation-testing)
+├── python
+│   └── mocking-best-practices (testing/python/mocking-best-practices)
+└── general
+    ├── tdd                    (testing/general/tdd)
+    └── structure_and_coverage (testing/general/structure_and_coverage)
+```
+
+In this example no `overview` is needed: `testing` groups subdomains rather than topics, and every topic is a leaf.
 
 - A domain is a **top-level name prefix** — never nested inside another domain.
 - Topics use `/` for nesting (e.g., `troubleshooting/software/finding-known-github-issues`). Memory names are identifiers, not file paths.
-- Parent topics that contain sub-topics must provide an **overview memory** that serves as a table of contents for those children, linking to each with a `mem:` reference.
+- Only a **topic that has nested child topics** must provide an **overview memory** that serves as a table of contents for those children, linking to each with a `mem:` reference. Domain roots and subdomain groupings never need an overview. This overview is the sole exception to the no-index rule (the `about` and grouping nodes are never tables of contents), and it applies only to topics that actually have children.
+- To classify an intermediate `/`-separated node: treat it as a **subdomain** when its role is grouping (its children are sibling topics sharing an area/tech); treat it as a **topic with children** when the node itself represents knowledge with a natural decomposition. The two look identical in a name (`testing/typescript` vs `troubleshooting/software`), so classify by role, not by path shape. When unsure, treat it as a subdomain.
 
 ## Naming Rule
 
-Memory names follow `<domain>/<subdomain>/<topic>`. `<domain>` is a top-level prefix (e.g., `troubleshooting`, `testing`, `refactoring`). `<subdomain>` groups an area/tech (e.g., `software`, `ts-libraries`, `python`, `general`, `typescript`). `<topic>` is action-oriented and self-describing — states what the memory helps with (e.g., `finding-known-github-issues`, `exploring-official-documentation`, `learning-current-versions`, `iterative-design`, `process-breakdown`, `import-convention`, `known-issues`, `mutation-testing`).
+Memory names follow `<domain>/<subdomain>/<topic>` (or `<domain>/<topic>` when the subdomain is skipped). `<domain>` is a top-level prefix (e.g., `troubleshooting`, `testing`, `refactoring`). `<subdomain>` groups an area/tech (e.g., `software`, `ts-libraries`, `python`, `general`, `typescript`). `<topic>` should be self-describing — states what the memory helps with. Action-oriented, hyphenated names are the preferred style (e.g., `finding-known-github-issues`, `exploring-official-documentation`, `learning-current-versions`, `iterative-design`, `process-breakdown`, `import-convention`, `known-issues`, `mutation-testing`), but terse names (`tdd`) and underscores as word separators (`structure_and_coverage`) are acceptable as long as the name is self-describing in context.
 
 Full-prefix examples: `troubleshooting/software/finding-known-github-issues`, `troubleshooting/ts-libraries/learning-current-versions`, `troubleshooting/python/exploring-official-documentation`, `testing/general/iterative-design`, `testing/general/process-breakdown`, `testing/typescript/import-convention`, `testing/typescript/known-issues`, `testing/typescript/mutation-testing` — the same schema works for tests.
 
@@ -116,8 +129,9 @@ write_memory({
 
 **Step 2 — Write topic memories:**
 
-- Memory name `authentication/overview`
 - Memory name `authentication/token`
+
+No `authentication/overview` is written here: `authentication` is a domain whose topics sit at the root, and no topic has children, so the overview rule above does not apply.
 
 After writing, verify via `list_memories({ topic: "authentication" })` that all memories exist and their names are self-describing (a reader scanning the list can judge each one's relevance).
 
@@ -159,7 +173,7 @@ mem:<domain>[/<topic-path>]
 
 | Target | `mem:` Reference |
 |---|---|
-| Root overview of a domain | `mem:authentication` |
+| Domain root entry (its `about`) | `mem:authentication/about` |
 | A topic within a domain | `mem:authentication/token` |
 | A deeply nested topic | `mem:authentication/policies/password` |
 | A topic in another domain | `mem:sessions/redis-config` |
@@ -191,4 +205,4 @@ Every domain must have an `about` entry (memory name: `my-domain/about`) describ
 
 ### Overview memory omitted for parent topics
 
-If a topic has children, it must provide an overview that links to each child via `mem:`. Without this, the hierarchy is flat and the collect-relevant-memories recipe cannot traverse it correctly.
+If a topic has children, it must provide an overview that links to each child via `mem:`. Without this, the subtree's structure is implicit: readers and the collect-relevant-memories recipe must prefix-list the topic to find its children instead of following the overview's `mem:` links, so children are easy to overlook.

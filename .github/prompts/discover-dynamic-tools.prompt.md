@@ -42,7 +42,7 @@ Analyzing to find relevant MCP servers...
 
 ## Analyze Project
 
-Analyze the project to determine what MCPs might be relevant. 
+Analyze the project to determine what MCPs might be relevant.
 
 ```
 1. mcp-discover-packages

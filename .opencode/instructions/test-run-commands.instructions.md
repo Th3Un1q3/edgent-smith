@@ -27,7 +27,7 @@ just mutation --mutate plugins/todo-enforcer.ts
 
 NEVER call underlying implementation commands directly (eg. `pytest`, `npm test`, `vitest`, `bun`, `tsc`) — always use the above commands to ensure that the plugin is tested, linted, and typechecked in the same way as it will be in production.
 
-### Per-File Verification is Mandatory
+## Per-File Verification is Mandatory
 
 1. **Verify each file as you finish it** — after editing a file, run the relevant per-file check (e.g., `just test -- <path-to-file>`, or lint/typecheck scoped to that file) BEFORE moving on to the next file. Do NOT defer verification to the end of the task.
 2. **Verification is not optional** — a file is not done until its check passes, or the failure is explicitly documented. Verification is part of "done", not a follow-up.

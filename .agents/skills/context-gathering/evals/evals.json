@@ -1,0 +1,157 @@
+{
+  "skill_name": "context-gathering",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm writing a blog post on Python concurrency and want to reference the official asyncio documentation. Cache the full text of the 3 most recent results for the topic using a web search + page fetch (e.g., the top 3 Python documentation pages for 'asyncio') into the memory store so I can pull excerpts on demand later. Follow the skill's caching discipline: check the cache before any fetch (the same URL/query always maps to the same cache key), never re-fetch a page already cached, store each verbatim page under its deterministic cache/{source}/{scope}/{slug} key, verify the cached entries by reading them back after writing, and report the per-op status with counts. Don't dump full pages into your reply — status lines and short excerpts only.",
+      "expected_output": "Pipeline HARVEST -> VERIFY -> FETCH -> STORE runs via gateway_mcp-exec scripts: cache/{source}/ is listed and read first (existing entries reused, no duplicate cache entries for the same URL, no re-fetch of cached pages), pages fetched with pagination and stored verbatim under deterministic cache/{source}/{scope}/{slug} keys, read-back verification performed on 1-2 entries with a length check against what was fetched, and a per-op status report returned whose fetched/cached/verified counts match.",
+      "assertions": [
+        {
+          "text": "cache-check-before-fetch: list_memories({topic:'cache/{source}/'}) is called and existing entries for the target URL/query are read before any page fetch",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "deterministic-key-cardinality: The same URL/query always maps to the same cache key — no duplicate cache entries are created for the same URL and no already-cached page is re-fetched",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "verbatim-cache-bodies: Cache entry bodies are raw fetched page text (verbatim content, no summary boilerplate), not hand-crafted summaries or paraphrases",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "read-back-verification-length-match: After the cache-write batch, 1-2 entries are read back via read_memory and the stored length matches what was fetched — counts reported as 'N fetched → N cached → N verified'",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "status-report-count-match: Final status report states 'N fetched → N cached → N verified' and the fetched, cached, and verified counts are all equal",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "snippet-only-return: Reply contains only per-op status lines (OK/FAIL <name> chars=<n>) plus ≤300-char excerpts per item — no full page text is returned to the model",
+          "passed": null,
+          "evidence": null
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Research how to connect from a Dev Container to a Chrome browser running on the host machine via the Chrome DevTools Protocol, then answer: what launch flags does Chrome need (remote-debugging port, user data dir) and what host.docker.internal caveats apply. Use the cache-first research pipeline: check cache/deepwiki/, cache/github/, and cache/fetch/ before calling any tool; re-fetch only on MISS; write every successful raw response verbatim under its deterministic cache key; synthesize a researches/<topic> memory with a '## Cached sources' section of mem: references; and return only the per-op status report. Keep every snapshot you return to me at or under 2 KB and stay within the ~60K token context budget.",
+      "expected_output": "Research follows the research-with-caching recipe: cache/{source}/... is checked before each tool call (HIT reuses the stored response, MISS fetches), raw responses are cached under deterministic cache/{source}/{scope}/{descriptor} keys, researches/about is written first and researches/<topic-slug> is synthesized with a '## Cached sources' section of mem: refs, and only a per-op status report is returned. No snapshot exceeds 2 KB and no raw fetched content enters the model context.",
+      "assertions": [
+        {
+          "text": "cache-first-read-checkpoints: cache/{source}/... is listed and the exact deterministic key is read before every deepwiki/github/fetch call — a cache HIT reuses the stored response and no re-fetch occurs",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "context-budget-2kb-snapshots: No single tool return or snapshot returned to the model exceeds 2 KB and no raw fetched content exceeding 5 KB is in context",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "no-json-parse-on-plain-text: deepwiki ask_question plain-text markdown is treated as content — never JSON.parse'd — and cache writes are confirmed via indexOf('written'), not by parsing the response",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "one-cache-entry-per-tool-query: Every successful fetch writes exactly one entry under a deterministic cache/{source}/{scope}/{descriptor} key; multiple pages of one URL consolidate into that URL's single entry",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "status-report-count-match: Status report states pages-fetched vs cache-entries-written counts and the two numbers match",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "synthesis-with-cached-sources: researches/about is written first (about-first), then researches/<topic-slug> is synthesized with a '## Cached sources' section listing mem: refs to every cache entry used",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "no-failure-string-caching: Error responses (github 'error' objects, fetch robots.txt probe failures, empty deepwiki answers) surface as FAIL status lines and are never written to cache",
+          "passed": null,
+          "evidence": null
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I'm resuming work on the edge agent evaluation setup (evals/runner.py) after a long break and need to recall what's already known before touching any code. Gather the relevant project memories for me: list the memory domains, read the about entry of each candidate domain to check its scope and boundaries, then fetch only the memories that actually match this task. Follow the memory-first discovery strategy and keep each read-back snippet-sized so context stays tight.",
+      "expected_output": "Discovery runs in list → about → fetch order: list_memories enumerates domains, each candidate domain's about is read to confirm scope, and only matching memories (selected by self-describing names) are fetched. list_memories JSON strings are parsed, read_memory returns are checked for 'not found', mem: cross-references are followed, and read-backs stay within the ≤2 KB snapshot budget.",
+      "assertions": [
+        {
+          "text": "discovery-order-list-about-fetch: Memory discovery follows list domains → read each candidate domain's about → fetch the matching memories ordering",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "list-memories-json-parsed: list_memories JSON-string responses are parsed before accessing .memories (prefix-based, case-sensitive topic filtering)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "defensive-read-not-found: read_memory results are checked for the 'not found' error string and handled defensively (JSON-wrapped vs plain Markdown returns)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "topic-prefix-scoped-lists: list_memories calls use a topic prefix (e.g. {topic:'evals'}), never an untopic'd full-store enumeration",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "selective-fetch-by-self-describing-names: Only memories matching the task are fetched — selected by self-describing name and about scope, not every memory in the store",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "mem-cross-references-followed: mem: references inside selected memories are followed to fetch related memories across domains",
+          "passed": null,
+          "evidence": null
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Before I change how the edge agent is built, find every place build_edge_agent (defined in agents/edge.py) is referenced across the project, and locate where evals/runner.py orchestrates model benchmarks. Explore the codebase using the serena server tools — find_referencing_symbols, search_for_pattern, get_symbols_overview, find_symbol — and report the files, symbol kinds, and line numbers, with short snippets. Keep the report compact: paths, kinds, start lines, and ≤2 KB of snippets — no full-file dumps.",
+      "expected_output": "Codebase explored via serena tools through code-mode: find_referencing_symbols returns reference locations with body_location.start_line, and search_for_pattern / find_symbol / get_symbols_overview are used for pattern and structure search. JSON-as-string returns are parsed, find_symbol uses substring_matching:true, and the report lists files + line numbers + short snippets trimmed to ≤2 KB. No direct read/grep of .serena/memories/*.",
+      "assertions": [
+        {
+          "text": "serena-tools-not-disk-search: Exploration uses serena tools (find_referencing_symbols / search_for_pattern / get_symbols_overview / find_symbol) — not raw disk search or read/grep on the memory store",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "json-string-returns-parsed: JSON-as-string tool returns (get_symbols_overview, search_for_pattern, find_referencing_symbols) are parsed before accessing properties",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "substring-matching-flag: find_symbol is called with substring_matching:true for partial name matches",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "reference-locations-reported: Report includes file paths and body_location.start_line for each build_edge_agent reference",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "compact-truncated-output: Output is a compact report (per-file result caps, ≤2 KB), with no full file contents or un-trimmed match dumps",
+          "passed": null,
+          "evidence": null
+        }
+      ],
+      "files": []
+    }
+  ]
+}

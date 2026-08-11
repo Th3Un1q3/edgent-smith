@@ -25,16 +25,16 @@ hf papers --help
 If either help command genuinely fails after being attempted, report the blocker briefly and stop. Do not ask the user to run `hf` manually, and do not substitute another discovery surface.
 
 5. Use a staged funnel instead of broad paper and repository reading:
-	- List recent or trending papers with `hf papers ls`.
-	- Run targeted searches for agentic engineering on constrained or edge-like systems with `hf papers search`.
-	- Treat "latest" as the current month plus the previous month by default; only retain an older paper when it clearly dominates on relevance, and label that choice explicitly.
-	- Build a bounded shortlist from the returned metadata and keep the retained set small and high-signal.
-	- Fetch structured information for every retained paper first with `hf papers info`.
-	- Read full markdown only for the final evidence-driving subset with `hf papers read`.
-	- Use DeepWiki MCP as the required primary discovery surface for repository exploration when the shortlisted repository is covered there. Start with `mcp_deepwiki_read_wiki_structure`, then use `mcp_deepwiki_ask_question` or `mcp_deepwiki_read_wiki_contents` for the smallest documentation slices that can materially change `docs/ideas.md`.
-	- Start from this bounded shortlist of repositories: `punkpeye/awesome-mcp-servers`, `dair-ai/Prompt-Engineering-Guide`, `Meirtz/Awesome-Context-Engineering`, `Shubhamsaboo/awesome-llm-apps`, and `shareAI-lab/learn-claude-code`.
-	- Use those repositories to answer targeted questions about local-first MCP server patterns, prompt compression and routing, context packing and memory distillation, lightweight agent or RAG architectures, and shell-first coding-agent harness loops.
-	- Keep the repository pass small and evidence-driven. Retain only the strongest repository-derived patterns, and ensure at least one retained repository-derived pattern is backed by an actual DeepWiki inspection when coverage exists.
+- List recent or trending papers with `hf papers ls`.
+- Run targeted searches for agentic engineering on constrained or edge-like systems with `hf papers search`.
+- Treat "latest" as the current month plus the previous month by default; only retain an older paper when it clearly dominates on relevance, and label that choice explicitly.
+- Build a bounded shortlist from the returned metadata and keep the retained set small and high-signal.
+- Fetch structured information for every retained paper first with `hf papers info`.
+- Read full markdown only for the final evidence-driving subset with `hf papers read`.
+- Use DeepWiki MCP as the required primary discovery surface for repository exploration when the shortlisted repository is covered there. Start with `mcp_deepwiki_read_wiki_structure`, then use `mcp_deepwiki_ask_question` or `mcp_deepwiki_read_wiki_contents` for the smallest documentation slices that can materially change `docs/ideas.md`.
+- Start from this bounded shortlist of repositories: `punkpeye/awesome-mcp-servers`, `dair-ai/Prompt-Engineering-Guide`, `Meirtz/Awesome-Context-Engineering`, `Shubhamsaboo/awesome-llm-apps`, and `shareAI-lab/learn-claude-code`.
+- Use those repositories to answer targeted questions about local-first MCP server patterns, prompt compression and routing, context packing and memory distillation, lightweight agent or RAG architectures, and shell-first coding-agent harness loops.
+- Keep the repository pass small and evidence-driven. Retain only the strongest repository-derived patterns, and ensure at least one retained repository-derived pattern is backed by an actual DeepWiki inspection when coverage exists.
 6. Keep the funnel tight: prefer a few strong candidates over a long queue of weak reads.
 7. Extract only concrete architectural insights, not generic trend summaries.
 8. Before writing, deduplicate against `docs/ideas.md` and prefer revising, consolidating, or sharpening existing weak or overlapping ideas instead of appending noise.

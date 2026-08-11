@@ -7,62 +7,62 @@ Scope: planning artifact only (no runtime code changes)
 
 ```mermaid
 flowchart TD
-    A[Trigger: manual or scheduled run] --> B[Load workflow config profile]
-    B --> C{Loop mode}
+    Trigger[Trigger: manual or scheduled run] --> LoadWorkflowConfig[Load workflow config profile]
+    LoadWorkflowConfig --> LoopMode{Loop mode}
 
-    C -->|one-shot| D[Run discovery stage]
-    C -->|continuous| D
+    LoopMode -->|one-shot| RunDiscovery[Run discovery stage]
+    LoopMode -->|continuous| RunDiscovery
 
-  D --> D1[Iterate trusted_sources one-by-one]
-  D1 --> D2[Extract normalized findings + source attribution]
-  D2 --> D3[Apply dedupe and merge rules]
-  D3 --> D4[Atomic save docs ideas output]
-  D4 --> D5[Verify completion digests counters semantic guard]
-  D5 -->|pass| D6[Run discovery_complete hook]
-  D6 --> D7{changed_flag and discovery_auto_commit}
-  D7 -->|yes| D8[Run discovery_commit hook]
-  D7 -->|no| E[Run design stage]
-  D8 --> E
-  D5 -->|fail| X1[Fail run with discovery_did_not_complete]
+    RunDiscovery --> IterateTrustedSources[Iterate trusted_sources one-by-one]
+    IterateTrustedSources --> ExtractFindings[Extract normalized findings + source attribution]
+    ExtractFindings --> DedupeAndMerge[Apply dedupe and merge rules]
+    DedupeAndMerge --> AtomicSaveIdeas[Atomic save docs ideas output]
+    AtomicSaveIdeas --> VerifyCompletion[Verify completion digests counters semantic guard]
+    VerifyCompletion -->|pass| RunDiscoveryCompleteHook[Run discovery_complete hook]
+    RunDiscoveryCompleteHook --> CommitDecision{changed_flag and discovery_auto_commit}
+    CommitDecision -->|yes| RunDiscoveryCommitHook[Run discovery_commit hook]
+    CommitDecision -->|no| RunDesignStage[Run design stage]
+    RunDiscoveryCommitHook --> RunDesignStage
+    VerifyCompletion -->|fail| FailDiscoveryIncomplete[Fail run with discovery_did_not_complete]
 
-  E --> E1[Load design instructions and merged ideas]
-  E1 --> E2[Select one or more ideas by policy]
-  E2 --> E3[Generate one or more experiments per selection or cycle strategy]
-  E3 --> E4[Write registry entries default draft status]
-  E4 --> E5[Run design_complete hook]
-  E5 --> E6[Queue selected drafts to pending]
-  E6 --> F[Queue execution batch]
+    RunDesignStage --> LoadDesignInputs[Load design instructions and merged ideas]
+    LoadDesignInputs --> SelectIdeasByPolicy[Select one or more ideas by policy]
+    SelectIdeasByPolicy --> GenerateExperiments[Generate one or more experiments per selection or cycle strategy]
+    GenerateExperiments --> WriteRegistryEntries[Write registry entries default draft status]
+    WriteRegistryEntries --> RunDesignCompleteHook[Run design_complete hook]
+    RunDesignCompleteHook --> QueueDrafts[Queue selected drafts to pending]
+    QueueDrafts --> QueueExecutionBatch[Queue execution batch]
 
-  F --> F1[Select up to execution_batch_size pending experiments]
-  F1 --> G[Execution loop per selected experiment]
+    QueueExecutionBatch --> SelectPendingExperiments[Select up to execution_batch_size pending experiments]
+    SelectPendingExperiments --> ExecutionLoop[Execution loop per selected experiment]
 
-  G --> G1[Pick pending mark started run experiment_started hook]
-  G1 --> G2{Baseline exists}
-  G2 -->|no| G3[Bootstrap baseline]
-  G2 -->|yes| G4[Execute attempt]
-  G3 --> G3a[Run baseline_changed hook]
-  G3a --> G4
-  G4 --> G5[Recompute baseline snapshot and compare]
-  G5 --> G6{Candidate improved}
+    ExecutionLoop --> PickAndStartExperiment[Pick pending mark started run experiment_started hook]
+    PickAndStartExperiment --> BaselineExists{Baseline exists}
+    BaselineExists -->|no| BootstrapBaseline[Bootstrap baseline]
+    BaselineExists -->|yes| ExecuteAttempt[Execute attempt]
+    BootstrapBaseline --> RunBaselineChangedHook[Run baseline_changed hook]
+    RunBaselineChangedHook --> ExecuteAttempt
+    ExecuteAttempt --> RecomputeBaseline[Recompute baseline snapshot and compare]
+    RecomputeBaseline --> CandidateImproved{Candidate improved}
 
-  G6 -->|yes| G7[Mark success run experiment_success hook]
-  G6 -->|no| G8{Attempts less than followup_max_attempts}
-  G8 -->|yes| G4
-  G8 -->|no| G9[Mark failed run experiment_failed hook]
+    CandidateImproved -->|yes| MarkSuccess[Mark success run experiment_success hook]
+    CandidateImproved -->|no| AttemptsBelowMax{Attempts less than followup_max_attempts}
+    AttemptsBelowMax -->|yes| ExecuteAttempt
+    AttemptsBelowMax -->|no| MarkFailed[Mark failed run experiment_failed hook]
 
-  G7 --> H{More experiments in batch}
-  G9 --> H1{continue_next_on_failure}
-  H1 -->|yes| H
-  H1 -->|no| X3[Stop run with execution_failed]
-    H -->|yes| G
-    H -->|no| I{continuous mode?}
+    MarkSuccess --> MoreExperiments{More experiments in batch}
+    MarkFailed --> ContinueOnFailure{continue_next_on_failure}
+    ContinueOnFailure -->|yes| MoreExperiments
+    ContinueOnFailure -->|no| StopExecutionFailed[Stop run with execution_failed]
+    MoreExperiments -->|yes| ExecutionLoop
+    MoreExperiments -->|no| ContinuousMode{continuous mode?}
 
-    I -->|no| J[Stop: one-shot complete]
-  I -->|yes| K{Queue empty after terminalization}
-    K -->|yes| L[Replenishment: create exactly one new auto-research issue]
-    K -->|no| M[Continue with next cycle]
-    L --> M
-    M --> D
+    ContinuousMode -->|no| StopOneShot[Stop: one-shot complete]
+    ContinuousMode -->|yes| QueueEmpty{Queue empty after terminalization}
+    QueueEmpty -->|yes| Replenishment[Replenishment: create exactly one new auto-research issue]
+    QueueEmpty -->|no| NextCycle[Continue with next cycle]
+    Replenishment --> NextCycle
+    NextCycle --> RunDiscovery
 ```
 
 ## 2) Hook Lifecycle and Payload Contracts
@@ -103,22 +103,22 @@ A discovery stage is complete only if all checks pass.
 Discovery contract (explicit):
 
 1. Per-source iteration model:
-  - Iterate trusted_sources in deterministic order.
-  - For each source, run source-specific fetch/parse step and emit source_stats counters (examined, parsed_ok, parse_failed, findings_extracted).
+- Iterate trusted_sources in deterministic order.
+- For each source, run source-specific fetch/parse step and emit source_stats counters (examined, parsed_ok, parse_failed, findings_extracted).
 2. Normalized finding extraction with attribution:
-  - Convert raw source output to normalized finding records with stable fields: finding_id, title, summary, tags, source_name, source_ref.
-  - Preserve source attribution for every normalized finding.
+- Convert raw source output to normalized finding records with stable fields: finding_id, title, summary, tags, source_name, source_ref.
+- Preserve source attribution for every normalized finding.
 3. Dedupe and merge rules:
-  - Primary dedupe key: normalized title hash plus source-independent semantic fingerprint.
-  - Merge strategy: keep highest-confidence summary as canonical, append alternate evidence refs, union tags, and increment merge_stats counters.
+- Primary dedupe key: normalized title hash plus source-independent semantic fingerprint.
+- Merge strategy: keep highest-confidence summary as canonical, append alternate evidence refs, union tags, and increment merge_stats counters.
 4. Atomic save semantics for ideas output:
-  - Write merged ideas to a temporary file in the same directory.
-  - fsync then atomic rename to target ideas file to avoid partial writes.
+- Write merged ideas to a temporary file in the same directory.
+- fsync then atomic rename to target ideas file to avoid partial writes.
 5. Completion verification with digests and counters:
-  - Record ideas_before_digest and ideas_after_digest.
-  - Verify parseable markdown and at least one non-empty idea entry.
-  - Verify counters are internally consistent (extracted >= merged >= written).
-  - Optional semantic guard: when enabled, require semantic_guard_passed=true before stage success.
+- Record ideas_before_digest and ideas_after_digest.
+- Verify parseable markdown and at least one non-empty idea entry.
+- Verify counters are internally consistent (extracted >= merged >= written).
+- Optional semantic guard: when enabled, require semantic_guard_passed=true before stage success.
 
 Completion checks:
 
@@ -175,8 +175,8 @@ If candidate does not improve after follow-up attempts, mark attempt failed and 
 7. On no improvement, enter follow-up prompt/attempt loop up to followup_max_attempts.
 8. After max attempts without improvement, mark failed and run experiment_failed hook.
 9. Apply continue_next_on_failure behavior:
-  - true: continue with next pending experiment.
-  - false: stop orchestrator run on first terminal failure.
+- true: continue with next pending experiment.
+- false: stop orchestrator run on first terminal failure.
 10. Continue-next behavior is a config-controlled branch, not a hardcoded default.
 
 ## 4) Configurability Matrix

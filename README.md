@@ -95,7 +95,7 @@ Current public `just` entrypoints are split between the Click-backed `autoresear
 
 | Surface | Backing implementation | Current commands |
 |--------|-------------------------|------------------|
-| `just autoresearch ...` | `uv run python -m cli autoresearch` | `init --name NAME [--baseline-id ID] [--eval-model ALIAS]`, `validate [--config PATH]`, `design [BRIEF] [--config PATH]`, `fix [--config PATH] [--autofix-config PATH] [--continue] [--parallel]`, `experiment create|start|finish|list|show ...` |
+| `just autoresearch ...` | `uv run python -m cli autoresearch` | `init --name NAME [--baseline-id ID] [--eval-model ALIAS]`, `validate [--config PATH]`, `design [BRIEF] [--config PATH]`, `fix [--config PATH] [--autofix-config PATH] [--continue] [--parallel]`, `experiment create\|start\|finish\|list\|show ...` |
 | `just run-experiment ...` | `uv run python scripts/experiment.py run` | Local script-backed experiment execution with a required prompt and forwarded flags |
 | `just run-experiment-loop ...` | `uv run python scripts/experiment.py local-loop` | Local foreground experiment loop with forwarded flags |
 | `just promote-baseline ...` | `uv run python scripts/experiment.py promote-baseline` | Baseline promotion for an existing candidate result |
@@ -448,4 +448,3 @@ Behavior and safety:
 - Secrets (API tokens) are never logged and are masked in printed config values.
 
 See `config.py` for the canonical preset definitions and `docs/models.md` for a short per-model capability matrix.
-

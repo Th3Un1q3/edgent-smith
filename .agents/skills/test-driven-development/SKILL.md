@@ -48,7 +48,6 @@ Identify your entry point below and load the corresponding workflow file:
 | Need to decide: modify existing tests or create new ones? | [workflows/modify-existing.md](./workflows/modify-existing.md) — decision guide for test reuse vs. creation |
 | Want refactoring suggestions for tests or subject code | [workflows/refactor-suggestions.md](./workflows/refactor-suggestions.md) — find duplicates, group cases, improve structure |
 
-
 ## References (load as needed)
 
 | Topic | File |

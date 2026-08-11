@@ -106,3 +106,11 @@ try {
 - `find_symbol` requires `substring_matching: true` for partial name matches (default is exact).
 - `search_for_pattern` values are arrays of formatted strings (`"  > LINE_NUM:content"`), not objects with separate fields.
 - All tool calls must be **synchronous** — no `async/await`.
+
+## Acceptance criteria
+
+- [ ] `find_referencing_symbols` output parsed via `JSON.parse`; report shows ≤2 references per kind with `body_location.start_line` and `content_around_reference` — matching the documented `{file: {kind: [...]}}` format.
+- [ ] `search_for_pattern` output parsed via `JSON.parse`; report shows ≤3 formatted matches (`"  > LINE_NUM:content"`) per file.
+- [ ] `find_symbol` called with `substring_matching: true` for partial name matches; `get_symbols_overview` result parsed before use.
+- [ ] Diagnostics count read from `get_diagnostics_for_file` output (`{file: {SeverityLevel: ...}}` structure) with `min_severity: 4`.
+- [ ] All `JSON.parse` calls wrapped in try/catch — a parse failure never crashes the script; all tool calls synchronous.

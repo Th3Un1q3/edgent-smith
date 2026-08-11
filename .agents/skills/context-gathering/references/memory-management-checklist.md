@@ -4,7 +4,7 @@ One gate governs every memory write. This checklist is the canonical, complete g
 
 ## The Blocking Gate (7 checks, ~60 seconds)
 
-Run BEFORE any `write_memory` call. If ANY box is unchecked, DO NOT WRITE — fix the item or skip the write. Writing with an unchecked box corrupts the store. For a batch of related memories, run the gate once on the planned set, then verify the set.
+Run BEFORE any `write_memory` or `edit_memory` call — every content write or edit (including rewrites and appends). If ANY box is unchecked, DO NOT WRITE — fix the item or skip the write. Writing with an unchecked box corrupts the store. For a batch of related memories, run the gate once on the planned set, then verify the set. `rename_memory` and `delete_memory` skip the full gate: a rename must still pass the **Discoverable** check (self-describing name), and a delete must leave the domain's `about` consistent (see manage-memories.md).
 
 <!-- Canonical gate — the single source of truth; store-memories.md links here and embeds no copy. -->
 - [ ] **Standalone** — a reader with no memory of this session can use it as-is. No "in this session…", "today we…", "the real cause was…". *If not:* session narrative is unusable to future readers → rewrite as knowledge ("the cause is X") with evidence.
@@ -18,7 +18,7 @@ Run BEFORE any `write_memory` call. If ANY box is unchecked, DO NOT WRITE — fi
 
 ## After Writing — read the memory back once
 
-AFTER WRITING — read the memory back once (or the whole batch). If it does not read as standalone, verified knowledge, fix it immediately. Confirm the memory's name is self-describing (a reader scanning the list can judge it) and its domain has an about that covers this memory's scope and boundaries.
+AFTER WRITING — read the memory back once (or the whole batch). If it does not read as standalone, verified knowledge, fix it immediately. Confirm the memory's name is self-describing (a reader scanning the list can judge it) and its domain has an about that covers this memory's scope and boundaries. (General principle: SKILL.md "Verify every write" — applies to every write: memories, cache entries, files.)
 
 ## Secondary quality bar (absorbed from the superseded memory-quality.md)
 

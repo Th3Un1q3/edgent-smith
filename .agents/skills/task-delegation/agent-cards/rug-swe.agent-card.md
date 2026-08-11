@@ -48,10 +48,9 @@ Bad:
 
 ### GOOD: Well-Scoped Task
 
-
 > "Create a draft for a new cli command in `cli/init.py`. Add a placeholder test in `tests/test_cli.py` to verify the command is registered.Only interface, arguments processing and help text. No implementation logic. Update `cli/__init__.py` to register the new command."
 
-**Why this works:** 
+**Why this works:**
 
 ### BAD: Telling how and not what
 

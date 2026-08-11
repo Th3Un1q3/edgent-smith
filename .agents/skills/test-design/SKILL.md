@@ -51,7 +51,7 @@ Load only the files relevant to the current task.
 - [ ] Every test case tests a single behavior or scenario; avoid multiple assertions that test different behaviors in one test case
 - [ ] Test follows the language-specific conventions for the project (e.g., TypeScript or Python)
 - [ ] Test passes, and any failures are reproducible and clearly indicate the cause of failure
-- [ ] Test file has no linter or type errors, and adheres to the project's coding standards 
+- [ ] Test file has no linter or type errors, and adheres to the project's coding standards
 - [ ] Test covers all the code branches and edge cases for the module under test, including error handling and boundary conditions for module under test
 
 When to apply this checklist:

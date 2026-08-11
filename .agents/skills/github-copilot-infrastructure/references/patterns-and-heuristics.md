@@ -11,9 +11,9 @@ maintainable.
    - Add a new primitive only when the current owner would become misleading.
 
 2. Keep durable policy separate from on-demand guidance.
-  - Instructions should carry stable project constraints and concise guidance
+- Instructions should carry stable project constraints and concise guidance
     that should auto-apply on matching surfaces.
-   - Skills should carry reusable nuance that is expensive to keep always-on.
+- Skills should carry reusable nuance that is expensive to keep always-on.
 
 3. Treat the root `SKILL.md` as a router.
    - Keep it short, keyword-rich, and explicit about applicability.

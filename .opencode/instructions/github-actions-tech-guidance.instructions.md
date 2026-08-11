@@ -81,7 +81,7 @@ Prefer the repository's `just` task runner inside the container.
 If your workflow needs to run a specific Python script, prefer repository `just` recipes; otherwise run `python` from the repo root inside the container.
 
 > Tip: If this repository uses a local environment file, create `.env` from `.env.example` before entering `devcontainers/ci`, not inside `runCmd`. The mounted workspace needs the file available when the container starts.
-
+>
 > Tip: Do not duplicate repository environment setup inside `devcontainers/ci` if the DevContainer image already includes the project environment. Run repo commands directly instead.
 
 ## When to use `devcontainer exec`

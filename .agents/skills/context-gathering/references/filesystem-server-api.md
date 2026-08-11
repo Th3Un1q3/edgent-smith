@@ -34,7 +34,7 @@ Canonical tool list and return formats for scripting the **filesystem** MCP serv
 | `zip_directory` | Zip a directory by glob pattern | Plain text |
 | `unzip_file` | Extract a zip to a directory | Plain text |
 | `search_files` | Find files/dirs by glob name pattern | One absolute path per line, or literal `No matches found` (probed) |
-| `search_files_content` | Find text/regex inside files by glob | `<file-path>` header, then `  <line>:<column>: <preview>` lines (probed) |
+| `search_files_content` | Find text/regex inside files by glob | `<file-path>` header, then `<line>:<column>: <preview>` lines (probed) |
 | `directory_tree` | Recursive tree listing | **JSON string** (2-space indented) — array of `{name, type, children?}` nodes; the only JSON response (probed) |
 | `get_file_info` | Metadata: size, times, permissions, type | Plain text `key: value` lines (`size`, `created`, `modified`, `accessed`, `isDirectory`, `isFile`, `permissions`) (probed) |
 | `find_empty_directories` | Find empty directories recursively | Plain text (default) or JSON via `output_format` |
@@ -56,6 +56,8 @@ The server is configured with 9 allowed directories (relative to the container w
 /workspace/scripts
 /workspace/tests
 ```
+
+> The 9-directory list above is a snapshot of this workspace's server catalog; re-verify it on catalog change — run `list_allowed_directories` at sandbox activation (the server may add or remove allowed dirs between releases).
 
 - Subdirectories within any allowed directory are also accessible.
 - Paths are **canonicalized** server-side and must resolve under an allowed directory; symlinks that escape an allowed directory are denied. Enforcement is real, not advisory.

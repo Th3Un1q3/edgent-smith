@@ -25,4 +25,3 @@ conductor update
 Or re-run the install script — it detects existing installs and upgrades automatically.
 
 After installation, retry the original `conductor` command.
-

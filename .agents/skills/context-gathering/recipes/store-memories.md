@@ -3,11 +3,15 @@
 All recipes use the **serena** MCP server via a code-mode environment (`code-mode-memory-store`).
 Serena memories are gateway-only: never read `.serena/memories/*` on disk — the `read` tool is denied there, and bypassing it (cat/sed/shell) is prohibited.
 
+**Prerequisite: load [references/serena-memory-api.md](../references/serena-memory-api.md) first — it defines the helper scripts (`readMemoryContent`, `parseJson`, etc.) this recipe uses.**
+
+Follow the [Setup workflow](../workflows/setup.md) and [Scripting workflow](../workflows/scripting-workflow.md) before using this recipe.
+
 ## BLOCKING GATE — Run Before Any `write_memory`
 
 If ANY box is unchecked, DO NOT WRITE. Fix the item or skip the write. Writing with an unchecked box corrupts the store.
 
-The 7 checks and the AFTER-WRITING verify step live in the [Memory Management Checklist](../references/memory-management-checklist.md) — open it and run the gate before EVERY write (including edits and rewrites; for a batch of related memories, run it once on the planned set, then verify the set).
+The 7 checks and the AFTER-WRITING verify step live in the [Memory Management Checklist](../references/memory-management-checklist.md) — open it and run the gate before EVERY content write or edit (`write_memory` and `edit_memory`, including rewrites and appends; for a batch of related memories, run it once on the planned set, then verify the set). Renames and deletes skip the full gate but must keep the domain consistent (see [manage-memories](manage-memories.md)).
 
 ## Store a single memory
 
@@ -34,25 +38,7 @@ if (typeof result === "string" && result.indexOf("written") > 0) {
 Write several granular memories for the same domain and cross-reference them. Each memory covers one concept. Use hierarchical naming with `/` separators (e.g., `auth/tokens`) to organize related memories.
 
 ```javascript
-// 1. Overview memory — describes the module and links to child memories.
-var overview = write_memory({
-  memory_name: "auth/overview",
-  content: [
-    "# Authentication Module",
-    "",
-    "The auth module handles user authentication and authorization.",
-    "",
-    "## Memories",
-    "",
-    "- Login flow: mem:auth/login",
-    "- Token management: mem:auth/tokens",
-    "- Role-based permissions: mem:auth/permissions/roles",
-  ].join("\n")
-});
-
-if (typeof overview !== "string" || overview.indexOf("written") < 0) { return "Error: " + overview; }
-
-// 2. Login flow — specific to how users authenticate.
+// 1. Login flow — specific to how users authenticate.
 var login = write_memory({
   memory_name: "auth/login",
   content: [
@@ -71,7 +57,7 @@ var login = write_memory({
 
 if (typeof login !== "string" || login.indexOf("written") < 0) { return "Error: " + login; }
 
-// 3. Token management — JWT structure, expiry, refresh logic.
+// 2. Token management — JWT structure, expiry, refresh logic.
 var tokens = write_memory({
   memory_name: "auth/tokens",
   content: [
@@ -88,7 +74,10 @@ var tokens = write_memory({
 
 if (typeof tokens !== "string" || tokens.indexOf("written") < 0) { return "Error: " + tokens; }
 
-// 4. Role-based permissions — hierarchical: auth/permissions/roles.
+// 3. Role-based permissions — hierarchical: auth/permissions/roles.
+// Cross-references form a one-directional chain (login -> tokens -> roles).
+// No backlink (roles -> tokens): memory-convention.md forbids circular
+// references (A -> B -> A) — pick one primary direction.
 var roles = write_memory({
   memory_name: "auth/permissions/roles",
   content: [
@@ -98,15 +87,16 @@ var roles = write_memory({
     "|---|---|",
     "| `admin` | read, write, delete, manage_users |",
     "| `editor` | read, write |",
-    "| `viewer` | read |",
-    "",
-    "See mem:auth/tokens for how roles are encoded in JWT claims.",
+    "| `viewer` | read |"
   ].join("\n")
 });
 
 if (typeof roles !== "string" || roles.indexOf("written") < 0) { return "Error: " + roles; }
 
-return "OK — wrote auth/overview, auth/login, auth/tokens, auth/permissions/roles";
+// No auth/overview at the domain root: auth is a domain with root-level topics
+// and no topic has children, so the overview rule does not apply (see
+// references/memory-convention.md). Topic-to-topic mem: references navigate the set.
+return "OK — wrote auth/login, auth/tokens, auth/permissions/roles";
 ```
 
 ## Append to an existing memory
@@ -164,14 +154,23 @@ function e(name, mode, needle, repl) {
   } catch (e) { report.push('ERROR ' + name + ': ' + e.message); return false; }
 }
 
-// 0. ensure/update the domain about (description + scope + boundaries)
-w('my-domain/about', ['# My Domain', '', 'Covers [domain purpose].', '', '## Scope', '', '- What belongs in this domain.', '', '## Boundaries (out of scope)', '', '- What does not belong here — overlap rules with sibling domains.'].join('\n'));
+// 0. ensure the domain about (description + scope + boundaries) — write it ONLY
+//    when ABSENT: list_memories topic filtering is PREFIX-based — an exact-name
+//    lookup ({topic: 'my-domain/about'}) returns {} and never matches; list the
+//    DOMAIN PREFIX and test membership instead. New-domain creation never
+//    overwrites an existing about (see "Creating a new domain" below); routine
+//    about updates in an existing domain proceed directly (see manage-memories.md).
+var dom = JSON.parse(list_memories({ topic: 'my-domain' }));
+if ((dom.memories || []).indexOf('my-domain/about') < 0) {
+  w('my-domain/about', ['# My Domain', '', 'Covers [domain purpose].', '', '## Scope', '', '- What belongs in this domain.', '', '## Boundaries (out of scope)', '', '- What does not belong here — overlap rules with sibling domains.'].join('\n'));
+}
 
 // 1. write topic memories with self-describing <domain>/<subdomain>/<topic> names
 w('my-domain/general/topic-a', ['# Topic A', '', 'Content about A.'].join('\n'));
-w('my-domain/general/topic-b', ['# Topic B', '', 'Content about B.', '', 'Related: mem:my-domain/general/topic-a.'].join('\n'));
+w('my-domain/general/topic-b', ['# Topic B', '', 'Content about B.'].join('\n'));
 
-// 2. add mem: cross-references between related memories where useful
+// 2. add a one-directional mem: cross-reference where useful — no circular
+//    refs (A -> B -> A); see references/memory-convention.md
 e('my-domain/general/topic-a', 'literal', 'Content about A.', 'Content about A. See mem:my-domain/general/topic-b.');
 
 // 3. return the per-memory status report — never abort the batch on one failure
@@ -216,6 +215,17 @@ Use this template when writing code-mode scripts that create or update domain me
 ### Creating a new domain
 
 ```javascript
+// 0. EXISTENCE CHECK FIRST: list_memories topic filtering is PREFIX-based, so
+// an exact-name lookup ({topic: 'my-domain/about'}) returns {} and never
+// matches. List the DOMAIN PREFIX, then test membership; only write when
+// ABSENT — an existing domain about is NEVER overwritten without operator
+// approval. Do NOT skip this check: write_memory overwrites by default.
+// Tool call pattern: list_memories({ topic: 'my-domain' }) — prefix list
+// Response format: JSON STRING — {"memories": ["my-domain/about", ...]}; parse and test membership
+var dom = JSON.parse(list_memories({ topic: 'my-domain' }));
+if ((dom.memories || []).indexOf('my-domain/about') >= 0) {
+  return "SKIP — my-domain/about already exists; do not overwrite without operator approval";
+}
 // 1. Write the domain's about entry (memory name: my-domain/about) — description + scope + boundaries
 var about = write_memory({
   memory_name: "my-domain/about",
@@ -279,7 +289,10 @@ if (typeof topic !== "string" || topic.indexOf("written") < 0) {
   return "Error writing topic: " + topic;
 }
 
-// 3. Update the domain about if the new memory changes the domain's scope or boundaries
+// 3. Update the domain about if the new memory changes the domain's scope or boundaries.
+//    Routine maintenance in an existing domain — writing the updated about directly
+//    is allowed here; the never-overwrite-without-operator-approval rule applies
+//    only to new-domain creation (see "Creating a new domain" below).
 var updatedAbout = about + "\n\n- New topic extends the scope to cover ...";
 var aboutResult = write_memory({
   memory_name: "my-domain/about",
@@ -311,9 +324,10 @@ For `edit_memory` (literal/regex partial updates), the success string is `"...ed
 - **Use schema-driven self-describing naming** — `<domain>/<subdomain>/<topic>`, action-oriented, judgeable from the list (rule + examples in [Memory Convention](../references/memory-convention.md)).
 - **Keep each memory granular** — one concept per file. If a memory describes both login flow and token expiry, split it into `auth/login` and `auth/tokens`.
 - **Cross-reference with `mem:` prefix** so anyone reading one memory can navigate to related ones without searching. Serena has no semantic search — cross-references are the only navigation aid.
-- **Start with an overview memory** that lists child memories and their cross-references. Treat it as a table of contents for a topic subtree.
+- **For a topic that has nested children, add an overview memory** that lists the child memories and their cross-references — a table of contents for that topic subtree (only topics with children get an overview; domain roots and subdomain groupings never do).
 - **Group related topics under shared subdomain prefixes** (e.g., `testing/typescript/*`). A flat list of names becomes unmanageable as the project grows.
 - **Prefer one `mcp-exec` call for a batch of related writes** (e.g., a domain `about` plus its topic memories): fewer round trips, one per-memory status report, no intermediate returns. Each write gets its own defensive check and a failure does not abort siblings — split calls only when debugging a failing write.
+- **Scope every list_memories with a topic prefix** (e.g., {topic:'cache/youtube-videos'} or {topic:'researches'}) — topic-scope to exactly the domains you need instead of enumerating the whole store. The one exception is the PRE-EXISTING DOMAINS FIRST survey ([Memory Convention](../references/memory-convention.md)): that step intentionally runs `list_memories({})` (the whole ~140-name store) to decide domain placement before creating a new domain. Outside that survey, an untopic'd full-store enumeration is pure context waste.
 
 ## Common pitfalls
 
@@ -324,3 +338,11 @@ For `edit_memory` (literal/regex partial updates), the success string is `"...ed
 - All tool calls must be **synchronous** — no `async/await`.
 - The return format of `read_memory` is not guaranteed — it may return plain Markdown or a JSON string wrapping the content. Always use the defensive `readMemoryContent` helper pattern shown above.
 - `write_memory` returns plain text like `"Memory <name> written."`, not JSON. Do not call `JSON.parse` on its return value; check for the substring `"written."` to confirm success.
+
+## Acceptance criteria
+
+- [ ] BLOCKING GATE ran before every write: all 7 checklist boxes checked and the after-writing verify step executed — any unchecked box means no write.
+- [ ] Every `write_memory`/`edit_memory` return is confirmed by substring check (`indexOf("written") > 0` for writes, `indexOf("edited") >= 0` for edits); `JSON.parse` is never applied to these plain-text returns.
+- [ ] New-domain creation ran the existence check first: `list_memories({topic: '<domain>'})` parsed and membership-tested for `<domain>/about`; an existing about returned SKIP (never overwritten during new-domain creation without operator approval). Routine about updates in existing domains (scope/boundaries changed) ran directly.
+- [ ] Batch script returns one status line per write/edit (OK/FAIL/ERROR) and the line count equals the number of operations attempted — a sibling failure did not abort the batch.
+- [ ] Size caps respected: `max_chars` set on `about`/append writes (e.g., 5000); cross-references use `mem:NAME` format.

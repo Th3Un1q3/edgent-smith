@@ -1,6 +1,10 @@
 # Workflow: Browser Automation with the devtools MCP Server
 
-We drive the host Chrome through the devtools MCP server via the gateway for extraction, navigation, and scripted SPA flows. Site-verified selectors, URL templates, and quirks live in per-site memory namespaces: extraction recipes at `mem:browser-automation/<site>/<task>-extraction` (public — no PII); dated result caches at `mem:private/<site>/<task>-<YYYY-MM-DD>` (private by default — session-derived). Read the target site's namespace before starting; this skill is site-agnostic. This workflow covers the full loop: activate → verify auth → navigate → extract → cache → memorize selectors → recover from drift.
+We drive the host Chrome through the devtools MCP server via the gateway for extraction, navigation, and scripted SPA flows.
+
+Site-verified selectors, URL templates, and quirks live in per-site memory namespaces: extraction recipes at `mem:browser-automation/<site>/<task>-extraction` (public — no PII); dated result caches at `mem:private/<site>/<task>-<YYYY-MM-DD>` (private by default — session-derived). Read the target site's namespace before starting; this skill is site-agnostic.
+
+Full loop: activate → verify auth → navigate → extract → cache → memorize selectors → recover from drift.
 
 ## Principles
 
@@ -21,134 +25,69 @@ We drive the host Chrome through the devtools MCP server via the gateway for ext
 ## Steps
 
 ### 1. Activate the sandbox
-
-Activate code-mode with only the servers we need — `devtools` and `serena` — and a descriptive, task-related name (e.g., `code-mode-<site>-<task>`). Keep the server set minimal per the Principles; adding servers later costs a re-activation.
+Activate code-mode with only `devtools` + `serena` and a descriptive, task-related name (`code-mode-<site>-<task>`). Keep the server set minimal per the Principles — adding servers later costs a re-activation.
 
 ### 2. Verify authentication first
-
-Call `list_pages()` and inspect the markdown table. Locate the operator's session tab by its URL (e.g., the operator's logged-in tab for the target site). Detect a login wall: the URL redirects to a login page or the page renders only login prompts.
+Call `list_pages()` and inspect the markdown table. Locate the operator's session tab by its URL. Detect a login wall: the URL redirects to a login page or the page renders only login prompts.
 
 - Session tab present and logged in → proceed.
-- Auth missing or login wall detected → **STOP** and escalate to the operator. No aggressive retries, no automated login.
+- Auth missing or login wall → **STOP** and escalate. No aggressive retries, no automated login.
 
-No session tab present does NOT mean the session is unauthenticated: even when the operator says the session is authenticated, `list_pages()` may show no session tab for the target site — session cookies live in the devtools server's shared default context, not in a named tab. A valid auth check without a session tab: open `new_page({url: '<target-url>'})` (WITHOUT `isolatedContext`) and probe for a login wall.
+No session tab ≠ unauthenticated: session cookies live in the devtools server's shared default context, not in a named tab. A valid auth check without a session tab: `new_page({url: '<target-url>'})` (WITHOUT `isolatedContext`) and probe for a login wall.
 
 ### 3. Navigate
+Open the target with `new_page({url: '<target-url>'})` — exactly once per session. Two movement types:
 
-Open the target with `new_page({url: '<target-url>'})` — exactly once per session. Every subsequent movement is a click (by text or recorded selector) inside `evaluate_script`: pagination, filters, "load more", cards — click, don't re-URL. Address-bar navigation (`new_page`/`navigate_page` with a new URL) is a bot signal and a fallback only when no clickable path exists — if you must use it, record the fallback and why in the cache memory. **Never** pass `isolatedContext` — an isolated context has no session cookies and lands on the login wall immediately. If we need another tab, create it with `new_page`; never reuse or navigate the operator's existing tabs.
+- **Intra-page (SPA):** every movement is a click (by text or recorded selector) inside `evaluate_script` — pagination, filters, "load more", tabs, cards. Click, don't re-URL.
+- **Cross-URL (distinct resources):** e.g., list result → item detail page, company → profile: paced `navigate_page`. Address-bar navigation is tolerated on some sites and triggers bot detection on others (e.g., wellfound — devtools-known-issues #17); record the site's **address-bar tolerance** in the extraction memory. Pace ≥1 s, shortest path (one hop, not a chain of reloads).
 
-### 4. Structure discovery — snapshot-truncate-first
+**Never** pass `isolatedContext` — an isolated context has no session cookies and lands on the login wall immediately. Create extra tabs with `new_page`; never reuse or navigate the operator's existing tabs.
 
-For sites/tasks with no extraction memory: (a) take ONE `take_snapshot`; (b) truncate it aggressively (first ~2 KB, or filter to text-only); (c) identify the needed text/buttons/structure in the truncated output; (d) issue a TARGETED `evaluate_script` that returns only the nodes containing that text (e.g., `{tag, text, href, class}` filtered on `textContent`); (e) click by text when sufficient. This is the ONLY permitted `take_snapshot` use — one per unfamiliar flow; never for extraction, never un-truncated.
+### 4. Structure discovery — targeted query, not snapshots
+No extraction memory yet: discover with a TARGETED `evaluate_script` returning only the nodes containing the text we need (e.g., `{tag, text, href, class}` filtered on `textContent`) — cheap, precise, no context flood. Only if that fails may you take ONE `take_snapshot`, always with `{filePath: '<...>'}` so the full a11y tree goes to disk, then read back a ~2 KB slice. A plain inline `take_snapshot` returns the full tree (tens of KB) into context BEFORE any truncation could apply — `filePath` is the only way to keep it out. This is the ONLY permitted use — one per unfamiliar flow. For interactive structure (clickable/typeable), prefer the battle-tested snippets in Examples (A–D).
 
 ### 5. Extract with minimal output
-
-Run one `evaluate_script` per logical unit and return only the fields we need (e.g., id, title, href — the exact fields come from `mem:browser-automation/<site>/<task>-extraction`). Never call `take_snapshot` during extraction — snapshots flood context and their uids are ephemeral. Every result is HARD-CAPPED at 3 KB: trim and aggregate inside the script (`map` to objects, `join` arrays) instead of returning raw DOM. If a result exceeds the cap, re-run the script trimmed — the oversized result never reaches the model. No raw HTML/markup dumps into context.
+One `evaluate_script` per logical unit; return only the fields the site's extraction memory records. Never `take_snapshot` during extraction. Every result is hard-capped per Shared rules: trim/aggregate in-script (`map` to objects, `join` arrays), never raw DOM. Oversized results still reach the model on the first call — stay lean from the start; for very large outputs use `evaluate_script({filePath: '<...>'})` and read back a slice. Parse every return through `unwrap` (Shared rules).
 
 ### 6. SPA interactions
-
-Run click-wait-read flows inside one async `evaluate_script`: click a list item, poll for the href to change with a bounded deadline (4 s) and a 120 ms sleep between polls, read the fields, then continue. Pace item-to-item transitions at ≥250 ms (the site's extraction memory may record tuned values) and ≥1 s between distinct human-like actions (clicks, navigations). Respect a per-task action budget — default ≤40 actions, tunable in the site's extraction memory. Watch for bot-alert signals after every action; on detection: STOP, checkpoint-write partials, report. Bounded polling beats open-ended waits; do not let a script run unattended.
+Click-wait-read flows inside ONE async `evaluate_script`: click a list item, bounded-poll the href for change, read, continue. Pace per Shared rules (site memory may tune). Watch for bot-alert signals after every action; on detection: STOP, checkpoint-write partials, report. Use the effect-verified click companion (B2) — `WARNING` semantics per Shared rules. On SPAs where filters mirror URL params (e.g., LinkedIn `f_WT`/`f_TPR`), a synthetic click on a React-controlled hidden input may be silently ignored: if a click shows no effect, ONE bounded `navigate_page` with the param set is acceptable; record the site's address-bar tolerance in memory.
 
 ### 7. Cache results — checkpoints as you work
-
-Check the cache before extracting: `mem:private/<site>/<task>-<YYYY-MM-DD>`. Each dated memory records its TTL — e.g., "Fresh for 24 h; re-run if older or if count differs". On a fresh hit, skip re-extraction entirely.
-
-Mandatory write checkpoints: write every intermediate result AS WORK PROCEEDS — after each search/results list, each page, each category — into the same dated memory. Never wait for the end of extraction. If the session stops early (bot alert, error), the checkpoint writes already persisted the partial data; never rely on a single end-of-task write.
-
-Result caches are session-derived (the operator's authenticated Chrome) → private by default: `private/{site}/{task}-<YYYY-MM-DD>`, under the `private` domain (`private/about`). Extraction recipes hold no PII and stay public at `browser-automation/<site>/<task>-extraction`.
-
-Partial-cache rule: a fresh dated cache may hold fewer results than the task requires. If the fresh cache covers the task's required count, skip re-extraction; otherwise re-extract to fill the gap and UPDATE the same dated memory — do not create a second one.
+Check `mem:private/<site>/<task>-<YYYY-MM-DD>` before extracting; each dated memory records its TTL ("Fresh for 24 h; re-run if older or if count differs"); fresh hit → skip re-extraction. Mandatory checkpoints: write every intermediate result AS WORK PROCEEDS — after each search/results list, page, category — into the same dated memory; never wait for the end (an early stop still leaves partials persisted). Caches are session-derived → private by default (`private/{site}/{task}-<YYYY-MM-DD>`, `private/about`); extraction recipes hold no PII and stay public at `browser-automation/<site>/<task>-extraction`. Partial-cache rule: a fresh dated cache may hold fewer results than required — if it covers the task's count, skip; else re-extract the gap and UPDATE the same memory, never a second one.
 
 ### 8. Store/refresh selectors
-
-Maintain `mem:browser-automation/<site>/<task>-extraction` with the verified selectors, the verification date stamp, and both the primary and stale/fallback selectors (sites A/B test class names; the superseded ones become the fallbacks). Run the [BLOCKING GATE](../references/memory-management-checklist.md) before every write.
+Maintain `mem:browser-automation/<site>/<task>-extraction`: verified selectors, verification date stamp, primary + stale/fallback selectors (sites A/B test class names; superseded ones become fallbacks). Run the [BLOCKING GATE](../references/memory-management-checklist.md) before every write.
 
 ### 9. Drift recovery
-
-Before trusting stored selectors, probe a sentinel element with one cheap `evaluate_script` that returns a single boolean or count. If fields come back empty or wrong, try the recorded fallback selectors listed in the site's extraction memory. If that fails, re-derive cheaply: dump the relevant nodes of one item only — never the whole page — identify the current classes, and update the extraction memory with a new verified date. Heroic parsing of full DOM dumps is the last resort, not the first step.
+Probe a sentinel element (one cheap `evaluate_script` returning a boolean/count) before trusting stored selectors. Empty/wrong fields → recorded fallbacks; then re-derive cheaply: dump ONE item's relevant nodes only — never the whole page — identify current classes, update memory with a new verified date. Heroic parsing of full DOM dumps is the last resort.
 
 ### 10. Anti-bot protocol
-
-Bot-alert signals: CAPTCHA iframe, "verify you are human" copy, a 403 alert page, or blocked/rate-limit copy. On any signal, execute the STOP sequence: STOP all actions immediately → write partial results to `private/` (the Step 7 checkpoint memories already hold most of it) → report to the operator with the signal and what was cached. No aggressive retries, no looped `new_page` — address-bar navigation is itself a bot signal (Step 3).
+Bot-alert signals: CAPTCHA iframe, "verify you are human" copy, 403 alert page, blocked/rate-limit copy. On any signal: STOP all actions immediately → write partials to `private/` (Step 7 checkpoints hold most already) → report signal + cached state to the operator. No retries, no looped `new_page` — address-bar navigation is itself a bot signal (Step 3).
 
 ### 11. Fail fast
+Retries are bounded and in-script only. Script error and no recorded fallback → **stop** and report, including the raw partial response for diagnosis. Never loop.
 
-Retries are bounded and in-script only. If a script errors and no recorded fallback works, **stop** and report — include the raw partial response for diagnosis. Never loop.
 
-## Examples
+## Battle-test lessons
 
-**Generic extraction skeleton (site-independent)**
-
-Get the URL template, selectors, and pagination details from `mem:browser-automation/<site>/<task>-extraction` — this example shows only the generic mechanics that apply to any site.
-
-Quoting rules: single quotes for JS strings in the code-mode script, double quotes inside the `evaluate_script` source, array-join for multi-line strings, and `String.fromCharCode(10)` for newlines — never backslashes.
-
-```javascript
-var SELECTOR = ''; /* set from mem:browser-automation/<site>/<task>-extraction */
-var js = [
-  '() => Array.from(document.querySelectorAll(SELECTOR)).map(function (el, i) {',
-  '  return {id: i, title: el.textContent.trim(), href: el.href};',
-  '})'
-].join(String.fromCharCode(10));
-try {
-  var result = evaluate_script({function: js});
-  return 'OK: ' + result;
-} catch (e) {
-  return 'ERROR: ' + e.message;
-}
-```
-
-`SELECTOR` is a placeholder for the recorded selector from `mem:browser-automation/<site>/<task>-extraction`; adapt the mapped fields (e.g., id, title, href) to whatever that site's extraction memory records. For click-wait-read flows, wrap the same body in `async () => { ... }` and `await` a bounded poll of `location.href` (deadline 4 s, sleep 120 ms) after `click()` — see Step 6. `evaluate_script` returns a markdown-wrapped string, not bare JSON — strip to the first `{` and the last `}` before parsing (see [references/devtools-known-issues.md](../references/devtools-known-issues.md)).
-
-**Click by text (no snapshot needed)** — verified 2026-08-06 (devtools-known-issues #16)
-
-```javascript
-var js = [
-  '() => {',
-  '  var el = Array.from(document.querySelectorAll("button,a")).find(function (n) { return n.textContent.includes("TEXT"); });',
-  '  if (el) { el.click(); return "OK: clicked " + el.textContent.trim(); }',
-  '  return "ERROR: element with text not found";',
-  '}'
-].join(String.fromCharCode(10));
-try {
-  var result = evaluate_script({function: js});
-  return 'OK: ' + result;
-} catch (e) {
-  return 'ERROR: ' + e.message;
-}
-```
-
-**Targeted text-filter query (structure discovery, Step 4)** — returns only the nodes containing the keyword
-
-```javascript
-var js = [
-  '() => Array.from(document.querySelectorAll("button,a,h2")).filter(function (n) {',
-  '  return n.textContent.includes("KEYWORD");',
-  '}).map(function (n) {',
-  '  return {tag: n.tagName, text: n.textContent.trim(), href: n.href, class: n.className};',
-  '})'
-].join(String.fromCharCode(10));
-try {
-  var result = evaluate_script({function: js});
-  return 'OK: ' + result;
-} catch (e) {
-  return 'ERROR: ' + e.message;
-}
-```
+- **`:has()` resolves to the OUTERMOST ancestor:** prefer `parentElement`/`closest()` ancestor stepping; zero-size inputs signal the real clickable is an ancestor.
+- **Pattern-based field matching:** with conditional spans (e.g., attribution before view counts), match meta fields by regex role (`/^[0-9.,KMB]+ views?$/`, `/ago|year|month|week|day|hour/`) rather than positional index.
+- Other lessons live in Shared rules and Steps: textContent-vs-innerText → `textOf`; hydration timing → `WAIT_FOR_SELECTOR`; quote double-decoding → zero-backslash rule; stale-route shells (`visible: false`) → C; long tracking hrefs → `shortHref`; `new_page` returns a pages table → D1.
 
 ## Acceptance Criteria
 
 - Sandbox activated with `devtools` + `serena` only, under a descriptive name.
 - Auth verified via `list_pages` before any navigation; login wall → STOP and escalate.
-- First step on an unfamiliar site was a truncated snapshot (≤2 KB) — one per flow, never for extraction.
-- Extraction returns only needed fields, hard-capped at 3 KB per result.
-- Navigation after the initial `new_page` used clicks (address-bar count = 0 unless documented).
-- ≥1 s inter-action gaps observed and ≤40 actions per task.
+- Structure discovery on an unfamiliar site used a targeted `evaluate_script` first; any `take_snapshot` used `{filePath}` (never inline) — one per flow, never for extraction.
+- Extraction returns only needed fields, hard-capped at 3 KB per result, parsed via `unwrap`.
+- Intra-page navigation used clicks; cross-URL navigation was paced (≥1 s) and the site's address-bar tolerance recorded.
+- ≥1 s inter-action gaps observed and ≤40 actions per task (pacing/action-budget helpers: [truncation-examples.md §E](../references/truncation-examples.md)).
 - Results checkpoint-cached in dated `private/` memories with a TTL; fresh hits skip re-extraction.
 - Selector memory stamped with a verification date and fallbacks; BLOCKING GATE run before every write.
 - On drift, a fallback or a cheap targeted re-derivation resolved it; the memory was updated.
 - Bot-alert STOP sequence executed and partials cached, if any alert occurred.
 - Fail-fast path executed (STOP + report) whenever no fallback worked.
+- Interactive-element discovery used the battle-tested snippets (A–D): clickables listed with a limit, filtered by type/text with self-verified unique selectors, effect-verified clicks (WARNING on no state change), inputs filtrable with visibility flags, and the combined navigate+list flow.
 
 ## Exit Criteria
 
@@ -162,5 +101,422 @@ Ask the operator before:
 - touching or navigating tabs we did not create;
 - any action that might log the session out (navigating the session tab away from authenticated domains, closing it);
 - batch runs longer than N items — confirm N with the operator first;
-- batch runs that would exceed the per-task action budget (default ≤40, tunable in site memory) — confirm the exact N with the operator first;
+- batch runs that would exceed the per-task action budget (default ≤40, tunable in site memory) — confirm the exact N first;
 - any bot-alert occurrence — report to the operator immediately with the signal and the cached partials.
+
+## Shared rules and helpers
+
+- **Quoting:** single quotes at code-mode level, double quotes inside the `evaluate_script` source, array-join for multi-line strings, `String.fromCharCode(10)` for newlines, `String.fromCharCode(34)` for quotes — never backslashes.
+- **Zero-backslash rule:** code-mode double-decodes backslash escapes, so any `\` in page source throws `SyntaxError` (verified live on YouTube round 1); build special characters via `String.fromCharCode`.
+- **3 KB cap:** every return is hard-capped — `LIMIT`/`MAX_TEXT` cap the data and wrappers return `JSON.stringify(result).slice(0, 3000)` ([truncation-examples.md §C](../references/truncation-examples.md)).
+- **Selector-quoting gotcha:** attribute-selector values with special characters (`.`, `/`, `=`, `-`) must be quoted or `querySelectorAll` throws `not a valid selector` — `a[href*="example.com"]`, NOT `a[href*=example.com]` (devtools-known-issues #18).
+- **Two-call pattern:** discover via B, click via B2 in the NEXT `evaluate_script` call with the emitted `uniqueSelector`. The DOM persists between calls, so a verified selector stays valid unless the page re-rendered.
+- **WARNING semantics:** B2's `WARNING: ... no state change detected` means the click did NOT register — treat as "not applied"; verify via a re-list (B) or a state/URL probe.
+- **Pacing:** ≥1 s between distinct actions, ≥250 ms between transitions, bounded polls (default 4 s / 120 ms), ≤40 actions ([truncation-examples.md §E](../references/truncation-examples.md)).
+
+**Return parsing — ALWAYS go through `unwrap`.** `evaluate_script` returns a markdown-wrapped string (`Script ran on page and returned:` + a `json`-fenced block) whose value may be an object, array, **or a plain string** — "strip to the first `{` and the last `}`" fails on string returns and on double-encoded values. `JSON.parse` the whole fenced block; detect the plain-error-string prefix (`Error:` / `SyntaxError:` etc.) before parsing. Use this helper (canonical here — devtools-known-issues #11 points at this file) for every `evaluate_script` return:
+
+```javascript
+function unwrap(raw) {
+  var s = String(raw);
+  var body = s;
+  var fence = '```json';
+  var i = s.indexOf(fence);
+  if (i >= 0) {
+    var j = s.indexOf('```', i + fence.length);
+    if (j >= 0) { body = s.slice(i + fence.length, j); }
+  }
+  if (/^(Error|SyntaxError|TypeError|ReferenceError|No snapshot)/.test(body.trim())) {
+    throw new Error(body.trim().slice(0, 300));
+  }
+  return JSON.parse(body);
+}
+```
+
+The helper must never contain backslash escapes (the old escaped-regex version threw `SyntaxError: missing ) after argument list`, verified live on YouTube round 1). `evaluate_script` already serializes the page's return value — do NOT `JSON.stringify` inside the page.
+
+**Install the page helpers (once per page load).** The page JS realm persists across `evaluate_script` calls (already proven in-file by `window.__ctxSeq`), so helpers installed once survive until navigation. **Re-install after every `new_page`/`navigate_page` — navigation destroys the realm.** Every snippet starts with `var H = window.__H;` and calls helpers as `H.<name>`. Unifications vs the older per-snippet copies: `visible` uses the offsetParent variant (an element with a negative bounding-box dimension flips visible to false in C's listing); `textOf` uses the full variant (value/select handling — C's reduced version was a subset); `sig` uses B2's version with the ctrl probe (D2's effect detection becomes richer — strictly a superset).
+
+```javascript
+// X — Install the page helpers once per page load. Re-run after every new_page/navigate_page.
+var js = [
+  '() => {',
+  '  var Q = String.fromCharCode(34);',
+  '  var SIG_KEYS = ["checked", "aria-expanded", "aria-pressed", "aria-selected", "className"];',
+  '  var CANDIDATES = ["button", "a[href]", "[role=" + Q + "button" + Q + "]", "input[type=" + Q + "submit" + Q + "]", "input[type=" + Q + "button" + Q + "]", "input[type=" + Q + "checkbox" + Q + "]", "input[type=" + Q + "radio" + Q + "]", "summary", "select", "label", "[role=" + Q + "option" + Q + "]"];',
+  '  function textOf(el) { var t = el.innerText; if (t && t.trim()) { return t.trim(); } t = (el.textContent || "").trim(); if (!t && el.tagName === "INPUT") { t = (el.value || "").trim(); } if (el.tagName === "SELECT" && el.options && el.options[el.selectedIndex]) { t = el.options[el.selectedIndex].text.trim(); } return t; }',
+  '  function visible(el) { var r = el.getBoundingClientRect(); if (r.width === 0 || r.height === 0) { return false; } if (el.offsetParent === null) { var st = window.getComputedStyle(el); if (st.display === "none" || st.visibility === "hidden") { return false; } } return true; }',
+  '  function trunc(s, maxText) { if (s.length > maxText) { s = s.slice(0, maxText - 3) + "..."; } return s; }',
+  '  function shortHref(el) { var h = el.href; if (!h) { return ""; } if (h.length <= 120) { return h; } try { var u = new URL(h); return u.origin + u.pathname; } catch (e) { return h.slice(0, 120); } }',
+  '  async function waitHydrated(sel) { if (!sel) { return; } var deadline = Date.now() + 4000; while (Date.now() < deadline) { if (document.querySelectorAll(sel).length > 0) { return; } await new Promise(function (r) { setTimeout(r, 120); }); } }',
+  '  function isCheckRadio(el) { return (el.tagName === "INPUT" && (el.type === "checkbox" || el.type === "radio")); }',
+  '  function labelText(el) {',
+  '    var lab = (el.labels && el.labels[0]) || (el.closest ? el.closest("label") : null); if (lab) { var lt = textOf(lab); if (lt) { return lt; } }',
+  '    var v = (el.value === undefined || el.value === null) ? "" : String(el.value).trim(); if (v && (el.type === "submit" || el.type === "button")) { return v; } return el.type || "checkbox";',
+  '  }',
+  '  function cssPath(el) {',
+  '    var parts = []; var node = el;',
+  '    while (node && node !== document.body && node !== document.documentElement) { var parent = node.parentElement; if (!parent) { break; } var tag = node.tagName.toLowerCase(); var nth = Array.from(parent.children).filter(function (c) { return c.tagName === node.tagName; }).indexOf(node) + 1; parts.unshift(tag + ":nth-of-type(" + nth + ")"); node = parent; }',
+  '    return "body > " + parts.join(" > ");',
+  '  }',
+  '  function uniqueSel(el) {',
+  '    var s, v, j;',
+  '    if (el.id && typeof CSS !== "undefined" && CSS.escape) { s = "#" + CSS.escape(el.id); if (document.querySelector(s) === el) { return s; } }',
+  '    var stables = ["data-testid", "data-test", "name", "aria-label"];',
+  '    for (j = 0; j < stables.length; j++) { v = el.getAttribute(stables[j]); if (v && v.indexOf(Q) < 0) { s = el.tagName.toLowerCase() + "[" + stables[j] + "=" + Q + v + Q + "]"; if (document.querySelector(s) === el) { return s; } } }',
+  '    s = cssPath(el); if (document.querySelector(s) === el) { return s; }',
+  '    var seq = (window.__ctxSeq || 0) + 1; window.__ctxSeq = seq;',
+  '    el.setAttribute("data-el", "t" + seq);',
+  '    return el.tagName.toLowerCase() + "[data-el=" + Q + "t" + seq + Q + "]";',
+  '  }',
+  '  function ctrl(el) { var lab = (el.tagName === "LABEL") ? el : (el.closest ? el.closest("label") : null); if (lab) { if (lab.control) { return lab.control; } var q = lab.querySelector("input"); if (q) { return q; } if (lab.parentElement) { q = lab.parentElement.querySelector("input"); if (q) { return q; } } } return null; }',
+  '  function sig(el) {',
+  '    var s = { href: location.href }; var i, v, ci;',
+  '    for (i = 0; i < SIG_KEYS.length; i++) { if (SIG_KEYS[i] === "checked") { v = el.checked; } else if (SIG_KEYS[i] === "className") { v = String(el.className); } else { v = el.getAttribute(SIG_KEYS[i]); } if (v !== null && v !== undefined && v !== "") { s[SIG_KEYS[i]] = v; } }',
+  '    ci = ctrl(el);',
+  '    if (ci) { if (ci.checked !== undefined && ci.checked !== "") { s.inputChecked = ci.checked; } if (ci.value !== undefined && ci.value !== "") { s.inputValue = ci.value; } if (ci.selected !== undefined && ci.selected !== "") { s.inputSelected = ci.selected; } }',
+  '    return s;',
+  '  }',
+  '  function sigChanged(a, b) { var k; for (k in a) { if (a[k] !== b[k]) { return true; } } for (k in b) { if (b[k] !== a[k]) { return true; } } return false; }',
+  '  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }',
+  '  window.__H = { textOf: textOf, visible: visible, trunc: trunc, shortHref: shortHref, waitHydrated: waitHydrated, isCheckRadio: isCheckRadio, labelText: labelText, cssPath: cssPath, uniqueSel: uniqueSel, ctrl: ctrl, sig: sig, sigChanged: sigChanged, sleep: sleep, CANDIDATES: CANDIDATES };',
+  '  return "helpers installed";',
+  '}'
+].join(String.fromCharCode(10));
+try {
+  var result = unwrap(evaluate_script({function: js}));
+  return 'OK: ' + result;
+} catch (e) {
+  return 'ERROR: ' + e.message;
+}
+```
+
+## Examples
+
+### SELECTOR extraction (Step-5 minimal extractor)
+Set `SELECTOR` from `mem:browser-automation/<site>/<task>-extraction`; adapt the mapped fields (e.g., id, title, href) to whatever that site's memory records. Quoting/rules as in Shared rules. For click-wait-read flows, wrap the same body in `async () => { ... }` and bounded-poll `location.href` (4 s deadline, 120 ms sleep) after `click()` — see Step 6 / D2.
+
+```javascript
+var SELECTOR = ''; /* set from mem:browser-automation/<site>/<task>-extraction */
+var js = [
+  '() => Array.from(document.querySelectorAll(SELECTOR)).map(function (el, i) {',
+  '  return {id: i, title: el.textContent.trim(), href: el.href};',
+  '})'
+].join(String.fromCharCode(10));
+try {
+  var result = unwrap(evaluate_script({function: js}));
+  return 'OK: ' + JSON.stringify(result).slice(0, 3000);
+} catch (e) {
+  return 'ERROR: ' + e.message;
+}
+```
+
+### A — List clickable elements (limit-capped)
+Candidate set: `button`, `a[href]`, `[role="button"]`, `input[type="submit"]`, `input[type="button"]`, `summary`, `select` — visible only, empty-text excluded. Returns `{count, items}` (`count` = number RETURNED, capped by `LIMIT`, not total matches). Hrefs longer than 120 chars trimmed to `origin + pathname` (long tracking blobs dropped — use site memory for full URLs). `WAIT_FOR_SELECTOR` bounded-polls (4 s / 120 ms) for a hydration selector before listing; `''` = disabled. **Use:** `LIMIT`, `MAX_TEXT`, `WAIT_FOR_SELECTOR`.
+
+```javascript
+// A — List clickable elements (plain, LIMIT-capped). Uses helpers installed by X.
+var js = [
+  'async () => {',
+  '  var H = window.__H;',
+  '  var LIMIT = 20;',
+  '  var MAX_TEXT = 80;',
+  '  var WAIT_FOR_SELECTOR = "";',
+  '  var Q = String.fromCharCode(34);',
+  '  var CANDIDATES = ["button", "a[href]", "[role=" + Q + "button" + Q + "]", "input[type=" + Q + "submit" + Q + "]", "input[type=" + Q + "button" + Q + "]", "summary", "select"];',
+  '  await H.waitHydrated(WAIT_FOR_SELECTOR);',
+  '  var nodes = [];',
+  '  CANDIDATES.forEach(function (sel) { nodes = nodes.concat(Array.from(document.querySelectorAll(sel))); });',
+  '  nodes = Array.from(new Set(nodes));',
+  '  var out = [];',
+  '  nodes.forEach(function (el) {',
+  '    if (out.length >= LIMIT) { return; }',
+  '    if (!H.visible(el)) { return; }',
+  '    var text = H.trunc(H.textOf(el), MAX_TEXT);',
+  '    if (!text) { return; }',
+  '    var h = H.shortHref(el);',
+  '    var row = { tag: el.tagName.toLowerCase(), text: text };',
+  '    if (h) { row.href = h; }',
+  '    if (el.type) { row.type = el.type; }',
+  '    out.push(row);',
+  '  });',
+  '  return { count: out.length, items: out };',
+  '}'
+].join(String.fromCharCode(10));
+try {
+  var result = unwrap(evaluate_script({function: js}));
+  return 'OK: ' + result.count + ' clickables: ' + JSON.stringify(result).slice(0, 3000);
+} catch (e) {
+  return 'ERROR: ' + e.message;
+}
+```
+### B — Filter clickables by type + text, self-verified unique selector
+Candidate set = A's set plus `label`, `[role="option"]`, and `input[type="checkbox"]`/`input[type="radio"]` via `H.CANDIDATES` (Set-deduped — an element matching several selectors counts once). Checkbox/radio inputs skip the visibility check (typically zero-size/visually hidden); their display text comes from the associated label, falling back to `value` for submit/button inputs, else the type name. Every hit carries `uniqueSelector` and `verified: true` (held at discovery time: `document.querySelector(uniqueSelector) === el`). `TYPE` accepts `any`, `button`, `a`, `button,a`, `label`, `[role="option"]`, etc. (comma-separated; values containing double quotes use the `Q` concatenation pattern). `TEXT` is a case-insensitive substring match on display text. **Use:** `TYPE`, `TEXT`, `LIMIT`, `MAX_TEXT`, `WAIT_FOR_SELECTOR`.
+
+```javascript
+// B — Clickables filterable by TYPE and TEXT, each with a self-verified unique selector.
+var js = [
+  'async () => {',
+  '  var H = window.__H;',
+  '  var TYPE = "any";',
+  '  var TEXT = "";',
+  '  var LIMIT = 20;',
+  '  var MAX_TEXT = 80;',
+  '  var WAIT_FOR_SELECTOR = "";',
+  '  await H.waitHydrated(WAIT_FOR_SELECTOR);',
+  '  var nodes = [];',
+  '  H.CANDIDATES.forEach(function (sel) { nodes = nodes.concat(Array.from(document.querySelectorAll(sel))); });',
+  '  nodes = Array.from(new Set(nodes));',
+  '  var out = [];',
+  '  nodes.forEach(function (el) {',
+  '    if (out.length >= LIMIT) { return; }',
+  '    if (!H.isCheckRadio(el) && !H.visible(el)) { return; }',
+  '    var text = H.isCheckRadio(el) ? H.labelText(el) : H.textOf(el);',
+  '    if (!text) { return; }',
+  '    if (TYPE !== "any") {',
+  '      var okType = false;',
+  '      TYPE.split(",").forEach(function (t) { if (el.matches(t.trim())) { okType = true; } });',
+  '      if (!okType) { return; }',
+  '    }',
+  '    if (TEXT && text.toLowerCase().indexOf(TEXT.toLowerCase()) < 0) { return; }',
+  '    var h = H.shortHref(el);',
+  '    var row = { tag: el.tagName.toLowerCase(), text: H.trunc(text, MAX_TEXT), uniqueSelector: H.uniqueSel(el), verified: true };',
+  '    if (h) { row.href = h; }',
+  '    if (el.type) { row.type = el.type; }',
+  '    out.push(row);',
+  '  });',
+  '  return { count: out.length, items: out };',
+  '}'
+].join(String.fromCharCode(10));
+try {
+  var result = unwrap(evaluate_script({function: js}));
+  return 'OK: ' + result.count + ' clickables: ' + JSON.stringify(result).slice(0, 3000);
+} catch (e) {
+  return 'ERROR: ' + e.message;
+}
+```
+
+### C — List inputs, filterable, visible flag
+Candidate set: `input`, `select`, `textarea`, `[contenteditable="true"]`. Returns `{count, items}` with `{tag, type, visible, name?, id?, placeholder?, value?, uniqueSelector}`; filter by input `TYPE` (`all`, `text`, `email`, `search`, `password`, ...) and a case-insensitive `TEXT` match against name/id/placeholder/label text. `value` is truncated to `MAX_TEXT` and omitted for `type="password"`. `visible: false` fields exist in the DOM but are not interactable — SPA stale-route shells stay mounted; interactive count ≠ visible count; filter on visibility when counting or interacting. **Use:** `TYPE`, `TEXT`, `LIMIT`, `MAX_TEXT`.
+
+```javascript
+// C — Form fields (input/select/textarea/contenteditable), filterable by TYPE and TEXT.
+var js = [
+  '() => {',
+  '  var H = window.__H;',
+  '  var TYPE = "all";',
+  '  var TEXT = "";',
+  '  var LIMIT = 20;',
+  '  var MAX_TEXT = 80;',
+  '  var Q = String.fromCharCode(34);',
+  '  var CANDIDATES = ["input", "select", "textarea", "[contenteditable=" + Q + "true" + Q + "]"];',
+  '  function fieldText(el) {',
+  '    var parts = [el.name, el.id, el.placeholder];',
+  '    if (el.labels && el.labels.length) { parts.push(H.textOf(el.labels[0])); }',
+  '    return parts.filter(function (s) { return s && String(s).trim(); }).join(" ").trim();',
+  '  }',
+  '  var nodes = [];',
+  '  CANDIDATES.forEach(function (sel) { nodes = nodes.concat(Array.from(document.querySelectorAll(sel))); });',
+  '  nodes = Array.from(new Set(nodes));',
+  '  var out = [];',
+  '  nodes.forEach(function (el) {',
+  '    if (out.length >= LIMIT) { return; }',
+  '    var tag = el.tagName.toLowerCase();',
+  '    var type = el.type ? String(el.type) : "";',
+  '    if (TYPE !== "all" && type !== TYPE) { return; }',
+  '    if (TEXT && fieldText(el).toLowerCase().indexOf(TEXT.toLowerCase()) < 0) { return; }',
+  '    var row = { tag: tag, type: type, visible: H.visible(el), uniqueSelector: H.uniqueSel(el) };',
+  '    if (el.name) { row.name = el.name; }',
+  '    if (el.id) { row.id = el.id; }',
+  '    if (el.placeholder) { row.placeholder = H.trunc(String(el.placeholder), MAX_TEXT); }',
+  '    var v = (el.value === undefined || el.value === null) ? "" : String(el.value);',
+  '    if (type !== "password") { row.value = H.trunc(v, MAX_TEXT); }',
+  '    out.push(row);',
+  '  });',
+  '  return { count: out.length, items: out };',
+  '}'
+].join(String.fromCharCode(10));
+try {
+  var result = unwrap(evaluate_script({function: js}));
+  return 'OK: ' + result.count + ' form fields: ' + JSON.stringify(result).slice(0, 3000);
+} catch (e) {
+  return 'ERROR: ' + e.message;
+}
+```
+
+### B2 — Effect-verified click companion (separate `evaluate_script` call)
+Paste a B-emitted `uniqueSelector` into `SEL` and run B2 as the NEXT `evaluate_script` call. A state signature (`location.href` plus whichever of `checked`/`aria-expanded`/`aria-pressed`/`aria-selected`/`className` exist on the target) is captured before and bounded-polled (2 s / 120 ms) after. Checkbox/radio targets click their label/ancestor (`closest("label") || parentElement`) — a real label receives the user gesture a synthetic input click does not — and the signature is input-aware (probes the label's control input via `H.ctrl`, so a checkbox/radio flip is observable even when the click landed on the label). If the first click shows no state change, it retries ONCE by clicking the input directly. Returns `OK: clicked <label> (state changed)` / `OK: clicked <label> (state changed on retry)` / `WARNING: clicked <label> but no state change detected` — a WARNING means the click did NOT register; treat as "not applied" (verify via re-list or a state/URL probe). **Use:** `SEL` embedded single-quoted, delimiters built with `String.fromCharCode(39)` — no backslashes. `POLL_DEADLINE_MS`/`POLL_SLEEP_MS` default 2000/120.
+
+```javascript
+// B2 — Effect-verified click companion: click a unique selector in its own evaluate_script call.
+var SEL = 'REPLACE_WITH_UNIQUE_SELECTOR';
+var SQ = String.fromCharCode(39);
+var js = [
+  'async () => {',
+  '  var H = window.__H;',
+  '  var sel = ' + SQ + SEL + SQ + ';',
+  '  var el = document.querySelector(sel);',
+  '  if (!el) { throw new Error("no element for selector: " + sel); }',
+  '  var POLL_DEADLINE_MS = 2000;',
+  '  var POLL_SLEEP_MS = 120;',
+  '  var isCheck = (el.tagName === "INPUT" && (el.type === "checkbox" || el.type === "radio"));',
+  '  var target = isCheck ? (el.closest("label") || el.parentElement || el) : el;',
+  '  var sig0 = H.sig(el);',
+  '  target.click();',
+  '  var label = (H.textOf(target) || target.tagName.toLowerCase()).trim();',
+  '  if (label.length > 60) { label = label.slice(0, 57) + "..."; }',
+  '  var deadline = Date.now() + POLL_DEADLINE_MS;',
+  '  var ok = false;',
+  '  while (Date.now() < deadline) {',
+  '    await H.sleep(POLL_SLEEP_MS);',
+  '    if (H.sigChanged(sig0, H.sig(el))) { ok = true; break; }',
+  '  }',
+  '  if (!ok && isCheck && target !== el) {',
+  '    var inp = H.ctrl(target);',
+  '    if (inp && inp !== target) {',
+  '      inp.click();',
+  '      deadline = Date.now() + POLL_DEADLINE_MS;',
+  '      while (Date.now() < deadline) {',
+  '        await H.sleep(POLL_SLEEP_MS);',
+  '        if (H.sigChanged(sig0, H.sig(el))) { ok = true; break; }',
+  '      }',
+  '      if (ok) { return "OK: clicked " + label + " (state changed on retry)"; }',
+  '    }',
+  '  }',
+  '  if (ok) { return "OK: clicked " + label + " (state changed)"; }',
+  '  return "WARNING: clicked " + label + " but no state change detected";',
+  '}'
+].join(String.fromCharCode(10));
+try {
+  var result = unwrap(evaluate_script({function: js}));
+  return result;
+} catch (e) {
+  return 'ERROR: ' + e.message;
+}
+```
+
+### D1 — Open page + load probe
+D1 and D2 are two code-mode scripts run in order against the same devtools page (run the Step-2 auth check before D1). D1 opens `TARGET_URL` with `new_page` and confirms the load with a title/url probe (`new_page` returns a plain string — a markdown pages table, not a page id — so D1 wraps it in try/catch without `unwrap`). **Run the install snippet X first** so the helpers exist in the new page's realm for D2.
+
+```javascript
+// D1 — Open the target page, then confirm the load with a title/url probe.
+// Fill TARGET_URL (single-quoted, code-mode level). Run the install snippet X first.
+var TARGET_URL = 'REPLACE_WITH_TARGET_URL';
+var probeJs = [
+  '() => ({ title: document.title, url: location.href })'
+].join(String.fromCharCode(10));
+try {
+  var page = new_page({ url: TARGET_URL });
+  var probe = unwrap(evaluate_script({function: probeJs}));
+  var title = String((probe && probe.title) || '').trim();
+  var url = String((probe && probe.url) || '').trim() || TARGET_URL;
+  if (!title) {
+    return 'ERROR: loaded ' + url + ' but document.title is empty';
+  }
+  return 'OK: loaded ' + title + ' (' + url + ')';
+} catch (e) {
+  return 'ERROR: new_page or load probe failed: ' + e.message;
+}
+```
+
+### D2 — Combined: list, click by text, re-list (paced)
+Runs ONE async `evaluate_script`: list interactive elements (`before`), optionally click one matching `TEXT` via its unique selector with full pacing (≥1 s actions, ≥250 ms transitions, bounded poll 4 s / 120 ms, ≤40 actions), then re-list (`after`). Returns `{before, clicked, after}`; when `clicked.effect` is false the wrapper returns `WARNING: ... no state change detected` (treat as "not applied"). D2 exercises the full navigate → list → click → re-list pattern in one async call. **Use:** `TEXT` (`''` = list only, no click), `WAIT_FOR_SELECTOR`; pacing/poll constants `PACE_ACTION_MS`/`PACE_TRANSITION_MS`/`POLL_DEADLINE_MS`/`POLL_SLEEP_MS`/`MAX_ACTIONS` (defaults above).
+
+```javascript
+// D2 — List interactive elements; optionally click one matching TEXT via its unique selector,
+// with full pacing (>=1 s actions, >=250 ms transitions, bounded poll 4 s/120 ms), then re-list.
+var js = [
+  'async () => {',
+  '  var H = window.__H;',
+  '  var TEXT = "REPLACE_WITH_TEXT";',
+  '  var LIMIT = 20;',
+  '  var MAX_TEXT = 80;',
+  '  var WAIT_FOR_SELECTOR = "";',
+  '  var PACE_ACTION_MS = 1000;',
+  '  var PACE_TRANSITION_MS = 250;',
+  '  var POLL_DEADLINE_MS = 4000;',
+  '  var POLL_SLEEP_MS = 120;',
+  '  var MAX_ACTIONS = 40;',
+  '  var actions = 0;',
+  '  function action() { actions++; if (actions > MAX_ACTIONS) { throw new Error("action budget exceeded (" + MAX_ACTIONS + ") — STOP"); } }',
+  '  function allNodes() {',
+  '    var nodes = [];',
+  '    H.CANDIDATES.forEach(function (sel) { nodes = nodes.concat(Array.from(document.querySelectorAll(sel))); });',
+  '    return Array.from(new Set(nodes));',
+  '  }',
+  '  function listInteractive() {',
+  '    var out = [];',
+  '    allNodes().forEach(function (el) {',
+  '      if (out.length >= LIMIT) { return; }',
+  '      if (!H.isCheckRadio(el) && !H.visible(el)) { return; }',
+  '      var text = H.isCheckRadio(el) ? H.labelText(el) : H.textOf(el);',
+  '      text = H.trunc(text, MAX_TEXT);',
+  '      if (!text) { return; }',
+  '      var h = H.shortHref(el);',
+  '      var row = { tag: el.tagName.toLowerCase(), text: text };',
+  '      if (h) { row.href = h; }',
+  '      if (el.type) { row.type = el.type; }',
+  '      out.push(row);',
+  '    });',
+  '    return { count: out.length, items: out };',
+  '  }',
+  '  function countMatches() { return allNodes().filter(function (el) { return H.isCheckRadio(el) || H.visible(el); }).length; }',
+  '  await H.waitHydrated(WAIT_FOR_SELECTOR);',
+  '  var out = { before: null, clicked: null, after: null };',
+  '  out.before = listInteractive();',
+  '  if (TEXT) {',
+  '    var target = null;',
+  '    allNodes().forEach(function (el) {',
+  '      if (target) { return; }',
+  '      var t = H.isCheckRadio(el) ? H.labelText(el) : H.textOf(el);',
+  '      if (t && t.toLowerCase().indexOf(TEXT.toLowerCase()) >= 0) { target = el; }',
+  '    });',
+  '    if (!target) { out.clicked = "not found: " + TEXT; }',
+  '    else {',
+  '      var sel = H.uniqueSel(target);',
+  '      var beforeCount = countMatches();',
+  '      var isCheck = (target.tagName === "INPUT" && (target.type === "checkbox" || target.type === "radio"));',
+  '      var clickTarget = isCheck ? (target.closest("label") || target.parentElement || target) : target;',
+  '      var sig0 = H.sig(target);',
+  '      action();',
+  '      clickTarget.click();',
+  '      await H.sleep(PACE_ACTION_MS);',
+  '      var deadline = Date.now() + POLL_DEADLINE_MS;',
+  '      var changed = false;',
+  '      var effect = false;',
+  '      while (Date.now() < deadline) {',
+  '        await H.sleep(POLL_SLEEP_MS);',
+  '        if (countMatches() !== beforeCount) { changed = true; }',
+  '        if (!document.querySelector(sel)) { changed = true; }',
+  '        if (H.sigChanged(sig0, H.sig(target))) { effect = true; }',
+  '        if (changed || effect) { break; }',
+  '      }',
+  '      await H.sleep(PACE_TRANSITION_MS);',
+  '      out.clicked = { text: H.trunc(H.textOf(target), MAX_TEXT), selector: sel, changed: changed, effect: effect };',
+  '      out.after = listInteractive();',
+  '    }',
+  '  }',
+  '  return out;',
+  '}'
+].join(String.fromCharCode(10));
+try {
+  var result = unwrap(evaluate_script({function: js}));
+  var msg = 'OK: ' + result.before.count + ' clickables before';
+  if (result.clicked) {
+    if (typeof result.clicked === 'string') { msg += ', ' + result.clicked; }
+    else if (!result.clicked.effect) {
+      msg = 'WARNING: clicked ' + result.clicked.text + ' but no state change detected';
+    } else { msg += ', clicked: ' + result.clicked.text + ' (state changed)'; }
+    if (result.after) { msg += ', ' + result.after.count + ' after'; }
+  }
+  msg += ' | ' + JSON.stringify(result).slice(0, 3000);
+  return msg;
+} catch (e) {
+  return 'ERROR: ' + e.message;
+}
+```
+
+### Cut-notes
+- Single-call click-by-text is D2 with `TEXT` set (supersedes the standalone "Click by text" snippet).
+- Text-filtered structure discovery is B (interactive) or the Step-4 pattern (any node).
+

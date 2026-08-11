@@ -6,7 +6,6 @@ oh my opencode and dcp(context manager) make a cicrle:
 
 ![alt text](opencode-dcp-conflict.png)
 
-
 ## Clean up
 
 devcontainers allow to avoid uninstalling by simply rebuilding clean state.
@@ -53,18 +52,21 @@ Model suffers following tools description.
 
 ![alt text](image.png)
 
-# Harness design 
+# Harness design
 
 - Cap output with token generation - no good change can be produced by 2000 token stream.
 - cap number of agent steps
 - Embed deterministic checks to automatically become part of the loop.
 - Local models don't follow the system prompt strictly, if user used UPPERCASE this takes priority over system message.
 
+## Codemode
+
+- Less round trips for multi-steps and batch operations
+- Cache first reliable workflows(allows access partial results and keep working offline).
+
 ## Agentic system
 
 Specialized minimalistic agents - start faster, fail faster. Keep tuning.
-
-
 
 ### Orchestration failures
 

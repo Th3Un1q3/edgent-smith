@@ -2,7 +2,6 @@
 
 A comprehensive catalog of code smells organized by family. Each smell includes a description, detection heuristics, and the named refactorings that fix it.
 
-
 ## Table of Contents
 1. [What Is a Code Smell?](#what-is-a-code-smell)
 2. [Family 1: Bloaters](#family-1-bloaters)

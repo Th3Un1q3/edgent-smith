@@ -1,0 +1,89 @@
+{
+  // markdownlint-cli2 configuration for the edgent-smith repository.
+  // Lints ALL markdown in the repo (including .agents/skills/), ignoring
+  // generated/vendor/noise directories only. Every rule override below is
+  // justified inline; anything not listed stays at the strict default.
+  //
+  // NOTE: `markdownlint-cli2` treats `//` comments in .jsonc as valid JSON
+  // comments, and JSONC comments do not carry into lint reports.
+
+  "globs": [
+    "**/*.{md,markdown}"
+  ],
+
+  "ignores": [
+    // Vendor/derived trees that are not authored content: dependency installs,
+    // generated caches, session dumps, and the internal memory store. These
+    // must never be linted or auto-fixed (--fix must not churn them).
+    "**/node_modules/**",
+    ".tmp/**",
+    ".venv/**",
+    ".git/**",
+    ".pytest_cache/**",
+    ".serena/**",
+    ".cache/**"
+  ],
+
+  // Many docs (skills, instructions, OpenCode/GitHub agent files) carry YAML
+  // frontmatter. In markdownlint-cli2 v0.23.x `frontMatter` is a RegExp
+  // *string* (not a boolean) that is compiled with only the `u` flag, so it
+  // must use explicit newlines instead of multiline `^`/`$` anchors. This
+  // matches a leading `---` block and strips it so rules apply to prose only.
+  "frontMatter": "^---[ \\t]*(?:\\r\\n|\\r|\\n)[^]*?(?:\\r\\n|\\r|\\n)---[ \\t]*(?:\\r\\n|\\r|\\n|$)",
+
+  "config": {
+    "default": true,
+
+    // MD013: 80-char line limit is noise for this prose-heavy repo (skills,
+    // instructions, plans) — 4,200+ violations across 181 files; the project
+    // already uses a 100-char Python convention and markdown prose does not
+    // benefit from hard wrapping.
+    "MD013": false,
+
+    // MD060: table pipe/column alignment is purely cosmetic; normalizing
+    // 1,293 tables across 91 files would add massive unreviewable churn.
+    "MD060": false,
+
+    // MD022/MD031/MD032: blank-line-around-headings/fences/lists whitespace
+    // churn across 100+ files (never-linted corpus). Kept off to keep the
+    // diff reviewable; can be re-enabled after a one-time cleanup pass.
+    "MD022": false,
+    "MD031": false,
+    "MD032": false,
+
+    // MD041: many docs open with frontmatter + intro prose (issue templates,
+    // agent docs), and .opencode/plugins/tests/fixtures/ contains *intentionally
+    // malformed/empty-frontmatter* test fixtures that must not be edited.
+    "MD041": false,
+
+    // MD025: multiple top-level headings are intentional in workflow/recipe
+    // and experiment-spec documents (35 sites in 7 files).
+    "MD025": false,
+
+    // MD040: skills reference fences are pseudocode, directory-tree diagrams,
+    // and plaintext outputs with no defined language (72 sites in 27 files);
+    // inventing language tags would be wrong.
+    "MD040": false,
+
+    // MD029: lists are deliberately numbered as continuations across fenced
+    // blocks (e.g., starting at 5); neither "one" nor "ordered" style fits.
+    "MD029": false,
+
+    // MD024: allow duplicate headings as long as they are in different
+    // sections (e.g., repeated "## Example" per rule) — only flag siblings.
+    "MD024": {
+      "siblings_only": true
+    },
+
+    // MD033: the only inline HTML is skill-recipe/command template placeholder
+    // tags like <domain>, <Recipe>, <analysis-metadata>; allow exactly those,
+    // keep the rule active for real HTML (badges, <br>, etc.).
+    "MD033": {
+      "allowed_elements": [
+        "analysis", "analysis-metadata", "analysis-questions", "domain",
+        "issue", "output", "profile", "short", "skill", "subdomain",
+        "topic", "Action", "Recipe"
+      ]
+    }
+  }
+}

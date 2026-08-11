@@ -4,11 +4,13 @@ description: >
   Research libraries, frameworks, and tools; search the web for facts and documentation;
   explore codebases to find files, symbols, and references; and investigate GitHub
   repositories. Explore and store memories to learn from past experiences.
-  Trigger on: "research a library or tool", "find docs or facts", "explore the codebase", "investigate a GitHub repo", "store or recall project memories", or any request needing context before acting(which is almost every task).
+  Trigger on: "research a library or tool", "find docs or facts", "explore the codebase", "investigate a GitHub repo", "store or recall project memories", or any request needing context before acting (which is almost every task).
+  Not for single-step factual lookups — an answer one direct tool call returns with no follow-up, no fetch-and-cache, and no synthesis; pure local code editing without a research component,
+  or tasks covered by a more specific skill (e.g., devcontainers-best-practices, docker-mcp-gateway, building-pydantic-ai-agents, python-testing-patterns).
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.13.0"
+  version: "1.17.0"
   author: Th3Un1qu3
   tools:
     - gateway_mcp-find
@@ -18,110 +20,215 @@ metadata:
 
 # Context Gathering
 
-Before writing code, fixing a bug, or answering a question, gather the
-relevant context. This skill shows how to research external sources, explore
-local codebases, and combine findings into actionable information — using MCP
-gateway servers through the code-mode scripting environment.
+Gather relevant context before writing code, fixing bugs, or answering questions. Use gateway tools in the code‑mode scripting environment. They let you research external sources, explore local codebases, and turn findings into actionable information, replacing most webfetch or curl calls.
 
-Replaces need for webfetch, curl and other tools.
+Every gateway tool follows the standard `gateway_` prefix—e.g., `gateway_mcp-find`, `gateway_code-mode`, `gateway_mcp-exec`—and Docker MCP gateway hosts them.
 
-The code-mode is provided by the Docker MCP gateway. All tools prefixed with
-"gateway_" are hosted by the Docker MCP gateway.
+## When Not to Use This Skill
+
+Do not use this skill for:
+- Pure local implementation/editing tasks with no research component — there is no external context to gather.
+- Tasks already covered by a more specific skill.
 
 ## Context Sources
 
-Explore these available context sources to get proper grounding for any task:
-- Memory – holds lessons learned and task‑related memories; use it to draw on past experience.  
-- External – web pages, documentation, repositories; provide reliable knowledge, avoiding reliance on pre‑trained assumptions.  
-- Internal – explore existing code, files, and dependencies to see what already exists and what a change might affect.  
+Leverage these context sources for grounding on any task:
 
-## Minimal Workflow Example:
+- Memory — lessons learned and task-related memories; cached external knowledge; draw on past experience.
+- External — web pages, documentation, repositories; reliable knowledge beyond pre-trained assumptions.
+- Internal — existing code, files, and dependencies; what exists and what a change might affect.
 
-The pipeline is `mcp-find` (discover servers) → `code-mode` (initialize a sandbox with the servers you need) → `mcp-exec` (run a synchronous JS script that chains the tools). Activate a sandbox per [workflows/setup.md](./workflows/setup.md); script rules and error handling in [workflows/scripting-workflow.md](./workflows/scripting-workflow.md).
+## Minimal Workflow
+
+- Read the relevant recipes for the task (see the flowchart below).
+- `gateway_mcp-find` (discover servers by keywords) → `gateway_code-mode` (initialize a sandbox with the name and servers) → `gateway_mcp-exec` (run a synchronous JS script that chains the tools).
+
+- [Sandbox activation details](./workflows/setup.md)
+- [Script rules and error handling](./workflows/scripting-workflow.md).
+
+## Context Gathering Flows
+
+The diagram below models the skill's four entry-point modes — external research, internal research, DevTools/private resources, and memory read/write — sharing one preamble (`gateway_mcp-find` → read server-selection → `gateway_code-mode`, the Minimal Workflow Example pipeline above) plus cross-cutting escape paths for blocking gates.
+
+Use the diagram to identify which flow matches the current task, then load only the matching recipe file(s) and activate the sandbox with only the relevant servers.
+
+```mermaid
+flowchart TD
+    subgraph PRE["Shared preamble — every entry point"]
+        FindServers["gateway_mcp-find — identify relevant MCP servers"]
+        ReadServerSelection["Read server-selection recommendations — start with the lightest server that can do the job"]
+        ActivateCodeMode["gateway_code-mode — activate code-mode, MUST set the name parameter (task-related sandbox name) + the selected servers"]
+    end
+
+    subgraph EXT["Entry point 1 — External research (libraries, websites, facts)"]
+        ExternalEntry["Exploring external context — libraries, websites, facts"]
+        CheckExternalCache["Check cache — cache/{source}/... for relevant info on the query"]
+        CacheOutcome{"Cache outcome?"}
+        CacheSufficient{"Sufficient for the response?"}
+        RespondFromCache["Respond based on cache info"]
+        IdentifyResearchPlan["Identify what to research and which tools will be used"]
+        ServersSufficient{"Selected servers sufficient?"}
+        FindAndRecreateServers["Search for more relevant servers (gateway_mcp-find) and re-create code-mode with them (gateway_code-mode)"]
+        QueryExternalResources["Query external resources (gateway_mcp-exec, synchronous) — explore libraries, keywords, text around keywords"]
+        CacheResults["Cache intermediate results and queries — caching flow"]
+        TruncationSufficient{"Truncated output sufficient?"}
+        ReportFindings["Reporting — pretty-print, quote key findings"]
+        ParseCachedEntry["Parse the cached entry (cache/{source}/...) for relevant info"]
+    end
+
+    subgraph INT["Entry point 2 — Internal research (codebase)"]
+        InternalEntry["Exploring local context — GLOB, file relations, similar and duplicate files"]
+        SkipCacheCheck["Omit cache check — source of truth is in the code"]
+        CheckMemoryLearnings["(Optional) check memory for relevant learnings"]
+        SearchCodebase["Search codebase — files, relations, dependencies, similar and duplicate files"]
+        OutputInternalResult["Output result — no cache write"]
+    end
+
+    subgraph DEV["Entry point 3 — DevTools / private resources"]
+        DevToolsEntry["Accessing private resources — auth-required, automation-blocking sites"]
+        PubliclyAccessible{"Accessible from the public internet?"}
+        FollowExternalResearch["Follow the external research flow"]
+        DevToolsServer["DevTools server — browser-based access (renders JS; operator's authenticated session)"]
+        CacheState{"Cache state?"}
+        UseCachedResults["Use cached results — present and sufficient"]
+        RunBrowserSteps["Perform automated browser steps"]
+        CachePrivateResults["Cache unfiltered, non-truncated results in the private/ section of memory"]
+        ReportDevToolsFindings["Reporting — pretty-print, quote key findings"]
+    end
+
+    subgraph MEM["Entry point 4 — Memory read/write (serena)"]
+        MemoryEntry["Reading or writing memory — serena"]
+        ConnectSerena["Connect to serena — list domains, read each about entry, fetch matching memories"]
+        ReadOrWrite{"Read or write?"}
+        ReadMemory["Read memory"]
+        WriteMemoryGate["Write memory — BLOCKING GATE (7 checks)"]
+        AnyBoxUnchecked{"Any box unchecked?"}
+        DoNotWrite["DO NOT WRITE — fix or skip"]
+        VerifyWrite["Verify every write — read back and confirm"]
+        ReportMemoryResult["Report — no cache write"]
+    end
+
+    subgraph ESC["Escape paths — blocking gates (all flows)"]
+        BlockingGateReached{"Blocking gate reached? — e.g. authentication wall REALLY phased (probed and detected, not just suspected)"}
+        HumanInteraction["Human interaction needed"]
+        ReturnReport["Return report — what was done, what is blocked, ideas to unblock"]
+    end
+
+    ExternalEntry --> FindServers
+    InternalEntry --> FindServers
+    DevToolsEntry --> FindServers
+    MemoryEntry --> FindServers
+    FindServers --> ReadServerSelection
+    ReadServerSelection --> ActivateCodeMode
+    ActivateCodeMode --> CheckExternalCache
+    ActivateCodeMode --> SkipCacheCheck
+    ActivateCodeMode --> PubliclyAccessible
+    ActivateCodeMode --> ConnectSerena
+
+    CheckExternalCache --> CacheOutcome
+    CacheOutcome -->|COMPLETE HIT| CacheSufficient
+    CacheOutcome -->|PARTIAL HIT| IdentifyResearchPlan
+    CacheOutcome -->|MISS| IdentifyResearchPlan
+    CacheSufficient -->|yes| RespondFromCache
+    CacheSufficient -->|no| IdentifyResearchPlan
+    RespondFromCache --> ReportFindings
+    IdentifyResearchPlan --> ServersSufficient
+    ServersSufficient -->|no| FindAndRecreateServers
+    FindAndRecreateServers --> ServersSufficient
+    ServersSufficient -->|yes| QueryExternalResources
+    QueryExternalResources --> CacheResults
+    QueryExternalResources -->|"auth wall or JS execution required (cookies, robots.txt, authentication, SPA)"| DevToolsServer
+    CacheResults --> TruncationSufficient
+    TruncationSufficient -->|yes| ReportFindings
+    TruncationSufficient -->|no| ParseCachedEntry
+    ParseCachedEntry -->|"relevant info found"| ReportFindings
+    ParseCachedEntry -->|"still insufficient"| QueryExternalResources
+
+    SkipCacheCheck --> CheckMemoryLearnings
+    CheckMemoryLearnings --> SearchCodebase
+    SearchCodebase --> OutputInternalResult
+
+    PubliclyAccessible -->|yes| FollowExternalResearch
+    FollowExternalResearch --> QueryExternalResources
+    PubliclyAccessible -->|no| DevToolsServer
+    DevToolsServer --> CacheState
+    CacheState -->|"present and sufficient"| UseCachedResults
+    CacheState -->|missing| RunBrowserSteps
+    CacheState -->|outdated| RunBrowserSteps
+    UseCachedResults -->|"direct devtools task"| ReportDevToolsFindings
+    UseCachedResults -->|"escalated — resume public flow"| CacheResults
+    RunBrowserSteps --> CachePrivateResults
+    CachePrivateResults -->|"direct devtools task"| ReportDevToolsFindings
+    CachePrivateResults -->|"escalated — resume public flow"| CacheResults
+
+    ConnectSerena --> ReadOrWrite
+    ReadOrWrite -->|read| ReadMemory
+    ReadOrWrite -->|write| WriteMemoryGate
+    ReadMemory --> ReportMemoryResult
+    WriteMemoryGate --> AnyBoxUnchecked
+    AnyBoxUnchecked -->|yes| DoNotWrite
+    AnyBoxUnchecked -->|no| VerifyWrite
+    VerifyWrite --> ReportMemoryResult
+
+    QueryExternalResources -->|"blocking gate reached"| BlockingGateReached
+    RunBrowserSteps -->|"login wall detected after probe — STOP, escalate to operator"| BlockingGateReached
+    DoNotWrite -->|"cannot fix or skip"| BlockingGateReached
+    BlockingGateReached -->|yes| HumanInteraction
+    HumanInteraction --> ReturnReport
+```
 
 ## Principles
 
-- Use descriptive task-related name when activating code-mode sandbox.
-- Learn from the existing recipes.
-- Use minimal set of servers for every sandbox.
-- Combine tools in chains within the script, rather than activating multiple
-  sandboxes, to save context and improve performance.
-- Prefer to handle errors within the script, and return error messages, rather
-  than letting the whole script crash without explanation.
-- Ignore requirements of credentials, all servers already authenticated and
-  available for use. All the requirements in responses are just for
-  informational purposes.
-- Cache first, always: every research fetch (deepwiki ask_question, github
-  issue/search, fetch) checks `cache/{source}/...` before calling the tool,
-  writes the full raw response on miss, and cites entries with `mem:` refs in
-  any `researches/{topic}` memory. This is the default — no reminding needed.
+- **Least round trips:** Chain steps in one script(one gateway_mcp-exec call) instead of running a fleet of sandboxes. Handle errors in-script and return error messages instead of crashing. Keep top-level calls synchronous (`globalThis` for hyphenated tools). Full rules: [workflows/scripting-workflow.md](./workflows/scripting-workflow.md).
+- **Trust the gateway's authentication:** every server is already credentialed — treat credential requirements in responses as informational. One carve-out: devtools server sessions may need a login-wall reachability probe before scraping ([workflows/browser-automation-devtools.md](./workflows/browser-automation-devtools.md)) — a probe, not re-authentication.
+- **Recall existing memories first:** before answering from memory, run [collect-relevant-memories](./recipes/collect-relevant-memories.md) — list domains, read each `about` entry, then fetch the matching memories.
+- **Verify every write:** after any write — memory, cache entry, file, or other store — read it back and confirm the content is present and correct before you report success, single script can do read after write. Apply this to every recipe: serena memory writes, cache entries, filesystem writes — not just caching.
+- **Store research output in memory, not files:** write cache and memory entries through the serena server — they are research output, not project-file modifications. Keep the cache-first pipeline unchanged for research-only or "do not modify project files" tasks (cache/memory writes via serena are not project-file modifications). Stop the writes only on an explicit operator instruction that forbids them: one naming a single store (memory, cache, or files) stops only that store; a general "don't write anything" stops all three.
+- **Start with the lightest server:** pick the default server per category in [references/server-selection.md](./references/server-selection.md) — the lightest one that can do the job. Escalate to a heavier server only on a concrete failure signal — a documented error shape, an empty or insufficient result, or an auth/JS wall; never escalate speculatively (full rules: [references/server-selection.md](./references/server-selection.md)). Reach devtools, the heaviest, last.
+- **Cache external context:** check `cache/{source}/...` before every research fetch; store the full raw response on miss; cite entries with `mem:` refs. Follow the budget, key-scheme, and status-report rules in [references/caching-rules.md](./references/caching-rules.md).
+- **Budget Tools Outputs:** truncate every tool return in-script — snapshots ≤2 KB; read-backs return only header, length, and ≤700-char excerpt. Copy the worked JS: [references/truncation-examples.md](./references/truncation-examples.md).
 
-### Cache read / write checkpoints
-
-**READ checkpoints (check these BEFORE acting):**
-- Before ANY external research fetch (deepwiki, github, fetch, tavily, youtube): list + read `cache/{source}/...` for the deterministic key — a HIT means reuse, do NOT re-fetch. Per-URL lookup: before fetching URL X, check `cache/fetch/{host-slug}/{path-slug}` — the key is derived deterministically from X (host and path slugs); HIT = reuse, do NOT re-fetch that URL.
-- Before synthesizing research findings: check existing `researches/{topic}` memories to build on, not duplicate.
-- Before answering from memory: run [collect-relevant-memories](./recipes/collect-relevant-memories.md) (list domains → read `about` → fetch matching) as step 0.
-
-**WRITE checkpoints (MUST write on these events):**
-- **Cardinality — one cache entry per fetched URL:** every successful fetch of a URL stores THAT page's full returned content under its own deterministic key `cache/fetch/{host-slug}/{path-slug}`. Never collapse multiple pages into a single entry. Pagination rounds of one URL consolidate into that URL's single entry (assembled content; note any truncation in the header).
-- Every research task → SYNTHESIZE `researches/about` first, then `researches/{topic-slug}` with a "## Cached sources" section of `mem:` refs to every cache entry used.
-- `cache/about` per source before that source's first write; about-first rule.
-- **Ground truth:** Raw fetched page content is the ground truth for cross-checking and revisiting. Syntheses and extractions belong in `researches/` and MUST `mem:`-reference the raw cache entries they derive from — never replace raw content with a summary.
-- **Status-report requirement:** Every research task's per-op status report MUST state the counts: "N pages fetched → N cache entries written" (match required), so ground-truth coverage is verifiable.
-
-**Precedence rule:** Cache and memory writes via the serena server are the skill's sanctioned research output channel and are NOT project-file modifications. The cache-first pipeline applies unchanged to research-only or 'do not modify project files' tasks. Only an explicit operator instruction forbidding memory writes overrides the STORE phase.
-
-- Public vs private: public research/cache → `researches/{topic}` + `cache/{source}/...`. Only devtools-derived output from authenticated sessions (and PII / job / application data) → `private/` namespace (gitignored, never committed). Extraction recipes stay public in `browser-automation/<site>/`.
-- **Start light, escalate on failure.** For every gathering need, pick the default server per category in [references/server-selection.md](./references/server-selection.md) — the most lightweight server that can do the job. Escalate to a heavier server only on a concrete failure signal (documented error shape, empty/insufficient result, auth/JS wall). devtools is the heaviest server — reach it only when a lighter server provably cannot deliver; never escalate speculatively.
-
-## Immutable Memory Rules
-
-These rules apply to every memory operation and are not negotiable:
-
-1. **Timeless** — memories record knowledge, not session narrative. "In this session…" means rewrite or skip.
-2. **Verified** — facts must state their source (docs, operator, observed output). A theory is not a fact; never encode an unverified diagnosis as truth.
-3. **Operator wins** — the operator's explanation and documented mechanics beat agent theories. Verify mechanics against docs/operator BEFORE theorizing.
-4. **Gate before write** — run the [BLOCKING GATE](./references/memory-management-checklist.md) before every `write_memory`; an unchecked box means DO NOT WRITE.
-
-### Recipe Usage
-
-| Recipe | How it uses the convention |
-|---|---|
-| **store-memories** | Writes the domain's `about` entry first (creating it if absent) — description, scope, boundaries — then writes the topic memory itself. This order ensures the domain is always documented. **Before creating a new domain, agents MUST check existing domains first per the PRE-EXISTING DOMAINS FIRST rule in [memory-convention.md](./references/memory-convention.md). Every memory write requires running the [BLOCKING GATE](./references/memory-management-checklist.md) first — if ANY box is unchecked, DO NOT WRITE.** |
-| **collect-relevant-memories** | Lists memories and reads the domain `about` for scope and boundaries, selects memories by their self-describing names, then fetches the matching ones. This avoids loading every memory and keeps context tight. |
-| **manage-memories** | When a domain is added, renamed, or removed, updates the `about` (scope/boundaries) accordingly. Ensures cross-references remain valid after structural changes. |
 
 ## Common Issues
 
-- **Using async functions**: All tool calls must be synchronous.
-- **Async inside `evaluate_script`**: code-mode tool calls are synchronous, but the devtools `evaluate_script` tool awaits async functions — see [references/devtools-known-issues.md](./references/devtools-known-issues.md).
-- **Using curl or webfetch**: Terminal tools are less effective than code-mode tools, and often fail to fetch or parse results. Use code-mode tools instead. MCP tools are already authenticated.
-- **Using `read`/`grep` on the Serena memory store**: NEVER read `.serena/memories/*` with `read`, `grep`, `glob`, `ls`, or shell tools — direct access is DENIED by permission and wastes a round. Project memories are accessible ONLY through the `serena` MCP server via `gateway_mcp-find` → `gateway_code-mode` → `gateway_mcp-exec` (recipes: store-memories, collect-relevant-memories).
+- **Accessing the Serena memory store directly**: NEVER read `.serena/memories/*` with `read`, `grep`, `glob`, `ls`, or shell tools — direct access is DENIED by permission and wastes a round. Project memories are accessible ONLY through the `serena` MCP server via `gateway_mcp-find` → `gateway_code-mode` → `gateway_mcp-exec` (recipes: store-memories, collect-relevant-memories).
+- **Failures to setup the code-mode sandbox**: every `gateway_code-mode` call MUST set the `name` parameter (task-related sandbox name) and the `servers` parameter (only the servers you need). Following `gateway_mcp-exec` call relies on the returned sandbox name.
+- **Missunderstanding of MCP-find function**: `gateway_mcp-find` discovers servers, but does not activate them. It also does not search the web or codebase. Use it to find a server by keywords and then activate it with `gateway_code-mode` (recipes: setup, server-selection).
+- **Using async / `evaluate_script`**: all top level tool calls must be synchronous; the devtools `evaluate_script`(nested level) tool awaits async functions — see [references/devtools-known-issues.md](./references/devtools-known-issues.md).
+- **gateway_mcp-exec call shape**: `gateway_mcp-exec` REQUIRES `{"name": "<returned-sandbox-tool>", "arguments": {"script": "<js>"}}` — `name` and `arguments` are sibling top-level keys, and the JS lives under `arguments.script`. Flattening (`{"name", "script"}`) or putting `script` at top level fails with "name parameter is required" or a JSON parse error. Pre-flight before every exec: (1) top-level keys are exactly `name` + `arguments`; (2) `arguments.script` is a string; (3) the payload parses as valid JSON.
+- **gateway_mcp-exec messed escape**: the JS script is a JSON string whose own string literals are quoted again — a double quote meant for a query must appear as `\"` in the payload, and a stray `"` breaks JSON ("Expected '}'"). Avoid it by (a) building query strings with NO inner double quotes (single-word/single-phrase queries, no `"..."` operators), (b) single-quoting JS strings, and (c) using `JSON.stringify` instead of hand-escaping. On a "JSON Parse error" from exec, re-emit a corrected payload — never retry the same malformed string.
+- **Forgetting the sandbox name in `gateway_code-mode`**: every activation call REQUIRES the `name` parameter — the sandbox name (descriptive, task-related, e.g., `code-mode-<task>`). Omitting it, or passing arbitrary text, creates a nameless or misnamed sandbox and breaks the `gateway_mcp-exec` routing that depends on the returned prefixed tool name. Set the `name` in the SAME call as `servers`; never invent or reuse a name later.
 - **Using `read` and `grep` for other research**: fine to read exact files; for broader context gathering the gateway_* tools are more token-efficient. For disk access through the gateway (allowed-dir only), see [recipes/filesystem-access.md](./recipes/filesystem-access.md).
-- **Outputting whole pages/markup into context** — the model must never receive a full page; everything arrives truncated (snapshot ≤2 KB) or as aggregated fields (≤3 KB).
+- **Jumping to execution without reading any recipes**: the recipes contain the full workflow and error-handling rules; read them before running any scripts. The flowchart above shows the entry points, but each recipe contains the step-by-step instructions, including tool call shapes, error handling, and caching rules.
 
 ## Task Routing Table
 
-Proactively explore the following files to learn about the skill's capabilities
-and how to use it effectively. Each file contains a specific workflow or recipe
-for common context-gathering tasks.
+Scan the routing table below to match the current task to one file. Each file contains a specific workflow or recipe; load only the file the matching row names — leave the others unread.
 
 | Triggers | Actions | Recipe |
 |---|---|---|
-| Need to choose which MCP server to use — web search, URL fetch, docs Q&A, GitHub, browser, memory, local files, YouTube transcripts — and when to escalate | Start with cache/memory (serena), pick the default server per category, escalate only on a concrete failure signal; devtools is the heaviest — reach it last | [references/server-selection.md](./references/server-selection.md) |
-| Need to store or update a memory — gate first, then quality, abstraction, discoverability | Run the BLOCKING GATE (7 checks, canonical in [references/memory-management-checklist.md](./references/memory-management-checklist.md)) before ANY `write_memory` — unchecked box = DO NOT WRITE; public vs private namespace split (private/ is gitignored) | [references/memory-management-checklist.md](./references/memory-management-checklist.md) |
+| Choose which MCP server to use — web search, URL fetch, docs Q&A, GitHub, browser, memory, local files, YouTube transcripts — and when to escalate | Start with cache/memory (serena), pick the default server per category, escalate only on a concrete failure signal; devtools is the heaviest — reach it last | [references/server-selection.md](./references/server-selection.md) |
+| Store or update a memory — gate first, then quality, abstraction, discoverability | Run the BLOCKING GATE (7 checks, canonical in [references/memory-management-checklist.md](./references/memory-management-checklist.md)) before ANY `write_memory` — unchecked box = DO NOT WRITE; public vs private namespace split (private/ is gitignored) | [references/memory-management-checklist.md](./references/memory-management-checklist.md) |
 | First time using the skill or need different MCP servers | Discover servers, review tools, activate code-mode sandbox | [workflows/setup.md](./workflows/setup.md) |
-| Writing code-mode scripts — need sync JS patterns, error handling | Structure scripts, handle errors, combine tool calls | [workflows/scripting-workflow.md](./workflows/scripting-workflow.md) |
-| No ready-made recipe exists — need to design a new approach | Map capabilities, hypothesize tool chains, test, capture as recipe | [workflows/refinement-discovery.md](./workflows/refinement-discovery.md) |
-| Need to explore local codebase — find symbols, references, patterns | Find referencing symbols, analyze file structure, search patterns | [recipes/codebase-exploration.md](./recipes/codebase-exploration.md) |
-| Need to fetch & cache external content — web-search results, library docs, YouTube transcripts — without flooding the model context: harvest targets, verify, paginate full fetch, write to cache/{source}/..., revisit later | Harvest → verify → fetch full content → write cache/about + cache/{source}/{channel}/{slug}_{id} memories → return per-op status report | [recipes/external-content-caching.md](./recipes/external-content-caching.md) |
-| Need to research a topic — answer questions from deepwiki, check known GitHub issues, fetch docs — cache tool responses first | Cache-check → per-tool fetch+cache → synthesize researches/{topic} with mem: refs → return per-op status report (required even for research-only tasks) | [recipes/research-with-caching.md](./recipes/research-with-caching.md) |
-| Need to read, list, search, or write files on disk through the gateway — restricted to the filesystem server's allowed directories | Verify allowed dirs, then read/list/search/tree/info files; writes need planned cleanup (no delete tool) | [recipes/filesystem-access.md](./recipes/filesystem-access.md) |
-| Need to understand a GitHub repository — codebase, issues, docs | Semantic Q&A on repo code; search and analyze repository issues | [recipes/github-insights.md](./recipes/github-insights.md) |
-| Need to automate a browser / drive Chrome via devtools MCP (extract, navigate, SPA click-through) | Activate devtools sandbox, verify auth, extract minimally, cache + memorize selectors, recover from drift | [workflows/browser-automation-devtools.md](./workflows/browser-automation-devtools.md) |
-| Need devtools tool facts — return formats, quoting rules, known gotchas | Look up the favorite-tools table and known issues | [references/devtools-known-issues.md](./references/devtools-known-issues.md) |
-| Need to persist project knowledge — document modules, APIs, decisions | Write single/multiple memories with hierarchical, self-describing names, cross-references | [recipes/store-memories.md](./recipes/store-memories.md) |
-| Resuming work on a topic — need to recall what's known | List, read, aggregate memories by topic; follow cross-references | [recipes/collect-relevant-memories.md](./recipes/collect-relevant-memories.md) |
-| Need to update, reorganize, or clean up existing memories | Edit content (literal/regex), rename, delete memories | [recipes/manage-memories.md](./recipes/manage-memories.md) |
-| Need to understand the memory convention — domain/about pattern with self-describing names | Read the memory convention guide; about files define scope and boundaries | [memory-convention.md](./references/memory-convention.md) |
+| Writing code-mode scripts — sync JS patterns, error handling | Structure scripts, handle errors, combine tool calls | [workflows/scripting-workflow.md](./workflows/scripting-workflow.md) |
+| No ready-made recipe exists — design a new approach | Map capabilities, hypothesize tool chains, test, capture as recipe | [workflows/refinement-discovery.md](./workflows/refinement-discovery.md) |
+| Explore local codebase — find symbols, references, patterns | Find referencing symbols, analyze file structure, search patterns | [recipes/codebase-exploration.md](./recipes/codebase-exploration.md) |
+| Fetch & cache external content — web-search results, library docs, YouTube transcripts — without flooding the model context | Harvest → verify → fetch full content → write cache/about + cache/{source}/{scope}/{descriptor} memories → return per-op status report | [recipes/external-content-caching.md](./recipes/external-content-caching.md) |
+| Research a topic — answer questions from deepwiki, check known GitHub issues, fetch docs — cache tool responses first | Cache-check → per-tool fetch+cache → synthesize researches/{topic} with mem: refs → return per-op status report (required even for research-only tasks) | [recipes/research-with-caching.md](./recipes/research-with-caching.md) |
+| Read, list, search, or write files on disk through the gateway — restricted to the filesystem server's allowed directories | Verify allowed dirs, then read/list/search/tree/info files; writes need planned cleanup (no delete tool) | [recipes/filesystem-access.md](./recipes/filesystem-access.md) |
+| Understand a GitHub repository — codebase, issues, docs | Semantic Q&A on repo code; search and analyze repository issues | [recipes/github-insights.md](./recipes/github-insights.md) |
+| Automate a browser / drive Chrome via devtools MCP (extract, navigate, SPA click-through) | Activate devtools sandbox, verify session (login-wall check), extract minimally, cache + memorize selectors, recover from drift | [workflows/browser-automation-devtools.md](./workflows/browser-automation-devtools.md) |
+| Devtools tool facts — return formats, quoting rules, known gotchas | Look up the favorite-tools table and known issues | [references/devtools-known-issues.md](./references/devtools-known-issues.md) |
+| Persist project knowledge — document modules, APIs, decisions | Write single/multiple memories with hierarchical, self-describing names, cross-references | [recipes/store-memories.md](./recipes/store-memories.md) |
+| Resuming work on a topic — recall what's known | List, read, aggregate memories by topic; follow cross-references | [recipes/collect-relevant-memories.md](./recipes/collect-relevant-memories.md) |
+| Update, reorganize, or clean up existing memories | Edit content (literal/regex), rename, delete memories | [recipes/manage-memories.md](./recipes/manage-memories.md) |
+| Understand the memory convention — domain/about pattern with self-describing names | Read the memory convention guide; about files define scope and boundaries | [references/memory-convention.md](./references/memory-convention.md) |
+| Tool call/response formats for tavily, youtube-transcript, deepwiki, github, fetch (search, extract, transcripts, issue reads) | Look up tool signatures, params, and JSON vs plain-text return shapes | [references/content-fetch-api.md](./references/content-fetch-api.md) |
+| Serena memory tool formats — list/read/write/delete names, return shapes, case sensitivity | Look up the serena API details; don't re-derive formats | [references/serena-memory-api.md](./references/serena-memory-api.md) |
+| Filesystem server tool formats — read/search/tree/info/write signatures and returns | Look up the filesystem API details | [references/filesystem-server-api.md](./references/filesystem-server-api.md) |
+| Worked JS truncation/budget snippets — ≤2 KB snapshot, ≤700-char read-back, ≤3 KB aggregate, 2× retry cap, pacing | Copy the worked JS examples; every snippet implements an existing prose rule | [references/truncation-examples.md](./references/truncation-examples.md) |
+| The cache rulebook — budgets, one entry per fetched URL, key scheme, per-op status lines | Read the canonical cache rules; the root Principles carry one pointer line | [references/caching-rules.md](./references/caching-rules.md) |
+
+## Related Skills
+
+- `docker-mcp-gateway` — operates the gateway that hosts the `gateway_*` servers this skill uses.

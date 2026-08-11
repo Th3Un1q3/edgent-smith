@@ -10,7 +10,7 @@ metadata:
 
 ## Product Summary
 
-Bun is an all-in-one JavaScript/TypeScript toolkit that replaces Node.js, npm, Jest, and esbuild. It ships as a single binary with four integrated tools: a fast runtime (powered by JavaScriptCore), a package manager, a test runner, and a bundler. Key files: `bunfig.toml` (configuration), `bun.lock` (lockfile), `package.json` (project metadata). Primary CLI commands: `bun run`, `bun install`, `bun test`, `bun build`. See https://bun.com/docs for comprehensive documentation.
+Bun is an all-in-one JavaScript/TypeScript toolkit that replaces Node.js, npm, Jest, and esbuild. It ships as a single binary with four integrated tools: a fast runtime (powered by JavaScriptCore), a package manager, a test runner, and a bundler. Key files: `bunfig.toml` (configuration), `bun.lock` (lockfile), `package.json` (project metadata). Primary CLI commands: `bun run`, `bun install`, `bun test`, `bun build`. See <https://bun.com/docs> for comprehensive documentation.
 
 ## When to Use
 
@@ -164,12 +164,12 @@ Before submitting work with Bun:
 
 ## Resources
 
-- **Comprehensive navigation**: https://bun.com/docs/llms.txt — Full page-by-page listing for agent navigation
-- **Runtime documentation**: https://bun.com/docs/runtime — Core APIs, file I/O, HTTP server, networking
-- **Package manager**: https://bun.com/docs/pm/cli/install — Install, add, remove, workspaces, lockfile
-- **Bundler**: https://bun.com/docs/bundler — Build, code splitting, plugins, minification
-- **Test runner**: https://bun.com/docs/test — Writing tests, mocks, snapshots, watch mode
+- **Comprehensive navigation**: <https://bun.com/docs/llms.txt> — Full page-by-page listing for agent navigation
+- **Runtime documentation**: <https://bun.com/docs/runtime> — Core APIs, file I/O, HTTP server, networking
+- **Package manager**: <https://bun.com/docs/pm/cli/install> — Install, add, remove, workspaces, lockfile
+- **Bundler**: <https://bun.com/docs/bundler> — Build, code splitting, plugins, minification
+- **Test runner**: <https://bun.com/docs/test> — Writing tests, mocks, snapshots, watch mode
 
 ---
 
-> For additional documentation and navigation, see: https://bun.com/docs/llms.txt
+> For additional documentation and navigation, see: <https://bun.com/docs/llms.txt>

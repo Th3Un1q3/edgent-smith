@@ -63,42 +63,42 @@ If unsure, default to Mixed. The goal is to avoid reserving implementation budge
 
 Pick the phases that match your task type. Skip PHASE 2 and PHASE 3 for exploration/analysis tasks.
 
-**PHASE 1 — DISCOVER & VALIDATE (allocate 15–40% of total budget)**
-   - Allocate more (30–40%) for exploration, analysis, or mixed tasks needing deep context.
-   - Allocate less (15–20%) for implementation tasks with a clear structure.
-   - Verify file paths with `glob` or `ls` before reading. Never guess paths.
-   - Read only essential files. Skip tangential ones — revisit later if needed.
-   - If a relevant skill exists, load it immediately. Do not proceed without one if the task matches a skill archetype.
-   - State your approach in 2–4 bullet points. Identify edge cases.
-   - If the task is ambiguous, clarify assumptions explicitly.
+#### PHASE 1 — DISCOVER & VALIDATE (allocate 15–40% of total budget)
+- Allocate more (30–40%) for exploration, analysis, or mixed tasks needing deep context.
+- Allocate less (15–20%) for implementation tasks with a clear structure.
+- Verify file paths with `glob` or `ls` before reading. Never guess paths.
+- Read only essential files. Skip tangential ones — revisit later if needed.
+- If a relevant skill exists, load it immediately. Do not proceed without one if the task matches a skill archetype.
+- State your approach in 2–4 bullet points. Identify edge cases.
+- If the task is ambiguous, clarify assumptions explicitly.
 
    GATE: If this phase consumed ≥80% of its allocation or ≥40% of total budget, stop and reassess. Propose scope reduction or clarify ambiguity before continuing.
 
-**PHASE 2 — SCAFFOLD (allocate 10–15%, skip for exploration/analysis)**
-   - Create file skeletons: imports, type stubs, function signatures, test placeholders.
-   - Do not write full logic yet — validate the layout first.
+#### PHASE 2 — SCAFFOLD (allocate 10–15%, skip for exploration/analysis)
+- Create file skeletons: imports, type stubs, function signatures, test placeholders.
+- Do not write full logic yet — validate the layout first.
 
    GATE: Verify scaffolded files compile/parse. Fix wrong paths now. Do not proceed with broken paths.
 
-**PHASE 3 — IMPLEMENT TDD (allocate 50–60%, skip for exploration/analysis)**
-   - One test case at a time: write failing test → minimal implementation → refactor.
-   - Use the project's existing style and conventions.
-   - Handle errors explicitly — no swallowed exceptions, no silent failures.
+#### PHASE 3 — IMPLEMENT TDD (allocate 50–60%, skip for exploration/analysis)
+- One test case at a time: write failing test → minimal implementation → refactor.
+- Use the project's existing style and conventions.
+- Handle errors explicitly — no swallowed exceptions, no silent failures.
 
    GATE: Mid-phase, check remaining calls against N. If <10% of N remains, stop implementing — move to PHASE 4 VERIFY with the reserved calls and deliver what's done.
 
-**PHASE 4 — VERIFY (reserve ~10% of N)**
-   - Run tests if any were written. Fix regressions.
-   - Check for lint/type errors after editing.
-   - For exploration tasks: confirm findings are documented and paths referenced are correct.
-   - Spend the reserved ~10% of N here — verification is mandatory, not optional.
+#### PHASE 4 — VERIFY (reserve ~10% of N)
+- Run tests if any were written. Fix regressions.
+- Check for lint/type errors after editing.
+- For exploration tasks: confirm findings are documented and paths referenced are correct.
+- Spend the reserved ~10% of N here — verification is mandatory, not optional.
 
    GATE: If verification fails and fixing would exceed the reserved calls, verify the most critical subset, document what remains, and deliver partial work with clear notes.
 
-**PHASE 5 — DELIVER (as needed)**
-   - Summarize what changed and why in 2–3 sentences.
-   - Flag any risks, trade-offs, or follow-up work.
-   - If any work was cut for budget reasons, call that out explicitly.
+#### PHASE 5 — DELIVER (as needed)
+- Summarize what changed and why in 2–3 sentences.
+- Flag any risks, trade-offs, or follow-up work.
+- If any work was cut for budget reasons, call that out explicitly.
 
 ### Per-File Work Packages & Budget Accounting
 

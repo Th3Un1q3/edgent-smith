@@ -29,7 +29,7 @@ time?"
 Keep this entry page short. Start with one route below, then load only the linked
 workflow or reference you need.
 
-### Route Hints
+## Route Hints
 
 - New here: start with the first row in the routing table.
 - Scan: inventory the current instructions, prompts, agents, skills, and hooks before deciding what to change.

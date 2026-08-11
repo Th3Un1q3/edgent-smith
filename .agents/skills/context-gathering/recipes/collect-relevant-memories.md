@@ -2,6 +2,10 @@
 
 All recipes use the **serena** MCP server via a code-mode environment (`code-mode-memory-collect`).
 
+**Prerequisite: load [references/serena-memory-api.md](../references/serena-memory-api.md) first — it defines the helper scripts (`readMemoryContent`, `parseJson`, etc.) this recipe uses.**
+
+Follow the [Setup workflow](../workflows/setup.md) and [Scripting workflow](../workflows/scripting-workflow.md) before using this recipe.
+
 ## List memories by topic
 
 Discover what memories exist under a given topic. `list_memories` returns a JSON **string** — parse it first, then access the `.memories` property (an array of strings).
@@ -145,7 +149,7 @@ return JSON.stringify({ direct: direct, related: related }, null, 2);
 
 ## Domain-Based Discovery
 
-Memory names are the discovery surface — self-describing `<domain>/<subdomain>/<topic>` names make relevance obvious when scanning the list. There is no table-of-contents memory to read; use `list_memories` plus each domain's `about` (scope + boundaries) instead.
+Memory names are the discovery surface — self-describing `<domain>/<subdomain>/<topic>` names make relevance obvious when scanning the list. There is no domain-level table-of-contents or `index` memory to read; use `list_memories` plus each domain's `about` (scope + boundaries) instead. Exception: a topic with nested children carries a `<topic>/overview` memory that serves as that subtree's table of contents — when a listed name ends in `/overview`, read it to enumerate the children (see [Memory Convention](../references/memory-convention.md)).
 
 ### Conventional entry points
 
@@ -154,7 +158,7 @@ Domain structure — one `about` (scope + boundaries) plus self-describing `<dom
 ### Discovery strategy
 
 1. **List first** — run `list_memories({})` and scan NAMES; self-describing names make relevance obvious for your task.
-2. **Read the domain `about`** for candidate domains — its SCOPE and BOUNDARIES confirm whether the domain covers your topic.
+2. **Read the domain `about`** for candidate domains — its SCOPE and BOUNDARIES confirm whether the domain covers your topic. For any listed name ending in `/overview`, read it to enumerate that topic's children.
 3. **Follow `mem:` cross-references** from selected memories to find related ones across domains.
 4. **Prefix-filter** with `list_memories({ topic: "<prefix>" })` to narrow to a domain or subdomain.
 5. **Read `private/*` freely** — private memories are readable by agents; the `private` domain only means "never commit to version control". Discovery, gate, and `mem:` rules apply unchanged.
@@ -245,6 +249,14 @@ return report.trim();
 ### Common pitfalls
 
 - `list_memories` topic filtering is **prefix-based** and case-sensitive. Use the exact domain prefix as written in memory names (e.g., `"my-domain"`, not `"My-Domain"`).
-- Names are the discovery surface — prefer `list_memories` and self-describing names over any stored table of contents.
+- Names are the discovery surface — prefer `list_memories` and self-describing names over any domain-level table of contents. A `<topic>/overview` memory is the one sanctioned table of contents (for topics-with-children only); read it when a listed name ends in `/overview`.
 - `mem:` references in memories may point to memories in other domains. The script above handles cross-domain discovery automatically.
 - Follow the same defensive `readMemoryContent` pattern used throughout this document to handle both JSON-wrapped and plain-text returns from `read_memory`.
+
+## Acceptance criteria
+
+- [ ] `list_memories` output parsed with `parseJson(result, "list_memories")` before `.memories` is accessed; `.memories` holds plain name strings, not objects.
+- [ ] Every memory read goes through `readMemoryContent`; a missing memory's `"not found"` error string is handled explicitly (thrown/reported), never propagated as content.
+- [ ] Output matches the documented format: "List memories by topic" returns numbered `1. <name>` lines; "Collect all memories" returns `## <name>` sections, with failed reads shown as `[ERROR: <message>]`, not silently dropped.
+- [ ] Cross-reference script ran `extractRefs` on every direct memory and each discovered `mem:` name was fetched or flagged `[ERROR: ...]` — no reference skipped.
+- [ ] All tool calls are synchronous (no `async`/`await`).

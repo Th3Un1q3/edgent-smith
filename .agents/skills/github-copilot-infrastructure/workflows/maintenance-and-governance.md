@@ -17,10 +17,10 @@ failure, or during regular cleanup.
 
 1. Reconfirm ownership before editing.
    - Ask which primitive should own the change.
-  - Ask first whether the guidance should auto-apply on a repo-wide or scoped
+- Ask first whether the guidance should auto-apply on a repo-wide or scoped
     surface before placing it in a skill.
-   - Move content instead of duplicating it when the answer changes.
-   - Default to the smallest existing primitive that can express the behavior.
+- Move content instead of duplicating it when the answer changes.
+- Default to the smallest existing primitive that can express the behavior.
 
 2. Review the discovery surfaces.
    - Check `description` fields for current trigger phrases.

@@ -7,7 +7,7 @@ This document outlines the transition from cloud-based AI assistants (e.g., GitH
 The current system is built upon four essential pillars designed to provide a performant and reliable local development experience.
 
 ### 1. Local LLM and Backend
-To avoid the performance bottlenecks of large, unoptimized models, the system utilizes efficient local inference engines. 
+To avoid the performance bottlenecks of large, unoptimized models, the system utilizes efficient local inference engines.
 - **Core Stack**: LM Studio with quantized models (e.g., Gemma 4) provides hardware acceleration and faster generation compared to standard Ollama setups for specific consumer-grade hardware.
 - **Optimization**: The architecture focuses on avoiding "quantization mismatch" to ensure memory efficiency without sacrificing logical reasoning capabilities.
 

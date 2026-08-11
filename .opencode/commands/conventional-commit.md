@@ -8,7 +8,6 @@ agent: build
 
 ## Context
 
-
 <output command="git status --short 2>/dev/null || echo '(no git repo or no changes)'">
 
 !`git status --short 2>/dev/null || echo '(no git repo or no changes)'`
@@ -16,7 +15,6 @@ agent: build
 </output>
 
 If the output above is empty, there are no untracked/unstaged changes. Check for staged changes:
-
 
 <output command="git diff --stat 2>/dev/null || echo '(nothing staged)'">
 
@@ -42,6 +40,7 @@ If the output above is empty, there are no untracked/unstaged changes. Check for
 
 3. **Propose a conventional commit message**
    - Choose the most appropriate type prefix from this list:
+
      | Prefix      | Use case                                  | Example                    |
      |-------------|-------------------------------------------|----------------------------|
      | `fix:`      | Bug fixes                                 | `fix: resolve null pointer`|
@@ -53,6 +52,7 @@ If the output above is empty, there are no untracked/unstaged changes. Check for
      | `style:`    | Formatting/linting (no logic change)      | `style: fix indentation`   |
      | `ci:`       | CI/CD pipeline changes                    | `ci: update workflow`      |
      | `perf:`     | Performance improvements                  | `perf: cache query result` |
+
    - Choose scope if applicable (e.g., `feat(auth): ...`).
    - Construct a concise, imperative message (prefix(scope): description format).
 

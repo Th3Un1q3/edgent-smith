@@ -225,7 +225,7 @@ Plain text content parts — human-readable messages, responses, or summaries wi
 | `text` | string | The text content of the part |
 
 > **Note:** Text parts appear in both user and assistant messages. User message text parts carry user-provided prompts/instructions — though some sessions may contain system-injected `<steering>` blocks within these same parts (see section on System-Injected Instructions for detection). Assistant message text parts carry agent-generated responses, not instructions. To distinguish instructional from generative text, filter by `.info.role == "user"` on the parent message object and then exclude any parts whose content starts with `<steering`.
-
+>
 > **Note:** Some text parts carry an additional `.time` object (`{start: <epoch-ms>, end: <epoch-ms>}`) not present in all text parts. This field is optional and appears when timing metadata is available for the text content.
 
 ### 8. `tool` — Most Complex Part Type

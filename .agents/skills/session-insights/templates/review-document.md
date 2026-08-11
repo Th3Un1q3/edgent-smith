@@ -1,13 +1,13 @@
-# Session Review Document
-
-Structured review of an OpenCode session export, answering audit questions and generating improvement recommendations.
-
 ---
 session_id: ""
 date_reviewed: ""
 reviewer: ""
 status: "in-progress"  # in-progress | completed
 ---
+
+# Session Review Document
+
+Structured review of an OpenCode session export, answering audit questions and generating improvement recommendations.
 
 ## 0. Reported Threshold Violations
 
@@ -36,7 +36,7 @@ _This section lists threshold violations reported when the session went idle. If
 <!-- FILL: fully achieved | partially achieved | not achieved -->
 **Details:** <!-- FILL: What was completed vs. what was not. -->
 
-**Q3a: First Why Chain (if not achieved)**
+### Q3a: First Why Chain (if not achieved)
 <!-- SOURCE: jq -r '.messages[].parts[] | select(.type == "reasoning" or (.type == "tool" and .state.status == "error"))' session.json -->
 1. Why? — <!-- FILL -->
 2. Why? — <!-- FILL -->
@@ -44,7 +44,7 @@ _This section lists threshold violations reported when the session went idle. If
 4. Why? — <!-- FILL -->
 5. Why? (root cause) — <!-- FILL -->
 
-**Q3b: Second Why Chain (if not achieved)**
+### Q3b: Second Why Chain (if not achieved)
 1. Why? — <!-- FILL -->
 2. Why? — <!-- FILL -->
 3. Why? — <!-- FILL -->
@@ -95,7 +95,7 @@ _This section lists threshold violations reported when the session went idle. If
 | Cache Read | <!-- FILL: .cache.read --> |
 | Cache Write | <!-- FILL: .cache.write --> |
 | **Total** | <!-- FILL: sum --> |
-**Cost:** <!-- FILL: .info.cost (USD) -->
+| **Cost:** | <!-- FILL: .info.cost (USD) --> |
 
 ## 8. Improvement Recommendations
 

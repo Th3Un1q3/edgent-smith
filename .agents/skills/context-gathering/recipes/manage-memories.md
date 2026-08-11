@@ -6,13 +6,13 @@
 |--------|-------------|
 | **Servers** | `serena` |
 | **When to use** | Needing to update, reorganize, or clean up existing memories |
-| **Combines with** | [store-memories](./store-memories) — creating new memories; [collect-relevant-memories](./collect-relevant-memories) — finding which memories need management |
+| **Combines with** | [store-memories](./store-memories.md) — creating new memories; [collect-relevant-memories](./collect-relevant-memories.md) — finding which memories need management |
 
 ## Prerequisites
 
-1. Follow [Setup](../workflows/setup) — discover servers, activate code-mode
-2. Follow [Scripting workflow](../workflows/scripting-workflow) — sync JS, error handling, mcp-exec patterns
-3. Activate code-mode: `code_mode({"name": "memory-manage", "servers": ["serena"]})`
+1. Follow [Setup](../workflows/setup.md) — discover servers, activate code-mode
+2. Follow [Scripting workflow](../workflows/scripting-workflow.md) — sync JS, error handling, mcp-exec patterns
+3. Activate code-mode: `gateway_code-mode({"name": "memory-manage", "servers": ["serena"]})`
 
 ## Scripts
 
@@ -131,6 +131,41 @@ if (typeof result === "string" && result.indexOf("renamed from") > 0) {
 }
 ```
 
+### Find plain-text references to a memory
+
+Before renaming, check which other memories mention the old name as plain text. `rename_memory` auto-updates `mem:` references but not hand-written mentions — after a rename those go stale. This full-store survey is the sanctioned `list_memories({})` exception (PRE-EXISTING DOMAINS FIRST, [Memory Convention](../references/memory-convention.md)): plain-text mentions can live in any domain, so topic-scoping can miss them.
+
+```javascript
+// Find every memory that mentions a target name as plain text.
+// Full-store survey is intentional — plain-text refs can be anywhere.
+// Helpers: parseJson / readMemoryContent — see ../references/serena-memory-api.md
+
+var target = "auth/legacy-config"; // The old_name you are renaming from.
+
+var listResult = list_memories({});
+var parsed = parseJson(listResult, "list_memories");
+var names = parsed.memories || [];
+if (!Array.isArray(names)) return "No memories found.";
+
+var hits = [];
+for (var i = 0; i < names.length; i++) {
+  var name = names[i];
+  if (name === target) continue; // the renamed memory itself
+  var content;
+  try { content = readMemoryContent(name); } catch (e) { continue; }
+  if (content.indexOf(target) >= 0) {
+    hits.push(name);
+  }
+}
+
+if (hits.length === 0) {
+  return "OK — no plain-text references to " + target + ".";
+}
+return "Plain-text references to " + target + " in:\n- " + hits.join("\n- ") +
+       "\n\nFix each with edit_memory (mode: 'literal'). Review each hit first —" +
+       " a longer name that merely contains " + target + " is not a reference.";
+```
+
 ### Delete a memory
 
 Permanently remove a memory file. Check that the memory exists first and verify its removal afterward.
@@ -166,6 +201,7 @@ if (remaining.indexOf("auth/legacy-config") < 0) {
 
 ## Best practices
 
+- **Run the BLOCKING GATE on every content edit** — `edit_memory` changes memory content, so run the [Memory Management Checklist](../references/memory-management-checklist.md) before the edit, exactly as for a `write_memory`. `rename_memory` skips the full gate but must pass the Discoverable check (self-describing name); `delete_memory` must leave the domain's `about` consistent.
 - **Check existence before acting** — use `read_memory` or `list_memories` to confirm a memory exists before editing, renaming, or deleting it.
 - **Prefer literal mode over regex** — literal mode is safer because special characters need no escaping and there are no surprises from regex engine quirks.
 - **Verify each operation** — check the return value for success substrings (`"edited successfully"`, `"renamed from"`, `"deleted"`) immediately after each call.
@@ -177,7 +213,7 @@ if (remaining.indexOf("auth/legacy-config") < 0) {
 - `edit_memory` with `allow_multiple_occurrences: false` (default) replaces only the **first** match. To replace all occurrences, explicitly set `allow_multiple_occurrences: true`.
 - Regex mode uses the tool's built-in regex engine — test your pattern on small content first by reading and inspecting the memory before editing.
 - `delete_memory` is **permanent**. There is no undo. Always list the memory contents first if you might need the data later.
-- `rename_memory` automatically updates `mem:` references in other memories, but does **not** update plain-text references (e.g., hand-written mentions of the old name).
+- `rename_memory` automatically updates `mem:` references in other memories, but does **not** update plain-text references (e.g., hand-written mentions of the old name) — find and fix them with the "Find plain-text references" script above.
 - All tool calls must be **synchronous** — no `async/await`.
 - Return values are plain text for most tools (`write_memory`, `read_memory`, `edit_memory`, `rename_memory`, `delete_memory`) — check for success substrings like `"written."`, `"edited successfully"`, `"renamed from"`, `"deleted"`.  
 - **Exception**: `list_memories` returns a JSON string (`{"memories": [string, ...]}`) — use `JSON.parse` to access the `.memories` array.
@@ -261,3 +297,14 @@ if (brokenRefs.length > 0) {
 
 return "OK — domain " + domain + " is consistent. about present. " + existingMemories.length + " memory(s) verified." + indexFlag;
 ```
+
+## Acceptance criteria
+
+Checklist — every item is objectively checkable and must pass before the operation counts as complete:
+
+- [ ] **Existence check** — the target memory was confirmed present via `list_memories`/`read_memory` before edit/rename/delete (or the intended "not found" path was returned).
+- [ ] **Success substring** — every tool call returned its expected success substring (`"edited successfully"`, `"renamed from"`, `"deleted"`); no call was accepted on absence of error alone.
+- [ ] **Post-op verification** — after a delete, a fresh `list_memories({topic: <parent>})` no longer lists the memory; after an edit, `read_memory` shows the replacement text.
+- [ ] **Domain consistency** — the validate-domain script returns `OK`: `about` present, every name follows `<domain>/<subdomain>/<topic>`, no `index` memory, all `mem:` references resolve.
+- [ ] **Cross-references** — after a rename, no memory still references the old name: `mem:` refs were auto-updated by serena, and the "Find plain-text references" script returned zero hits (or each hit was reviewed and fixed via `edit_memory`).
+- [ ] **Content gate** — every `edit_memory` that changed content ran the [BLOCKING GATE](../references/memory-management-checklist.md); every `rename_memory` name passes the Discoverable check (self-describing); every `delete_memory` leaves the domain's `about` consistent.

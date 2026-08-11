@@ -47,7 +47,7 @@ Keep both the test and the implementation limited to the simplest implementation
 
 ## Applying ZOMBIES with the Iron Law
 Start with **Zero** and proceed through the mnemonic in order. If a specific case demands it, you may skip to the next step, but only after the empty/base behavior is defined.
-1.  Identify the **Z** case.
-2.  Write the **RED** test for it.
-3.  Implement the **GREEN** solution (keep it **S**imple).
-4.  **Refactor** and iterate to **O**, then **M**, and so on.
+1. Identify the **Z** case.
+2. Write the **RED** test for it.
+3. Implement the **GREEN** solution (keep it **S**imple).
+4. **Refactor** and iterate to **O**, then **M**, and so on.

@@ -10,7 +10,7 @@ Unit tests drive hooks directly with hand-built input/output objects - they prov
 
 - Enable logging: OPENCODE_LOG_LEVEL=INFO; runtime logs are key=value at ~/.local/share/opencode/log/opencode.log.
 - Correlate log lines by timestamp and session id to the failing subagent.
-- A false warn is a smoking gun: in the envelope bug, `Envelope <id> not found - leaving placeholder.` lines carrying literal bogus ids proved the unwrap regex matched prompt prose, not a real tag.
+- A false warn is a smoking gun: in the envelope bug, `Envelope <id> not found - removing placeholder.` lines carrying literal bogus ids proved the unwrap regex matched prompt prose, not a real tag.
 
 ## Detection: substring is fragile, precise tokens win
 

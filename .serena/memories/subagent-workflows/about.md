@@ -9,7 +9,7 @@ Process learnings for dispatching and verifying sub-agents in orchestrator-drive
 - Prompt discipline - drafting subagent prompts that carry the needed context and constraints.
 - Verification and retries - launching validation, handling silent/early returns, retry policies.
 - Memory-first orchestration - collecting relevant Serena memories before decomposing a task or drafting prompts.
-- Retrospective lessons from completed RUG sessions - design-churn avoidance, up-front constraint clarification, live verification requirements for plugin hooks.
+- Retrospective lessons from completed RUG sessions - design-churn avoidance, up-front constraint clarification, live verification requirements for plugin hooks, parallel multi-agent edit coordination (central cross-file reference declarations, full-tree validation sweeps).
 
 ## Boundaries (out of scope)
 

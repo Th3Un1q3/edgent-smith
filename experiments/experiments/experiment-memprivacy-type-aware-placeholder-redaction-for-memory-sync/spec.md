@@ -38,7 +38,7 @@ Prototype + empirical validation (privacy-utility tradeoff benchmark).
 
 # Sources
 - Docs/ideas.md — MemPrivacy section (refs: 2605.09530)
-- MemPrivacy paper/repo: https://github.com/MemTensor/MemPrivacy (reference)
+- MemPrivacy paper/repo: <https://github.com/MemTensor/MemPrivacy> (reference)
 
 # Notes
 - Keep the implementation minimal: a detection heuristic (regex+simple NER via spaCy/transformers) is acceptable for prototype. Production improvements (ML-based NER) can be added later.

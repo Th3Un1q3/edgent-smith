@@ -14,7 +14,7 @@
 
 1. Follow [Setup](../workflows/setup.md) — discover servers, activate code-mode
 2. Follow [Scripting workflow](../workflows/scripting-workflow.md) — sync JS, error handling, mcp-exec patterns
-3. Activate code-mode: `code_mode({"name": "<descriptive-sandbox-name>", "servers": ["<server1>", "<server2>"]})`
+3. Activate code-mode: `gateway_code-mode({"name": "<descriptive-sandbox-name>", "servers": ["<server1>", "<server2>"]})`
 
 ## Scripts
 
