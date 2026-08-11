@@ -40,6 +40,8 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
                 "elif command == ('lint',):\n",
                 "    sys.stdout.write(os.environ['CI_TEST_LINT_OUTPUT'])\n",
                 "    raise SystemExit(1)\n",
+                "elif command == ('md-lint',):\n",
+                "    sys.stdout.write('md-lint ok\\n')\n",
                 "elif command == ('typecheck',):\n",
                 "    sys.stdout.write('typecheck ok\\n')\n",
                 "elif command == ('test',):\n",
@@ -101,6 +103,7 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
     assert command_log.read_text().splitlines() == [
         "just format-check",
         "just lint",
+        "just md-lint",
         "just typecheck",
         "just test",
         "uv run python scripts/validate_workflow_security.py",
@@ -114,6 +117,8 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
     output = result.stdout
     assert output.index("── format-check") < output.index("── lint")
     assert output.index("── lint") < output.index("── typecheck")
+    assert output.index("── lint") < output.index("── markdownlint")
+    assert output.index("── markdownlint") < output.index("── typecheck")
     assert output.index("── typecheck") < output.index("── test")
     assert output.index("── test") < output.index("── workflow-security")
     assert output.index("── workflow-security") < output.index("── opencode-deps")
@@ -124,6 +129,7 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
     assert "format ok" in output
     assert "lint line 01" in output
     assert ":END" in output
+    assert "md-lint ok" in output
     assert "typecheck ok" in output
     assert "test ok" in output
     assert "workflow security failed" in output

@@ -10,7 +10,7 @@ Copy-pasteable JS for the skill's numeric context-budget rules: the ≤2 KB snap
 - [B. Verification read-back (≤700-char excerpt)](#b-verification-read-back-700-char-excerpt)
 - [C. Aggregate ≤3 KB enforcement](#c-aggregate-3-kb-enforcement)
 - [D. Retry-cap counter (2× rule)](#d-retry-cap-counter-2-rule)
-- [E. Pacing & action budget (browser)](#e-pacing-action-budget-browser)
+- [E. Pacing & action budget (browser)](#e-pacing--action-budget-browser)
 
 ## A. Truncating any tool return to ≤2 KB
 

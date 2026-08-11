@@ -67,7 +67,6 @@ Bot-alert signals: CAPTCHA iframe, "verify you are human" copy, 403 alert page, 
 ### 11. Fail fast
 Retries are bounded and in-script only. Script error and no recorded fallback → **stop** and report, including the raw partial response for diagnosis. Never loop.
 
-
 ## Battle-test lessons
 
 - **`:has()` resolves to the OUTERMOST ancestor:** prefer `parentElement`/`closest()` ancestor stepping; zero-size inputs signal the real clickable is an ancestor.
@@ -519,4 +518,3 @@ try {
 ### Cut-notes
 - Single-call click-by-text is D2 with `TEXT` set (supersedes the standalone "Click by text" snippet).
 - Text-filtered structure discovery is B (interactive) or the Step-4 pattern (any node).
-

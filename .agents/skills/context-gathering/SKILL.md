@@ -188,7 +188,6 @@ flowchart TD
 - **Cache external context:** check `cache/{source}/...` before every research fetch; store the full raw response on miss; cite entries with `mem:` refs. Follow the budget, key-scheme, and status-report rules in [references/caching-rules.md](./references/caching-rules.md).
 - **Budget Tools Outputs:** truncate every tool return in-script — snapshots ≤2 KB; read-backs return only header, length, and ≤700-char excerpt. Copy the worked JS: [references/truncation-examples.md](./references/truncation-examples.md).
 
-
 ## Common Issues
 
 - **Accessing the Serena memory store directly**: NEVER read `.serena/memories/*` with `read`, `grep`, `glob`, `ls`, or shell tools — direct access is DENIED by permission and wastes a round. Project memories are accessible ONLY through the `serena` MCP server via `gateway_mcp-find` → `gateway_code-mode` → `gateway_mcp-exec` (recipes: store-memories, collect-relevant-memories).
