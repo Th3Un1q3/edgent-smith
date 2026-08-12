@@ -12,8 +12,11 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "3.1.0"
-  delta: "3.1.0 — guidance.md rewritten to rule-based guidance; context-gathering case study removed; prompt-qa findings addressed"
+  version: "3.4.0"
+  delta: |
+    3.4.0 — added scripts/validate_md_links.py: cross-skill Markdown link validator
+    3.3.0 — compacted prose: dropped mapping table, checklist now points to rules, collapsed vocabulary
+    3.2.0 — reader-benefit hardening: rules 14-16 added (reader-benefit, fence validity, examples match facts); check 6 amended to positional wiring; Completion Gate removed from the root template; 13→16 counts updated; author-process records confined to frontmatter metadata.
   author: Th3Un1qu3
 ---
 
@@ -41,15 +44,12 @@ Do not use this skill for:
 - **Keep the root lean:** hold metadata, triggers, a workflow skeleton, cross-cutting principles, and routing in SKILL.md; push instance detail to references. Layout rules: [workflows/authoring-workflow.md](./workflows/authoring-workflow.md).
 - **Route every file:** list every file — workflows, references, recipes, scripts, and templates — in the routing table; an unrouted file is dead weight.
 - **Define jargon once:** collect load-bearing terms in a Vocabulary line in the relevant reference; keep factual tool names. Pattern: [references/guidance.md](./references/guidance.md).
-- **Give every rule a worked example:** wire each numeric or behavioral rule to a copy-pasteable example marked "Implements:". Patterns: [references/templates.md](./references/templates.md).
+- **Give every rule an adjacent worked example:** place a copy-pasteable example next to each numeric or behavioral rule; optional labels never break code fences.
+- **Write for the reader:** every body sentence and example teaches the skill's subject; no meta-commentary, provenance markers, or author-process sections in the reader path — author-process history lives in frontmatter metadata. Rules: [references/guidance.md](./references/guidance.md) Rule 14.
 - **Verify every link and anchor:** after edits, resolve every cross-reference; grep the whole tree for stale naming. Protocol: [references/guidance.md](./references/guidance.md).
 - **State invariants generically:** put cross-cutting principles in the root; apply them per instance in recipes; never scope a general rule to one store type.
 - **Bump the version on every content change:** record what changed and why.
-- **Practice what you preach:** before declaring a skill complete, run the [Shaping Checklist](./workflows/shaping-checklist.md) — an unchecked box means the skill is NOT complete.
-
-## Completion Gate
-
-**Completion Gate:** before you declare a skill complete, run the [Shaping Checklist](./workflows/shaping-checklist.md). One unchecked box means the skill is NOT complete. The checklist applies to this skill too.
+- **Practice what you preach:** before declaring a skill complete, run the [Shaping Checklist](./workflows/shaping-checklist.md) — an unchecked box means the skill is NOT complete. The gate applies to this skill too: its reader is the skill's author, so the gate is reader-relevant here; for every other skill, author-process content stays out of the reader path (Rule 14).
 
 ## Task Routing Table
 
@@ -61,6 +61,7 @@ Every file appears here — the table is the completeness contract.
 | Validate a skill against the completion gate | [workflows/shaping-checklist.md](./workflows/shaping-checklist.md) |
 | Need the rules, Vocabulary line, or the guidance behind the checks | [references/guidance.md](./references/guidance.md) |
 | Need copy-pasteable file templates | [references/templates.md](./references/templates.md) |
+| Validate Markdown links across a skills tree | [scripts/validate_md_links.py](./scripts/validate_md_links.py) |
 
 ## Related Skills
 

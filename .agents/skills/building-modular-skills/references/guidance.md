@@ -1,30 +1,27 @@
-# Reference: Rules — the 13 Shaping Rules
+# Reference: Rules — the 16 Shaping Rules
 
-This reference carries the canonical rules behind the index-and-router skill structure. Each rule names a directive, states why it matters, and points to the file where it applies. [workflows/shaping-checklist.md](../workflows/shaping-checklist.md) turns these 13 rules into the completion gate — one check per rule.
+This reference carries the canonical rules behind the index-and-router skill structure. Each rule names a directive, states why it matters, and points to the file where it applies. [workflows/shaping-checklist.md](../workflows/shaping-checklist.md) turns these 16 rules into the completion gate — one check per rule.
 
 **When to load:** whenever you author, rework, or review a modular skill and need the reasoning behind the structure rules; before you run the [Shaping Checklist](../workflows/shaping-checklist.md) to declare a skill complete; whenever a review flags a rule violation.
 
 ## How to use this reference
 
-Read the rule behind a failing checklist check. Run the gate first; when a check fails, find its rule here, apply the fix, then re-run the check. The table at the bottom maps each rule to its checklist check and the file where it applies.
+Read the rule behind a failing checklist check. Run the [Shaping Checklist](../workflows/shaping-checklist.md) first — it runs the fix→re-run loop; this file holds the reasoning.
 
 ## Vocabulary
 
 These terms carry load-bearing meaning. Define each once in a Vocabulary line; reuse the term verbatim everywhere else. Decode non-load-bearing jargon inline.
 
-- **rule** — a directive the Shaping Checklist verifies; the 13 rules map one-to-one to the 13 checks.
+- **rule** — a directive the Shaping Checklist verifies; the 16 rules map one-to-one to the 16 checks.
 - **root** — the always-loaded SKILL.md; the skill's index and router.
-- **workflow** — a step-by-step file under `workflows/`, loaded only when the task matches.
-- **reference** — a factual detail file under `references/`, loaded only when the task matches.
+- **file type** — a file under `workflows/`, `references/`, `recipes/`, or `scripts/`; loads only when the task matches.
 - **routing table** — the completeness contract; every file gets one row.
 - **applicability** — the When to Use / Not Use sections that decide when a skill triggers.
 - **overmatching** — triggering when the skill should not, from a too-broad description.
 - **clarification triggers** — questions to ask before authoring when the request is ambiguous.
 - **guardrails** — numeric limits (line budgets, token caps) that prevent bloat.
 - **completion gate** — the mandatory [Shaping Checklist](../workflows/shaping-checklist.md); one unchecked box means the skill is NOT complete.
-- **"Implements:"** — a line wiring a rule to its worked example.
-- **recipe** — a step-by-step reusable procedure under `recipes/`.
-- **script** — an executable helper under `scripts/`.
+- **"Implements:"** — optional label wiring a rule to its worked example; allowed only in prose outside code fences, never inside one.
 
 ## Rule 1: Keep the root lean
 
@@ -70,9 +67,9 @@ A skill overfit to one task fails every other task. The general workflow keeps t
 
 ## Rule 6: Wire every rule to a worked example
 
-Every numeric or behavioral rule needs a copy-pasteable worked example. Wire the example to the rule with an "Implements: [reference] §N — ..." line. A rule without an example is incomplete.
+Every numeric or behavioral rule needs a copy-pasteable worked example placed adjacent to it — same section, immediately below or beside the rule. Positional wiring lets the reader see the connection without a label. "Implements:" labels are optional; when used, they sit in prose outside the fence, never inside it.
 
-Rules without examples leave the model to invent code; invented code drifts from intent. The "Implements:" line pins the example to its rule so the reader sees the connection.
+A rule without an example leaves the model to invent code; invented code drifts from intent. An example that fails to parse teaches broken output — see Rule 15.
 
 **Applied in:** [templates.md](../references/templates.md) example pattern; [guidance.md](./guidance.md) "Example application: shaping a skill" below.
 
@@ -132,25 +129,50 @@ A gate that fails its owner proves nothing. Passing your own gate makes the chec
 
 **Applied in:** [shaping-checklist.md](../workflows/shaping-checklist.md) check 13 — the checklist applies to this skill too.
 
-## How the rules map to the gate
+## Rule 14: Write for the reader, not the author
 
-Each checklist check in the Shaping Checklist maps one-to-one to a rule here. Fix the rule, then re-run the check.
+Every sentence, heading, and code fence must teach the skill's subject. Body content that serves only the authoring process is prohibited: meta-commentary labels ("Implements:", "Example fragment:", "Notes on the example", "Steps:"), provenance and verification markers ("(verify against …)", "verified against …", "## Source anchors" sections), self-referential prose about a file's own construction ("This file parses as JSON…", "Recipes point here…", "the table is the completeness contract"), and author-process directives (a "## Completion Gate" section telling the author to run a checklist). Navigation is allowed and required: When to load lines, routing tables, cross-file pointers, and subject-naming headings ("## Examples", "## Steps"). Author-process history — version, delta notes, provenance — lives in frontmatter metadata, never in body prose.
 
-| Rule | Checklist check | File where it applies |
-|---|---|---|
-| 1 Keep the root lean | 1 | SKILL.md root |
-| 2 Write principles in active voice | 2 | SKILL.md Principles |
-| 3 Define jargon once | 3 | reference Vocabulary lines |
-| 4 Comply with the writing style | 4 | every skill file |
-| 5 Generalize beyond the originating task | 5 | workflows, references |
-| 6 Wire every rule to a worked example | 6 | references with rules |
-| 7 State principles before instances | 7 | SKILL.md Principles |
-| 8 Keep routing complete | 8 | SKILL.md Task Routing Table |
-| 9 Orient the first-time reader | 9 | workflows, recipes |
-| 10 Write acceptance criteria | 10 | workflows, recipes |
-| 11 Guard parallel edits | 11 | whole skill tree |
-| 12 Version every change | 12 | SKILL.md frontmatter |
-| 13 Practice what you preach | 13 | the whole skill |
+The reader pays tokens for every line. Content that describes how the skill was built teaches nothing about the task; content that describes the task teaches the task.
+
+**Audit method:** grep the skill tree for prohibited patterns:
+Run: `grep -rEn 'Implements:|Example fragment:|Notes on the example|verify against|verified against|Source anchor|provenance|[Cc]ompletion [Gg]ate' . --include='*.md'` — expect zero matches in body prose. Exceptions: the frontmatter `metadata.delta` line, and — in this meta-skill only — its own root Completion Gate and the shaping-checklist's gate text, because this skill's reader is the skill's author.
+
+**Applied in:** every skill file body; [shaping-checklist.md](../workflows/shaping-checklist.md) check 14.
+
+## Rule 15: Make every code fence valid
+
+Every code fence must be valid for its declared language. A ```json fence must parse with `json.loads`; JSON has no comments, so no `//` or `#` lines inside JSON fences. A fence holding several documents fails to parse — wrap multi-document fragments in a JSON array or split them into one fence per document. A partial fragment is still a valid JSON value (object, array, or scalar) that parses on its own. Fences that declare no language carry plain text only.
+
+A skill whose examples do not parse teaches broken output; a skill whose job is emitting JSON proves itself with fences that parse.
+
+**Audit method:** parse every ```json fence in the tree (run from the skill's root directory):
+Run:
+```python
+python3 - <<'PY'
+import json, pathlib, re
+for f in pathlib.Path('.').rglob('*.md'):
+    for i, (lang, body) in enumerate(re.findall(r'```(\w*)\n(.*?)```', f.read_text(), re.S), 1):
+        if lang.lower() == 'json':
+            try:
+                json.loads(body)
+            except Exception as e:
+                print(f'{f}: fence {i}: {e}')
+PY
+```
+Expect zero lines printed.
+
+**Applied in:** every skill file's examples; [shaping-checklist.md](../workflows/shaping-checklist.md) check 15.
+
+## Rule 16: Make examples match the skill's own facts
+
+Every example must use the shapes, schema, labels, and option keys the skill's own references define. A node example follows the node format the schema reference defines; a label exists in the skill's catalog; an option key is one the references document. No legacy, invented, or placeholder format contradicts a reference the same skill ships. When a reference changes, every example in the tree changes with it.
+
+A self-contradicting skill teaches the wrong format; the reader copies the example, not the reference.
+
+**Audit method:** cross-check every label and key in each example against the skill's own references; run the skill's validation commands on its worked examples.
+
+**Applied in:** every skill file's examples; [shaping-checklist.md](../workflows/shaping-checklist.md) check 16.
 
 ## Example application: shaping a skill
 
@@ -161,6 +183,6 @@ This section is a labeled example at the end of the file, per Rule 5. It demonst
 - **Root sketch (Rule 1):** one routing row reads `| references/templates.md | template patterns | load on authoring |`. The row points; the rules live in the file.
 - **Vocabulary line (Rule 3):** `references/templates.md` opens with `- **snippet** — a reusable code block with a named rule citation.`
 - **Routing row (Rule 8):** the routing table lists every file, templates included; adding a file without a row is a defect.
-- **Worked example (Rule 6):** `recipes/example.md` opens with `Implements: [templates.md] §2 — every snippet names its rule.`
+- **Worked example (Rule 6):** `recipes/example.md` opens with the snippet example placed directly below the rule it implements — adjacency carries the connection, no "Implements:" label.
 
 The general guidance leads; this section stays labeled and last. It is the reference's own worked example for Rule 6.

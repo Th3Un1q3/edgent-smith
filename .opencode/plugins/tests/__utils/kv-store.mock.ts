@@ -69,6 +69,8 @@ export function makeKvStoreMockFactory(): {
     toolCalls: 'toolCalls',
     agent: 'agent',
     needsReview: 'needsReview',
+    todoFollowupErrorCount: 'todoFollowupErrorCount',
+    todoFollowupBrokenAt: 'todoFollowupBrokenAt',
   }
 
   return { SessionStorage: MockSessionStorage, FileSystemSessionStorageAdapter, _mockReadState: functionReadState, _mockUpdateState: functionUpdateState, SESSION_FIELDS }

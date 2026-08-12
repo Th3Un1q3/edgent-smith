@@ -1,6 +1,5 @@
 {
     "$schema": "https://opencode.ai/config.json",
-    "model": "local/qwen3.6-28b-reap20-a3b",
     "compaction": {
         "auto": true,
         "prune": false,
@@ -18,6 +17,22 @@
                 "baseURL": "http://host.docker.internal:1289/v1"
             },
             "models": {
+                "glm-4.7-flash-reap-23b-a3b": {
+                    "name": "l-glm-4.7-flash-reap-23b-a3b",
+                    "attachment": true,
+                    "modalities": {
+                        "input": [
+                            "text",
+                        ],
+                        "output": [
+                            "text"
+                        ]
+                    },
+                    "limit": {
+                        "context": 128000,
+                        "output": 32768
+                    }
+                },
                 "qwen3.6-28b-reap20-a3b": {
                     "name": "l-qwen3.6-28b",
                     "attachment": true,

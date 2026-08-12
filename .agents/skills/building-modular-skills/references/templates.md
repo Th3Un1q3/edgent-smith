@@ -16,6 +16,7 @@ license: MIT
 compatibility: Universal
 metadata:
   version: "1.0.0"
+  delta: "what changed and why; author-process history lives here, never in body prose"
   author: GitHub Copilot
 ---
 
@@ -39,13 +40,9 @@ Do not use this skill for:
 
 - **Active-verb kicker:** one-line rule with a pointer to the file that carries the detail.
 
-## Completion Gate
-
-**Completion Gate:** before you declare a skill complete, run the [Shaping Checklist](./workflows/shaping-checklist.md). One unchecked box means the skill is NOT complete.
-
 ## Task Routing Table
 
-Every file appears here — the table is the completeness contract.
+Every file appears here; pick the row that matches your task.
 
 | I want to... | File |
 |---|---|
@@ -61,7 +58,9 @@ Every file appears here — the table is the completeness contract.
 - `sibling-skill` — what it provides.
 ~~~~
 
-**Implements: [guidance.md](../references/guidance.md) §1, §8, §12.** Keep the root under ~90 lines; list every file in the routing table; bump the version on every content change.
+The root carries no author-process section — no Completion Gate, no provenance notes. Author-process records (version, delta) live in frontmatter `metadata.delta` (Rule 14).
+
+**Root leanness, routing completeness, versioning: Rules 1, 8, 12.**
 
 ## Workflow File Template
 
@@ -101,7 +100,9 @@ Ask the user before proceeding if:
 - [Measurable check 2]
 ~~~~
 
-**Implements: [guidance.md](../references/guidance.md) §8, §6.** The root links this file; every numeric or behavioral rule in the steps carries an "Implements:" example.
+**Fence validity:** See Rule 15. **No meta-commentary:** See Rule 14.
+
+The root links this file; place a copy-pasteable example adjacent to every numeric or behavioral rule in the steps.
 
 ## Reference File Template
 
@@ -127,8 +128,8 @@ When to load: [when to open this reference].
 ## Examples
 
 ```javascript
-// Implements: <rule it proves> — copy-pasteable worked example
+console.log(option_a);
 ```
 ~~~~
 
-**Implements: [guidance.md](../references/guidance.md) §3, §6.** Define jargon once in the Vocabulary line; mark each example with "Implements:".
+Define jargon once in the Vocabulary line; place a copy-pasteable example adjacent to each rule.

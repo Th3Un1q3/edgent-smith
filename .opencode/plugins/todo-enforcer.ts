@@ -3,8 +3,22 @@ import { log } from './helpers/logger'
 import { sendMessage } from './helpers/session-helpers'
 import { SessionStorage, SESSION_FIELDS } from './helpers/kv-store'
 import { getSessionAgent } from './helpers/agent-steps'
+import { harnessConfig } from './config/harness.config'
 
 const PLUGIN_ID = 'todo-enforcer'
+
+/** Consecutive technical errors tolerated before the todo follow-up loop is broken for a session. */
+const DEFAULT_MAX_FOLLOWUP_ERRORS = 3
+
+/**
+ * Reads the 'todo-enforcer' section from .opencode/plugins/config/harness.config.ts
+ * (modular eslint-style config). Falls back to the default when the section is
+ * absent, keeping the loop-breaking behavior identical.
+ */
+function loadTodoEnforcerConfig(): { maxFollowUpErrors: number } {
+  const section = harnessConfig.plugins['todo-enforcer']
+  return { maxFollowUpErrors: section?.maxConsecutiveErrors ?? DEFAULT_MAX_FOLLOWUP_ERRORS }
+}
 
 type Todo = {
   content: string
@@ -45,8 +59,29 @@ Proceed with the following steps:
 }
 
 export const todoEnforcer: Plugin = async ({ client }) => {
+  const { maxFollowUpErrors: TODO_FOLLOWUP_MAX_ERRORS } = loadTodoEnforcerConfig()
+
   const sessionStorage = new SessionStorage()
   await log(client, 'info', 'initialized', PLUGIN_ID)
+
+  // Inner closure (calls the mocked sessionStorage/log) — spread-preserving increment.
+  // Reads the count back from updateState's return value (real signature returns the updater's return value).
+  // Logs the break exactly once at the threshold crossing: increments are +1, so 2→3 crosses exactly once.
+  const incrementFollowUpErrorCount = (sessionId: string): void => {
+    const nextState = sessionStorage.updateState(sessionId, (s: Record<string, unknown>) => {
+      const nextCount = ((s[SESSION_FIELDS.todoFollowupErrorCount] as number) ?? 0) + 1
+      return {
+        ...s,
+        [SESSION_FIELDS.todoFollowupErrorCount]: nextCount,
+        // Trip marker — written in the same transition that crosses the threshold.
+        ...((nextCount === TODO_FOLLOWUP_MAX_ERRORS) && { [SESSION_FIELDS.todoFollowupBrokenAt]: new Date().toISOString() }),
+      }
+    })
+    const errorCount = (nextState as Record<string, unknown>)[SESSION_FIELDS.todoFollowupErrorCount] as number
+    if (errorCount === TODO_FOLLOWUP_MAX_ERRORS) {
+      void log(client, 'error', `Breaking todo follow-up loop for session ${sessionId}: ${errorCount} consecutive technical errors.`, PLUGIN_ID)
+    }
+  }
 
   const extractTodos = async (sessionId: string): Promise<Array<Todo>> => {
     const todosRaw = await client.session.todo({ path: { id: sessionId } })
@@ -97,14 +132,59 @@ export const todoEnforcer: Plugin = async ({ client }) => {
 
       throw new Error(`Error calling ${input.tool}. All tools are suspended until \`${TODO_TOOL_NAME}\` is called with updated todo list. Sample todo list: ${JSON.stringify(sampleTodo)}`)
     },
+    // Recovery: a message created AFTER the break proves the errors stopped.
+    // User messages fire this hook (documented contract + session-tracker's
+    // lastMessageSentAt chain that todo-enforcer already consumes). Whether
+    // steering/prompt-injected messages fire it is unknown and non-load-bearing:
+    // our own follow-ups are always created BEFORE the trip, so the creation-time
+    // comparison excludes them either way. Known accepted limitation: any post-break
+    // message (incl. another plugin's steering) resets; if errors persist the
+    // breaker re-trips after at most 3 more cycles.
+    'chat.message': async (input, output) => {
+      const sessionId = input?.sessionID
+      if (!sessionId) return
+      const created = output?.message?.time?.created
+      // Fall back to dispatch time if the message creation timestamp is absent
+      // (graceful degradation; the hook fires at message receipt).
+      const messageAt = typeof created === 'number' ? created : Date.now()
+      const state = sessionStorage.readState(sessionId, s => s)
+      if (!state) return
+      const brokenAt = state[SESSION_FIELDS.todoFollowupBrokenAt] as string | undefined
+      if (!brokenAt) return
+      const brokenAtMs = new Date(brokenAt).getTime()
+      if (Number.isNaN(brokenAtMs)) return
+      if (messageAt <= brokenAtMs) return
+      sessionStorage.updateState(sessionId, (s: Record<string, unknown>) => {
+        const { [SESSION_FIELDS.todoFollowupBrokenAt]: _removed, ...rest } = s
+        return { ...rest, [SESSION_FIELDS.todoFollowupErrorCount]: 0 }
+      })
+      await log(client, 'info', `Recovered todo follow-up loop for session ${sessionId} after message.`, PLUGIN_ID)
+    },
     'event': async ({ event }) => {
+      if (event.type === 'session.error') {
+        // Cancellation is owned by session-tracker (records cancelledAt) and must not count toward the break.
+        // A missing/unnamed error still counts — conservative: an unclassifiable error must not loop forever.
+        if (!event.properties?.sessionID) return
+        if (event.properties.error?.name === 'MessageAbortedError') return
+        incrementFollowUpErrorCount(event.properties.sessionID)
+        return
+      }
+
       const isSessionIdle = event.type === 'session.idle' && event.properties.sessionID
       if (!isSessionIdle) return
 
       const todos = await extractTodos(event.properties.sessionID)
       const remainingTodos = todos.filter(todo => ['pending', 'in_progress'].includes(todo.status))
       if (remainingTodos.length === 0) {
-        await log(client, 'info', 'No remaining todos — clearing cancellation state.', PLUGIN_ID)
+        const state = sessionStorage.readState(event.properties.sessionID, s => s) ?? {}
+        const errorCount = (state[SESSION_FIELDS.todoFollowupErrorCount] as number) ?? 0
+        if (errorCount > 0 || Object.hasOwn(state, SESSION_FIELDS.todoFollowupBrokenAt)) {
+          sessionStorage.updateState(event.properties.sessionID, (s: Record<string, unknown>) => {
+            const { [SESSION_FIELDS.todoFollowupBrokenAt]: _removed, ...rest } = s
+            return { ...rest, [SESSION_FIELDS.todoFollowupErrorCount]: 0 }
+          })
+        }
+        await log(client, 'info', 'No remaining todos — clearing follow-up error state.', PLUGIN_ID)
         return
       }
 
@@ -130,6 +210,23 @@ export const todoEnforcer: Plugin = async ({ client }) => {
             return
           }
 
+          // Break the loop when the session has repeatedly thrown technical errors.
+          // Silent skip — the break was logged exactly once at the threshold crossing.
+          // >= keeps a persisted count already above the threshold broken.
+          const state = sessionStorage.readState(event.properties.sessionID, s => s) ?? {}
+          const errorCount = (state[SESSION_FIELDS.todoFollowupErrorCount] as number) ?? 0
+          if (errorCount >= TODO_FOLLOWUP_MAX_ERRORS) {
+            // Mark that the breaker triggered and prevented this follow-up.
+            // Backfills legacy persisted counts that predate todoFollowupBrokenAt.
+            if (!Object.hasOwn(state, SESSION_FIELDS.todoFollowupBrokenAt)) {
+              sessionStorage.updateState(event.properties.sessionID, s => ({
+                ...s,
+                [SESSION_FIELDS.todoFollowupBrokenAt]: new Date().toISOString(),
+              }))
+            }
+            return
+          }
+
           await sendMessage({
             client,
             sessionId: event.properties.sessionID,
@@ -139,6 +236,7 @@ export const todoEnforcer: Plugin = async ({ client }) => {
           sessionStorage.updateState(event.properties.sessionID, s => ({ ...s, todoFollowupSentAt: (new Date()).toISOString() }))
         }
         catch (error) {
+          incrementFollowUpErrorCount(event.properties.sessionID)
           await log(client, 'error', `Todo follow-up failed: ${error}`, PLUGIN_ID)
         }
       }, 500)

@@ -4,7 +4,7 @@ import type { PluginInput } from '@opencode-ai/plugin'
 
 import type { ClientMock } from '@tests/helpers/mock-utilities'
 
-import { makeKvStoreMockFactory, resetMockState } from '@tests/__utils/kv-store.mock'
+import { makeKvStoreMockFactory, resetMockState, mockState } from '@tests/__utils/kv-store.mock'
 
 import { pluginContextBuilder } from '@tests/__utils/plugin-builder'
 
@@ -17,9 +17,17 @@ vi.mock('@plugins/helpers/session-helpers')
 
 import { log } from '@plugins/helpers/logger'
 
+import { SessionStorage, SESSION_FIELDS } from '@plugins/helpers/kv-store'
+
 import { sendMessage } from '@plugins/helpers/session-helpers'
 
 import { todoEnforcer } from '@plugins/todo-enforcer'
+
+import { harnessConfig } from '@plugins/config/harness.config'
+
+// Live-config read (mirrors skill-usage-tracker.test.ts) — keeps the threshold in
+// sync with what the plugin reads from harness.config.ts.
+const TODO_FOLLOWUP_MAX_ERRORS = harnessConfig.plugins['todo-enforcer'].maxConsecutiveErrors
 
 type Todo = { content: string, status: string, priority: string, id: string }
 
@@ -28,8 +36,12 @@ interface TodoEnforcerPlugin {
     input: { sessionID?: string, tool: string },
     output?: { args?: Record<string, unknown> },
   ) => Promise<void>
-  'event': (input: { event: { type: string, properties: Record<string, string> } }) => Promise<void>
+  'event': (input: { event: { type: string, properties?: Record<string, unknown> } }) => Promise<void>
   'dispose': () => Promise<void>
+  'chat.message'?: (
+    input: { sessionID?: string, agent?: string },
+    output?: { message?: { role?: string, time?: { created?: number } }, parts?: unknown[] },
+  ) => Promise<void>
 }
 
 const idleEvent = { event: { type: 'session.idle' as const, properties: { sessionID: 'test_session' } } }
@@ -37,6 +49,12 @@ const idleEvent = { event: { type: 'session.idle' as const, properties: { sessio
 const todoItem = { content: 'content of todo item', status: 'pending', priority: 'medium', id: '1' }
 
 const activeState = { cancelledAt: '2026-01-01T00:00:00Z', lastMessageSentAt: '2026-01-01T01:00:00Z' }
+
+// Breaker-recovery timing (epoch ms): BROKEN_AT = 2026-01-01T01:00:00.000Z = 1767229200000
+const BROKEN_AT = '2026-01-01T01:00:00.000Z'
+const POST = 1_767_229_260_000 // > brokenAt
+const PRE = 1_767_229_140_000 // < brokenAt
+const AT = 1_767_229_200_000 // == brokenAt (strict > comparison must NOT recover)
 
 describe('todoEnforcer', () => {
   let client: ReturnType<typeof opencodeClientFactory>
@@ -139,6 +157,9 @@ describe('todoEnforcer', () => {
     })
     afterEach(() => vi.useRealTimers())
 
+    const errorEvent = (errorName: string) => ({ event: { type: 'session.error' as const, properties: { sessionID: 'test_session', error: { name: errorName } } } })
+    const getState = (sessionID: string) => new SessionStorage().readState(sessionID, s => s)
+
     it('fetches todos and composes the steering follow-up message', async () => {
       await plugin.event(idleEvent)
       vi.advanceTimersByTime(1001)
@@ -175,7 +196,7 @@ describe('todoEnforcer', () => {
     it('returns early when no remaining todos', async () => {
       await makePlugin('rug', [])
       await plugin.event(idleEvent)
-      expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', 'No remaining todos — clearing cancellation state.', expect.any(String))
+      expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', 'No remaining todos — clearing follow-up error state.', expect.any(String))
       vi.advanceTimersByTime(1001)
       expect(sendMessage).not.toHaveBeenCalled()
     })
@@ -185,7 +206,7 @@ describe('todoEnforcer', () => {
       it('falls back to empty todos and skips the follow-up', async () => {
         await plugin.event(idleEvent)
         vi.advanceTimersByTime(1001)
-        expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', 'No remaining todos — clearing cancellation state.', expect.any(String))
+        expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', 'No remaining todos — clearing follow-up error state.', expect.any(String))
         expect(sendMessage).not.toHaveBeenCalled()
       })
     })
@@ -223,6 +244,244 @@ describe('todoEnforcer', () => {
       expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('completed - [✓]') }))
       expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('cancelled - [-]') }))
       expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/\[ \] first todo\n\[ \] second todo\n\[•\] third todo/) }))
+    })
+
+    describe('loop breaking', () => {
+      it('increments error count on non-cancellation session.error', async () => {
+        await plugin.event(errorEvent('TimeoutError'))
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(1)
+      })
+
+      it('does not increment on MessageAbortedError', async () => {
+        await plugin.event(errorEvent('MessageAbortedError'))
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBeUndefined()
+      })
+
+      it('does not increment when sessionID is missing', async () => {
+        await plugin.event({ event: { type: 'session.error' as const, properties: { error: { name: 'TimeoutError' } } } })
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBeUndefined()
+      })
+
+      it('still sends follow-up below threshold', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: 1 } })
+        await plugin.event(idleEvent)
+        vi.advanceTimersByTime(1001)
+        expect(sendMessage).toHaveBeenCalled()
+      })
+
+      it('skips follow-up at threshold', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: TODO_FOLLOWUP_MAX_ERRORS } })
+        await plugin.event(idleEvent)
+        vi.advanceTimersByTime(1001)
+        expect(sendMessage).not.toHaveBeenCalled()
+        expect(log).not.toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('skipping followup'), 'todo-enforcer')
+      })
+
+      it('logs breaking message exactly at threshold crossing', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: 2 } })
+        await plugin.event(errorEvent('TimeoutError'))
+        expect(log).toHaveBeenCalledWith(expect.any(Object), 'error', expect.stringContaining('Breaking todo follow-up loop'), 'todo-enforcer')
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(TODO_FOLLOWUP_MAX_ERRORS)
+      })
+
+      it('accumulates error count across repeated errors', async () => {
+        await plugin.event(errorEvent('TimeoutError'))
+        await plugin.event(errorEvent('TimeoutError'))
+        await plugin.event(errorEvent('TimeoutError'))
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(TODO_FOLLOWUP_MAX_ERRORS)
+      })
+
+      it('resets count to 0 on no remaining todos when count > 0', async () => {
+        await makePlugin('rug', [])
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: 2 } })
+        await plugin.event(idleEvent)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(0)
+        expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', 'No remaining todos — clearing follow-up error state.', 'todo-enforcer')
+      })
+
+      it('does not write state when no error count exists', async () => {
+        await makePlugin('rug', [])
+        await plugin.event(idleEvent)
+        expect(mockState.updateState).not.toHaveBeenCalled()
+        expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', 'No remaining todos — clearing follow-up error state.', 'todo-enforcer')
+      })
+
+      it('break persists across repeated idle events', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: TODO_FOLLOWUP_MAX_ERRORS } })
+        await plugin.event(idleEvent)
+        vi.advanceTimersByTime(1001)
+        await plugin.event(idleEvent)
+        vi.advanceTimersByTime(1001)
+        expect(sendMessage).not.toHaveBeenCalled()
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(TODO_FOLLOWUP_MAX_ERRORS)
+      })
+
+      it('does not increment or crash when session.error has no properties', async () => {
+        await plugin.event({ event: { type: 'session.error' as const } })
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBeUndefined()
+      })
+
+      it('counts errors with missing error object as technical', async () => {
+        await plugin.event({ event: { type: 'session.error' as const, properties: { sessionID: 'test_session', error: undefined } } })
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(1)
+      })
+
+      it('logs breaking message only once across threshold', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: TODO_FOLLOWUP_MAX_ERRORS - 1 } })
+        await plugin.event(errorEvent('TimeoutError'))
+        await plugin.event(errorEvent('TimeoutError'))
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(TODO_FOLLOWUP_MAX_ERRORS + 1)
+
+        const breakingLogCalls = vi.mocked(log).mock.calls.filter(call => call[1] === 'error' && String(call[2]).includes('Breaking todo follow-up loop'))
+
+        expect(breakingLogCalls).toHaveLength(1)
+      })
+    })
+
+    describe('breaker recovery', () => {
+      const chatMessage = (sessionID: string, created?: number, hasOutput = true) =>
+        plugin['chat.message']?.(
+          { sessionID },
+          hasOutput ? { message: { role: 'user', time: { created } }, parts: [] } : undefined,
+        )
+
+      it('trip sets brokenAt at threshold crossing', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: 2 } })
+        await plugin.event(errorEvent('TimeoutError'))
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(TODO_FOLLOWUP_MAX_ERRORS)
+
+        const brokenAt = getState('test_session')?.[SESSION_FIELDS.todoFollowupBrokenAt]
+
+        expect(brokenAt).toBeDefined()
+        expect(!Number.isNaN(new Date(brokenAt as string).getTime())).toBe(true)
+        expect(log).toHaveBeenCalledWith(expect.any(Object), 'error', expect.stringContaining('Breaking todo follow-up loop'), 'todo-enforcer')
+      })
+
+      it('does not set brokenAt below threshold', async () => {
+        await plugin.event(errorEvent('TimeoutError'))
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(1)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupBrokenAt]).toBeUndefined()
+      })
+
+      it('backfill sets brokenAt at silent skip when missing', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: TODO_FOLLOWUP_MAX_ERRORS } })
+        await plugin.event(idleEvent)
+        vi.advanceTimersByTime(1001)
+        expect(sendMessage).not.toHaveBeenCalled()
+
+        const brokenAt = getState('test_session')?.[SESSION_FIELDS.todoFollowupBrokenAt]
+
+        expect(brokenAt).toBeDefined()
+        expect(!Number.isNaN(new Date(brokenAt as string).getTime())).toBe(true)
+      })
+
+      it('backfill does not overwrite existing brokenAt', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: TODO_FOLLOWUP_MAX_ERRORS, todoFollowupBrokenAt: BROKEN_AT } })
+        await plugin.event(idleEvent)
+        vi.advanceTimersByTime(1001)
+        expect(sendMessage).not.toHaveBeenCalled()
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupBrokenAt]).toBe(BROKEN_AT)
+      })
+
+      it('recovers on post-break message and resumes follow-up', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: TODO_FOLLOWUP_MAX_ERRORS, todoFollowupBrokenAt: BROKEN_AT } })
+        await chatMessage('test_session', POST)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(0)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupBrokenAt]).toBeUndefined()
+        expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', 'Recovered todo follow-up loop for session test_session after message.', 'todo-enforcer')
+        await plugin.event(idleEvent)
+        vi.advanceTimersByTime(1001)
+        expect(sendMessage).toHaveBeenCalled()
+      })
+
+      it('does NOT recover on pre-break or boundary message', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: TODO_FOLLOWUP_MAX_ERRORS, todoFollowupBrokenAt: BROKEN_AT } })
+        await chatMessage('test_session', PRE)
+        await chatMessage('test_session', AT)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(TODO_FOLLOWUP_MAX_ERRORS)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupBrokenAt]).toBe(BROKEN_AT)
+        expect(log).not.toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('Recovered todo follow-up loop'), 'todo-enforcer')
+        expect(mockState.updateState).not.toHaveBeenCalled()
+      })
+
+      it('no-op when no brokenAt', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: 0 } })
+        await chatMessage('test_session', POST)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(0)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupBrokenAt]).toBeUndefined()
+        expect(log).not.toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('Recovered todo follow-up loop'), 'todo-enforcer')
+        expect(mockState.updateState).not.toHaveBeenCalled()
+      })
+
+      it('no-op when sessionID missing', async () => {
+        await plugin['chat.message']?.({ agent: 'rug' }, { message: { role: 'user', time: { created: POST } }, parts: [] })
+        expect(mockState.updateState).not.toHaveBeenCalled()
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupBrokenAt]).toBeUndefined()
+        expect(log).not.toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('Recovered todo follow-up loop'), 'todo-enforcer')
+      })
+
+      it('recovers via Date.now() fallback when time.created missing', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: TODO_FOLLOWUP_MAX_ERRORS, todoFollowupBrokenAt: BROKEN_AT } })
+        vi.setSystemTime(new Date('2026-01-02T00:00:00.000Z'))
+        await chatMessage('test_session', undefined)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(0)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupBrokenAt]).toBeUndefined()
+        expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', 'Recovered todo follow-up loop for session test_session after message.', 'todo-enforcer')
+      })
+
+      it('no-op on corrupt brokenAt', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: TODO_FOLLOWUP_MAX_ERRORS, todoFollowupBrokenAt: 'not-a-date' } })
+        await chatMessage('test_session', POST)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(TODO_FOLLOWUP_MAX_ERRORS)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupBrokenAt]).toBe('not-a-date')
+        expect(log).not.toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('Recovered todo follow-up loop'), 'todo-enforcer')
+      })
+
+      it('no-todos reset clears brokenAt', async () => {
+        await makePlugin('rug', [])
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: 2, todoFollowupBrokenAt: BROKEN_AT } })
+        await plugin.event(idleEvent)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(0)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupBrokenAt]).toBeUndefined()
+        expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', 'No remaining todos — clearing follow-up error state.', 'todo-enforcer')
+      })
+
+      it('re-trips after recovery', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: 0 } })
+        await plugin.event(errorEvent('TimeoutError'))
+        await plugin.event(errorEvent('TimeoutError'))
+        await plugin.event(errorEvent('TimeoutError'))
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(TODO_FOLLOWUP_MAX_ERRORS)
+
+        const brokenAt = getState('test_session')?.[SESSION_FIELDS.todoFollowupBrokenAt]
+
+        expect(brokenAt).toBeDefined()
+        expect(!Number.isNaN(new Date(brokenAt as string).getTime())).toBe(true)
+
+        const breakingLogCalls = vi.mocked(log).mock.calls.filter(call => call[1] === 'error' && String(call[2]).includes('Breaking todo follow-up loop'))
+
+        expect(breakingLogCalls).toHaveLength(1)
+      })
+
+      it('regression: silent skip while broken with no recovery message', async () => {
+        resetMockState({ test_session: { ...activeState, todoFollowupErrorCount: TODO_FOLLOWUP_MAX_ERRORS, todoFollowupBrokenAt: BROKEN_AT } })
+        await plugin.event(idleEvent)
+        vi.advanceTimersByTime(1001)
+        expect(sendMessage).not.toHaveBeenCalled()
+        expect(log).not.toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('skipping followup'), 'todo-enforcer')
+      })
+    })
+
+    describe('when sendMessage rejects', () => {
+      beforeEach(() => {
+        vi.mocked(sendMessage).mockRejectedValueOnce(new Error('api down'))
+      })
+      it('sendMessage rejection increments count and logs failure', async () => {
+        await plugin.event(idleEvent)
+        await vi.advanceTimersByTimeAsync(1001)
+        expect(getState('test_session')?.[SESSION_FIELDS.todoFollowupErrorCount]).toBe(1)
+        expect(log).toHaveBeenCalledWith(expect.any(Object), 'error', expect.stringContaining('Todo follow-up failed'), 'todo-enforcer')
+      })
     })
   })
 

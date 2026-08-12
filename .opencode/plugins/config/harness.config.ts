@@ -78,7 +78,8 @@ export const harnessConfig = {
       gates: qualityGates,
       debounceMs: 300,
     },
-    // Future plugin sections:
-    // 'todo-enforcer': { ... },
+    'todo-enforcer': {
+      maxConsecutiveErrors: 3,
+    },
   },
 } as const
