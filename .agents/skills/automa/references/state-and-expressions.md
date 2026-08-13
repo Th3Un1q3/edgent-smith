@@ -98,6 +98,8 @@ Extraction blocks (Get Text, Attribute Value) with "Insert to table" enabled app
 
 Extraction inserts add rows; read the newest with `$last`.
 
+The bare key `{{table}}` (no selector after it) renders the WHOLE table as a JSON array — each row is an object keyed by column name. Use it to serialize the table into a webhook body, e.g. `"items":{{table}}`. There is no `tableData` function or namespace: an unresolved key like `{{tableData(JSON)}}` stays literal in the rendered string and breaks the webhook's `JSON.parse`. Functions are `$`-prefixed only (`templatingFunctions.js`).
+
 Table vs variable: table columns are typed and inserts append; variables are untyped and assignment overwrites.
 
 ## Global data
@@ -170,6 +172,8 @@ Prefix a field value with `!!` to evaluate the rest as JavaScript in a sandbox; 
 ```
 
 `!!` for mixed text+JS; raw JS inside tags; do not use on non-Chromium browsers.
+
+Caveat (1.30.02, runtime-verified): `!!` sandbox expressions are NOT evaluated for the new-tab `url` field — the prefix is consumed and the raw expression body is treated as the URL, failing with "is an invalid URL". Use plain `{{variables.*}}` interpolation in `url`.
 
 ## Condition builder value types
 

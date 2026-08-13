@@ -63,6 +63,20 @@ Do not use this skill for:
 | Apply design best practices — node selection, connecting, state, error handling | [references/design-patterns.md](./references/design-patterns.md) |
 | Run the eval test cases | [evals/evals.json](./evals/evals.json) |
 
+## Scripts
+
+| I want to... | Command |
+|---|---|
+| Validate a workflow's structure (nodes, edges, handles, loop pairs) | [scripts/validate_workflow.py](./scripts/validate_workflow.py) `<workflow.json>` |
+| Syntax-check javascript-code blocks in a workflow | [scripts/check_workflow_code.py](./scripts/check_workflow_code.py) `<workflow.json>` |
+| Hash a workflow / check integrity | [scripts/hash_workflow.py](./scripts/hash_workflow.py) `<workflow.json>` |
+| Normalize conditions to the modern serialization | [scripts/conditions_normalize.py](./scripts/conditions_normalize.py) `<workflow.json>` |
+| Summarize a workflow (envelope + counts) | [scripts/analyze_workflow.py](./scripts/analyze_workflow.py) `<workflow.json>` |
+| Regenerate / validate the eval suite | [scripts/gen_evals.py](./scripts/gen_evals.py), [scripts/validate_evals.py](./scripts/validate_evals.py) |
+| Check skill docs (json fences, links, residual patterns) | [scripts/check_docs.py](./scripts/check_docs.py) |
+
+All scripts are stdlib-only (json, re, sys, argparse, hashlib, pathlib, subprocess, collections) and take workflow/document paths via argparse — nothing is hardcoded. One reusable validation technique worth remembering: verify javascript-code blocks by substituting `{{variables}}` interpolation with literals, wrapping in automa's non-async IIFE, and running `node --check`.
+
 ## Related Skills
 
 - `context-gathering` — web research and devtools browser automation; the adjacent tool for plain browser automation without Automa.

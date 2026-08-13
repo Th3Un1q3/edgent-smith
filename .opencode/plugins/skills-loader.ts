@@ -163,12 +163,6 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory, $ }) => {
         + '<user_request>\n'
         + prompt
         + '\n</user_request>'
-
-      // --- Cleanup skills field (only for arrays) ---
-      // TODO: remove this one as it forces the model to forget that it used to assign skills for previous tasks and it becomes lazy. Model must be aware it assigned skills before to have bravety to assign skills again.
-      if (Array.isArray(skills)) {
-        delete output.args.skills
-      }
     },
 
     'chat.message': async (input, output) => {

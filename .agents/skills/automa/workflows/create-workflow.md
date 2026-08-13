@@ -119,7 +119,7 @@ Run every check below; any failure blocks delivery. Fix the failing piece, then 
       "type": "Text"
     }
   ],
-  "version": "1.29.12",
+  "version": "1.30.02",
   "drawflow": {
     "nodes": [
       {
@@ -206,10 +206,12 @@ Run every check below; any failure blocks delivery. Fix the failing piece, then 
         "type": "BlockBasic",
         "position": { "x": 96, "y": 570 },
         "data": {
-          "data": [
+          "dataList": [
             {
-              "dataColumn": "title",
-              "value": "{{variables.productTitle}}"
+              "name": "title",
+              "value": "{{variables.productTitle}}",
+              "type": "table",
+              "isFile": false
             }
           ],
           "tableName": ""
@@ -250,10 +252,12 @@ Run every check below; any failure blocks delivery. Fix the failing piece, then 
   },
   "globalData": "{}",
   "description": "Open a product page, extract the h1 title into a variable, and append it as a table row.",
-  "extVersion": "1.29.12",
+  "extVersion": "1.30.02",
   "includedWorkflows": {}
 }
 ```
+
+Automa ≥1.30 requires `data.dataList` (array of `{name, value, type, isFile}`; `type:'table'` writes to column `name`). The legacy `data: [...]` array crashes at runtime with `t.dataList is not iterable`.
 
 ## Clarification Triggers
 
@@ -263,6 +267,16 @@ Ask the user before proceeding if:
 - The workflow reads a page whose structure is unknown — a `get-text` or `event-click` selector needs a real selector from the target page.
 - The user asks for blocks the references do not cover — labels outside the 61-block catalog may be business/custom blocks ([block-reference.md](../references/block-reference.md#caveats)).
 - The user wants to edit an existing `.automa.json` — preserve its key set and edit in place instead of rewriting it in export form.
+
+## Runtime-verification pre-flight (BEFORE handing a workflow to the user for a live test)
+
+Run this checklist before a workflow leaves your hands for a live test. The facts below cost re-test rounds when assumed instead of checked — confirm each against the real target before handoff.
+
+- **Block schemas** — for any block `data` you did not copy verbatim from a known-working export, check the AutomaApp/automa source on GitHub (`src/workflowEngine/blocksHandler/`, `src/workflowEngine/utils/`, `src/utils/shared.js`). Known 1.30.02 facts: `insert-data` reads `data.dataList` (array of `{name, value, type, isFile}`); the legacy `data: [...]` array crashes at runtime with `t.dataList is not iterable`. Block-level `onError` is an OBJECT — `{"enable": true, "toDo": "continue"}` — a bare string is silently ignored and falls through to the workflow-level stop.
+- **JS blocks (`javascript-code`)** — `data.code` executes RAW: `{{...}}` is NOT interpolated, and the editor's variable autocomplete writes raw JS, not templates. In-scope globals: `automaRefData(keyword, path)`, `automaSetVariable(name, value)`, `automaNextBlock(data, insert)`, `automaResetTimeout()`, `automaFetch(type, resource)`. Read variables with `automaRefData('variables', '<name>')` — the engine forwards real variables only when `data.code` literally contains the string `automaRefData`. Never click links/anchors from JS that navigate — SPA navigation destroys the injected context and can hang the block; in-pane expand toggles must exclude `a` elements (guard with `el.closest('a')`).
+- **Templating** — functions are `$`-prefixed only. The bare key `{{table}}` renders the WHOLE workflow table as a JSON array — use it in webhook bodies: `"items":{{table}}`. There is NO `tableData` function — unresolved keys stay literal, so `JSON.parse` fails. `!!` sandbox expressions are NOT evaluated on the new-tab `url` field; plain `{{variables.*}}` interpolation works there.
+- **Selectors** — check against the LIVE page before relying on them. Classes may be hashed (A/B render); prefer stable attributes (`data-testid`, `aria-label`, `componentkey`, `role`, text markers). On list pages, scope the card selector to the results container — e.g. `//div[contains(@class, '<results-container>')]//div[...card...]` — so recommended/similar sections do not match. English-literal text selectors (`'Next'`, `'About the job'`, `'Save'`) are locale-fragile.
+- **Automated gates** — run `python3 scripts/validate_workflow.py <workflow>` and `python3 scripts/check_workflow_code.py <workflow>` before handoff; both must exit 0. They encode the known traps: insert-data schema, `{{` in JS code, `tableData(`, `!!` on url.
 
 ## Acceptance Criteria
 

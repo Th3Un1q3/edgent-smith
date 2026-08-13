@@ -99,6 +99,14 @@ The `background` context bypasses the page CSP; keep `active-tab` context only f
 { "label": "javascript-code", "data": { "context": "background", "timeout": 20000, "code": "return { ok: true };" } }
 ```
 
+#### Runtime failure checklist
+
+When the root cause is a schema, expression, or selector assumption rather than a missing block or wrong mode, check the pre-flight list in [create-workflow.md](./create-workflow.md) before re-testing. The three most common runtime failures from those assumptions:
+
+- `t.dataList is not iterable` — `insert-data` got the legacy `data: [...]` array; it reads `data.dataList`.
+- Stored variables hold literal `{{...}}` — `javascript-code` runs `data.code` raw, so interpolation never runs; write `automaRefData('variables', '<name>')` instead of `{{variables.<name>}}` inside JS.
+- `'{url}' is invalid URL` — the url field carries a `!!` expression, which the new-tab field does not evaluate; use plain `{{variables.*}}` interpolation there.
+
 ### Step 3 — Check the JSON structure (when editing JSON)
 
 Run the validation checklist in [create-workflow.md §4. Validate the output](../workflows/create-workflow.md#4-validate-the-output) before touching any block: the JSON parses; every `label` sits in the catalog; every edge resolves; every `{{}}` namespace is valid; the settings enums hold; exactly one trigger exists; loops pair with breakpoints. The checklist names each failing piece and its fix — apply it here instead of re-reading the schema.

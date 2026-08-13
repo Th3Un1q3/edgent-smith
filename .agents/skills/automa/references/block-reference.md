@@ -211,6 +211,8 @@ Key fields: `timeout` (20000), `context` ('website'), `code`, `preloadScripts` (
 }
 ```
 
+Runtime scope (verified against `AutomaApp/automa` source): `data.code` executes raw — `{{...}}` mustache tags are NOT interpolated inside javascript-code blocks (the editor's variable autocomplete writes raw JS, not templates). In-scope globals: `automaRefData(keyword, path)`, `automaSetVariable(name, value)`, `automaNextBlock(data, insert)`, `automaResetTimeout()`, `automaFetch(type, resource)`. Read variables with `automaRefData('variables', '<name>')`. The workflow-engine handler forwards real variables only when `data.code` literally contains the string `automaRefData`.
+
 ### delay — general
 
 Pauses execution. Key fields: `time` (500, milliseconds). `refDataKeys: ['time']`. Example: `{"label": "delay", "type": "BlockDelay", "data": {"time": 2000}}`.

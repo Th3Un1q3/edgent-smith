@@ -85,7 +85,7 @@ describe('skillsLoaderPlugin', () => {
   afterEach(() => {
     __resetStoreForTests()
   })
-  it('stores skills in an envelope, injects only the envelope tag, removes skills field, and sorts by mtime ascending', async () => {
+  it('stores skills in an envelope, injects only the envelope tag, keeps the skills field in args, and sorts by mtime ascending', async () => {
     registerSkillFiles({
       'skill-a': makeSkillFile({ content: '---\nname: skill-a\n---\n\n# Skill A\nBody of skill A.', mtimeMs: 100 }),
       'skill-b': makeSkillFile({ content: '---\nname: skill-b\n---\n\n# Skill B\nBody of skill B.', mtimeMs: 200 }),
@@ -94,7 +94,7 @@ describe('skillsLoaderPlugin', () => {
     const output = { args: { prompt: 'original prompt', skills: ['skill-a', 'skill-b'] } }
 
     await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
-    expect(output.args.skills).toBeUndefined()
+    expect(output.args.skills).toEqual(['skill-a', 'skill-b'])
 
     const prompt = output.args.prompt as string
 
@@ -159,12 +159,12 @@ describe('skillsLoaderPlugin', () => {
       await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
       expect(output.args.prompt).toBe('<user_request>\no\n</user_request>')
     })
-    it('does not call Bun.file and removes skills field when empty', async () => {
+    it('does not call Bun.file and keeps the skills field in args when empty', async () => {
       const output = { args: { prompt: 'o', skills: [] as string[] } }
 
       await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
       expect(mockBunFile).not.toHaveBeenCalled()
-      expect(output.args.skills).toBeUndefined()
+      expect(output.args.skills).toEqual([])
     })
     it('logs debug when skills array is empty, not when absent', async () => {
       await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, { args: { prompt: 'o', skills: [] } })
@@ -204,7 +204,7 @@ describe('skillsLoaderPlugin', () => {
     expect(output2.args.skills).toBe(notAnArray)
     expect(mockBunFile).not.toHaveBeenCalled()
   })
-  it('deletes skills when directory is undefined, skips non-task tools', async () => {
+  it('keeps skills when directory is undefined, skips non-task tools', async () => {
     const plugin = await skillsLoaderPlugin({ client } as unknown as PluginInput)
 
     registerSkillFiles({ 'skill-a': makeSkillFile({ content: '# Skill A', mtimeMs: 100 }) })
@@ -212,7 +212,7 @@ describe('skillsLoaderPlugin', () => {
     const output = { args: { prompt: 'o', skills: ['skill-a'] } }
 
     await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
-    expect(output.args.skills).toBeUndefined()
+    expect(output.args.skills).toEqual(['skill-a'])
     expect(output.args.prompt).toBe('<user_request>\no\n</user_request>')
     expect(mockBunFile).not.toHaveBeenCalled()
     expect(log).not.toHaveBeenCalledWith(expect.any(Object), 'debug', expect.any(String))
@@ -232,7 +232,7 @@ describe('skillsLoaderPlugin', () => {
     const output = { args: { prompt: 'prompt', skills: ['skill-a', 'skill-b', 'skill-c'] } }
 
     await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
-    expect(output.args.skills).toBeUndefined()
+    expect(output.args.skills).toEqual(['skill-a', 'skill-b', 'skill-c'])
     expect(output.args.prompt).not.toContain('Skill A')
     expect(output.args.prompt).not.toContain('<skill name=')
     expect(output.args.prompt).toContain(`description="${ENVELOPE_DESCRIPTION}"`)
@@ -256,7 +256,7 @@ describe('skillsLoaderPlugin', () => {
     expect(output2.args.prompt).not.toContain('skill name="no-such-skill"')
     expect(output2.args.prompt).toContain(`description="${ENVELOPE_DESCRIPTION}"`)
     expect(output2.args.prompt).toContain('<user_request>\nprompt\n</user_request>')
-    expect(output2.args.skills).toBeUndefined()
+    expect(output2.args.skills).toEqual(['no-such-skill'])
     expect(log).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('Load the skill "no-such-skill" by the name.'))
 
     const payload2 = await resolvePayloadFromPrompt(output2.args.prompt as string)
@@ -271,7 +271,7 @@ describe('skillsLoaderPlugin', () => {
     const output = { args: { prompt: 'original prompt', skills: ['only-skill'] } }
 
     await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
-    expect(output.args.skills).toBeUndefined()
+    expect(output.args.skills).toEqual(['only-skill'])
     expect(output.args.prompt).toContain('<envelope ')
     expect(output.args.prompt).not.toContain('<task_skills>')
     expect(output.args.prompt).not.toContain('<skill_envelope')
@@ -289,7 +289,7 @@ describe('skillsLoaderPlugin', () => {
     const output2: { args: Record<string, unknown> } = { args: { skills: ['skill-a'] } }
 
     await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output2)
-    expect(output2.args.skills).toBeUndefined()
+    expect(output2.args.skills).toEqual(['skill-a'])
     expect(output2.args.prompt).toContain('<envelope ')
     expect(output2.args.prompt).not.toContain('<task_skills>')
     expect(output2.args.prompt).not.toContain('Skill A')
@@ -326,7 +326,7 @@ describe('skillsLoaderPlugin', () => {
     expect((secondPrompt.match(/<envelope /g) ?? []).length).toBe(1)
     expect(envelopeKeyFromPrompt(secondPrompt)).toBe(firstKey)
     expect(mockBunFile).not.toHaveBeenCalled()
-    expect(output2.args.skills).toBeUndefined()
+    expect(output2.args.skills).toEqual(['skill-a'])
     // The single envelope entry is still the first one (not replaced/duplicated)
     expect(__peekEnvelopeForTests(firstKey)).toBeDefined()
   })
