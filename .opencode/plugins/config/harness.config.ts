@@ -67,7 +67,7 @@ export const harnessConfig = {
         // Read relevant references + read relevant file, update relevant file, run test, fix test, update implementation, run test.
         'test-design': 8,
         // read 3 recepis, find mcp + create sandbox + read something + write an update ideally 4 steps. + 1 step for correction.
-        'context-gathering': 8,
+        'context-gathering': 12,
       },
     },
     'tool-limit-reminder': {

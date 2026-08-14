@@ -12,7 +12,7 @@ description: >-
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   author: Th3Un1qu3
 ---
 
@@ -45,6 +45,8 @@ Do not use this skill for:
 | Provide scoped context for a directory and its subdirectories (key files, structure, commands, in/out of scope) | Directory knowledge base | `<directory>/AGENTS.md` | [workflows/directory-agents-md.md](./workflows/directory-agents-md.md) |
 | Enhance orchestration process and principles to prevent repeated agent mistakes | Agent definition | `.opencode/agents/<name>.md` | [workflows/agent-definition.md](./workflows/agent-definition.md) |
 
+Starting from a diagnosis instead of a goal (e.g. a session audit finding)? Map the finding to a change type with [references/improvement-patterns.md](./references/improvement-patterns.md).
+
 ## Workflow
 
 1. Decide which change type(s) fit your case and objectives using the Change Type Reference table.
@@ -59,3 +61,4 @@ Do not use this skill for:
 - `find-skills` — discover existing skills before creating new ones.
 - `skill-creator` — create, modify, and benchmark skills.
 - `context-gathering` — store transient knowledge as memories.
+- `session-insights` — analyze session exports; its audit findings map to change types via [references/improvement-patterns.md](./references/improvement-patterns.md).

@@ -27,6 +27,10 @@ export-opencode-session session_id:
     mkdir -p /workspace/.tmp/session-review/{{ session_id }} && \
     opencode export {{ session_id }} > "/workspace/.tmp/session-review/{{ session_id }}/session.json"
 
+# Run the session-insights session-parts CLI (format/extract session parts)
+session-parts *args:
+    cd /workspace && uv run .agents/skills/session-insights/scripts/session_parts.py {{ args }}
+
 # ---------------------------------------------------------------------------
 # Session Review (session-analysis command support)
 # ---------------------------------------------------------------------------
@@ -57,6 +61,10 @@ review-start session_id="":
         echo "SESSION_DIR=$SESSION_DIR"
         exit 1
     fi
+    # Render compact session transcript for the command and subagents.
+    # On CLI failure, write an error note instead of crashing the recipe.
+    TRANSCRIPT="$SESSION_DIR/transcript.txt"
+    uv run .agents/skills/session-insights/scripts/session_parts.py --session-file-json "$SESSION_DIR/session.json" conversation --format short-human-readable > "$TRANSCRIPT" 2>/dev/null || echo "Error: transcript render failed" > "$TRANSCRIPT"
     # Check if review already started
     REVIEW_MD="$SESSION_DIR/review.md"
     TEMPLATE=".agents/skills/session-insights/templates/review-document.md"
@@ -111,6 +119,7 @@ review-start session_id="":
         echo "SESSION_JSON=$SESSION_DIR/session.json"
         echo "REVIEW_MD=$REVIEW_MD"
     fi
+    echo "SESSION_TRANSCRIPT=$TRANSCRIPT"
 
 # ---------------------------------------------------------------------------
 # AFK mode (permission auto-reject support)

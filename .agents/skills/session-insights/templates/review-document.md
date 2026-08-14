@@ -99,7 +99,7 @@ _This section lists threshold violations reported when the session went idle. If
 
 ## 8. Improvement Recommendations
 
-<!-- SOURCE: Map Sections 2-7 findings to the 4 patterns in references/agentic-system.md. -->
+<!-- SOURCE: Map Sections 2-7 findings to the 4 patterns in ../../harness-management/references/improvement-patterns.md. -->
 
 ### P1: Skill Was Loaded But Objective Not Achieved
 - **Evidence:** <!-- FILL: Which skill(s) loaded? What was missing? -->
@@ -125,6 +125,7 @@ _This section lists threshold violations reported when the session went idle. If
 ## 9. Follow-up Actions
 
 <!-- SOURCE: Convert each Section 8 recommendation into a concrete, verifiable step. -->
+<!-- ADDRESSING: Implementing any of these steps means deciding where a harness change belongs — load the harness-management skill and follow its Change Type Reference + workflows (see ../../harness-management/references/improvement-patterns.md). -->
 - [ ] <!-- FILL: Action 1 — specific and verifiable -->
 - [ ] <!-- FILL: Action 2 -->
 - [ ] <!-- FILL: Action 3 -->

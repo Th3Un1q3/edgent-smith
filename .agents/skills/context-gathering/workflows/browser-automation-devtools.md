@@ -21,6 +21,7 @@ Full loop: activate → verify auth → navigate → extract → cache → memor
 - Complete the [Setup workflow](./setup.md) to activate a code-mode sandbox with the `devtools` and `serena` servers.
 - Follow the [Scripting workflow](./scripting-workflow.md) for synchronous-JS rules, quoting, and error handling.
 - The devtools MCP server must be attached to the operator's host Chrome with an authenticated session (logged-in cookies). We never attempt to log in ourselves.
+- **The devtools server runs on the HOST, not in this container.** `.devcontainer/init.sh` (devcontainer `initializeCommand`) launches `chrome-devtools-mcp` on the host OS, bridged by mcp-proxy to port 9223; the agent reaches it only through the gateway. The server's filesystem IS the host's — container paths (`/tmp/...`, `/workspace/...`) do not exist there. Every file-writing tool (`take_snapshot`, `evaluate_script`, `take_screenshot`) refuses a `filePath` with `Error: Access denied: path <p> (canonical: <host path>) is not within any of the configured workspace roots` (verified live 2026-08-13), and even an allowed host-side write would be unreadable from this container. **All devtools data returns INLINE or not at all.**
 
 ## Steps
 
@@ -44,10 +45,16 @@ Open the target with `new_page({url: '<target-url>'})` — exactly once per sess
 **Never** pass `isolatedContext` — an isolated context has no session cookies and lands on the login wall immediately. Create extra tabs with `new_page`; never reuse or navigate the operator's existing tabs.
 
 ### 4. Structure discovery — targeted query, not snapshots
-No extraction memory yet: discover with a TARGETED `evaluate_script` returning only the nodes containing the text we need (e.g., `{tag, text, href, class}` filtered on `textContent`) — cheap, precise, no context flood. Only if that fails may you take ONE `take_snapshot`, always with `{filePath: '<...>'}` so the full a11y tree goes to disk, then read back a ~2 KB slice. A plain inline `take_snapshot` returns the full tree (tens of KB) into context BEFORE any truncation could apply — `filePath` is the only way to keep it out. This is the ONLY permitted use — one per unfamiliar flow. For interactive structure (clickable/typeable), prefer the battle-tested snippets in Examples (A–D).
+No extraction memory yet: discover with a TARGETED `evaluate_script` returning only the nodes containing the text we need (e.g., `{tag, text, href, class}` filtered on `textContent`) — cheap, precise, no context flood. Only if that fails may you take ONE `take_snapshot` — **inline only, NO `filePath`** — and truncate it to a ~2 KB slice IN-SCRIPT before returning (snapshot-truncate-first; [truncation-examples.md §A](../references/truncation-examples.md)). An inline `take_snapshot` returns the full a11y tree (tens of KB) into context BEFORE any in-script truncation could apply if you skip it — truncate first, always. This is the ONLY permitted use — one per unfamiliar flow. For interactive structure (clickable/typeable), prefer the battle-tested snippets in Examples (A–D).
+
+**Snapshot `filePath` — DO/DON'T (verified live 2026-08-13):**
+- DO take snapshots INLINE (no `filePath`) and truncate to ~2 KB in-script before returning.
+- DO call `take_snapshot` BEFORE the first `evaluate_script` on a page when a snapshot is needed — an `evaluate_script` on a page with no snapshot can fail with `No snapshot found for page N` (devtools-known-issues #13); a snapshot taken first avoids that failure class.
+- DON'T pass any `filePath` — container-style (`/tmp/...`, `/workspace/...`), host-style, and relative paths are ALL denied by the host-side server (`Error: Access denied: ... is not within any of the configured workspace roots`), and a host-side file is unreadable from this container.
+- DON'T assume the server's filesystem is the agent's filesystem — the server runs on the HOST (launched by `.devcontainer/init.sh`; see Prerequisites); the agent sees only inline returns through the gateway.
 
 ### 5. Extract with minimal output
-One `evaluate_script` per logical unit; return only the fields the site's extraction memory records. Never `take_snapshot` during extraction. Every result is hard-capped per Shared rules: trim/aggregate in-script (`map` to objects, `join` arrays), never raw DOM. Oversized results still reach the model on the first call — stay lean from the start; for very large outputs use `evaluate_script({filePath: '<...>'})` and read back a slice. Parse every return through `unwrap` (Shared rules).
+One `evaluate_script` per logical unit; return only the fields the site's extraction memory records. Never `take_snapshot` during extraction. Every result is hard-capped per Shared rules: trim/aggregate in-script (`map` to objects, `join` arrays), never raw DOM. Oversized results still reach the model on the first call — stay lean from the start; there is no `filePath` escape hatch (denied — see Step 4 / Prerequisites), so trim/aggregate in-script and re-run with tighter caps rather than dumping raw DOM. Parse every return through `unwrap` (Shared rules).
 
 ### 6. SPA interactions
 Click-wait-read flows inside ONE async `evaluate_script`: click a list item, bounded-poll the href for change, read, continue. Pace per Shared rules (site memory may tune). Watch for bot-alert signals after every action; on detection: STOP, checkpoint-write partials, report. Use the effect-verified click companion (B2) — `WARNING` semantics per Shared rules. On SPAs where filters mirror URL params (e.g., LinkedIn `f_WT`/`f_TPR`), a synthetic click on a React-controlled hidden input may be silently ignored: if a click shows no effect, ONE bounded `navigate_page` with the param set is acceptable; record the site's address-bar tolerance in memory.
@@ -77,7 +84,7 @@ Retries are bounded and in-script only. Script error and no recorded fallback �
 
 - Sandbox activated with `devtools` + `serena` only, under a descriptive name.
 - Auth verified via `list_pages` before any navigation; login wall → STOP and escalate.
-- Structure discovery on an unfamiliar site used a targeted `evaluate_script` first; any `take_snapshot` used `{filePath}` (never inline) — one per flow, never for extraction.
+- Structure discovery on an unfamiliar site used a targeted `evaluate_script` first; any `take_snapshot` was INLINE with NO `filePath` and truncated in-script to ~2 KB — one per flow, never for extraction.
 - Extraction returns only needed fields, hard-capped at 3 KB per result, parsed via `unwrap`.
 - Intra-page navigation used clicks; cross-URL navigation was paced (≥1 s) and the site's address-bar tolerance recorded.
 - ≥1 s inter-action gaps observed and ≤40 actions per task (pacing/action-budget helpers: [truncation-examples.md §E](../references/truncation-examples.md)).

@@ -31,6 +31,7 @@ The output contains KEY=VALUE lines:
 - `SESSION_ID` — the target session identifier
 - `SESSION_JSON` — path to session.json
 - `REVIEW_MD` — path to review.md
+- `SESSION_TRANSCRIPT` — path to the pre-rendered compact transcript
 
 ### Handle Each Status
 
@@ -48,6 +49,7 @@ Read `$REVIEW_MD` Section 0 (Reported Threshold Violations). If it contains prob
 
 For EACH problem statement in Section 0:
 - Identify the step in session.json where the count crossed the threshold (use jq against `$SESSION_JSON`; never read the whole file).
+- Get the precise tool block for that call: `just agent_utils/session-parts --session-file-json "$SESSION_JSON" parts --tool-id <callID>` (input/output/error truncated to 200 chars) — the "what was the agent doing at that point" evidence.
 - Determine what the agent was doing at that point.
 - For skill problems (`## skill: <name>`): verify the skill was actually loaded and used; check whether its instructions were followed.
 - For agent problems (`## agent: <name>`): identify which tool calls exhausted the budget and why the agent kept working past the reminder.
@@ -90,6 +92,15 @@ Read schema.md to learn how to extract fields from session.json.
 Read the review.md to learn current progress of session review.
 Then answer the following question based on the session.json file at {path_to_session_json}.
 
+First pass: read the compact transcript at $SESSION_TRANSCRIPT (rendered by review-start). It covers text parts and tool call references — message ids, tool callID, output_length, errors — with excerpts truncated to 200 chars.
+
+Detailed evidence on a specific tool call (Section 0 problem investigation, or any question needing full tool state):
+just agent_utils/session-parts --session-file-json "$SESSION_JSON" parts --tool-id <callID> --message-id <msg_id>
+
+`--part-id` also exists — it pulls a specific part (e.g. reasoning) by its `prt_...` id.
+
+jq stays the reference for what the CLI cannot answer: agent identity (Q8), token/cost distribution (Q9), and timings. Never read the whole session.json — use jq or the CLI for targeted extraction.
+
 Question: {one question from the list}
 
 References:
@@ -104,7 +115,7 @@ Read the review.md to ensure all questions have been answered and Section 0 prob
 
 ## Step 5: Identify Improvement Patterns
 
-Read the report and match it to the patterns in `references/agentic-system.md`. For each pattern that applies, propose a concrete change to the agentic system. Populate Section 8 of review.md with the findings.
+Read the report and match it to the patterns in the harness-management [improvement-patterns](../../.agents/skills/harness-management/references/improvement-patterns.md) reference. For each pattern that applies, propose a concrete change to the agentic system. Populate Section 8 of review.md with the findings.
 
 ## Step 6: Prioritize Improvements
 

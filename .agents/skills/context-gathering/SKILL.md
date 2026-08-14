@@ -10,7 +10,7 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.17.0"
+  version: "1.17.1"
   author: Th3Un1qu3
   tools:
     - gateway_mcp-find
@@ -42,6 +42,13 @@ Leverage these context sources for grounding on any task:
 
 - Read the relevant recipes for the task (see the flowchart below).
 - `gateway_mcp-find` (discover servers by keywords) → `gateway_code-mode` (initialize a sandbox with the name and servers) → `gateway_mcp-exec` (run a synchronous JS script that chains the tools).
+
+### `gateway_code-mode` Pre-flight Checklist (MANDATORY)
+
+Pre-flight before EVERY `gateway_code-mode` call:
+1. Input MUST contain BOTH `name` (task-related sandbox name, e.g., `<task>`) and `servers` (the list of discovered server names, e.g., `["devtools"]`) — in the SAME call. An empty `{}` or missing `servers` is a malformed activation.
+2. The `servers` list must carry the exact server name(s) returned by `gateway_mcp-find`.
+3. NEVER dispatch an activation whose payload has not passed this checklist.
 
 - [Sandbox activation details](./workflows/setup.md)
 - [Script rules and error handling](./workflows/scripting-workflow.md).
@@ -196,7 +203,8 @@ flowchart TD
 - **Using async / `evaluate_script`**: all top level tool calls must be synchronous; the devtools `evaluate_script`(nested level) tool awaits async functions — see [references/devtools-known-issues.md](./references/devtools-known-issues.md).
 - **gateway_mcp-exec call shape**: `gateway_mcp-exec` REQUIRES `{"name": "<returned-sandbox-tool>", "arguments": {"script": "<js>"}}` — `name` and `arguments` are sibling top-level keys, and the JS lives under `arguments.script`. Flattening (`{"name", "script"}`) or putting `script` at top level fails with "name parameter is required" or a JSON parse error. Pre-flight before every exec: (1) top-level keys are exactly `name` + `arguments`; (2) `arguments.script` is a string; (3) the payload parses as valid JSON.
 - **gateway_mcp-exec messed escape**: the JS script is a JSON string whose own string literals are quoted again — a double quote meant for a query must appear as `\"` in the payload, and a stray `"` breaks JSON ("Expected '}'"). Avoid it by (a) building query strings with NO inner double quotes (single-word/single-phrase queries, no `"..."` operators), (b) single-quoting JS strings, and (c) using `JSON.stringify` instead of hand-escaping. On a "JSON Parse error" from exec, re-emit a corrected payload — never retry the same malformed string.
-- **Forgetting the sandbox name in `gateway_code-mode`**: every activation call REQUIRES the `name` parameter — the sandbox name (descriptive, task-related, e.g., `code-mode-<task>`). Omitting it, or passing arbitrary text, creates a nameless or misnamed sandbox and breaks the `gateway_mcp-exec` routing that depends on the returned prefixed tool name. Set the `name` in the SAME call as `servers`; never invent or reuse a name later.
+- **Forgetting the sandbox name in `gateway_code-mode`**: every activation call REQUIRES the `name` parameter — the sandbox name (descriptive, task-related, e.g., `code-mode-<task>`). Omitting it, or passing arbitrary text, creates a nameless or misnamed sandbox and breaks the `gateway_mcp-exec` routing that depends on the returned prefixed tool name. Set the `name` in the SAME call as `servers`; never invent or reuse a name later. Run the [pre-flight checklist](#gateway_code-mode-pre-flight-checklist-mandatory) before dispatch.
+- **Aborted or errored `gateway_code-mode` activation**: if the activation is aborted ("Tool execution aborted") or fails, re-emit a corrected payload with `name` + `servers` set — never go idle silently. Report only when fully blocked (e.g., the gateway is unreachable). No further step can proceed without a valid sandbox, so recover before moving on.
 - **Using `read` and `grep` for other research**: fine to read exact files; for broader context gathering the gateway_* tools are more token-efficient. For disk access through the gateway (allowed-dir only), see [recipes/filesystem-access.md](./recipes/filesystem-access.md).
 - **Jumping to execution without reading any recipes**: the recipes contain the full workflow and error-handling rules; read them before running any scripts. The flowchart above shows the entry points, but each recipe contains the step-by-step instructions, including tool call shapes, error handling, and caching rules.
 
