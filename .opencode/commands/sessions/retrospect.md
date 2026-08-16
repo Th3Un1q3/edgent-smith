@@ -35,10 +35,11 @@ Anchor: state the session's objective, what you actually shipped or decided, and
 
 ## Step 3: Turn answers into action items
 
-Prioritize by recurrence × cost per occurrence: a one-off is a note in `$FILE`; a repeated or expensive failure is a harness change. Cap the action-item list at 1–3, each with four fields:
+Prioritize by recurrence × cost per occurrence: a one-off is a note in `$FILE`; a repeated or expensive failure is a harness change. Cap the action-item list at 1–3, each with five fields:
 
+- **Domain match** — for each action item, name the skill/domain where the failure occurred and place the change in THAT domain's skill (per harness-management domain-matching); verify the home's domain matches the failure before implementing. Generic homes (scoped instructions, root `AGENTS.md`, agent definitions) are fallbacks, not defaults.
 - **Change** — the exact modification, specific enough that a fresh-context agent could act on it alone.
-- **Where** — the target artifact: `.opencode/instructions/`, `.agents/skills/`, `AGENTS.md`, or `.opencode/agents/`.
+- **Where** — the target artifact: the domain's skill (`.agents/skills/`), else `.opencode/instructions/`, `AGENTS.md`, or `.opencode/agents/`.
 - **Trigger** — the condition that should have invoked this behavior.
 - **Next step** — the single smallest first action.
 

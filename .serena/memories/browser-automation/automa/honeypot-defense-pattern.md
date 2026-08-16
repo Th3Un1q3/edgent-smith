@@ -1,0 +1,9 @@
+# Honeypot Defense Pattern — Automa SPA Job Scrapers
+
+SPA job boards may inject honeypot cards that look real but navigate to a placeholder page (verified 2026-08-15 on de.indeed.com: fake card caused full-page navigation, wrong-page extraction, and a polluted results row). Defense = three layers, verified in the workflow fix:
+
+1. **Navigation guard** — register once per page (flag on `window`) a capture-phase click listener that `preventDefault()`s same-host anchor navigation when the target pathname is NOT the search page path (carve-out for pagination links which stay on `/jobs`). preventDefault does not stop propagation, so the SPA React onClick still fires for real cards (panel loads in place) while the honeypot navigation is blocked. Never use stopPropagation/stopImmediatePropagation.
+2. **Card validity filter** — before clicking, scan all unmarked cards and require BOTH a 16-hex `data-jk` (`/^[a-f0-9]{16}$/i`) AND a tracking href (`//pagead/clk|/rc/clk/` — the observed real-card href pattern on de.indeed.com); mark invalid cards `data-job-list-item="complete"` so they are never retried; select the first valid card. jk-format alone is insufficient: the observed fake jk matches the hex-16 regex, so the href pattern is the primary discriminator.
+3. **Wrong-page sanity check** — bail early (cardFound=false in the finder; empty description in the extractor) when `location.pathname` is not the search page — never search for cards or extract from a stray page.
+
+Generalize: any SPA job board can be defended the same way. Verified case study: mem:browser-automation/indeed/honeypot-detection.

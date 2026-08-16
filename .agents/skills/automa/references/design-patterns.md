@@ -64,13 +64,30 @@ Violating the precondition produces the documented error: `Can't connect to a ta
 
 Valid order `Trigger → Active Tab → Get Text`; invalid order `Trigger → Get Text`.
 
-### Give every loop a Loop Breakpoint with the same loop id
+### Rebind the active tab after close-tab
 
-Loop Data, Loop Elements, and Repeat Task require a Loop Breakpoint block whose loop id matches the loop block. The breakpoint defines the loop scope — without it the looping "will not work" and runs once.
+`close-tab` leaves the engine holding a stale reference to the closed tab. The next web-interaction block — `attribute-value`, `javascript-code`, `get-text`, … — fails with `Can't connect to a tab, use 'New tab' or 'Active tab' block before using the '{name}' block`. A per-block `onError: continue` masks the failure until a later block without `onError` trips the workflow-level `stop-workflow` and kills the run.
+
+Insert an `active-tab` block immediately after every `close-tab` to rebind the engine to the currently active tab.
+
+In Automa ≥ 1.28 the `active-tab` block's data carries no `url` or `tabType` fields — the legacy pre-1.28 shape. It rebinds; it does not navigate.
+
+`active-tab` binds only to the currently focused tab — it has no URL/title/id targeting. When the tab you need is not the focused one (the common case right after `close-tab`), switch deterministically with `switch-tab` by Match Pattern: `findTabBy: "match-patterns"`, `matchPattern` (MDN match-pattern syntax; scheme required; query string ignored), `activeTab: true`, `createIfNoMatch: false` (data keys verified against AutomaApp/automa engine source).
+
+```json
+[
+  { "id": "closeTabNode", "label": "close-tab", "data": { "disableBlock": false } },
+  { "id": "rebindTabNode", "label": "active-tab", "data": { "disableBlock": false } }
+]
+```
+
+### Give every loop-data/loop-elements loop a Loop Breakpoint with the same loop id (repeat-task takes none)
+
+Loop Data and Loop Elements require a Loop Breakpoint block whose loop id matches the loop block, placed at the END of the loop body. Repeat Task does NOT use a Loop Breakpoint: it iterates via continuation edges back into the repeat-task node's input-1 and exits via output-1, so a breakpoint wired to a repeat-task loopId crashes the workflow on the first iteration with `Can't find a loop with "<loopId>" loop id` — repeat-task never populates the engine's loop list; only loop-data/loop-elements do. Verified against AutomaApp/automa engine source (handlerRepeatTask.js, handlerLoopBreakpoint.js).
 
 Three looping mechanisms: Loop Data (variables, table rows, Google Sheets, a custom JSON array), Loop Elements (page elements), and Repeat Task (a count plus a start point).
 
-Pair every loop block with its breakpoint:
+Pair loop-data/loop-elements with a breakpoint; never pair repeat-task with one:
 
 ```json
 {
@@ -100,7 +117,7 @@ Pair every loop block with its breakpoint:
 }
 ```
 
-Wire `Loop Data (loopId: users) → Loop Breakpoint (loopId: users) → Get Text → Next Loop Item`. A breakpoint with a different loop id leaves the loop unbounded and the body unrun.
+Wire `Loop Data (loopId: users) → Loop Breakpoint (loopId: users) → Get Text → Next Loop Item` — the breakpoint sits at the END of the loop body and returns control to the loop for the next item. A breakpoint whose `loopId` matches no loop block — including a repeat-task loopId — throws `Can't find a loop with "<loopId>" loop id` on the first iteration.
 
 ### Serialize HTTP requests as webhook with http/https URLs
 
@@ -181,6 +198,8 @@ Per-block on-error offers Enable, Retry action, Throw error, Continue flow, Exec
 
 An HTTP request that can fail transiently gets `Retry action` with an interval; a block whose failure is non-fatal gets `Continue flow`.
 
+Block-level `onError` in workflow JSON is an OBJECT, never a string: `{"enable": true, "toDo": "retry", "retryTimes": 2, "retryInterval": 1000}` or `{"enable": true, "toDo": "continue"}`. A bare string is silently ignored and falls through to the workflow-level `settings.onError` policy. Per-block onError is available on new-tab, javascript-code, close-tab, active-tab, switch-tab, event-click, link, and attribute-value; the excluded blocks are listed in [block-reference.md §Branch, fallback, and parallel connections](./block-reference.md#branch-fallback-and-parallel-connections). Verified against AutomaApp/automa engine source (src/utils/shared.js).
+
 ## Managing state
 
 Decide where each value lives by how long it must survive and who shares it. The full expression language is in [state-and-expressions.md](./state-and-expressions.md).
@@ -229,6 +248,56 @@ An HTTP Request with basic auth reads `{{secrets@apiKey}}` instead of a literal 
 The "Reuse the last workflow state" workflow setting carries the table, variables, and global data from one execution into the next. Turn it on only when a run genuinely needs the previous run's state.
 
 A daily aggregation workflow reads the table row the previous run appended, instead of restarting from empty.
+
+## Extracting data reliably
+
+### Prefer embedded structured data (JSON-LD) over DOM traversal
+
+Job boards and many content pages embed `<script type="application/ld+json">` — a `@type: "JobPosting"` object with a full HTML `description` field. Parse it before walking the rendered DOM: JSON-LD stays stable while section headings move. Use the extraction order: JSON-LD → stable `data-testid` fallback → text-anchored section walk → meta description last resort.
+
+Client-rendered pages show a hydration flash — the DOM is empty before scripts mount. Poll briefly for the JSON-LD script or the fallback element; bound the poll (~5 × 700 ms) inside the 20000 ms `javascript-code` timeout.
+
+```json
+{ "label": "javascript-code", "data": { "context": "website", "timeout": 20000, "code": "const findLd = () => document.querySelector('script[type=\"application/ld+json\"]'); for (let i = 0; i < 5 && !findLd(); i++) await new Promise(r => setTimeout(r, 700)); const el = findLd(); if (!el) return { description: '' }; return { description: JSON.parse(el.textContent).description };" } }
+```
+
+### Normalize card/list hrefs before matching and shipping
+
+List-item anchors in SPAs may sit RELATIVE in the raw DOM — `getAttribute('href')` returns `/jobs/foo-123` — while the `href` property reads absolute, and both often carry tracking queries (`?ijt=jb_55`). Regexes anchored on `-(\d+)$` miss them.
+
+Normalize before matching: strip the query and hash (`href.split('#')[0].split('?')[0]`), then resolve relative hrefs against the page (`new URL(href, location.href)`). Ship CLEAN apply/link URLs to consumers — no tracking parameters. Gate with `element-exists` XPath that uses `contains(@href, '/jobs/')`-style matching, never `starts-with(@href, 'https://…')` — starts-with breaks on relative hrefs.
+
+```json
+{ "label": "javascript-code", "data": { "context": "website", "code": "const clean = (href) => new URL(href.split('#')[0].split('?')[0], location.href).href; return { url: clean(document.querySelector('a[data-testid=\"job-link\"]').href) };" } }
+```
+
+### Prefer SPA in-page detail panels over tab-per-job
+
+For SPA job listings, extract from the in-page detail panel instead of opening a tab per job: tab-per-job races on `close-tab`/`active-tab` (stale engine reference after close) and multiplies navigation. One tab, one SPA route change, extract, then back. Verified against the live de.indeed.com DOM.
+
+### Guard against honeypot listings on SPA job boards
+
+Fake job cards exist to trap scrapers. Three defenses (verified against the live de.indeed.com DOM):
+
+- **Capture-phase click navigation guard** — `preventDefault` same-host links whose pathname is NOT the search page, then navigate via the SPA's own state; carve out pagination links. NEVER `stopPropagation` — it kills the SPA's React handler and the click goes nowhere.
+- **Card validity filter** — accept a card only when it carries a tracking href AND a valid job id; the href is the primary discriminator — a fake 16-hex id passes a naive regex, a tracking href does not.
+- **Wrong-page sanity checks** — verify the search page (expected pathname/URL pattern) in BOTH the finder and the extractor before acting; a redirected or error page aborts, never extracts.
+
+### Verify selectors against the live page, not rendered markdown
+
+Third-party JS-rendering extractors (tavily et al.) return normalized markdown that lies about the DOM: headings may be styled `div`s, "Show more" buttons may be absent, and class names may be build-hashed (styled-components `*-sc-*`). Before finalizing selectors, verify them against the real page in a live browser (devtools MCP), keying off stable attributes — `data-testid`, `aria-label`, href patterns, visible text — never hashed classes. When a live browser is unavailable, say so; do not ship guessed selectors as fact.
+
+```json
+{ "label": "get-text", "data": { "findBy": "cssSelector", "selector": "div[data-testid='job-title']", "waitForSelector": true, "waitSelectorTimeout": 5000, "assignVariable": true, "variableName": "jobTitle" } }
+```
+
+### Prefer verified URL filter parameters over UI clicks
+
+When a results page supports URL-encoded filters (e.g. `sincePeriod=LAST_WEEK`), navigate directly to the filtered URL instead of clicking filter controls — the controls may be locale-fragile and regenerate tokens per session. Keep the UI click as a CONDITIONAL fallback: check the URL param or the control's selected state first; click only when the filter is not already applied.
+
+```json
+{ "id": "filteredList", "label": "new-tab", "data": { "url": "https://example.com/jobs?sincePeriod=LAST_WEEK", "active": true, "waitTabLoaded": false, "inGroup": false } }
+```
 
 ## Robustness
 
@@ -298,6 +367,12 @@ When a click lands on the wrong pixel, run testing mode, pause at the Click bloc
 | Dangling branches | part of the graph never runs after a condition | merge branches into one Blocks Group or next condition |
 | Hardcoded URLs | domain change means editing every New Tab block | put the domain in global data; interpolate `{{globalData.baseUrl}}` |
 | Conditions without a fallback connection | unmatched input dead-ends silently | wire the fallback output to a handler |
-| Loop without a Loop Breakpoint | loop body runs once, no error | add a Loop Breakpoint with the matching loop id |
+| Loop without a Loop Breakpoint | `loop-data`/`loop-elements` body runs once, no error | add a Loop Breakpoint with the matching loop id at the end of the body |
+| `repeat-task` paired with a Loop Breakpoint | workflow crashes on the first iteration: `Can't find a loop with "<loopId>" loop id` | remove the breakpoint — repeat-task iterates via continuation edges back into input-1 |
 | Web-interaction block before an active tab | "Can't connect to a tab..." error | insert New Tab or Active Tab first |
 | Secrets in block options | credentials sit in plaintext workflow JSON | move them to Credentials; read `{{secrets@name}}` |
+| `close-tab` without a following `active-tab` | next web-interaction errors "Can't connect to a tab..." after the tab closed | insert an `active-tab` block right after `close-tab` to rebind |
+| DOM traversal for structured data | section-walk breaks when headings move | parse embedded JSON-LD first |
+| Regex on raw list hrefs | relative hrefs and tracking queries defeat `-(\d+)$` | strip query/hash, resolve relative → absolute before matching |
+| Selectors taken from rendered markdown | hashed classes and phantom "Show more" buttons break extraction | confirm them against the live page; key off stable attributes |
+| Clicking filter controls | locale-fragile labels and regenerated tokens | navigate to the URL-encoded filter; click only as a conditional fallback |

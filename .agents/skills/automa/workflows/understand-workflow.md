@@ -91,11 +91,11 @@ Resolve handles exactly; classify default, condition, and fallback outputs — s
 Start at the trigger node and walk the edges from step 3. Name four constructs:
 
 - **Parallel branches** — a block feeding ≥2 next blocks; the engine spawns one worker per next block ([Execution semantics](../references/workflow-json-schema.md#execution-semantics), [Each extra output connection spawns a parallel worker](../references/design-patterns.md#each-extra-output-connection-spawns-a-parallel-worker)). Note a `wait-connections` block when it joins them.
-- **Loops** — a `loop-data` or `loop-elements` node whose `loopId` matches a `loop-breakpoint` node's `loopId`. A loop without its breakpoint runs once, no error (see [Give every loop a Loop Breakpoint](../references/design-patterns.md#give-every-loop-a-loop-breakpoint-with-the-same-loop-id)). Name the loop body: everything between the loop node and its breakpoint.
+- **Loops** — a `loop-data` or `loop-elements` node whose `loopId` matches a `loop-breakpoint` node's `loopId` at the end of the body; such a loop without its breakpoint runs once, no error (see [Give every loop-data/loop-elements loop a Loop Breakpoint](../references/design-patterns.md#give-every-loop-dataloop-elements-loop-a-loop-breakpoint-with-the-same-loop-id-repeat-task-takes-none)). A `repeat-task` loop takes NO breakpoint — it iterates via continuation edges back into the repeat-task node's input-1 and exits via output-1; a breakpoint wired to a repeat-task loopId crashes the workflow with `Can't find a loop with "<loopId>" loop id` (verified: handlerRepeatTask.js, handlerLoopBreakpoint.js). Name the loop body: everything between the loop node and its breakpoint.
 - **Conditions** — each condition id names a branch; check the edges on every condition output and on the fallback output ([Conditions route to a matching condition output or the fallback](../references/design-patterns.md#conditions-route-to-a-matching-condition-output-or-the-fallback)).
 - **Nested workflows** — each `execute-workflow` node targets another workflow; list the ids and, in export files, the matching entries of `includedWorkflows` (see [Stored form vs export form](../references/workflow-json-schema.md#stored-form-vs-export-form)).
 
-Name every loop with its breakpoint; name every branch with its condition id — see [workflow-json-schema.md §Execution semantics; design-patterns.md §Give every loop a Loop Breakpoint, §Conditions route to a matching condition output].
+Name every `loop-data`/`loop-elements` loop with its breakpoint and every `repeat-task` loop as breakpoint-free; name every branch with its condition id — see [workflow-json-schema.md §Execution semantics; design-patterns.md §Give every loop-data/loop-elements loop a Loop Breakpoint, §Conditions route to a matching condition output].
 
 ```json
 [
@@ -128,7 +128,7 @@ Write the plain-language summary in five parts:
 
 1. Goal — one sentence on what the workflow accomplishes.
 2. Run path — trigger type, then the block sequence from step 3.
-3. Branches and loops — every branch with its condition; every loop named with its breakpoint; every parallel fan-out.
+3. Branches and loops — every branch with its condition; every loop-data/loop-elements loop named with its breakpoint; repeat-task loops are breakpoint-free; every parallel fan-out.
 4. State — inputs and outputs from step 5; settings worth knowing: `execContext` runtime limits, `onError` policy, `debugMode`, `saveLog`.
 5. Design smells — check the graph against the anti-pattern table ([Common design anti-patterns](../references/design-patterns.md#common-design-anti-patterns)): dangling branches, hardcoded URLs, conditions without fallback, loops without breakpoints, web-interaction before an active tab, secrets in block options. Also note robustness gaps, such as extraction without [waiting for dynamic elements](../references/design-patterns.md#wait-for-dynamic-elements-before-interacting).
 
@@ -395,7 +395,7 @@ Ask the user before proceeding if:
 - The identity card names the workflow, the trigger type, and every non-default setting; it lists the `globalData` keys and the table columns.
 - Every node appears in the enumeration with a resolved label, key data highlights, and a disabled flag wherever `disableBlock` is true.
 - Every edge resolves to a real source and target node; each branch is classified as default (`-output-1`), condition id, or `fallback`.
-- Every loop names its `loopId` and its breakpoint pairing; loops without a breakpoint are flagged.
+- Every loop-data/loop-elements loop names its `loopId` and its breakpoint pairing; repeat-task loops pair with no breakpoint (a breakpoint on a repeat-task loopId crashes the workflow).
 - Every `{{...}}` namespace in the file appears in the state summary, each with the block that reads it and the block that writes it.
 - The final explanation covers goal, run path, branches/loops, state, settings, and smells.
 - Every smell present in the file appears with a symptom and a fix; the output invents no smell.

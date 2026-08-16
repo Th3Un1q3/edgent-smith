@@ -139,6 +139,8 @@
             "rtk git status *": "allow",
             "git show *": "allow",
             "rtk git show *": "allow",
+            "git ls *": "allow",
+            "rtk git ls *": "allow",
             "git log *": "allow",
             "rtk git log *": "allow",
             "curl *": "deny",

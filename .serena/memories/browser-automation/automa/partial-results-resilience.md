@@ -1,0 +1,5 @@
+# Automa scrapers: partial-results resilience pattern
+
+Design long-running Automa scrapers so a single failing iteration cannot lose collected data. Set workflow settings.onError: "keep-running" so no unhandled block error hard-stops the run before the webhook. Add per-block onError continue (see `mem:browser-automation/automa/block-onerror-object-format`) to every failure-prone block in the iteration path. Wrap all javascript-code extraction in try/catch with a single-call finish guard: let finished=false; const finish=()=>{if(!finished){finished=true;automaNextBlock();}}.
+
+Reset per-iteration variables (e.g., description, duplicate flag) at the START of each iteration — an engine-level JS failure (user code never runs) can otherwise leak a stale value into the inserted row. {{table}} in the webhook body renders all rows inserted SO FAR at execution time, so partial rows are sent even if the run dies later. Always-insert rows (allow empty description) instead of skipping empty-description rows to maximize captured data.

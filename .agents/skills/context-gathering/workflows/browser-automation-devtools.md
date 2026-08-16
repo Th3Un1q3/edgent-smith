@@ -15,6 +15,16 @@ Full loop: activate → verify auth → navigate → extract → cache → memor
 - **Cache with freshness TTL.** Search-URL → results in dated `mem:private/<site>/<task>-<YYYY-MM-DD>` memories; fresh hits skip re-extraction (Step 7).
 - **Pace actions.** ≥1 s between human-like actions, ≥250 ms between in-page transitions, bounded polling deadlines, no burst loops (Step 6).
 - **Fail fast.** In-script error handling and bounded fallbacks; if none work, stop and report instead of looping (Step 11).
+- **Escalate, don't workaround.** The devtools server is the designated source of truth for live-page DOM evidence; when it is DOWN, stop after bounded retries and escalate to the operator — never silently substitute tools that change the source of truth. Full rule: "Source of truth down — ESCALATE, don't workaround" below.
+
+## Source of truth down — ESCALATE, don't workaround
+
+When a task designates a specific source of truth (for us: the devtools server for live-page DOM evidence) and that source is DOWN or unreachable:
+
+- **Retry, bounded.** Gateway attach is transiently flaky — on "Not connected" or an empty tool list, retry once or twice before concluding anything (devtools-known-issues #20).
+- **Stop after ~8–10 bounded retries and escalate.** Report the exact blocker — which tool, what error, what config — and ask the operator to restart the host proxy/service (`.devcontainer/init.sh`) or re-attach the session. **Never silently substitute tools that change the source of truth**: direct HTTP fetch (urllib/requests/curl), tavily, search APIs, or web archives. Workaround tools yield different data and corrupted evidence — rendered markdown ≠ real DOM (e.g., a "Show more" button that exists only in markdown, or a job count that disagrees with the filtered live page).
+- **Write prompts around the gotchas** (reference notes: [devtools-known-issues #20–22](../references/devtools-known-issues.md)): gateway attach is transiently flaky ("Not connected" → retry once or twice; sustained failure = host proxy/Chrome down); the code-mode JS harness mangles `\"`/`\\` inside nested strings — write scripts with zero backslashes and zero double quotes; navigate in one CDP call and evaluate in the NEXT — navigate + heavy evaluate in one call times out.
+- **Verify down before declaring down** — an agent MUST have attempted the actual tool path (`gateway_mcp-find` → `gateway_code-mode` → `gateway_mcp-exec` against the devtools server) and observed ≥2 real timeouts/errors on real tool calls before reporting the server as down. Log files, port scans, or indirect evidence alone are NOT sufficient. After an operator reports a restart, re-probe rather than trusting a prior down-verdict. Orchestrators must not embed "the server is down" as a premise in retry prompts.
 
 ## Prerequisites
 

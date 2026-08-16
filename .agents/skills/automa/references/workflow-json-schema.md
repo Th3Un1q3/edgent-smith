@@ -239,16 +239,19 @@ Example — the fallback output edge.
 
 The engine starts the run at the trigger block's node. Each block handler returns the next block id, or an array of block ids — an array spawns parallel workers, one per next block. The engine does not store incoming edges; it computes outgoing connections per output index via `getBlockConnections(blockId, outputIndex)` in `src/workflowEngine/WorkflowWorker.js`, which builds `${blockId}-output-${outputIndex}` and looks it up in the connections map.
 
-Per-block error handling lives in `data.onError`: `retry` (with `retryTimes` and `retryInterval`), `toDo: continue | error`, or executing the fallback output.
+Per-block error handling lives in `data.onError` as an OBJECT — `{"enable": true, "toDo": "retry", "retryTimes": 2, "retryInterval": 1000}` for retry, or `{"enable": true, "toDo": "continue"}` to continue flow. A bare string is silently ignored (v1.30.02) and falls through to the workflow-level `settings.onError`. Executing the fallback output is also available.
 
-Example — a per-block `onError` using only the documented option keys.
+Example — a per-block `onError` object with the documented option keys.
 
 ```json
 {
   "data": {
-    "onError": "retry",
-    "retryTimes": 3,
-    "retryInterval": 1000
+    "onError": {
+      "enable": true,
+      "toDo": "retry",
+      "retryTimes": 3,
+      "retryInterval": 1000
+    }
   }
 }
 ```

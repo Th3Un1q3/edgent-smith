@@ -36,6 +36,10 @@ When a subagent returns no usable output or exhausts its budget without producin
 1. **Resume before relaunching.** Re-invoke the subagent with the same `task_id` and a prompt like "report what you did and what remains." Context reuse is cheaper than re-discovery. If the resumed subagent still produces nothing, proceed to step 2.
 2. **Relaunch with narrow scope.** If resume fails, launch a fresh subagent with a single deliverable, step-by-step instructions, and an explicit directive to produce output immediately. Broad prompts ("implement X, Y, and Z") cause budget exhaustion on discovery — scope each subagent to one deliverable.
 
+## Delegating Browser-Evidence Tasks
+
+Ask the user early (question tool) for artifacts only they can produce — address-bar URLs, run logs, screenshots, DOM snapshots — before spending subagent budget researching or deriving them.
+
 ## Well-Known Workflows
 
 Step-by-step task specific guides, explaining what agent team to use, how to route tasks, and how to validate results.

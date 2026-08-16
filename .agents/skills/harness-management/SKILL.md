@@ -47,9 +47,16 @@ Do not use this skill for:
 
 Starting from a diagnosis instead of a goal (e.g. a session audit finding)? Map the finding to a change type with [references/improvement-patterns.md](./references/improvement-patterns.md).
 
+## Domain Match — route by where the failure occurred
+
+For a recurring failure, the harness change belongs in the SKILL that governs the DOMAIN where the failure occurred: automa failures → the `automa` skill; research/investigation failures → `context-gathering`; test failures → `test-design`; delegation-prompt failures → `task-delegation`. Generic homes — scoped instructions, root `AGENTS.md`, agent definitions — are fallbacks, not defaults; use them only when no skill governs the domain.
+
+- **Verify the domain before implementing.** Confirm the chosen home's domain matches the failing work's domain; if it doesn't, re-route to the skill that governs the failure.
+- **On rejection, re-evaluate the domain match.** When a harness change is itself rejected or mis-scoped, re-examine which domain the failure belongs to and re-route there — do not just relocate the same content to another generic home.
+
 ## Workflow
 
-1. Decide which change type(s) fit your case and objectives using the Change Type Reference table.
+1. Decide which change type(s) fit your case and objectives using the Change Type Reference table — for recurring failures, first apply [Domain Match](#domain-match--route-by-where-the-failure-occurred) above.
 2. Read the workflow file(s) for the change type(s) you selected.
 3. Execute the changes as the workflow describes.
 4. Ask for an opencode restart to apply the changes — agents, plugins, and skills load at server start.

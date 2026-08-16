@@ -12,8 +12,8 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.0.0"
-  delta: "initial draft from Automa docs + source research (AutomaApp/automa @ main); refined through validation-fix rounds (schema-corrected examples, consistency and vocabulary alignment); meta-commentary removed (Implements labels, provenance markers, source-anchor sections) per review; removed author-facing Completion Gate from reader path per review"
+  version: "1.1.0"
+  delta: "1.1.0 — added session lessons to design-patterns.md (rebind active tab after close-tab; JSON-LD-first extraction with bounded hydration polling; href normalization for relative/tracking URLs; verify selectors against the live page; URL filter params over UI clicks; 5 new anti-pattern rows), troubleshoot-workflow.md (close-tab tab-orphan row, fragment, step-4 checklist item) and create-workflow.md pre-flight selectors bullet (extractor markdown lies, JSON-LD pointer). 1.0.0 — initial draft from Automa docs + source research (AutomaApp/automa @ main); refined through validation-fix rounds (schema-corrected examples, consistency and vocabulary alignment); meta-commentary removed (Implements labels, provenance markers, source-anchor sections) per review; removed author-facing Completion Gate from reader path per review"
   author: Th3Un1qu3
 ---
 

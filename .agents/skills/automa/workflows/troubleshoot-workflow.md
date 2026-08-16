@@ -82,6 +82,7 @@ Every URL carries the scheme; `api.example.com/items` alone is invalid.
 | Worker destroyed mid-run | An edge or `nextBlockId` names a node that does not exist | Verify every edge resolves ([workflow-json-schema.md §Edges & branches](../references/workflow-json-schema.md#edges--branches)) |
 | Block "succeeds" but results are incomplete | `javascript-code` hit its timeout — default 20000 ms ([block-reference.md §Common blocks in depth](../references/block-reference.md#common-blocks-in-depth)) | Raise `timeout` or shorten the code |
 | `Could not establish connection` / `Message channel closed` | No active tab, or the content script did not inject | Put `new-tab`/`active-tab` first; reload the tab |
+| `Can't connect to a tab, use 'New tab' or 'Active tab' block before using the '{name}' block` immediately after a `close-tab` | `close-tab` closed the active tab and left a stale reference; the engine no longer holds a usable tab | Insert an `active-tab` block right after `close-tab` to rebind ([design-patterns.md §Rebind the active tab after close-tab](../references/design-patterns.md#rebind-the-active-tab-after-close-tab)); a per-block `onError: continue` only masks it until a later block trips the workflow-level `stop-workflow` |
 | `ai-workflow` block fails | Missing or invalid AI token | Provide a valid token — settings seed `aipowerToken` ([workflow-json-schema.md §settings](../references/workflow-json-schema.md#settings)) |
 | `Refused to execute inline script because it violates the following Content Security Policy directive: ...` | JS runs in the `active-tab` context; the page CSP blocks it | Switch `javascript-code` to the `background` context, or probe the page with an inline-script check first |
 | Expressions evaluate wrong, or fail, on Firefox | The `!!` prefix and raw JS in tags are Chromium-only | Replace them with built-in `$` functions ([state-and-expressions.md §JS expressions (Chromium only)](../references/state-and-expressions.md#js-expressions-chromium-only)) |
@@ -97,6 +98,12 @@ The `background` context bypasses the page CSP; keep `active-tab` context only f
 
 ```json
 { "label": "javascript-code", "data": { "context": "background", "timeout": 20000, "code": "return { ok: true };" } }
+```
+
+The `active-tab` block after `close-tab` rebinds the engine to the currently active tab; in Automa ≥ 1.28 its data carries no `url` or `tabType` fields.
+
+```json
+{ "id": "rebindTabNode", "label": "active-tab", "data": { "disableBlock": false } }
 ```
 
 #### Runtime failure checklist
@@ -121,13 +128,13 @@ A structural defect looks like a dangling edge.
 
 When structure passes but the run still fails, inspect the runtime conditions around the failing block:
 
-- **Active tab** — does a `new-tab` or `active-tab` block sit on the path before every web-interaction block? ([design-patterns.md §Satisfy the active-tab precondition](../references/design-patterns.md#satisfy-the-active-tab-precondition-before-web-interaction-blocks))
+- **Active tab** — does a `new-tab` or `active-tab` block sit on the path before every web-interaction block? A `close-tab` on the path also needs an `active-tab` rebind immediately after it, or the next web-interaction block errors "Can't connect to a tab..." ([design-patterns.md §Satisfy the active-tab precondition](../references/design-patterns.md#satisfy-the-active-tab-precondition-before-web-interaction-blocks), [§Rebind the active tab after close-tab](../references/design-patterns.md#rebind-the-active-tab-after-close-tab))
 - **Execution mode** — Popup mode needs the popup open; Background mode caps near 5 minutes. Does the job fit the mode? ([design-patterns.md §Choose the execution mode](../references/design-patterns.md#choose-the-execution-mode-by-runtime-versus-capability))
 - **Selector timing** — does the element exist when the block runs? Add an `element-exists` check or enable "Wait for selector". ([design-patterns.md §Wait for dynamic elements](../references/design-patterns.md#wait-for-dynamic-elements-before-interacting))
-- **Loop breakpoint** — does every `loop-data`/`loop-elements` node pair with a `loop-breakpoint` carrying the same `loopId`? A missing breakpoint runs the body once. ([design-patterns.md §Give every loop a Loop Breakpoint](../references/design-patterns.md#give-every-loop-a-loop-breakpoint-with-the-same-loop-id))
+- **Loop breakpoint** — does every `loop-data`/`loop-elements` node pair with a `loop-breakpoint` carrying the same `loopId` at the end of the body? A missing breakpoint runs the body once. `repeat-task` must NOT be paired with a `loop-breakpoint` — it iterates via continuation edges back into its input-1, and a breakpoint wired to a repeat-task loopId throws `Can't find a loop with "<loopId>" loop id` (verified: handlerRepeatTask.js, handlerLoopBreakpoint.js). ([design-patterns.md §Give every loop-data/loop-elements loop a Loop Breakpoint](../references/design-patterns.md#give-every-loop-dataloop-elements-loop-a-loop-breakpoint-with-the-same-loop-id-repeat-task-takes-none))
 - **Condition fallback** — does every `conditions` block wire its `fallback` output? An unwired fallback dead-ends unmatched input. ([design-patterns.md §Conditions route to a matching condition output](../references/design-patterns.md#conditions-route-to-a-matching-condition-output-or-the-fallback))
 
-A loop without its breakpoint passes step 3, then misbehaves.
+A `loop-data`/`loop-elements` loop without its breakpoint passes step 3, then misbehaves; a `repeat-task` loop crashes if one is wired to it.
 
 ```json
 { "id": "loopNode", "label": "loop-data", "data": { "loopId": "items", "loopData": "[1, 2, 3]" } }
@@ -140,12 +147,12 @@ When classification and checks leave no confirmed cause, observe the run directl
 - **Testing mode** — runs with breakpoints; pause at any block and inspect the variables and table at that instant.
 - **Debug mode (CDP, Chromium)** — attaches a browser; use it when JS-emulated clicks or typing fail, e.g. WYSIWYG editors and XY-coordinate clicks ([design-patterns.md §Reach for debug and testing mode](../references/design-patterns.md#reach-for-debug-and-testing-mode-for-wysiwyg-and-coordinate-cases)).
 - **`blockDelay`** — set a delay between blocks (`settings.blockDelay`, default `0` — [workflow-json-schema.md §settings](../references/workflow-json-schema.md#settings)) to watch a slow run.
-- **Per-block on-error** — set `retry` with `retryTimes`/`retryInterval` to absorb transient failures and let the log repeat the error ([workflow-json-schema.md §Execution semantics](../references/workflow-json-schema.md#execution-semantics), [design-patterns.md §Follow the error-handling ladder](../references/design-patterns.md#follow-the-error-handling-ladder)).
+- **Per-block on-error** — set an object `{"enable": true, "toDo": "retry", "retryTimes": 3, "retryInterval": 1000}` to absorb transient failures and let the log repeat the error ([workflow-json-schema.md §Execution semantics](../references/workflow-json-schema.md#execution-semantics), [design-patterns.md §Follow the error-handling ladder](../references/design-patterns.md#follow-the-error-handling-ladder)).
 
 A transient failure retries three times at 1 s intervals instead of stopping the run.
 
 ```json
-{ "data": { "onError": "retry", "retryTimes": 3, "retryInterval": 1000 } }
+{ "data": { "onError": { "enable": true, "toDo": "retry", "retryTimes": 3, "retryInterval": 1000 } } }
 ```
 
 ### Step 6 — Apply the fix and re-run

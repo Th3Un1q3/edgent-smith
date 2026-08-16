@@ -1,0 +1,7 @@
+# Automa: SPA job boards — in-page detail panel over tab-per-job
+
+For SPA job listings with lazy detail panels, extract in-page instead of opening a tab per job. The tab-per-job pattern (new-tab → extract → close-tab → rebind) is fragile: `active-tab` only binds to whatever the browser currently has focused, and the engine holds a stale reference after `close-tab` (a real run died mid-loop with the `Can’t find active tab` error). Verified on de.indeed.com: staying on the search tab and clicking the card title anchor updates `[data-testid=vjJobDetails-test]` in place (SPA — list DOM persists, `data-job-list-item` marks survive), the panel exposes `#jobDescriptionText`, and the detail JSON-LD `script[type=application/ld+json]` (@type JobPosting) `.description` is the preferred description source when present.
+
+Generalize: prefer in-page panel clicks over tab-per-job for SPA listings with lazy detail panels.
+
+Related: `mem:browser-automation/automa/active-tab-rebind-after-close-tab` (rebind fallback when tabs are unavoidable), `mem:browser-automation/automa/fireclick-synthetic-click-helper` (click helper), `mem:browser-automation/automa/lazy-panel-wait-stale-read-guard` (panel wait + stale-read guard).

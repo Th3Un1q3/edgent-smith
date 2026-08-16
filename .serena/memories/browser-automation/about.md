@@ -9,6 +9,7 @@ Recipes and dated result caches for driving host Chrome through the devtools MCP
 - All website-specific content lives here, never in the context-gathering skill.
 - `browser-automation/wellfound/` — wellfound.com extraction recipes (devtools-required site; plain fetch returns 403).
 - `browser-automation/general/` — cross-site lessons (e.g., bot-safe extraction).
+- `browser-automation/automa/` — Automa workflow authoring lessons: engine behavior verified against Automa source (handlerRepeatTask, handlerLoopBreakpoint, switch-tab schema in src/utils/shared.js) and observed run failures.
 
 ## Boundaries (out of scope)
 

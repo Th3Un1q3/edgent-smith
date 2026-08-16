@@ -1,0 +1,1032 @@
+{
+  "extVersion": "1.30.02",
+  "name": "Manual Indeed Jobs",
+  "icon": "riGlobalLine",
+  "table": [
+    {
+      "id": "id",
+      "name": "id",
+      "type": "Text"
+    },
+    {
+      "id": "title",
+      "name": "title",
+      "type": "Text"
+    },
+    {
+      "id": "description",
+      "name": "description",
+      "type": "Text"
+    },
+    {
+      "id": "apply_url",
+      "name": "apply_url",
+      "type": "Text"
+    }
+  ],
+  "version": "1.30.02",
+  "drawflow": {
+    "nodes": [
+      {
+        "id": "trig",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 128,
+          "y": 143.5
+        },
+        "data": {
+          "activeInInput": false,
+          "contextMenuName": "",
+          "contextTypes": [],
+          "date": "",
+          "days": [],
+          "delay": 5,
+          "description": "A1 Trigger — manual start with search parameters",
+          "disableBlock": false,
+          "interval": 60,
+          "isUrlRegex": false,
+          "observeElement": {
+            "baseElOptions": {
+              "attributeFilter": [],
+              "attributes": false,
+              "characterData": false,
+              "childList": true,
+              "subtree": false
+            },
+            "baseSelector": "",
+            "matchPattern": "",
+            "selector": "",
+            "targetOptions": {
+              "attributeFilter": [],
+              "attributes": false,
+              "characterData": false,
+              "childList": true,
+              "subtree": false
+            }
+          },
+          "parameters": [
+            {
+              "data": {
+                "masks": [
+                  {
+                    "isRegex": false,
+                    "lazy": false,
+                    "mask": ""
+                  }
+                ],
+                "required": true,
+                "unmaskValue": false,
+                "useMask": false
+              },
+              "defaultValue": "Engineering Manager",
+              "description": "Job search keywords",
+              "name": "search_query",
+              "placeholder": "Search query",
+              "type": "string"
+            },
+            {
+              "data": {
+                "masks": [
+                  {
+                    "isRegex": false,
+                    "lazy": false,
+                    "mask": ""
+                  }
+                ],
+                "required": true,
+                "unmaskValue": false,
+                "useMask": false
+              },
+              "defaultValue": 25,
+              "description": "Maximum job postings to collect",
+              "name": "max_jobs",
+              "placeholder": "Max jobs",
+              "type": "number"
+            },
+            {
+              "data": {
+                "masks": [
+                  {
+                    "isRegex": false,
+                    "lazy": false,
+                    "mask": ""
+                  }
+                ],
+                "required": true,
+                "unmaskValue": false,
+                "useMask": false
+              },
+              "defaultValue": "https://example.com/hook",
+              "description": "Endpoint receiving the {collection, query, items} payload",
+              "name": "webhook_url",
+              "placeholder": "Webhook URL",
+              "type": "string"
+            }
+          ],
+          "preferParamsInTab": false,
+          "shortcut": "",
+          "time": "00:00",
+          "type": "manual",
+          "url": ""
+        },
+        "label": "trigger"
+      },
+      {
+        "id": "opnt",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 452,
+          "y": 143.5
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "A2 Open Indeed jobs search in a new tab (Deutschland, sort=date)",
+          "url": "https://de.indeed.com/jobs?q={{variables.search_query}}&l=Deutschland&sort=date",
+          "userAgent": "",
+          "active": true,
+          "tabZoom": 1,
+          "inGroup": false,
+          "waitTabLoaded": true,
+          "updatePrevTab": false,
+          "customUserAgent": false,
+          "settings": {
+            "blockTimeout": 0,
+            "debugMode": false
+          }
+        },
+        "label": "new-tab"
+      },
+      {
+        "id": "setu",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 776,
+          "y": 143.5
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "A3 Setup — seed variables",
+          "timeout": 20000,
+          "context": "website",
+          "code": "automaSetVariable('seenIds', '0,');\nautomaSetVariable('currentId', '');\nautomaSetVariable('currentTitle', '');\nautomaSetVariable('currentDescription', '');\nautomaSetVariable('applyUrl', '');\nautomaSetVariable('isDuplicate', 'false');\nautomaSetVariable('insertCount', '0');\nautomaSetVariable('cardFound', 'false');\nautomaSetVariable('prevPanelDesc', '');\nautomaSetVariable('hasRows', 'false');\nautomaNextBlock();",
+          "preloadScripts": [],
+          "everyNewTab": false,
+          "runBeforeLoad": false
+        },
+        "label": "javascript-code"
+      },
+      {
+        "id": "dly1",
+        "type": "BlockDelay",
+        "initialized": false,
+        "position": {
+          "x": 1427,
+          "y": 143.5
+        },
+        "data": {
+          "disableBlock": false,
+          "time": "{{$randint(3000,8000)}}",
+          "$breakpoint": false,
+          "description": "A4 Delay — initial page settle"
+        },
+        "label": "delay"
+      },
+      {
+        "id": "gate",
+        "type": "BlockElementExists",
+        "initialized": false,
+        "position": {
+          "x": 1652,
+          "y": 143.5
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "A5 Page gate — job cards (slider_item) present",
+          "findBy": "cssSelector",
+          "selector": "div[data-testid=\"slider_item\"]",
+          "tryCount": 2,
+          "timeout": 5000,
+          "markEl": false,
+          "throwError": false
+        },
+        "label": "element-exists"
+      },
+      {
+        "id": "ntf1",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 1652,
+          "y": 330
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "N1 Abort notification — structure drift, Cloudflare, or empty results",
+          "imageUrl": "",
+          "message": "Aborted: no job cards (div[data-testid=slider_item]) found — Cloudflare interstitial, structure drift, or empty results. See log.",
+          "title": "Indeed collector aborted",
+          "url": ""
+        },
+        "label": "notification"
+      },
+      {
+        "id": "cls1",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 5600,
+          "y": 620
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "N2 Close tab after abort",
+          "activeTab": true,
+          "allWindows": false,
+          "closeType": "tab",
+          "url": ""
+        },
+        "label": "close-tab"
+      },
+      {
+        "id": "stp1",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 5930,
+          "y": 620
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "N3 Stop workflow after abort",
+          "action": "stop",
+          "stopAllWorkflows": true
+        },
+        "label": "workflow-state"
+      },
+      {
+        "id": "loop",
+        "type": "BlockRepeatTask",
+        "initialized": false,
+        "position": {
+          "x": 2000,
+          "y": 143.5
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "B1 Loop over job cards (up to max_jobs)",
+          "repeatFor": "{{variables.max_jobs}}"
+        },
+        "label": "repeat-task"
+      },
+      {
+        "id": "fndc",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 2330,
+          "y": 143.5
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "B2 Scan cards for real jobs (16-hex data-jk + tracking href), skip honeypots, mark active, click to load panel",
+          "timeout": 20000,
+          "context": "website",
+          "code": "(() => {\n  let finished = false;\n  const finish = () => { if (!finished) { finished = true; automaNextBlock(); } };\n  automaSetVariable('currentDescription', '');\n  automaSetVariable('isDuplicate', 'false');\n  try {\n    // Navigation guard (registered once per page): block same-host navigation\n    // away from the /jobs search page (e.g. honeypot cards linking to /viewjob).\n    // Pagination (/jobs path) is allowed; preventDefault does not stop the SPA's\n    // React onClick, so real card clicks still load the detail panel in place.\n    if (!window.__indeedNavGuard) {\n      window.__indeedNavGuard = true;\n      document.addEventListener('click', (e) => {\n        const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;\n        if (!a) return;\n        try {\n          const u = new URL(a.href, location.href);\n          if (u.host === location.host && u.pathname.indexOf('/jobs') === -1) e.preventDefault();\n        } catch (err) {}\n      }, true);\n    }\n    // Wrong-page sanity check: never search for cards on a stray page\n    if (location.pathname.indexOf('/jobs') === -1) {\n      automaSetVariable('cardFound', 'false');\n      finish();\n      return;\n    }\n    // Scan all unmarked cards; select the first REAL job (16-hex data-jk AND\n    // tracking href). Honeypots fail the checks and are marked complete so they\n    // are never retried (nor clicked, nor inserted).\n    let selected = null;\n    for (const card of Array.from(document.querySelectorAll('div[data-testid=\"slider_item\"]'))) {\n      if (card.hasAttribute('data-job-list-item')) continue;\n      const anchor = card.querySelector('a.jcs-JobTitle');\n      const jk = anchor ? (anchor.getAttribute('data-jk') || '') : '';\n      const href = anchor ? (anchor.getAttribute('href') || '') : '';\n      const validJk = /^[a-f0-9]{16}$/i.test(jk);\n      const isTracking = /\\/pagead\\/clk|\\/rc\\/clk/.test(href);\n      if (!anchor || !validJk || !isTracking) {\n        card.setAttribute('data-job-list-item', 'complete');\n        continue;\n      }\n      selected = card;\n      break;\n    }\n    if (selected) {\n      selected.setAttribute('data-job-list-item', 'active');\n      const anchor = selected.querySelector('a.jcs-JobTitle');\n      const jk = anchor ? (anchor.getAttribute('data-jk') || '') : '';\n      const titleEl = anchor ? (anchor.querySelector('span[title]') || anchor.querySelector('span')) : null;\n      const title = titleEl ? (titleEl.textContent || '').replace(/\\s+/g, ' ').trim() : '';\n      automaSetVariable('currentId', jk);\n      automaSetVariable('currentTitle', title);\n      automaSetVariable('applyUrl', jk ? 'https://de.indeed.com/viewjob?jk=' + jk : '');\n      automaSetVariable('cardFound', 'true');\n      automaSetVariable('prevPanelDesc', (document.querySelector('#jobDescriptionText') || { innerText: '' }).innerText || '');\n      if (anchor) {\n        const fireClick = (el) => {\n          const opts = { bubbles: true, cancelable: true, view: window };\n          ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click'].forEach((t) => {\n            try { el.dispatchEvent(new MouseEvent(t, opts)); } catch (e) {}\n          });\n          try { el.click(); } catch (e) {}\n        };\n        fireClick(anchor);\n      }\n    } else {\n      automaSetVariable('cardFound', 'false');\n    }\n    finish();\n  } catch (e) { automaSetVariable('cardFound', 'false'); finish(); }\n})();",
+          "preloadScripts": [],
+          "everyNewTab": false,
+          "runBeforeLoad": false
+        },
+        "label": "javascript-code"
+      },
+      {
+        "id": "fnd2",
+        "type": "BlockConditions",
+        "initialized": false,
+        "position": {
+          "x": 2660,
+          "y": 143.5
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "B3 Card found?",
+          "conditions": [
+            {
+              "id": "card",
+              "name": "Path 1",
+              "conditions": [
+                {
+                  "id": "card-g1",
+                  "conditions": [
+                    {
+                      "id": "card-r1",
+                      "items": [
+                        {
+                          "id": "card-v1",
+                          "type": "value",
+                          "category": "value",
+                          "data": {
+                            "value": "{{variables.cardFound}}"
+                          }
+                        },
+                        {
+                          "id": "card-cmp",
+                          "category": "compare",
+                          "type": "eq"
+                        },
+                        {
+                          "id": "card-v2",
+                          "type": "value",
+                          "category": "value",
+                          "data": {
+                            "value": "true"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "retryConditions": false,
+          "retryCount": 10,
+          "retryTimeout": 1000
+        },
+        "label": "conditions"
+      },
+      {
+        "id": "exdc",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 2990,
+          "y": 340
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "C3 Wait for lazy panel + extract description (JSON-LD, fallback #jobDescriptionText)",
+          "onError": {
+            "enable": true,
+            "toDo": "continue"
+          },
+          "timeout": 20000,
+          "context": "website",
+          "code": "(async () => {\n  let finished = false;\n  const finish = () => { if (!finished) { finished = true; automaNextBlock(); } };\n  try {\n    // Wrong-page sanity check: never extract from a stray page (e.g. /viewjob\n    // after a hypothetical nav-guard failure) — refuse instead of polluting rows.\n    if (location.pathname.indexOf('/jobs') === -1) {\n      automaSetVariable('currentDescription', '');\n      automaSetVariable('isDuplicate', 'false');\n      finish();\n      return;\n    }\n    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));\n    const collapse = (s) => s.replace(/\\s+/g, ' ').trim();\n    const stripHtml = (s) => {\n      const div = document.createElement('div');\n      div.innerHTML = s;\n      return div.textContent || '';\n    };\n    const fromLdJson = () => {\n      const scripts = Array.from(document.querySelectorAll('script[type=\"application/ld+json\"]'));\n      for (const script of scripts) {\n        let parsed;\n        try { parsed = JSON.parse(script.textContent || ''); } catch (e) { continue; }\n        if (!parsed || typeof parsed !== 'object') continue;\n        const types = Array.isArray(parsed['@type']) ? parsed['@type'] : [parsed['@type']];\n        if (types.some((t) => typeof t === 'string' && t.indexOf('JobPosting') !== -1)) {\n          if (typeof parsed.description === 'string' && parsed.description.trim()) return parsed.description;\n        }\n      }\n      return '';\n    };\n    const fromPanel = () => {\n      const el = document.querySelector('#jobDescriptionText');\n      return el ? (el.innerText || el.textContent || '') : '';\n    };\n    const seen = automaRefData('variables', 'seenIds') || '0,';\n    const id = automaRefData('variables', 'currentId') || '';\n    const prevRaw = automaRefData('variables', 'prevPanelDesc') || '';\n    const prevTxt = collapse(stripHtml(prevRaw));\n    let raw = '';\n    let txt = '';\n    let broke = false;\n    for (let i = 0; i < 20; i++) {\n      raw = fromLdJson() || fromPanel();\n      txt = collapse(stripHtml(raw));\n      if (txt && (!prevTxt || txt !== prevTxt)) { broke = true; break; }\n      await sleep(500);\n    }\n    let desc = collapse(stripHtml(raw));\n    if (!broke && prevTxt && txt && txt === prevTxt && location.search.indexOf(id) === -1) desc = '';\n    const dup = id ? seen.indexOf(id + ',') >= 0 : false;\n    automaSetVariable('currentDescription', desc.slice(0, 8000));\n    automaSetVariable('isDuplicate', dup ? 'true' : 'false');\n    if (!dup && id) automaSetVariable('seenIds', seen + id + ',');\n    finish();\n  } catch (e) {\n    automaSetVariable('currentDescription', '');\n    automaSetVariable('isDuplicate', 'false');\n    finish();\n  }\n})();",
+          "preloadScripts": [],
+          "everyNewTab": false,
+          "runBeforeLoad": false
+        },
+        "label": "javascript-code"
+      },
+      {
+        "id": "mrkc",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 3320,
+          "y": 120
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "C5 Mark list item as complete",
+          "onError": {
+            "enable": true,
+            "toDo": "continue"
+          },
+          "findBy": "cssSelector",
+          "waitForSelector": false,
+          "waitSelectorTimeout": 5000,
+          "selector": "[data-job-list-item=\"active\"]",
+          "markEl": false,
+          "multiple": false,
+          "attributeValue": "complete",
+          "attributeName": "data-job-list-item",
+          "assignVariable": false,
+          "variableName": "",
+          "dataColumn": "",
+          "saveData": true,
+          "action": "set",
+          "addExtraRow": false,
+          "extraRowValue": "",
+          "extraRowDataColumn": ""
+        },
+        "label": "attribute-value"
+      },
+      {
+        "id": "ndg",
+        "type": "BlockConditions",
+        "initialized": false,
+        "position": {
+          "x": 3650,
+          "y": 120
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "C6 Insert gate — skip duplicates / empty descriptions",
+          "conditions": [
+            {
+              "id": "notdup",
+              "name": "Path 1",
+              "conditions": [
+                {
+                  "id": "notdup-g1",
+                  "conditions": [
+                    {
+                      "id": "notdup-r1",
+                      "items": [
+                        {
+                          "id": "notdup-v1",
+                          "type": "value",
+                          "category": "value",
+                          "data": {
+                            "value": "{{variables.isDuplicate}}"
+                          }
+                        },
+                        {
+                          "id": "notdup-cmp",
+                          "category": "compare",
+                          "type": "eq"
+                        },
+                        {
+                          "id": "notdup-v2",
+                          "type": "value",
+                          "category": "value",
+                          "data": {
+                            "value": "false"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "retryConditions": false,
+          "retryCount": 10,
+          "retryTimeout": 1000
+        },
+        "label": "conditions"
+      },
+      {
+        "id": "insd",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 3980,
+          "y": 120
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "C7 Insert collected job row",
+          "dataList": [
+            {
+              "name": "id",
+              "value": "{{variables.currentId}}",
+              "type": "table",
+              "isFile": false
+            },
+            {
+              "name": "title",
+              "value": "{{variables.currentTitle}}",
+              "type": "table",
+              "isFile": false
+            },
+            {
+              "name": "description",
+              "value": "{{variables.currentDescription}}",
+              "type": "table",
+              "isFile": false
+            },
+            {
+              "name": "apply_url",
+              "value": "{{variables.applyUrl}}",
+              "type": "table",
+              "isFile": false
+            }
+          ],
+          "tableName": ""
+        },
+        "label": "insert-data"
+      },
+      {
+        "id": "incr",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 4310,
+          "y": 120
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "C8 Count inserted rows",
+          "variableName": "insertCount",
+          "increaseBy": 1
+        },
+        "label": "increase-variable"
+      },
+      {
+        "id": "mors",
+        "type": "BlockElementExists",
+        "initialized": false,
+        "position": {
+          "x": 2660,
+          "y": 330
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "B4 Next-page button present?",
+          "findBy": "cssSelector",
+          "selector": "a[data-testid=\"pagination-page-next\"]",
+          "tryCount": 1,
+          "timeout": 500,
+          "markEl": false,
+          "throwError": false
+        },
+        "label": "element-exists"
+      },
+      {
+        "id": "mclk",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 2330,
+          "y": 330
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "B5 Click next page (pagination-page-next)",
+          "onError": {
+            "enable": true,
+            "toDo": "continue"
+          },
+          "findBy": "cssSelector",
+          "waitForSelector": true,
+          "waitSelectorTimeout": 5000,
+          "selector": "a[data-testid=\"pagination-page-next\"]",
+          "markEl": false,
+          "multiple": false
+        },
+        "label": "event-click"
+      },
+      {
+        "id": "dlym",
+        "type": "BlockDelay",
+        "initialized": false,
+        "position": {
+          "x": 2000,
+          "y": 330
+        },
+        "data": {
+          "disableBlock": false,
+          "time": "{{$randint(3000,8000)}}",
+          "$breakpoint": false,
+          "description": "B6 Delay — next page loads"
+        },
+        "label": "delay"
+      },
+      {
+        "id": "rcrd",
+        "type": "BlockElementExists",
+        "initialized": false,
+        "position": {
+          "x": 2330,
+          "y": 470
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "B7 Re-check unmarked cards after next page",
+          "findBy": "cssSelector",
+          "selector": "div[data-testid=\"slider_item\"]:not([data-job-list-item])",
+          "tryCount": 1,
+          "timeout": 5000,
+          "markEl": false,
+          "throwError": false
+        },
+        "label": "element-exists"
+      },
+      {
+        "id": "gurd",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 4310,
+          "y": 400
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "E1 Guard — set hasRows from insert count",
+          "timeout": 20000,
+          "context": "website",
+          "code": "const n = Number(automaRefData('variables', 'insertCount') || 0);\nautomaSetVariable('hasRows', n > 0 ? 'true' : 'false');\nautomaNextBlock();",
+          "preloadScripts": [],
+          "everyNewTab": false,
+          "runBeforeLoad": false
+        },
+        "label": "javascript-code"
+      },
+      {
+        "id": "hrow2",
+        "type": "BlockConditions",
+        "initialized": false,
+        "position": {
+          "x": 4640,
+          "y": 400
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "E1b Any rows collected?",
+          "conditions": [
+            {
+              "id": "hasRows",
+              "name": "Path 1",
+              "conditions": [
+                {
+                  "id": "hasRows-g1",
+                  "conditions": [
+                    {
+                      "id": "hasRows-r1",
+                      "items": [
+                        {
+                          "id": "hasRows-v1",
+                          "type": "value",
+                          "category": "value",
+                          "data": {
+                            "value": "{{variables.hasRows}}"
+                          }
+                        },
+                        {
+                          "id": "hasRows-cmp",
+                          "category": "compare",
+                          "type": "eq"
+                        },
+                        {
+                          "id": "hasRows-v2",
+                          "type": "value",
+                          "category": "value",
+                          "data": {
+                            "value": "true"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "retryConditions": false,
+          "retryCount": 10,
+          "retryTimeout": 1000
+        },
+        "label": "conditions"
+      },
+      {
+        "id": "wbhk",
+        "type": "BlockBasicWithFallback",
+        "initialized": false,
+        "position": {
+          "x": 4970,
+          "y": 400
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "E2 POST collected jobs to webhook",
+          "url": "{{variables.webhook_url}}",
+          "body": "{\"collection\":\"indeed-jobs\",\"query\":\"{{variables.search_query}}\",\"items\":{{table}}}",
+          "headers": [],
+          "method": "POST",
+          "timeout": 15000,
+          "dataPath": "",
+          "contentType": "json",
+          "variableName": "",
+          "assignVariable": false,
+          "saveData": false,
+          "dataColumn": "",
+          "responseType": "json"
+        },
+        "label": "webhook"
+      },
+      {
+        "id": "ntf2s",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 5300,
+          "y": 300
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "E6 Success notification",
+          "imageUrl": "",
+          "message": "Collected jobs for '{{variables.search_query}}' and submitted to {{variables.webhook_url}}.",
+          "title": "Indeed collector done",
+          "url": ""
+        },
+        "label": "notification"
+      },
+      {
+        "id": "ntf2f",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 5300,
+          "y": 500
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "E8 Submit-failed notification",
+          "imageUrl": "",
+          "message": "POST to {{variables.webhook_url}} failed after retries. See log.",
+          "title": "Indeed collector: submit failed",
+          "url": ""
+        },
+        "label": "notification"
+      },
+      {
+        "id": "ntf2n",
+        "type": "BlockBasic",
+        "initialized": false,
+        "position": {
+          "x": 4970,
+          "y": 600
+        },
+        "data": {
+          "disableBlock": false,
+          "description": "E9 No-jobs notification",
+          "imageUrl": "",
+          "message": "No jobs matched — nothing submitted.",
+          "title": "Indeed collector: no jobs",
+          "url": ""
+        },
+        "label": "notification"
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge-01",
+        "source": "trig",
+        "sourceHandle": "trig-output-1",
+        "target": "opnt",
+        "targetHandle": "opnt-input-1"
+      },
+      {
+        "id": "edge-02",
+        "source": "opnt",
+        "sourceHandle": "opnt-output-1",
+        "target": "setu",
+        "targetHandle": "setu-input-1"
+      },
+      {
+        "id": "edge-03",
+        "source": "setu",
+        "sourceHandle": "setu-output-1",
+        "target": "dly1",
+        "targetHandle": "dly1-input-1"
+      },
+      {
+        "id": "edge-04",
+        "source": "dly1",
+        "sourceHandle": "dly1-output-1",
+        "target": "gate",
+        "targetHandle": "gate-input-1"
+      },
+      {
+        "id": "edge-05",
+        "source": "gate",
+        "sourceHandle": "gate-output-1",
+        "target": "loop",
+        "targetHandle": "loop-input-1"
+      },
+      {
+        "id": "edge-06",
+        "source": "gate",
+        "sourceHandle": "gate-output-2",
+        "target": "ntf1",
+        "targetHandle": "ntf1-input-1"
+      },
+      {
+        "id": "edge-07",
+        "source": "ntf1",
+        "sourceHandle": "ntf1-output-1",
+        "target": "cls1",
+        "targetHandle": "cls1-input-1"
+      },
+      {
+        "id": "edge-08",
+        "source": "cls1",
+        "sourceHandle": "cls1-output-1",
+        "target": "stp1",
+        "targetHandle": "stp1-input-1"
+      },
+      {
+        "id": "edge-11",
+        "source": "fndc",
+        "sourceHandle": "fndc-output-1",
+        "target": "fnd2",
+        "targetHandle": "fnd2-input-1"
+      },
+      {
+        "id": "edge-13",
+        "source": "fnd2",
+        "sourceHandle": "fnd2-output-fallback",
+        "target": "mors",
+        "targetHandle": "mors-input-1"
+      },
+      {
+        "id": "edge-19",
+        "source": "mrkc",
+        "sourceHandle": "mrkc-output-1",
+        "target": "ndg",
+        "targetHandle": "ndg-input-1"
+      },
+      {
+        "id": "edge-20",
+        "source": "ndg",
+        "sourceHandle": "ndg-output-notdup",
+        "target": "insd",
+        "targetHandle": "insd-input-1"
+      },
+      {
+        "id": "edge-21",
+        "source": "insd",
+        "sourceHandle": "insd-output-1",
+        "target": "incr",
+        "targetHandle": "incr-input-1"
+      },
+      {
+        "id": "edge-22",
+        "source": "incr",
+        "sourceHandle": "incr-output-1",
+        "target": "loop",
+        "targetHandle": "loop-input-1"
+      },
+      {
+        "id": "edge-23",
+        "source": "ndg",
+        "sourceHandle": "ndg-output-fallback",
+        "target": "loop",
+        "targetHandle": "loop-input-1"
+      },
+      {
+        "id": "edge-24",
+        "source": "mors",
+        "sourceHandle": "mors-output-1",
+        "target": "mclk",
+        "targetHandle": "mclk-input-1"
+      },
+      {
+        "id": "edge-25",
+        "source": "mclk",
+        "sourceHandle": "mclk-output-1",
+        "target": "dlym",
+        "targetHandle": "dlym-input-1"
+      },
+      {
+        "id": "edge-26",
+        "source": "dlym",
+        "sourceHandle": "dlym-output-1",
+        "target": "rcrd",
+        "targetHandle": "rcrd-input-1"
+      },
+      {
+        "id": "edge-27",
+        "source": "mors",
+        "sourceHandle": "mors-output-2",
+        "target": "loop",
+        "targetHandle": "loop-input-1"
+      },
+      {
+        "id": "edge-28",
+        "source": "loop",
+        "sourceHandle": "loop-output-1",
+        "target": "gurd",
+        "targetHandle": "gurd-input-1"
+      },
+      {
+        "id": "edge-29",
+        "source": "gurd",
+        "sourceHandle": "gurd-output-1",
+        "target": "hrow2",
+        "targetHandle": "hrow2-input-1"
+      },
+      {
+        "id": "edge-30",
+        "source": "hrow2",
+        "sourceHandle": "hrow2-output-hasRows",
+        "target": "wbhk",
+        "targetHandle": "wbhk-input-1"
+      },
+      {
+        "id": "edge-31",
+        "source": "hrow2",
+        "sourceHandle": "hrow2-output-fallback",
+        "target": "ntf2n",
+        "targetHandle": "ntf2n-input-1"
+      },
+      {
+        "id": "edge-32",
+        "source": "wbhk",
+        "sourceHandle": "wbhk-output-1",
+        "target": "ntf2s",
+        "targetHandle": "ntf2s-input-1"
+      },
+      {
+        "id": "edge-33",
+        "source": "wbhk",
+        "sourceHandle": "wbhk-output-fallback",
+        "target": "ntf2f",
+        "targetHandle": "ntf2f-input-1"
+      },
+      {
+        "id": "edge-34",
+        "source": "ntf2s",
+        "sourceHandle": "ntf2s-output-1",
+        "target": "cls1",
+        "targetHandle": "cls1-input-1"
+      },
+      {
+        "id": "edge-35",
+        "source": "ntf2f",
+        "sourceHandle": "ntf2f-output-1",
+        "target": "cls1",
+        "targetHandle": "cls1-input-1"
+      },
+      {
+        "id": "edge-36",
+        "source": "ntf2n",
+        "sourceHandle": "ntf2n-output-1",
+        "target": "cls1",
+        "targetHandle": "cls1-input-1"
+      },
+      {
+        "id": "edge-37",
+        "source": "rcrd",
+        "sourceHandle": "rcrd-output-1",
+        "target": "fndc",
+        "targetHandle": "fndc-input-1"
+      },
+      {
+        "id": "edge-38",
+        "source": "rcrd",
+        "sourceHandle": "rcrd-output-2",
+        "target": "loop",
+        "targetHandle": "loop-input-1"
+      },
+      {
+        "id": "edge-39",
+        "source": "loop",
+        "sourceHandle": "loop-output-2",
+        "target": "fndc",
+        "targetHandle": "fndc-input-1"
+      },
+      {
+        "id": "edge-40",
+        "source": "fnd2",
+        "sourceHandle": "fnd2-output-card",
+        "target": "exdc",
+        "targetHandle": "exdc-input-1"
+      },
+      {
+        "id": "edge-41",
+        "source": "exdc",
+        "sourceHandle": "exdc-output-1",
+        "target": "mrkc",
+        "targetHandle": "mrkc-input-1"
+      }
+    ],
+    "position": [
+      -2000,
+      200
+    ],
+    "zoom": 0.7,
+    "viewport": {
+      "x": -2000,
+      "y": 200,
+      "zoom": 0.7
+    }
+  },
+  "settings": {
+    "publicId": "",
+    "restartTimes": 3,
+    "notification": true,
+    "tabLoadTimeout": 30000,
+    "inputAutocomplete": true,
+    "insertDefaultColumn": false,
+    "defaultColumnName": "column",
+    "aipowerToken": "",
+    "blockDelay": 0,
+    "debugMode": true,
+    "execContext": "popup",
+    "executedBlockOnWeb": false,
+    "onError": "keep-running",
+    "reuseLastState": false,
+    "saveLog": true
+  },
+  "globalData": "{}",
+  "description": "Indeed Jobs Collector — collects job postings (id, title, description, apply_url) from de.indeed.com search results (Deutschland, sorted by date) and POSTs them to a webhook as {collection, query, items}. Job cards: div[data-testid=slider_item]; id from a.jcs-JobTitle data-jk; canonical apply_url https://de.indeed.com/viewjob?jk=<jk>; description read from the in-page lazy detail panel after clicking the card (bounded ~10s poll, JSON-LD JobPosting script with #jobDescriptionText fallback, stale-guard via previous panel text), stripped/collapsed/truncated to 8000 chars. Next page via a[data-testid=pagination-page-next]. Runs in popup execution context (no 5-minute runtime cap).",
+  "includedWorkflows": {}
+}
