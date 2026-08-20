@@ -225,6 +225,62 @@ var NL = String.fromCharCode(10);
 return report.join(NL) || 'OK   (no ops this run)';
 ```
 
+## Intermediate checkpoint storage (batch research)
+
+When conducting batch research across multiple entities (e.g., 5–20 companies), **store intermediate progress after every 5–10 entities** — do not wait until the end. Subagent sessions may be resumed, interrupted, or split; intermediate checkpoints prevent context loss.
+
+**Checkpoint pattern:**
+1. After each batch of 5–10 entities, write a progress memory: `private/{domain}/batch-progress-{timestamp}` containing the list of entities processed so far, their status (cached/failed/skipped), and pointers to the cache entries created.
+2. On session resume, **read the latest progress memory first** — it tells you which entities are done, which failed, and where to continue.
+3. When the entire batch completes, delete or archive intermediate progress memories and replace with the final synthesis.
+
+**Progress memory format:**
+```
+# Batch Progress — <topic> (<date>)
+
+## Processed
+- entity-1: cached → mem:cache/...
+- entity-2: cached → mem:cache/...
+- entity-3: FAILED (reason)
+
+## Remaining
+- entity-4 through entity-10
+
+## Stats
+- Processed: 3/10
+- Cached: 2
+- Failed: 1
+```
+
+**Why 5–10 and not per-entity:** per-entity writes add overhead (one `mcp-exec` per checkpoint); 5–10 balances freshness against cost. The exact count depends on entity complexity — tune in site memory.
+
+## Single-Source Constraint
+
+When conducting research that specifies a single data source, apply this explicit negative constraint in the prompt:
+
+> **Do NOT use third-party data sources (Revelio Labs, StockAnalysis, etc.) unless explicitly requested. Use ONLY the data source specified in the request.**
+
+Without this negative constraint, subagents will mix in excluded sources — they default to broadening the search when left unrestricted. The positive instruction ("Use ONLY X") is necessary but insufficient on its own; the negative instruction ("Do NOT use Y, Z") closes the gap.
+
+**When to apply:**
+- The request names a specific data source (e.g., "research from LinkedIn only").
+- The task has data-source restrictions (e.g., "no third-party aggregators").
+- A prior run produced results from unintended sources.
+
+**Pattern in prompts:**
+```
+Use ONLY [specified source]. Do NOT use [excluded sources] unless explicitly requested.
+```
+
+**Example:**
+```
+Use ONLY LinkedIn company pages for employee count data. Do NOT use third-party
+data sources (Revelio Labs, StockAnalysis, Apollo, ZoomInfo, etc.) unless explicitly
+requested in the task.
+```
+
+**Verification:** After cache writes, check that every cache entry's `source:` header matches the allowed source. If a cache entry from a disallowed source appears, discard it and flag the prompt for revision.
+
 ## Generalized skeleton
 
 One compact script per SOURCE batch, phases labeled CHECK → FETCH → STORE → SYNTHESIZE (canonical checkpoints: [caching-rules.md](../references/caching-rules.md)). Split by source into a few `mcp-exec` calls — a monolithic batch with MANY tool calls can hit the gateway timeout (-32001) mid-loop. All loops live inside the script; no cross-call state is needed (variables do not persist between mcp-exec calls).

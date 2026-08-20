@@ -1,9 +1,8 @@
-"""Tests for the `session_parts.py` CLI (new Click interface: `conversation` / `parts` flows).
+"""Tests for the `session_parts.py` Click CLI (`conversation` / `parts` / `info` / `summary`).
 
-TDD status: the script at `scripts/session_parts.py` is STILL the old argparse
-implementation (`format`/`extract`). These tests target the NEW Click interface
-(`--session-file-json <path> conversation|parts ...`) and are therefore RED until
-the script is rewritten.
+The script at `scripts/session_parts.py` is the Click implementation
+(`--session-file-json <path> conversation|parts|info|summary ...`); this suite is
+green against it (22 original tests + `info`/`summary` coverage below).
 
 Fixture provenance
 ------------------
@@ -36,7 +35,7 @@ Expected `conversation` output: 3 text lines + 5 tool lines = 8 logical lines
 (reasoning, step-start, step-finish omitted). NOTE: truncated excerpts keep their
 interior newlines, so a logical line may span several physical lines in stdout.
 
-Contract interpretation (unchanged from the old suite): `msg_<messageID>` in the
+Contract interpretation: `msg_<messageID>` in the
 output templates means the message id taken from part["messageID"] as-is (it already
 starts with "msg_"), e.g. `msg_fce0d4a10001bR02RIHWfI4UI5 [assistant]: ...`.
 
@@ -47,11 +46,10 @@ All tests invoke the script EXACTLY as documented, via subprocess:
 `uv` resolves `click` from the project environment (`click>=8.1,<10` is a dependency
 in /workspace/pyproject.toml; verified: click 8.3.2 is importable under
 `uv run --quiet python -c "import click"`). Subprocess-only keeps the suite
-independent of the future module's internal structure (e.g. the Click group object
-name), exercises the user-documented invocation for every assertion, and produces
-uniform RED failures against the old argparse script. `uv run --quiet` works in this
-environment; if it ever prints extra output, drop `--quiet` (stderr equality
-assertions below would then need loosening).
+independent of the script's internal structure (e.g. the Click group object name)
+and exercises the user-documented invocation for every assertion. `uv run --quiet`
+works in this environment; if it ever prints extra output, drop `--quiet` (stderr
+equality assertions below would then need loosening).
 """
 
 from __future__ import annotations
@@ -553,10 +551,278 @@ def test_parts_no_matches_empty_output_exit_zero(session: dict) -> None:
     assert result.stdout == ""
 
 
+# --- info subcommand ---
+
+
+def test_info_key_value_default_format(session: dict) -> None:
+    """`info` (default key=value) prints every session-level field as key=value lines."""
+    result = invoke("info")
+    assert result.returncode == 0, result.stderr
+
+    info = session["info"]
+    kv = dict(ln.split("=", 1) for ln in result.stdout.splitlines())
+    assert kv["id"] == info["id"] == "ses_031f2b634ffep3ESmVmc0nPA3b"
+    assert kv["slug"] == info["slug"] == "glowing-harbor"
+    assert kv["title"] == info["title"] == "Explore repo devcontainer setup (@rug-swe subagent)"
+    assert kv["agent"] == info["agent"] == "rug-swe"
+    assert kv["model.id"] == info["model"]["id"] == "deepseek-v4-flash"
+    assert kv["model.providerID"] == info["model"]["providerID"] == "opencode-go"
+    assert kv["created"] == str(info["time"]["created"])
+    assert kv["updated"] == str(info["time"]["updated"])
+    # duration = updated - created = 490365 ms -> 8m 10s
+    assert kv["duration"] == "8m 10s"
+    assert kv["tokens.input"] == str(info["tokens"]["input"]) == "16318"
+    assert kv["tokens.output"] == str(info["tokens"]["output"]) == "747"
+    assert kv["tokens.reasoning"] == str(info["tokens"]["reasoning"]) == "853"
+    assert kv["tokens.cache.read"] == str(info["tokens"]["cache"]["read"]) == "45312"
+    assert kv["tokens.cache.write"] == str(info["tokens"]["cache"]["write"]) == "0"
+    # total is not stored at session level; computed = input+output+reasoning+cache.read
+    assert kv["tokens.total"] == "63230"
+    assert kv["cost"] == str(info["cost"]) == "0.0028593935999999998"
+
+
+def test_info_json_format(session: dict) -> None:
+    """`info --format json` emits a JSON object with the same fields."""
+    result = invoke("info", "--format", "json")
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+
+    info = session["info"]
+    assert payload["id"] == info["id"]
+    assert payload["agent"] == info["agent"]
+    assert payload["model"] == {"id": "deepseek-v4-flash", "providerID": "opencode-go"}
+    assert payload["duration"] == "8m 10s"
+    assert payload["tokens"]["input"] == info["tokens"]["input"]
+    assert payload["tokens"]["cache"]["read"] == info["tokens"]["cache"]["read"]
+    assert payload["tokens"]["total"] == 63230
+    assert payload["cost"] == info["cost"]
+
+
+def test_info_markdown_format(session: dict) -> None:
+    """`info --format markdown` emits a two-column field/value table."""
+    result = invoke("info", "--format", "markdown")
+    assert result.returncode == 0, result.stderr
+
+    assert "| Field | Value |" in result.stdout
+    assert "| agent | rug-swe |" in result.stdout
+    assert "| model.id | deepseek-v4-flash |" in result.stdout
+    assert "| duration | 8m 10s |" in result.stdout
+    assert "| tokens.total | 63230 |" in result.stdout
+
+
+def test_info_missing_fields_emitted_as_unknown(tmp_path: Path) -> None:
+    """Missing/incomplete `.info` must not crash; absent fields print as `unknown`."""
+    minimal = {
+        "info": {"id": "ses_minimal"},
+        "messages": [{"info": {"role": "user", "id": "msg_1"}, "parts": []}],
+    }
+    path = tmp_path / "minimal.json"
+    path.write_text(json.dumps(minimal), encoding="utf-8")
+
+    result = invoke("info", session_file=path)
+    assert result.returncode == 0, result.stderr
+    kv = dict(ln.split("=", 1) for ln in result.stdout.splitlines())
+    assert kv["id"] == "ses_minimal"
+    for field in ("slug", "title", "agent", "model.id", "model.providerID",
+                  "created", "updated", "duration", "tokens.input",
+                  "tokens.output", "tokens.reasoning", "tokens.cache.read",
+                  "tokens.cache.write", "tokens.total", "cost"):
+        assert kv[field] == "unknown", field
+
+    # json format: absent fields are the literal string "unknown", never missing keys
+    jresult = invoke("info", "--format", "json", session_file=path)
+    assert jresult.returncode == 0, jresult.stderr
+    payload = json.loads(jresult.stdout)
+    assert payload["agent"] == "unknown"
+    assert payload["tokens"]["input"] == "unknown"
+    assert payload["tokens"]["cache"]["read"] == "unknown"
+
+
+def test_info_invalid_format_exits_2(session: dict) -> None:
+    """Unknown --format value -> click usage error, exit code 2."""
+    result = invoke("info", "--format", "bogus")
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "bogus" in result.stderr
+
+
+# --- summary subcommand ---
+
+
+def test_summary_markdown_tool_and_token_tables(session: dict) -> None:
+    """`summary` markdown: §5 tool-call table with success/error split and §7 tokens."""
+    result = invoke("summary")
+    assert result.returncode == 0, result.stderr
+
+    # §5 Tool Calls: bash 3 calls (2 completed, 1 error), read 2 calls (both completed)
+    assert "| Tool Name | Call Count | Success | Errors |" in result.stdout
+    assert "| bash | 3 | 2 | 1 |" in result.stdout
+    assert "| read | 2 | 2 | 0 |" in result.stdout
+
+    # §7 Token Distribution from .info.tokens
+    assert "| Category | Tokens |" in result.stdout
+    assert "| Input | 16318 |" in result.stdout
+    assert "| Output | 747 |" in result.stdout
+    assert "| Reasoning | 853 |" in result.stdout
+    assert "| Cache Read | 45312 |" in result.stdout
+    assert "| Cache Write | 0 |" in result.stdout
+    assert "| **Total** | 63230 |" in result.stdout
+    assert "| **Cost:** | 0.0028593935999999998 |" in result.stdout
+
+
+def test_summary_markdown_steering_and_errors(session: dict) -> None:
+    """§4 steering rows and §6 consolidated errors (fixture has one steering + one tool error)."""
+    result = invoke("summary")
+    assert result.returncode == 0, result.stderr
+
+    # §4 Steering Instructions: M1 text part starts with `<steering ...>`
+    assert "| # | Reason | Severity |" in result.stdout
+    assert "user is away from keyboard" in result.stdout
+    assert "| 1 | user is away from keyboard" in result.stdout
+
+    # §6 Consolidated Errors: the single error tool part
+    assert "The user rejected permission to use this specific tool call." in result.stdout
+    assert "call_00_sd5HRDsI5lCcvz949INd8202" in result.stdout
+
+
+def test_summary_json_shape(session: dict) -> None:
+    """`summary --format json` emits structured aggregations (tools/skills/errors/tokens)."""
+    result = invoke("summary", "--format", "json")
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+
+    assert payload["tools"]["bash"] == {"count": 3, "success": 2, "errors": 1}
+    assert payload["tools"]["read"] == {"count": 2, "success": 2, "errors": 0}
+    assert payload["tokens"]["total"] == 63230
+    assert payload["cost"] == session["info"]["cost"]
+    assert len(payload["steering"]) == 1
+    assert payload["steering"][0]["severity"] == "warning"
+    assert any("rejected permission" in e["description"] for e in payload["errors"])
+
+
+def test_summary_skill_load_discriminator(tmp_path: Path) -> None:
+    """Skill loads count `skill` tool parts AND delegated `<task_skills>` payloads,
+    but NOT bare prose `<skill ... location=.../>` tags (plan §9 'loaded' definition)."""
+    crafted = {
+        "info": {"id": "ses_skill_disc"},
+        "messages": [
+            # signal (a): native `skill` tool call
+            {
+                "info": {"role": "assistant", "id": "msg_1"},
+                "parts": [
+                    {
+                        "type": "tool", "id": "prt_1", "messageID": "msg_1",
+                        "tool": "skill", "callID": "call_1",
+                        "state": {
+                            "status": "completed",
+                            "input": {"name": "test-design", "dir": "/skills/test-design"},
+                            "metadata": {"truncated": False},
+                        },
+                    },
+                ],
+            },
+            # signal (b): delegated envelope in a user text part (skills-loader form)
+            {
+                "info": {"role": "user", "id": "msg_2"},
+                "parts": [
+                    {
+                        "type": "text", "id": "prt_2", "messageID": "msg_2",
+                        "text": (
+                            "<task_skills>\n"
+                            '<skill name="context-gathering" '
+                            'path=".agents/skills/context-gathering/SKILL.md">\n'
+                            "<skill_index>\nreferences\n</skill_index>\n"
+                            "</skill>\n"
+                            "</task_skills>\n"
+                        ),
+                    },
+                ],
+            },
+            # inert prose tag: must NOT count as a load
+            {
+                "info": {"role": "user", "id": "msg_3"},
+                "parts": [
+                    {
+                        "type": "text", "id": "prt_3", "messageID": "msg_3",
+                        "text": (
+                            'Load the harness-management skill by name: '
+                            '<skill name="harness-management" '
+                            'location="../../harness-management/SKILL.md"/> '
+                            "is inert text, not a load signal.\n"
+                        ),
+                    },
+                ],
+            },
+        ],
+    }
+    path = tmp_path / "skill_disc.json"
+    path.write_text(json.dumps(crafted), encoding="utf-8")
+
+    result = invoke("summary", session_file=path)
+    assert result.returncode == 0, result.stderr
+
+    # both signals counted
+    assert "| test-design |" in result.stdout
+    assert "| context-gathering |" in result.stdout
+    # bare prose tag excluded
+    assert "harness-management" not in result.stdout
+
+    jresult = invoke("summary", "--format", "json", session_file=path)
+    assert jresult.returncode == 0, jresult.stderr
+    payload = json.loads(jresult.stdout)
+    sources = {s["name"]: s["source"] for s in payload["skills"]}
+    assert sources["test-design"] == "tool"
+    assert sources["context-gathering"] == "delegated"
+    assert "harness-management" not in sources
+
+
+def test_summary_errors_step_finish_and_reasoning(tmp_path: Path) -> None:
+    """§6 consolidates tool errors, step-finish error states and reasoning mentions."""
+    crafted = {
+        "info": {"id": "ses_errors"},
+        "messages": [
+            {
+                "info": {"role": "assistant", "id": "msg_1"},
+                "parts": [
+                    {
+                        "type": "tool", "id": "prt_1", "messageID": "msg_1",
+                        "tool": "bash", "callID": "call_err",
+                        "state": {"status": "error", "error": "permission denied"},
+                    },
+                    {
+                        "type": "step-finish", "id": "prt_2", "messageID": "msg_1",
+                        "state": {"status": "error", "error": "step failed"},
+                    },
+                    {
+                        "type": "reasoning", "id": "prt_3", "messageID": "msg_1",
+                        "text": "Tried approach A; it failed with an error. Trying B.",
+                    },
+                ],
+            },
+        ],
+    }
+    path = tmp_path / "errors.json"
+    path.write_text(json.dumps(crafted), encoding="utf-8")
+
+    result = invoke("summary", session_file=path)
+    assert result.returncode == 0, result.stderr
+    assert "permission denied" in result.stdout
+    assert "step failed" in result.stdout
+    assert "Tried approach A" in result.stdout  # reasoning error mention
+
+    jresult = invoke("summary", "--format", "json", session_file=path)
+    assert jresult.returncode == 0, jresult.stderr
+    payload = json.loads(jresult.stdout)
+    descs = [e["description"] for e in payload["errors"]]
+    assert any("permission denied" in d for d in descs)
+    assert any("step failed" in d for d in descs)
+    assert any("Tried approach A" in d for d in descs)
+
+
 # --- error handling (both flows) ---
 
 
-@pytest.mark.parametrize("subcommand", ["conversation", "parts"])
+@pytest.mark.parametrize("subcommand", ["conversation", "parts", "info", "summary"])
 def test_missing_session_file_exits_1(subcommand: str, tmp_path: Path) -> None:
     """Missing session file -> exit 1 + `error: session file not found: <path>` on stderr."""
     missing = tmp_path / "nope.json"
@@ -566,7 +832,7 @@ def test_missing_session_file_exits_1(subcommand: str, tmp_path: Path) -> None:
     assert result.stderr.rstrip("\n") == f"error: session file not found: {missing}"
 
 
-@pytest.mark.parametrize("subcommand", ["conversation", "parts"])
+@pytest.mark.parametrize("subcommand", ["conversation", "parts", "info", "summary"])
 def test_invalid_session_json_exits_1(subcommand: str, tmp_path: Path) -> None:
     """Invalid JSON -> exit 1 + `error: invalid session JSON in <path>: <msg>` on stderr."""
     bad = tmp_path / "bad.json"
@@ -581,7 +847,7 @@ def test_invalid_session_json_exits_1(subcommand: str, tmp_path: Path) -> None:
     assert result.stderr.rstrip("\n") == f"error: invalid session JSON in {bad}: {expected_msg}"
 
 
-@pytest.mark.parametrize("subcommand", ["conversation", "parts"])
+@pytest.mark.parametrize("subcommand", ["conversation", "parts", "info", "summary"])
 def test_missing_session_file_json_flag_exits_2(subcommand: str) -> None:
     """Missing required --session-file-json -> click usage error, exit code 2."""
     result = invoke(subcommand, session_file=None)

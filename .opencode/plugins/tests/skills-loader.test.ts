@@ -16,7 +16,7 @@ import Bun from 'bun'
 
 import { log } from '@plugins/helpers/logger'
 
-import { __peekEnvelopeForTests, __resetStoreForTests, createEnvelope, resolveEnvelope } from '@plugins/helpers/envelope-store'
+import { __peekEnvelopeForTests, __resetStoreForTests, createEnvelope, hasEnvelope, resolveEnvelope } from '@plugins/helpers/envelope-store'
 
 import { skillsLoaderPlugin } from '@plugins/skills-loader'
 
@@ -44,10 +44,10 @@ const chatMessageHook = (p: Awaited<ReturnType<typeof skillsLoaderPlugin>>) => p
  * Mirrors the implementation's constant description.
  */
 const envelopeTag = (key: string): string =>
-  `<envelope id="${key}" description="System-managed envelope; skill content is attached automatically. Do not modify."/>`
+  `<envelope id="${key}" description="${ENVELOPE_DESCRIPTION}"/>`
 
 /** Constant description used by the plugin's envelope tag. */
-const ENVELOPE_DESCRIPTION = 'System-managed envelope; skill content is attached automatically. Do not modify.'
+const ENVELOPE_DESCRIPTION = 'Subtask will see complete description of skills where this placeholder is.'
 
 /**
  * Builds a $ shell mock whose `ls -R .` invocation in the skill directory
@@ -99,7 +99,7 @@ describe('skillsLoaderPlugin', () => {
     const prompt = output.args.prompt as string
 
     // Prompt carries ONLY the small self-closing envelope tag — never the full skill content
-    expect(prompt).toMatch(/^<envelope id="[^"]+" description="System-managed envelope; skill content is attached automatically\. Do not modify\."\/>/)
+    expect(prompt).toMatch(/^<envelope id="[^"]+" description="Subtask will see complete description of skills where this placeholder is\."\/>/)
     expect(prompt).not.toContain('<skill name=')
     expect(prompt).not.toContain('Body of skill A.')
     expect(prompt).not.toContain('Body of skill B.')
@@ -299,7 +299,7 @@ describe('skillsLoaderPlugin', () => {
 
     expect(payload2).toContain('Skill A')
   })
-  it('does not double-envelope when the prompt already contains an envelope tag', async () => {
+  it('does not double-envelope when the prompt already contains a live envelope tag', async () => {
     registerSkillFiles({ 'skill-a': makeSkillFile({ content: '# Skill A', mtimeMs: 100 }) })
 
     const output = { args: { prompt: 'original', skills: ['skill-a'] } }
@@ -312,6 +312,7 @@ describe('skillsLoaderPlugin', () => {
     expect((firstPrompt.match(/<envelope /g) ?? []).length).toBe(1)
     expect(firstKey).not.toBe('')
     expect(__peekEnvelopeForTests(firstKey)).toBeDefined()
+    expect(await hasEnvelope(firstKey)).toBe(true)
 
     // Model echoes the enveloped prompt back with skills again
     mockBunFile.mockClear()
@@ -327,8 +328,114 @@ describe('skillsLoaderPlugin', () => {
     expect(envelopeKeyFromPrompt(secondPrompt)).toBe(firstKey)
     expect(mockBunFile).not.toHaveBeenCalled()
     expect(output2.args.skills).toEqual(['skill-a'])
-    // The single envelope entry is still the first one (not replaced/duplicated)
+    // The single envelope entry is still the live first one (not replaced/duplicated)
     expect(__peekEnvelopeForTests(firstKey)).toBeDefined()
+    expect(await hasEnvelope(firstKey)).toBe(true)
+  })
+  describe('GUARD 3 — envelope liveness', () => {
+    const dispatch = async (parts: Array<Record<string, unknown>>): Promise<Array<Record<string, unknown>>> => {
+      await chatMessageHook(plugin)({ sessionID: 's' }, { message: {} as never, parts: parts as never })
+      return parts
+    }
+
+    it('regression: an echoed consumed envelope is stripped and a fresh envelope replaces it when skills are passed again', async () => {
+      registerSkillFiles({ 'skill-a': makeSkillFile({ content: '# Skill A', mtimeMs: 100 }) })
+
+      // 1. First task: fresh envelope K1 created and injected
+      const firstOutput = { args: { prompt: 'first task', skills: ['skill-a'] } }
+
+      await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, firstOutput)
+
+      const firstPrompt = firstOutput.args.prompt as string
+      const key1 = envelopeKeyFromPrompt(firstPrompt)
+
+      expect(await hasEnvelope(key1)).toBe(true)
+
+      // 2. Recipient consumes K1 through the real chat.message unwrap hook
+      const parts: Array<Record<string, unknown>> = [{ type: 'text', text: firstPrompt }]
+
+      await dispatch(parts)
+      expect(await hasEnvelope(key1)).toBe(false)
+
+      // 3. A new task echoes the old (now consumed) tag and passes skills again
+      const echo = envelopeTag(key1)
+      const secondOutput = { args: { prompt: `new task\n${echo}`, skills: ['skill-a'] } }
+
+      await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, secondOutput)
+
+      const secondPrompt = secondOutput.args.prompt as string
+      const key2 = envelopeKeyFromPrompt(secondPrompt)
+
+      // 4. Dead echo filtered; fresh envelope K2 created and resolvable
+      expect(secondPrompt).not.toContain(key1)
+      expect(key2).not.toBe('')
+      expect(key2).not.toBe(key1)
+      expect(await hasEnvelope(key2)).toBe(true)
+      expect(await hasEnvelope(key1)).toBe(false)
+
+      const payload = await resolveEnvelope(key2)
+
+      expect(payload).toContain('Skill A')
+      expect(secondPrompt).toContain('<user_request>')
+    })
+
+    it('strips a dead (never-created) envelope tag when no skills are passed and creates no envelope', async () => {
+      const deadTag = envelopeTag('00000000-0000-4000-8000-000000000000')
+      const output = { args: { prompt: `prefix text\n${deadTag}\nsuffix text` } }
+
+      await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
+
+      const prompt = output.args.prompt as string
+
+      expect(prompt).not.toContain('<envelope ')
+      expect(prompt).not.toContain('00000000-0000-4000-8000-000000000000')
+      expect(prompt).toBe('<user_request>\nprefix text\n\nsuffix text\n</user_request>')
+      expect(mockBunFile).not.toHaveBeenCalled()
+    })
+
+    it('strips multiple dead envelope tags and injects exactly one fresh envelope when skills are provided', async () => {
+      registerSkillFiles({ 'skill-a': makeSkillFile({ content: '# Skill A', mtimeMs: 100 }) })
+
+      const dead1 = envelopeTag('11111111-1111-4111-8111-111111111111')
+      const dead2 = envelopeTag('22222222-2222-4222-8222-222222222222')
+      const output = { args: { prompt: `a ${dead1} b ${dead2} c`, skills: ['skill-a'] } }
+
+      await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
+
+      const prompt = output.args.prompt as string
+
+      expect(prompt).not.toContain('11111111-1111-4111-8111-111111111111')
+      expect(prompt).not.toContain('22222222-2222-4222-8222-222222222222')
+      expect((prompt.match(/<envelope /g) ?? []).length).toBe(1)
+
+      const key = envelopeKeyFromPrompt(prompt)
+
+      expect(await hasEnvelope(key)).toBe(true)
+      expect(prompt).toContain('<user_request>\na  b  c\n</user_request>')
+
+      const payload = await resolveEnvelope(key)
+
+      expect(payload).toContain('Skill A')
+    })
+
+    it('keeps a live envelope tag and skips skill loading when skills are passed (idempotency preserved)', async () => {
+      // A live, not-yet-consumed envelope in the store, as if from a concurrent task
+      const key = await createEnvelope('<task_skills>\n<skill name="skill-a">already loaded</skill>\n</task_skills>', { skills: [{ name: 'skill-a', mtimeMs: 100 }], unresolved: [] })
+
+      mockBunFile.mockClear()
+
+      const output = { args: { prompt: `keep ${envelopeTag(key)}`, skills: ['skill-a'] } }
+
+      await hook(plugin)({ tool: 'task', sessionID: 's', callID: 'c' }, output)
+
+      const prompt = output.args.prompt as string
+
+      expect((prompt.match(/<envelope /g) ?? []).length).toBe(1)
+      expect(envelopeKeyFromPrompt(prompt)).toBe(key)
+      expect(await hasEnvelope(key)).toBe(true)
+      expect(mockBunFile).not.toHaveBeenCalled()
+      expect(prompt).toContain('<user_request>')
+    })
   })
   it('regression: prose envelope examples in the prompt do not trip the idempotency guard — a real UUID envelope is still created', async () => {
     registerSkillFiles({ 'skill-a': makeSkillFile({ content: '# Skill A', mtimeMs: 100 }) })

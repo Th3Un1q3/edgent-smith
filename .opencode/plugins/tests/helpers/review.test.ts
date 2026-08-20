@@ -236,7 +236,7 @@ describe('clearReviewState', () => {
 })
 
 describe('renderProblemsMarkdown', () => {
-  it('renders the full markdown for a skill and an agent problem verbatim', () => {
+  it('renders the full markdown for a skill and an agent problem verbatim, each section carrying its problem-id comment', () => {
     const problems = [
       skillProblemStatement('test-design', 3, 5),
       agentProblemStatement('rug-swe', 20, 23),
@@ -247,9 +247,11 @@ describe('renderProblemsMarkdown', () => {
         '# Reported Threshold Violations',
         '',
         '## skill: test-design',
+        '<!-- problem-id: skill:test-design -->',
         'The session took 5 steps after skill \'test-design\' was loaded, exceeding the expected 3 steps for the task. The skill may not have been effective — investigate.',
         '',
         '## agent: rug-swe',
+        '<!-- problem-id: agent:rug-swe -->',
         'The session took 23 tool calls for agent \'rug-swe\', exceeding the agent\'s budget of 20 steps. Investigate why the agent exceeded its step budget.',
         '',
       ].join('\n'),
@@ -271,13 +273,51 @@ describe('renderProblemsMarkdown', () => {
         '# Reported Threshold Violations',
         '',
         '## skill: test-design',
+        '<!-- problem-id: skill:test-design -->',
         'The session took 5 steps after skill \'test-design\' was loaded, exceeding the expected 3 steps for the task. The skill may not have been effective — investigate.',
         '',
         '## skill: session-insights',
+        '<!-- problem-id: skill:session-insights -->',
         'The session took 9 steps after skill \'session-insights\' was loaded, exceeding the expected 4 steps for the task. The skill may not have been effective — investigate.',
         '',
       ].join('\n'),
     )
+  })
+
+  it('emits one problem-id comment under each section, with the id equal to source:thresholdName', () => {
+    const problems = [
+      skillProblemStatement('test-design', 3, 5),
+      skillProblemStatement('session-insights', 4, 9),
+      agentProblemStatement('rug-swe', 20, 23),
+    ]
+
+    const markdown = renderProblemsMarkdown(problems)
+    const headings = markdown.match(/^## .+$/gm) ?? []
+    const ids = markdown.match(/^<!-- problem-id: (.+) -->$/gm) ?? []
+
+    expect(headings).toEqual([
+      '## skill: test-design',
+      '## skill: session-insights',
+      '## agent: rug-swe',
+    ])
+    expect(ids).toEqual([
+      '<!-- problem-id: skill:test-design -->',
+      '<!-- problem-id: skill:session-insights -->',
+      '<!-- problem-id: agent:rug-swe -->',
+    ])
+    // each heading is immediately followed by its id comment line
+    const idValues = ids.map(id => id.replaceAll(/^<!-- problem-id: | -->$/g, ''))
+    for (const [index, heading] of headings.entries()) {
+      const [source, thresholdName] = heading.replace(/^## /, '').split(': ')
+      expect(idValues[index]).toBe(`${source}:${thresholdName}`)
+    }
+  })
+
+  it('renders no problem-id lines in the none-reported zero case', () => {
+    const markdown = renderProblemsMarkdown([])
+
+    expect(markdown).toContain('*None reported.*')
+    expect(markdown).not.toMatch(/problem-id/)
   })
 })
 

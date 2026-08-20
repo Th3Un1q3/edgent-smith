@@ -58,6 +58,7 @@ Model suffers following tools description.
 - cap number of agent steps
 - Embed deterministic checks to automatically become part of the loop.
 - Local models don't follow the system prompt strictly, if user used UPPERCASE this takes priority over system message.
+- You don't have web search by the model provider so bring your own.
 
 ## Codemode
 

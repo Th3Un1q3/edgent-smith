@@ -59,7 +59,7 @@ export function renderProblemsMarkdown(problems: ProblemStatement[]): string {
   if (problems.length === 0) {
     return '# Reported Threshold Violations\n\n*None reported.*\n'
   }
-  const sections = problems.map(p => `## ${p.source}: ${p.thresholdName}\n${p.message}`)
+  const sections = problems.map(p => `## ${p.source}: ${p.thresholdName}\n<!-- problem-id: ${p.source}:${p.thresholdName} -->\n${p.message}`)
   return `# Reported Threshold Violations\n\n${sections.join('\n\n')}\n`
 }
 

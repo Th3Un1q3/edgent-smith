@@ -1,0 +1,8 @@
+# Lessons Learned - LinkedIn 50-company research (append 2026-08-19)
+- CHART POINTS ARE GROUND TRUTH FOR DIRECTION: growth text regex captures only the absolute value (no minus sign). 7 entries had wrong sign fixed by comparing first/last chart point (arvato, deepl, maibornwolff, new-work-se, t-systems, commercetools, software-ag). ALWAYS compute direction = last - first.
+- Posts/About view drift: Zalando, Delivery Hero, init SE render views without the hiring chart; take_snapshot a11y tree also empty of counts/chart. No-data flag + re-capture via different route needed.
+- search-first wrong-entity trap: regional/subsidiary pages dominate results (msg Romania, USU s.r.o., init-ag agriculture, Allgeier exclude mistake - industry label contains services). ALWAYS title-verify; 3 prevented, 1 fixed (USU overwritten as no-data).
+- evaluate_script signature is {function: js} (NOT script), returns markdown-fenced JSON - unwrap helper required. Payload cap ~4KB - compact scripts, one company per exec for variant-probe flows (2 companies timeout).
+- Selector-quoting: unquoted attribute selectors throw (a[href*=x]); filter querySelectorAll(a) in JS instead.
+- Search-first captured this session: Vector Informatik, Allgeier Group, Trivago, Scout24 SE, GetYourGuide, q.beyond AG, Materna (correct entity), NTT global range, Siemens global range.
+- Memory cache must hold EVERY company: gaps (no-data entries) cost full re-capture.

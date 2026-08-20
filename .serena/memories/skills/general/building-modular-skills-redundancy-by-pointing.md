@@ -9,3 +9,10 @@ Compaction pass (v3.4.0, 2026-08-12) on the building-modular-skills meta-skill. 
 - Invariants that must never break: 16:16 one-to-one mapping, rule numbering.
 
 Related: mem:skills/general/validate-md-links-script (validate_md_links.py wired into the v3.4.0 routing table).
+
+## Pointer mechanics (context-gathering workflow rework, 2026-08-13)
+
+Workflow files hold the procedure; reference files hold the facts. Point, don't restate, using:
+- Numbered-entry references — `(devtools-known-issues #N)`: the reference's numbered list is canonical; the workflow cites the number, never the fact.
+- Section anchors — `[truncation-examples §A](../references/truncation-examples.md)`: anchor symbols name stable reference sections, so pointers survive edits.
+- The workflow restates only the procedure decision; every fact it needs is one pointer away.

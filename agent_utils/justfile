@@ -111,8 +111,56 @@ review-start session_id="":
                 { print }
             ' "$PROBLEMS_FILE" "$REVIEW_MD" > "$REVIEW_MD.tmp" && mv "$REVIEW_MD.tmp" "$REVIEW_MD"
         else
-            sed -i "s|<!-- FILL: problems.md -->|*The session took way too many steps.*|" "$REVIEW_MD"
+            # No problems.md: seed the plugin zero-problem convention
+            # (matches helpers/review.ts zero-case `*None reported.*`).
+            sed -i "s|<!-- FILL: problems.md -->|*None reported.*|" "$REVIEW_MD"
         fi
+        # Pre-fill §1 Duration (info) and splice §3-§7 (summary) from the CLI.
+        # On CLI failure, leave the template placeholders/markers and warn —
+        # never invent content (plan Step 4 / O3).
+        if INFO=$(uv run .agents/skills/session-insights/scripts/session_parts.py --session-file-json "$SESSION_DIR/session.json" info 2>/dev/null); then
+            DURATION=$(printf '%s\n' "$INFO" | awk -F= '/^duration=/{print $2; exit}')
+            if [ -n "$DURATION" ]; then
+                sed -i "s|<!-- FILL: computed -->|$DURATION|" "$REVIEW_MD"
+            else
+                echo "WARNING=info emitted no duration for $REVIEW_DIR; §1 Duration left for agent"
+            fi
+        else
+            echo "WARNING=session_parts.py info failed for $REVIEW_DIR; §1 Duration left as-is"
+        fi
+        SUMMARY_TMP="/tmp/review-start-summary.$$"
+        if uv run .agents/skills/session-insights/scripts/session_parts.py --session-file-json "$SESSION_DIR/session.json" summary --format markdown > "$SUMMARY_TMP" 2>/dev/null; then
+            for N in 3 4 5 6 7; do
+                if grep -q "^## $N\." "$SUMMARY_TMP"; then
+                    # Replace the template block between the section's markers with
+                    # the machine content (summary headings dropped — the template's
+                    # own headings stay).
+                    awk -v n="$N" '
+                        NR==FNR {
+                            if ($0 ~ /^## [0-9]+\./ && index($0, "## " n ". ") == 1) { active=1; next }
+                            if ($0 ~ /^## [0-9]+\./) { active=0; next }
+                            if (active) sec[++nsec]=$0
+                            next
+                        }
+                        $0 == ("<!-- AUTO-FILL: SECTION-" n "-START -->") {
+                            for (i=1; i<=nsec; i++) print sec[i]
+                            skip=1
+                            next
+                        }
+                        skip {
+                            if ($0 == ("<!-- AUTO-FILL: SECTION-" n "-END -->")) skip=0
+                            next
+                        }
+                        { print }
+                    ' "$SUMMARY_TMP" "$REVIEW_MD" > "$REVIEW_MD.tmp" && mv "$REVIEW_MD.tmp" "$REVIEW_MD"
+                else
+                    echo "WARNING=summary has no section $N for $REVIEW_DIR; template block left for agent"
+                fi
+            done
+        else
+            echo "WARNING=session_parts.py summary failed for $REVIEW_DIR; §3-§7 markers left for agent"
+        fi
+        rm -f "$SUMMARY_TMP"
         echo "STATUS=new"
         echo "MESSAGE=New review started"
         echo "SESSION_ID=$REVIEW_DIR"

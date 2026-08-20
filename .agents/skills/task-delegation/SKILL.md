@@ -36,6 +36,13 @@ When a subagent returns no usable output or exhausts its budget without producin
 1. **Resume before relaunching.** Re-invoke the subagent with the same `task_id` and a prompt like "report what you did and what remains." Context reuse is cheaper than re-discovery. If the resumed subagent still produces nothing, proceed to step 2.
 2. **Relaunch with narrow scope.** If resume fails, launch a fresh subagent with a single deliverable, step-by-step instructions, and an explicit directive to produce output immediately. Broad prompts ("implement X, Y, and Z") cause budget exhaustion on discovery — scope each subagent to one deliverable.
 
+## Pilot-first rule for research campaigns
+
+- Any research campaign spanning >5 entities MUST start with a single-entity pilot: capture one entity end-to-end (search → open → extract → store in memory → report), confirm the pipeline, then proceed.
+- Then run batches of ≤5 entities, with per-item recovery: on batch failure, save what succeeded (memory store first), retry ONLY the failed items — once — with a changed approach (smaller batch, different extractor, different navigation, longer waits). NEVER retry the same failing batch repeatedly.
+- Prefer RESUME (task_id) over fresh relaunch for resumable research scopes: resumption preserves calibrated technique and saves re-deriving context.
+- Store results per-entity in memory as the primary cache; a checkpoint file is a secondary crash-safety copy.
+
 ## Delegating Browser-Evidence Tasks
 
 Ask the user early (question tool) for artifacts only they can produce — address-bar URLs, run logs, screenshots, DOM snapshots — before spending subagent budget researching or deriving them.

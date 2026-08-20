@@ -61,6 +61,11 @@ For a recurring failure, the harness change belongs in the SKILL that governs th
 3. Execute the changes as the workflow describes.
 4. Ask for an opencode restart to apply the changes — agents, plugins, and skills load at server start.
 
+## Prioritization — recurrence × cost, cap 1–3
+
+- **Score by recurrence × cost per occurrence**: a one-off is a note in the flow's lesson record, not a harness change; a repeated or expensive failure is a harness change.
+- **Cap the action-item list at 1–3** (default cap) in every flow before recording or implementing.
+
 ## Related Skills
 
 - `building-modular-skills` — authoring workflow, multi-file layout, completion gate.

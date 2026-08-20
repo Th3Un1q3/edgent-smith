@@ -9,7 +9,7 @@
 import { Plugin } from '@opencode-ai/plugin'
 import type { PluginInput } from '@opencode-ai/plugin'
 import Bun from 'bun'
-import { createEnvelope, resolveEnvelope } from './helpers/envelope-store'
+import { createEnvelope, hasEnvelope, resolveEnvelope } from './helpers/envelope-store'
 import type { EnvelopeMetadata } from './helpers/envelope-store'
 import { log } from './helpers/logger'
 
@@ -77,12 +77,40 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory, $ }) => {
       const skills = output.args.skills
       const existingPrompt = (output.args.prompt || '') as string
 
-      // GUARD 3: Idempotency — never double-envelope. If the prompt already
-      // carries a REAL envelope tag (UUID id, e.g. the model echoed a
-      // previously-enveloped prompt back into a new task), skip skill loading
-      // and envelope creation entirely and just proceed to wrapping. Prose
-      // examples like `<envelope id="..." .../>` never match this pattern.
-      const isAlreadyEnveloped = ENVELOPE_TAG_PATTERN.test(existingPrompt)
+      // GUARD 3: Idempotency — never double-envelope a prompt that genuinely
+      // carries a LIVE envelope (payload still resolvable in the store).
+      // Envelope tags are classified by LIVENESS, not just UUID shape: a tag
+      // whose envelope was already consumed — or never existed (model echo or
+      // hallucination) — is stripped from the prompt so it can neither
+      // suppress fresh envelope creation nor reach the recipient. Prose
+      // examples like `<envelope id="..." .../>` never match the pattern.
+      // Fresh global regex per scan to avoid lastIndex hazards (same technique
+      // as the chat.message hook).
+      const envelopeTagPattern = new RegExp(ENVELOPE_TAG_PATTERN.source, 'g')
+
+      let cleanedPrompt = existingPrompt
+      let isAlreadyEnveloped = false
+      let result = ''
+      let lastIndex = 0
+      let match: RegExpExecArray | null
+
+      while ((match = envelopeTagPattern.exec(cleanedPrompt)) !== null) {
+        const tag = match[0]
+        const id = match[1]
+        if (await hasEnvelope(id)) {
+          // Live envelope — keep the tag and skip re-enveloping entirely.
+          isAlreadyEnveloped = true
+          result += cleanedPrompt.slice(lastIndex, match.index) + tag
+        }
+        else {
+          // Dead (consumed or never-created) tag — strip it, preserving the
+          // surrounding text exactly like the chat.message hook strips
+          // unknown ids. It must never suppress fresh envelope creation.
+          result += cleanedPrompt.slice(lastIndex, match.index)
+        }
+        lastIndex = match.index + tag.length
+      }
+      cleanedPrompt = result + cleanedPrompt.slice(lastIndex)
 
       let prefix = ''
 
@@ -151,14 +179,15 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory, $ }) => {
           // description cannot be misread by the model as a directive to
           // re-create, echo, or expand anything (the previous per-name array
           // description was hallucinated back into prompts as a fake tag).
-          const description = 'System-managed envelope; skill content is attached automatically. Do not modify.'
+          const description = 'Subtask will see complete description of skills where this placeholder is.'
           prefix = `<envelope id="${key}" description="${description}"/>`
         }
       }
 
       // --- Always wrap prompt ---
-      // Strip existing user_request wrappers to prevent nesting when the model echoes them back
-      const prompt = existingPrompt.replaceAll(/<\/?user_request>/g, '')
+      // Strip existing user_request wrappers from the CLEANED prompt (after
+      // dead-tag stripping) to prevent nesting when the model echoes them back
+      const prompt = cleanedPrompt.replaceAll(/<\/?user_request>/g, '')
       output.args.prompt = (prefix ? prefix + '\n' : '')
         + '<user_request>\n'
         + prompt

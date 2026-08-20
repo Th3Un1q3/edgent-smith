@@ -1,6 +1,6 @@
 # Reference: Content-Fetch API — Tools & Response Formats
 
-Canonical tool list and return formats for scripting the **tavily**, **youtube-transcript**, **deepwiki**, **github**, **fetch**, and **serena** MCP servers in code-mode for external content caching and cache-first research. The recipes point here instead of re-defining the formats, so there is a single source of truth. All tool calls must be **synchronous** — no `async`/`await`. Serena memory formats are NOT duplicated here — see [serena-memory-api.md](./serena-memory-api.md); this reference only records content-fetch/research-specific observations (e.g., the undocumented `max_chars`).
+Canonical tool list and return formats for scripting the **tavily**, **youtube-transcript**, **deepwiki**, **github**, **fetch**, and **serena** MCP servers in code-mode for external content caching and cache-first research. All tool calls must be **synchronous** — no `async`/`await`. Serena memory formats are NOT duplicated here — see [serena-memory-api.md](./serena-memory-api.md); this reference only records content-fetch/research-specific observations (e.g., the undocumented `max_chars`).
 
 ## Server identity
 

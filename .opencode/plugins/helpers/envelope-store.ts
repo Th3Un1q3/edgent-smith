@@ -59,6 +59,17 @@ export async function resolveEnvelope(key: string): Promise<string | undefined> 
 }
 
 /**
+ * Non-consuming liveness check: returns true iff a payload is currently stored
+ * for key. Unlike resolveEnvelope, this does NOT delete the entry — a later
+ * resolve still succeeds. Used by the skills-loader idempotency guard to
+ * distinguish a genuinely live envelope tag (skip re-enveloping) from a dead
+ * echo of an already-consumed envelope (strip it and create a fresh one).
+ */
+export async function hasEnvelope(key: string): Promise<boolean> {
+  return envelopes.has(key)
+}
+
+/**
  * Removes entries whose createdAt is older than maxAgeMs and returns how many
  * were removed. Never throws.
  */

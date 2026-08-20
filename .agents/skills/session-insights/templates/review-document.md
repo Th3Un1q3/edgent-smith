@@ -17,8 +17,7 @@ _This section lists threshold violations reported when the session went idle. If
 
 ## 1. Session Identity
 
-<!-- SOURCE: jq '{id, agent, model: .model.id, provider: .model.providerID, created: .time.created, updated: .time.updated}' <<< "$(jq .info session.json)" -->
-<!-- Duration = (updated - created) epoch ms → human-readable. -->
+<!-- SOURCE: filled by review-start from session_parts.py info/summary (see references/extending_scripts.md) -->
 - **Session ID:** <!-- FILL: .info.id -->
 - **Agent:** <!-- FILL: .info.agent -->
 - **Model:** <!-- FILL: .info.model.id (provider: .info.model.providerID) -->
@@ -53,40 +52,48 @@ _This section lists threshold violations reported when the session went idle. If
 
 ## 3. Skills Loaded
 
-<!-- SOURCE: jq '[.messages[].parts[] | select(.type == "tool" and .tool == "skill") | {name: .state.input.name, dir: .state.metadata.dir, truncated: .state.metadata.truncated}]' session.json -->
+<!-- SOURCE: filled by review-start from session_parts.py info/summary (see references/extending_scripts.md) -->
+<!-- AUTO-FILL: SECTION-3-START -->
 | Skill Name | Directory | Truncated? |
 |------------|-----------|------------|
 | <!-- FILL: name --> | <!-- FILL: dir --> | <!-- FILL: yes/no --> |
 <!-- If none: *No skills loaded.* -->
+<!-- AUTO-FILL: SECTION-3-END -->
 
 ## 4. Steering Instructions
 
-<!-- SOURCE: jq -r '.messages[].parts[] | select(.type == "text" and (.text | startswith("<steering>"))) | .text' session.json — extract reason and severity from each <steering> block. -->
+<!-- SOURCE: filled by review-start from session_parts.py info/summary (see references/extending_scripts.md) -->
+<!-- AUTO-FILL: SECTION-4-START -->
 | # | Reason | Severity |
 |---|--------|----------|
 | 1 | <!-- FILL: reason --> | <!-- FILL: severity --> |
 <!-- If none: *No steering instructions detected.* -->
+<!-- AUTO-FILL: SECTION-4-END -->
 
 ## 5. Tool Calls
 
-<!-- SOURCE: jq '[.messages[].parts[] | select(.type == "tool") | {tool: .tool, status: .state.status}]' session.json -->
+<!-- SOURCE: filled by review-start from session_parts.py info/summary (see references/extending_scripts.md) -->
+<!-- AUTO-FILL: SECTION-5-START -->
 | Tool Name | Call Count | Success | Errors |
 |-----------|-----------|---------|--------|
 | <!-- FILL: tool --> | <!-- FILL: total --> | <!-- FILL: ok --> | <!-- FILL: err --> |
 
 **Detailed errors:**
-<!-- SOURCE: jq -r '.messages[].parts[] | select(.type == "tool" and .state.status == "error") | "\(.callID): \(.tool) — \(.state.output // .state.error // \"unknown\")"' session.json -->
 - `<!-- FILL: callID -->` — **<!-- FILL: tool name -->**: <!-- FILL: error -->
 <!-- If none: *No tool errors recorded.* -->
+<!-- AUTO-FILL: SECTION-5-END -->
 
 ## 6. Consolidated Errors
 
 <!-- SOURCE: Collect from tool errors (Section 5), step-finish failure reasons, and error mentions in reasoning parts. -->
+<!-- AUTO-FILL: SECTION-6-START -->
 <!-- FILL: Each distinct error with source and description. If none: *No errors recorded.* -->
+<!-- AUTO-FILL: SECTION-6-END -->
 
 ## 7. Token Distribution
 
-<!-- SOURCE: jq '.info.tokens' session.json -->
+<!-- SOURCE: filled by review-start from session_parts.py info/summary (see references/extending_scripts.md) -->
+<!-- AUTO-FILL: SECTION-7-START -->
 | Category | Tokens |
 |----------|--------|
 | Input | <!-- FILL: .input --> |
@@ -96,6 +103,7 @@ _This section lists threshold violations reported when the session went idle. If
 | Cache Write | <!-- FILL: .cache.write --> |
 | **Total** | <!-- FILL: sum --> |
 | **Cost:** | <!-- FILL: .info.cost (USD) --> |
+<!-- AUTO-FILL: SECTION-7-END -->
 
 ## 8. Improvement Recommendations
 

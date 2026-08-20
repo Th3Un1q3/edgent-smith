@@ -14,6 +14,20 @@
 2. Follow [Scripting workflow](../workflows/scripting-workflow.md) — sync JS, error handling, mcp-exec patterns
 3. Activate code-mode: `gateway_code-mode({"name": "memory-manage", "servers": ["serena"]})`
 
+## Full-Store Scan Before Any Correction (MANDATORY)
+
+**Trigger:** any user-reported data discrepancy in memory — a stale value, a wrong figure, a missing update. Before touching ANY memory, run the full-store scan. Do NOT correct only the entry or domain the user names: values repeat across entries, and duplicate domains with near-identical stems hide siblings (e.g. `research/` vs `researches/`). A scan scoped to the named domain misses them; a full-store scan collapses N correction rounds into one.
+
+Checklist — every item is mandatory before any `edit_memory`, `rename_memory`, or `delete_memory` that corrects data:
+
+- [ ] **Enumerate all domains** — `list_memories({})` and record every domain prefix. This is a sanctioned full-store exception (same class as the "Find plain-text references" script below): corrections are value-based and can span any domain.
+- [ ] **Read every entry** — `read_memory` each entry in every domain; build the value map before diffing anything.
+- [ ] **Grep each corrected value across all domains** — for every corrected value (e.g. a company's employee count), search ALL entries in ALL domains for both the stale and the corrected form. Corrections are value-based, never entry-based.
+- [ ] **Apply all fixes in one pass** — one `mcp-exec` batch covering every hit found in the scan; do not report done while any sibling entry still carries the stale value.
+- [ ] **Verify with a final read** — re-read every touched entry (and re-list affected domains) to confirm no stale value survives anywhere.
+
+Run this checklist at the start of every correction workflow below and record its results in your delivery notes.
+
 ## Scripts
 
 ### Edit memory content (literal mode)
@@ -170,6 +184,8 @@ return "Plain-text references to " + target + " in:\n- " + hits.join("\n- ") +
 
 Permanently remove a memory file. Check that the memory exists first and verify its removal afterward.
 
+**Delete verification standard (MANDATORY):** always call `list_memories` after `delete_memory` and record the result — typically `{"memories": []}` when the domain is now empty — verbatim in your delivery notes. Never report a deletion without the confirming read; the empty listing is the only proof the delete landed rather than overwrote.
+
 ```javascript
 // Step 1: Confirm the memory exists by listing its parent topic.
 // Helper: parseJson — see ../references/serena-memory-api.md
@@ -188,12 +204,15 @@ if (typeof delResult !== "string" || delResult.indexOf("deleted") < 0) {
   return "Delete failed: " + delResult;
 }
 
-// Step 3: Verify the memory is gone by listing again.
+// Step 3: Verify the memory is gone by listing again — MANDATORY.
+// Never report a deletion without this confirming read; record the result
+// (typically {"memories": []}) verbatim in your delivery notes.
 var verifyList = list_memories({ topic: "auth" });
 var verifyParsed = parseJson(verifyList, "list_memories");
 var remaining = verifyParsed.memories || [];
 if (remaining.indexOf("auth/legacy-config") < 0) {
-  return "OK — deleted auth/legacy-config. " + remaining.length + " memory(s) remain in auth/.";
+  var confirmNote = "list_memories({topic: \"auth\"}) -> " + JSON.stringify(verifyParsed);
+  return "OK — deleted auth/legacy-config. Confirmed by " + confirmNote + ". " + remaining.length + " memory(s) remain in auth/.";
 } else {
   return "WARNING — delete reported success but memory still appears in listing.";
 }
@@ -303,8 +322,9 @@ return "OK — domain " + domain + " is consistent. about present. " + existingM
 Checklist — every item is objectively checkable and must pass before the operation counts as complete:
 
 - [ ] **Existence check** — the target memory was confirmed present via `list_memories`/`read_memory` before edit/rename/delete (or the intended "not found" path was returned).
+- [ ] **Full-store scan** — any data correction (user-reported discrepancy) ran the MANDATORY full-store scan first: all domains enumerated, every entry read, each corrected value grepped across all domains, all fixes applied in one pass, verified with a final read.
 - [ ] **Success substring** — every tool call returned its expected success substring (`"edited successfully"`, `"renamed from"`, `"deleted"`); no call was accepted on absence of error alone.
-- [ ] **Post-op verification** — after a delete, a fresh `list_memories({topic: <parent>})` no longer lists the memory; after an edit, `read_memory` shows the replacement text.
+- [ ] **Post-op verification** — after a delete, a fresh `list_memories({topic: <parent>})` no longer lists the memory AND the confirming result (typically `{"memories": []}`) was recorded verbatim in the delivery notes — never report a deletion without the confirming read; after an edit, `read_memory` shows the replacement text.
 - [ ] **Domain consistency** — the validate-domain script returns `OK`: `about` present, every name follows `<domain>/<subdomain>/<topic>`, no `index` memory, all `mem:` references resolve.
 - [ ] **Cross-references** — after a rename, no memory still references the old name: `mem:` refs were auto-updated by serena, and the "Find plain-text references" script returned zero hits (or each hit was reviewed and fixed via `edit_memory`).
 - [ ] **Content gate** — every `edit_memory` that changed content ran the [BLOCKING GATE](../references/memory-management-checklist.md); every `rename_memory` name passes the Discoverable check (self-describing); every `delete_memory` leaves the domain's `about` consistent.

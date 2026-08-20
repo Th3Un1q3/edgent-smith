@@ -1,6 +1,6 @@
 # Reference: Filesystem Server — Tools & Response Formats
 
-Canonical tool list and return formats for scripting the **filesystem** MCP server in code-mode. Recipes point here instead of re-defining the formats, so there is a single source of truth. All tool calls must be **synchronous** — no `async`/`await`. None of these tool names are hyphenated, so call them directly (no `globalThis['...']`).
+Canonical tool list and return formats for scripting the **filesystem** MCP server in code-mode. All tool calls must be **synchronous** — no `async`/`await`. None of these tool names are hyphenated, so call them directly (no `globalThis['...']`).
 
 ## Server identity
 

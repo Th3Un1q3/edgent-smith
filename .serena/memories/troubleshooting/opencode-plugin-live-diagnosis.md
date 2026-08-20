@@ -18,7 +18,7 @@ Loose detection (prompt.includes substring, id="([^"]+)") matches LITERAL PROSE:
 
 ## Gotchas
 
-- Plugins load at server start: applying a plugin change requires an opencode restart (operator-in-the-loop); unit tests cannot prove live hook wiring.
+- Plugins load at server start: applying a plugin change requires an opencode restart (operator-in-the-loop); unit tests cannot prove live hook wiring. This is a documented limitation, not an error: the restart is part of the flow, and the session-analysis and retrospect commands explicitly ask for an opencode restart after harness changes.
 - Log attribution: helpers/logger.ts hardcodes PLUGIN_ID=harness-plugin, so skills-loader logs appear as [harness-plugin] - attribute log lines per-plugin, not by the label.
 - A typed hook is a contract, not a guarantee - prove dispatch with runtime logs (mem:refactoring/permission-hooks).
 

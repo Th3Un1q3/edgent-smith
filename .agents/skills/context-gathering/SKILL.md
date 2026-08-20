@@ -10,8 +10,9 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.17.1"
+  version: "1.20.0"
   author: Th3Un1qu3
+  delta: "1.20.0: Add browser-runtime rule (no require()/Node.js APIs in evaluate_script), extractor smoke-test gate, and fallback ladder for batch extraction (P3 session review)."
   tools:
     - gateway_mcp-find
     - gateway_code-mode
@@ -20,9 +21,9 @@ metadata:
 
 # Context Gathering
 
-Gather relevant context before writing code, fixing bugs, or answering questions. Use gateway tools in the code‑mode scripting environment. They let you research external sources, explore local codebases, and turn findings into actionable information, replacing most webfetch or curl calls.
+Ground your responses, decisions, code changes, library selection with external, memory and internal context.
 
-Every gateway tool follows the standard `gateway_` prefix—e.g., `gateway_mcp-find`, `gateway_code-mode`, `gateway_mcp-exec`—and Docker MCP gateway hosts them.
+> Every gateway tool follows the standard `gateway_` prefix—e.g., `gateway_mcp-find`, `gateway_code-mode`, `gateway_mcp-exec`—and Docker MCP gateway hosts them.
 
 ## When Not to Use This Skill
 
@@ -191,9 +192,14 @@ flowchart TD
 - **Recall existing memories first:** before answering from memory, run [collect-relevant-memories](./recipes/collect-relevant-memories.md) — list domains, read each `about` entry, then fetch the matching memories.
 - **Verify every write:** after any write — memory, cache entry, file, or other store — read it back and confirm the content is present and correct before you report success, single script can do read after write. Apply this to every recipe: serena memory writes, cache entries, filesystem writes — not just caching.
 - **Store research output in memory, not files:** write cache and memory entries through the serena server — they are research output, not project-file modifications. Keep the cache-first pipeline unchanged for research-only or "do not modify project files" tasks (cache/memory writes via serena are not project-file modifications). Stop the writes only on an explicit operator instruction that forbids them: one naming a single store (memory, cache, or files) stops only that store; a general "don't write anything" stops all three.
-- **Start with the lightest server:** pick the default server per category in [references/server-selection.md](./references/server-selection.md) — the lightest one that can do the job. Escalate to a heavier server only on a concrete failure signal — a documented error shape, an empty or insufficient result, or an auth/JS wall; never escalate speculatively (full rules: [references/server-selection.md](./references/server-selection.md)). Reach devtools, the heaviest, last.
+- **Start with the lightest server:** pick the default server per category in [references/server-selection.md](./references/server-selection.md) — the lightest one that can do the job. Escalate to a heavier server only on a concrete failure signal — a documented error shape, an empty or insufficient result, or an auth/JS wall; never escalate speculatively (full rules: [references/server-selection.md](./references/server-selection.md)). Reach devtools, the heaviest, last — unless the task is an interactive browser task (SPA click-through, pagination, form submission, login-gated flows) or the operator explicitly chose devtools; see server-selection routing precedence.
 - **Cache external context:** check `cache/{source}/...` before every research fetch; store the full raw response on miss; cite entries with `mem:` refs. Follow the budget, key-scheme, and status-report rules in [references/caching-rules.md](./references/caching-rules.md).
 - **Budget Tools Outputs:** truncate every tool return in-script — snapshots ≤2 KB; read-backs return only header, length, and ≤700-char excerpt. Copy the worked JS: [references/truncation-examples.md](./references/truncation-examples.md).
+- **Batch execution gate:** batch browser visits follow the batch recipe: 2 `gateway_mcp_exec` calls per entity (NAVIGATE then EXTRACTION), ≤5 exec calls per batch → ≤2 entities per batch, chunked as needed; checkpoint written at each batch boundary. This prevents excessive round trips and respects the "least round trips" principle.
+- **Cache-before-fetch gate:** run a cache lookup (`cache/{source}/...`) before any web fetch; skip only if the cache server is unavailable. This is a BLOCKING gate — do not proceed with a fetch without checking cache first. Reference: [references/caching-rules.md](./references/caching-rules.md).
+- **Output truncation gate:** cap tool returns at 2 KB; truncate or summarize longer outputs. This is a BLOCKING gate — do not return oversized outputs. Reference: [references/truncation-examples.md](./references/truncation-examples.md).
+- **Smoke-test extractors before batch use:** validate an extraction script on the FIRST entity of a batch — confirm non-empty fields, iterate until accurate — before applying it to the rest ([recipes/batch-browser-automation.md](./recipes/batch-browser-automation.md)).
+- **Explicit negative constraints in research prompts:** when writing prompts for research tasks that have data-source restrictions, always include both a positive instruction ("Use ONLY A") and an explicit negative constraint ("Do NOT use X, Y, Z"). Subagents mix in excluded sources without negative constraints — the positive instruction alone is insufficient. Place the constraint at the start of the prompt. Example: "Use ONLY LinkedIn company pages. Do NOT use third-party data sources (Revelio Labs, StockAnalysis, Apollo, ZoomInfo)." Full pattern: [recipes/research-with-caching.md §Single-Source Constraint](./recipes/research-with-caching.md#single-source-constraint).
 
 ## Common Issues
 
@@ -201,12 +207,14 @@ flowchart TD
 - **Failures to setup the code-mode sandbox**: every `gateway_code-mode` call MUST set the `name` parameter (task-related sandbox name) and the `servers` parameter (only the servers you need). Following `gateway_mcp-exec` call relies on the returned sandbox name.
 - **Missunderstanding of MCP-find function**: `gateway_mcp-find` discovers servers, but does not activate them. It also does not search the web or codebase. Use it to find a server by keywords and then activate it with `gateway_code-mode` (recipes: setup, server-selection).
 - **Using async / `evaluate_script`**: all top level tool calls must be synchronous; the devtools `evaluate_script`(nested level) tool awaits async functions — see [references/devtools-known-issues.md](./references/devtools-known-issues.md).
+- **Node.js imports in page scripts**: `evaluate_script` runs in the browser realm — `require()`, `process`, `Buffer` are undefined and throw `ReferenceError: require is not defined` or `Invalid or unexpected token`. Write plain DOM/Web-API JS; reuse the battle-tested snippets and helpers in [references/snippets.md](./references/snippets.md) (devtools-known-issues #23).
 - **gateway_mcp-exec call shape**: `gateway_mcp-exec` REQUIRES `{"name": "<returned-sandbox-tool>", "arguments": {"script": "<js>"}}` — `name` and `arguments` are sibling top-level keys, and the JS lives under `arguments.script`. Flattening (`{"name", "script"}`) or putting `script` at top level fails with "name parameter is required" or a JSON parse error. Pre-flight before every exec: (1) top-level keys are exactly `name` + `arguments`; (2) `arguments.script` is a string; (3) the payload parses as valid JSON.
 - **gateway_mcp-exec messed escape**: the JS script is a JSON string whose own string literals are quoted again — a double quote meant for a query must appear as `\"` in the payload, and a stray `"` breaks JSON ("Expected '}'"). Avoid it by (a) building query strings with NO inner double quotes (single-word/single-phrase queries, no `"..."` operators), (b) single-quoting JS strings, and (c) using `JSON.stringify` instead of hand-escaping. On a "JSON Parse error" from exec, re-emit a corrected payload — never retry the same malformed string.
 - **Forgetting the sandbox name in `gateway_code-mode`**: every activation call REQUIRES the `name` parameter — the sandbox name (descriptive, task-related, e.g., `code-mode-<task>`). Omitting it, or passing arbitrary text, creates a nameless or misnamed sandbox and breaks the `gateway_mcp-exec` routing that depends on the returned prefixed tool name. Set the `name` in the SAME call as `servers`; never invent or reuse a name later. Run the [pre-flight checklist](#gateway_code-mode-pre-flight-checklist-mandatory) before dispatch.
 - **Aborted or errored `gateway_code-mode` activation**: if the activation is aborted ("Tool execution aborted") or fails, re-emit a corrected payload with `name` + `servers` set — never go idle silently. Report only when fully blocked (e.g., the gateway is unreachable). No further step can proceed without a valid sandbox, so recover before moving on.
 - **Using `read` and `grep` for other research**: fine to read exact files; for broader context gathering the gateway_* tools are more token-efficient. For disk access through the gateway (allowed-dir only), see [recipes/filesystem-access.md](./recipes/filesystem-access.md).
 - **Jumping to execution without reading any recipes**: the recipes contain the full workflow and error-handling rules; read them before running any scripts. The flowchart above shows the entry points, but each recipe contains the step-by-step instructions, including tool call shapes, error handling, and caching rules.
+- **Get context without gateway**: Trying curl, curl in python scripts - is overcomplication. Use optimized tools from servers available via the gateweay.
 
 ## Task Routing Table
 
@@ -225,6 +233,7 @@ Scan the routing table below to match the current task to one file. Each file co
 | Read, list, search, or write files on disk through the gateway — restricted to the filesystem server's allowed directories | Verify allowed dirs, then read/list/search/tree/info files; writes need planned cleanup (no delete tool) | [recipes/filesystem-access.md](./recipes/filesystem-access.md) |
 | Understand a GitHub repository — codebase, issues, docs | Semantic Q&A on repo code; search and analyze repository issues | [recipes/github-insights.md](./recipes/github-insights.md) |
 | Automate a browser / drive Chrome via devtools MCP (extract, navigate, SPA click-through) | Activate devtools sandbox, verify session (login-wall check), extract minimally, cache + memorize selectors, recover from drift | [workflows/browser-automation-devtools.md](./workflows/browser-automation-devtools.md) |
+| Batch research tasks — visiting multiple entities (5+) on a site | Chunk into batches of ≤2 entities; smoke-test the extractor on the first entity before the batch; use batch-browser-automation recipe for page visits with the fallback ladder | [recipes/batch-browser-automation.md](./recipes/batch-browser-automation.md) |
 | Devtools tool facts — return formats, quoting rules, known gotchas | Look up the favorite-tools table and known issues | [references/devtools-known-issues.md](./references/devtools-known-issues.md) |
 | Persist project knowledge — document modules, APIs, decisions | Write single/multiple memories with hierarchical, self-describing names, cross-references | [recipes/store-memories.md](./recipes/store-memories.md) |
 | Resuming work on a topic — recall what's known | List, read, aggregate memories by topic; follow cross-references | [recipes/collect-relevant-memories.md](./recipes/collect-relevant-memories.md) |

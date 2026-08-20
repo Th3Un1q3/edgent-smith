@@ -6,7 +6,7 @@ Make sure to perform servers discovery and code mode activation steps in the [Se
 
 ## Rules
 
-- Do NOT use `async` or `await`. All scripts must be synchronous.
+- Do NOT use `async`/`await` at the code-mode top level — each script is synchronous there. `async () => {...}` bodies are allowed ONLY inside `evaluate_script` (devtools-known-issues #2).
 - Variables declared in one script execution do not persist to the next. Each `mcp_exec` call runs in a fresh environment.
 - Use `globalThis` to access tools having hyphenated names. For example, a tool named `tavily-search` would be accessed as `globalThis["tavily-search"](params)`, while a tool named `search` can be called directly as `search(params)`.
 

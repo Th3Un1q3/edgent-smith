@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   DEFAULT_TTL_MS,
   createEnvelope,
+  hasEnvelope,
   pruneStaleEnvelopes,
   resolveEnvelope,
   __peekEnvelopeForTests,
@@ -96,6 +97,30 @@ describe('envelope-store', () => {
       expect(await resolveEnvelope(firstKey)).toBe('payload-1')
       expect(await resolveEnvelope(secondKey)).toBe('payload-2')
       expect(await resolveEnvelope(firstKey)).toBeUndefined()
+    })
+  })
+
+  describe('hasEnvelope', () => {
+    it('returns true right after createEnvelope and false after resolveEnvelope consumes it', async () => {
+      const key = await createEnvelope('payload', makeMetadata())
+
+      expect(await hasEnvelope(key)).toBe(true)
+      expect(await resolveEnvelope(key)).toBe('payload')
+      expect(await hasEnvelope(key)).toBe(false)
+      expect(__peekEnvelopeForTests(key)).toBeUndefined()
+    })
+
+    it('returns false for a never-created key without throwing', async () => {
+      await expect(hasEnvelope('00000000-0000-4000-8000-000000000000')).resolves.toBe(false)
+    })
+
+    it('does not consume the envelope: resolve after hasEnvelope still returns the payload', async () => {
+      const key = await createEnvelope('payload', makeMetadata())
+
+      expect(await hasEnvelope(key)).toBe(true)
+      expect(await hasEnvelope(key)).toBe(true)
+      expect(await resolveEnvelope(key)).toBe('payload')
+      expect(await hasEnvelope(key)).toBe(false)
     })
   })
 

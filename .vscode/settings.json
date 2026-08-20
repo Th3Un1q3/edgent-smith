@@ -10,5 +10,7 @@
             "--noprofile"
         ]
     },
-    "terminal.integrated.shellIntegration.enabled": true
+    "terminal.integrated.shellIntegration.enabled": true,
+    "mypy-type-checker.path": "${workspaceFolder}/.venv/bin/mypy",
+    "mypy-type-checker.cwd": "${workspaceFolder}"
 }

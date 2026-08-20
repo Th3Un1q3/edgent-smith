@@ -1,6 +1,6 @@
 # Reference: Serena Memory API — Helpers & Return Formats
 
-Canonical helper functions and return formats for scripting the **serena** MCP server in code-mode. The recipes point here instead of re-defining the helpers, so there is a single source of truth. All tool calls must be **synchronous** — no `async`/`await`.
+Canonical helper functions and return formats for scripting the **serena** MCP server in code-mode. All tool calls must be **synchronous** — no `async`/`await`.
 
 ## parseJson(str, label)
 

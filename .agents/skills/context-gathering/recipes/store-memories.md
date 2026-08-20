@@ -189,6 +189,20 @@ When a domain grows beyond a single memory, use the **domain/about** convention 
 
 PRE-EXISTING DOMAINS FIRST (rule + steps in [Memory Convention](../references/memory-convention.md)): before creating a new domain, collect relevant memories from ALL existing domains and place the knowledge in the best fit. Create a new domain ONLY when no existing domain can reasonably contain the knowledge AND it is systematically useful.
 
+### Domain collision check (MANDATORY before research writes)
+
+**Trigger:** storing or correcting research memory entries. Memory domains with near-identical stems are DISTINCT domains — `research/` and `researches/` coexisted and hid the canonical domain until a user pointed it out. Before writing into any research domain (or any domain whose stem could collide), run the collision check:
+
+1. **Run `list_memories({})`** — note every existing domain prefix. Same sanctioned full-store exception class as the manage-memories pre-correction scan: collisions can sit in any domain, so topic-scoping the list misses them.
+2. **Compare stems** — normalize (strip trailing plural `s`/`es`, hyphen/underscore variants) and flag domains that share a stem, e.g. `research` vs `researches`.
+3. **Consolidate into the canonical domain** — pick the existing domain that already holds the bulk of the topic's entries (or the best-fit domain per PRE-EXISTING DOMAINS FIRST above); write new entries there. Never create or write into a second stem-variant domain.
+4. **Store a SUPERSEDED pointer in the orphan** — any entry living in the non-canonical domain becomes a pointer first: rewrite its content to `# SUPERSEDED` + `mem:` links to the canonical entries + a note on why it moved (provenance preserved). Delete the orphan only after the pointer is in place — see the [manage-memories](manage-memories.md) delete verification standard.
+5. **Record outcomes** — domain list, canonical choice, and any SUPERSEDED pointer go into the delivery notes.
+
+### Capture lessons immediately
+
+Capture lessons immediately — after any discovery, batch, or quirk, append lessons to the relevant domain's lessons-learned entry right away; never defer to campaign end. Harness quirks (sync-only scripts, wait_for-as-sleep, evaluate_script {function: js} signature, ~4KB payload cap, MCP -32001 timeouts on large batches) are prime candidates and were re-learned by multiple agents when deferred.
+
 ### Private memories
 
 Only devtools-derived output from authenticated sessions (and PII / job / application data) is private. Such content goes to the `private` domain — never to a public domain. Public-source research and caches remain in `researches/{topic}` and `cache/{source}/...`. Write `private/about` first (see [Memory Convention](../references/memory-convention.md)), then `private/{subdomain}/{topic}` and `private/cache/{source}/...`. Run the same BLOCKING GATE before every write.
@@ -342,6 +356,7 @@ For `edit_memory` (literal/regex partial updates), the success string is `"...ed
 ## Acceptance criteria
 
 - [ ] BLOCKING GATE ran before every write: all 7 checklist boxes checked and the after-writing verify step executed — any unchecked box means no write.
+- [ ] **Domain collision check** — before writing/correcting research (or stem-collidable) domains, `list_memories({})` enumerated all domains, stems were compared for collisions (`research` vs `researches`), entries were consolidated into the canonical domain, and any orphan carried a SUPERSEDED pointer before deletion.
 - [ ] Every `write_memory`/`edit_memory` return is confirmed by substring check (`indexOf("written") > 0` for writes, `indexOf("edited") >= 0` for edits); `JSON.parse` is never applied to these plain-text returns.
 - [ ] New-domain creation ran the existence check first: `list_memories({topic: '<domain>'})` parsed and membership-tested for `<domain>/about`; an existing about returned SKIP (never overwritten during new-domain creation without operator approval). Routine about updates in existing domains (scope/boundaries changed) ran directly.
 - [ ] Batch script returns one status line per write/edit (OK/FAIL/ERROR) and the line count equals the number of operations attempted — a sibling failure did not abort the batch.

@@ -13,6 +13,7 @@ from cli.commands.experiment import (
 )
 from cli.commands.fix import run_fix
 from cli.commands.init import run_init
+from cli.commands.memory_viz import run_memory_viz
 from cli.commands.validate import run_validate
 
 
@@ -27,6 +28,33 @@ def cli() -> None:
 def hello(name: str) -> None:
     """Print a friendly greeting."""
     click.echo(f"Hello, {name}!")
+
+
+@cli.command("memory-viz")
+@click.option(
+    "--memories-dir",
+    "memories_dir",
+    default=None,
+    help=(
+        "Path to the Serena memories directory. Defaults to SERENA_MEMORIES_DIR "
+        "or .serena/memories under the current/git root."
+    ),
+)
+@click.option(
+    "--output",
+    default="memory-graph.html",
+    show_default=True,
+    help="Output HTML file path for the interactive graph.",
+)
+@click.option(
+    "--open",
+    "open_browser",
+    is_flag=True,
+    help="Open the generated graph in the default browser.",
+)
+def memory_viz(memories_dir: str | None, output: str, open_browser: bool) -> None:
+    """Generate an interactive graph of the Serena memory store."""
+    run_memory_viz(memories_dir=memories_dir, output=output, open_browser=open_browser)
 
 
 @cli.group()

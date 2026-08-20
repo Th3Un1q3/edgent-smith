@@ -64,6 +64,11 @@ Weight bands, lightest to heaviest:
 
 L1 local (serena, filesystem) → L2 structured APIs (github, deepwiki, context7) → L3 network (tavily, fetch, youtube-transcript) → L4 devtools (operator's Chrome).
 
+**Routing precedence** — three rules settle which routing mechanism wins:
+- An explicit operator tool choice OVERRIDES the lightest-first escalation.
+- Interactive browser tasks (SPA click-through, pagination, form submission, login-gated flows) are devtools-first — fetch/tavily cannot click or iterate pages; do not force a futile probe sequence.
+- Lightest-first applies when the operator has no tool preference and the content is static.
+
 Content-path spine: tavily_search (discovery) → context7 or deepwiki (knowledge) → tavily_extract (URL content) → fetch (public URL) → devtools → STOP.
 
 IF/THEN escalation rules:

@@ -11,6 +11,7 @@ Captures refactoring patterns, architectural decisions, and migration findings f
 - Process lessons: how to run multi-file refactoring sessions (see mem:refactoring/process/running-refactoring-sessions).
 - Python module moves: relocating a module between layers behind a re-export shim, pinned by a guard test (topics prefixed `python-*`).
 - Plugin runtime behavior as it drives refactoring decisions: hook lifecycle, SessionStorage-backed state, in-memory envelope state, and test harness configuration.
+- Session-review infrastructure consolidation: command evidence spine, review-document contract, skill-loading conventions, open decisions (subdomain `session-review/`).
 
 ## Boundaries (out of scope)
 

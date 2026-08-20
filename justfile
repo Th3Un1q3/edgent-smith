@@ -124,6 +124,15 @@ autoresearch +ARGS:
     set -euo pipefail
     {{ UV }} run python -m cli autoresearch "$@"
 
+# Generate an interactive graph of the Serena memory store as a single
+# self-contained HTML file (vis-network, no build step, no server).
+# Usage: just memory-viz [--memories-dir PATH] [--output PATH] [--open]
+[positional-arguments]
+memory-viz +ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ UV }} run python -m cli memory-viz "$@"
+
 # Run the edge agent with timing, tools used, output, and local OTLP trace metadata.
 edge-agent prompt:
     #!/usr/bin/env bash
