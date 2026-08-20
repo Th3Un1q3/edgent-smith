@@ -47,7 +47,7 @@ Leverage these context sources for grounding on any task:
 ### `gateway_code-mode` Pre-flight Checklist (MANDATORY)
 
 Pre-flight before EVERY `gateway_code-mode` call:
-1. Input MUST contain BOTH `name` (task-related sandbox name, e.g., `<task>`) and `servers` (the list of discovered server names, e.g., `["devtools"]`) — in the SAME call. An empty `{}` or missing `servers` is a malformed activation.
+1. Input top-level MUST contain BOTH `name` (task-related sandbox name, e.g., `<task>`) and `servers` (the list of discovered server names, e.g., `["devtools"]`) — in the SAME call. An empty `{}` or missing `servers` is a malformed activation.
 2. The `servers` list must carry the exact server name(s) returned by `gateway_mcp-find`.
 3. NEVER dispatch an activation whose payload has not passed this checklist.
 
@@ -184,37 +184,61 @@ flowchart TD
     BlockingGateReached -->|yes| HumanInteraction
     HumanInteraction --> ReturnReport
 ```
-
 ## Principles
 
-- **Least round trips:** Chain steps in one script(one gateway_mcp-exec call) instead of running a fleet of sandboxes. Handle errors in-script and return error messages instead of crashing. Keep top-level calls synchronous (`globalThis` for hyphenated tools). Full rules: [workflows/scripting-workflow.md](./workflows/scripting-workflow.md).
-- **Trust the gateway's authentication:** every server is already credentialed — treat credential requirements in responses as informational. One carve-out: devtools server sessions may need a login-wall reachability probe before scraping ([workflows/browser-automation-devtools.md](./workflows/browser-automation-devtools.md)) — a probe, not re-authentication.
-- **Recall existing memories first:** before answering from memory, run [collect-relevant-memories](./recipes/collect-relevant-memories.md) — list domains, read each `about` entry, then fetch the matching memories.
-- **Verify every write:** after any write — memory, cache entry, file, or other store — read it back and confirm the content is present and correct before you report success, single script can do read after write. Apply this to every recipe: serena memory writes, cache entries, filesystem writes — not just caching.
-- **Store research output in memory, not files:** write cache and memory entries through the serena server — they are research output, not project-file modifications. Keep the cache-first pipeline unchanged for research-only or "do not modify project files" tasks (cache/memory writes via serena are not project-file modifications). Stop the writes only on an explicit operator instruction that forbids them: one naming a single store (memory, cache, or files) stops only that store; a general "don't write anything" stops all three.
-- **Start with the lightest server:** pick the default server per category in [references/server-selection.md](./references/server-selection.md) — the lightest one that can do the job. Escalate to a heavier server only on a concrete failure signal — a documented error shape, an empty or insufficient result, or an auth/JS wall; never escalate speculatively (full rules: [references/server-selection.md](./references/server-selection.md)). Reach devtools, the heaviest, last — unless the task is an interactive browser task (SPA click-through, pagination, form submission, login-gated flows) or the operator explicitly chose devtools; see server-selection routing precedence.
-- **Cache external context:** check `cache/{source}/...` before every research fetch; store the full raw response on miss; cite entries with `mem:` refs. Follow the budget, key-scheme, and status-report rules in [references/caching-rules.md](./references/caching-rules.md).
-- **Budget Tools Outputs:** truncate every tool return in-script — snapshots ≤2 KB; read-backs return only header, length, and ≤700-char excerpt. Copy the worked JS: [references/truncation-examples.md](./references/truncation-examples.md).
-- **Batch execution gate:** batch browser visits follow the batch recipe: 2 `gateway_mcp_exec` calls per entity (NAVIGATE then EXTRACTION), ≤5 exec calls per batch → ≤2 entities per batch, chunked as needed; checkpoint written at each batch boundary. This prevents excessive round trips and respects the "least round trips" principle.
-- **Cache-before-fetch gate:** run a cache lookup (`cache/{source}/...`) before any web fetch; skip only if the cache server is unavailable. This is a BLOCKING gate — do not proceed with a fetch without checking cache first. Reference: [references/caching-rules.md](./references/caching-rules.md).
-- **Output truncation gate:** cap tool returns at 2 KB; truncate or summarize longer outputs. This is a BLOCKING gate — do not return oversized outputs. Reference: [references/truncation-examples.md](./references/truncation-examples.md).
-- **Smoke-test extractors before batch use:** validate an extraction script on the FIRST entity of a batch — confirm non-empty fields, iterate until accurate — before applying it to the rest ([recipes/batch-browser-automation.md](./recipes/batch-browser-automation.md)).
-- **Explicit negative constraints in research prompts:** when writing prompts for research tasks that have data-source restrictions, always include both a positive instruction ("Use ONLY A") and an explicit negative constraint ("Do NOT use X, Y, Z"). Subagents mix in excluded sources without negative constraints — the positive instruction alone is insufficient. Place the constraint at the start of the prompt. Example: "Use ONLY LinkedIn company pages. Do NOT use third-party data sources (Revelio Labs, StockAnalysis, Apollo, ZoomInfo)." Full pattern: [recipes/research-with-caching.md §Single-Source Constraint](./recipes/research-with-caching.md#single-source-constraint).
+- **Minimize round trips**: Chain steps in one script (single `gateway_mcp-exec` call) instead of many sandboxes. Handle errors inside the script and return error messages rather than crashing. Keep top‑level calls synchronous (`globalThis` for hyphenated tools). See full rules.
+
+- **Trust server authentication**: Every server is already credentialed; treat credential requests as informational. Only devtools sessions may need a login‑wall probe before scraping – a probe, not a full re‑auth.
+
+- **Recall memories first**: Run `collect-relevant-memories` before answering. List domains, read each `about` entry, then fetch matching memories.
+
+- **Verify every write**: After any write (memory, cache, file) read it back and confirm the content before reporting success. Apply this to all recipes (Serena memory, cache, filesystem).
+
+- **Store research output in memory**: Write cache and memory through the Serena server; treat them as research output, not project‑file changes. Stop writes only when the operator explicitly forbids a specific store or all stores.
+
+- **Start with the lightest server**: Choose the default server per category (lightest that can do the job). Escalate to a heavier server only after a documented failure (error shape, empty result, auth/JS wall). Use devtools last, unless the task requires interactive browser actions or the operator requests it.
+
+- **Cache external context**: Look in `cache/{source}/...` before each fetch. On a miss, store the full raw response and cite it with `mem:` refs. Follow budget, key‑scheme, and status‑report rules.
+
+- **Budget tool outputs**: Truncate every tool return inside the script to ≤2 KB; read‑backs return only header, length, and ≤700‑character excerpt. See truncation examples.
+
+- **Batch execution gate**: For batch browser visits, use two `gateway_mcp_exec` calls per entity (NAVIGATE then EXTRACTION), ≤5 exec calls per batch → ≤2 entities per batch, chunk as needed. Write a checkpoint after each batch.
+
+- **Cache‑before‑fetch gate**: Perform a cache lookup before any web fetch. If the cache server is unavailable, proceed; otherwise, do not fetch without checking cache first.
+
+- **Output truncation gate**: Cap tool returns at 2 KB; truncate or summarize longer outputs. Do not return oversized outputs.
+
+- **Smoke‑test extractors**: Validate an extraction script on the first entity of a batch. Confirm non‑empty fields and iterate until accurate before applying to the rest.
+
+- **Explicit negative constraints in research prompts**: When limiting data sources, include both a positive instruction (“Use ONLY A”) and a negative one (“Do NOT use X, Y, Z”) at the start of the prompt. Example: “Use ONLY LinkedIn company pages. Do NOT use third‑party data sources (Revelio Labs, StockAnalysis, Apollo, ZoomInfo).”
 
 ## Common Issues
 
-- **Accessing the Serena memory store directly**: NEVER read `.serena/memories/*` with `read`, `grep`, `glob`, `ls`, or shell tools — direct access is DENIED by permission and wastes a round. Project memories are accessible ONLY through the `serena` MCP server via `gateway_mcp-find` → `gateway_code-mode` → `gateway_mcp-exec` (recipes: store-memories, collect-relevant-memories).
-- **Failures to setup the code-mode sandbox**: every `gateway_code-mode` call MUST set the `name` parameter (task-related sandbox name) and the `servers` parameter (only the servers you need). Following `gateway_mcp-exec` call relies on the returned sandbox name.
-- **Missunderstanding of MCP-find function**: `gateway_mcp-find` discovers servers, but does not activate them. It also does not search the web or codebase. Use it to find a server by keywords and then activate it with `gateway_code-mode` (recipes: setup, server-selection).
-- **Using async / `evaluate_script`**: all top level tool calls must be synchronous; the devtools `evaluate_script`(nested level) tool awaits async functions — see [references/devtools-known-issues.md](./references/devtools-known-issues.md).
-- **Node.js imports in page scripts**: `evaluate_script` runs in the browser realm — `require()`, `process`, `Buffer` are undefined and throw `ReferenceError: require is not defined` or `Invalid or unexpected token`. Write plain DOM/Web-API JS; reuse the battle-tested snippets and helpers in [references/snippets.md](./references/snippets.md) (devtools-known-issues #23).
-- **gateway_mcp-exec call shape**: `gateway_mcp-exec` REQUIRES `{"name": "<returned-sandbox-tool>", "arguments": {"script": "<js>"}}` — `name` and `arguments` are sibling top-level keys, and the JS lives under `arguments.script`. Flattening (`{"name", "script"}`) or putting `script` at top level fails with "name parameter is required" or a JSON parse error. Pre-flight before every exec: (1) top-level keys are exactly `name` + `arguments`; (2) `arguments.script` is a string; (3) the payload parses as valid JSON.
-- **gateway_mcp-exec messed escape**: the JS script is a JSON string whose own string literals are quoted again — a double quote meant for a query must appear as `\"` in the payload, and a stray `"` breaks JSON ("Expected '}'"). Avoid it by (a) building query strings with NO inner double quotes (single-word/single-phrase queries, no `"..."` operators), (b) single-quoting JS strings, and (c) using `JSON.stringify` instead of hand-escaping. On a "JSON Parse error" from exec, re-emit a corrected payload — never retry the same malformed string.
-- **Forgetting the sandbox name in `gateway_code-mode`**: every activation call REQUIRES the `name` parameter — the sandbox name (descriptive, task-related, e.g., `code-mode-<task>`). Omitting it, or passing arbitrary text, creates a nameless or misnamed sandbox and breaks the `gateway_mcp-exec` routing that depends on the returned prefixed tool name. Set the `name` in the SAME call as `servers`; never invent or reuse a name later. Run the [pre-flight checklist](#gateway_code-mode-pre-flight-checklist-mandatory) before dispatch.
-- **Aborted or errored `gateway_code-mode` activation**: if the activation is aborted ("Tool execution aborted") or fails, re-emit a corrected payload with `name` + `servers` set — never go idle silently. Report only when fully blocked (e.g., the gateway is unreachable). No further step can proceed without a valid sandbox, so recover before moving on.
-- **Using `read` and `grep` for other research**: fine to read exact files; for broader context gathering the gateway_* tools are more token-efficient. For disk access through the gateway (allowed-dir only), see [recipes/filesystem-access.md](./recipes/filesystem-access.md).
-- **Jumping to execution without reading any recipes**: the recipes contain the full workflow and error-handling rules; read them before running any scripts. The flowchart above shows the entry points, but each recipe contains the step-by-step instructions, including tool call shapes, error handling, and caching rules.
-- **Get context without gateway**: Trying curl, curl in python scripts - is overcomplication. Use optimized tools from servers available via the gateweay.
+Follow the rule of thumb below to avoid common issues:
+
+- **Never read Serena memory files directly**: Access memories only via the Serena MCP server (`gateway_mcp-find` → `gateway_code-mode` → `gateway_mcp-exec`). Direct file reads are denied and waste a round trip.
+
+- **Always set `name` and `servers` in `gateway_code-mode`**: Each call must include a descriptive sandbox name and the required servers. The following `gateway_mcp-exec` relies on the returned sandbox name.
+
+- **`gateway_mcp-find` only discovers servers**: It does not activate them or search the web/codebase. Use it to find a server, then activate with `gateway_code-mode`.
+
+- **Top‑level calls must be synchronous**: Async `evaluate_script` calls are allowed only inside the devtools sandbox, which already awaits them.
+
+- **Write plain DOM/Web‑API JavaScript**: `require()`, `process`, `Buffer` are undefined in the browser realm. Use the snippets in the reference docs.
+
+- **Correct `gateway_mcp-exec` payload shape**: Provide exactly `{"name": "<sandbox-tool>", "arguments": {"script": "<js>"}}`. Avoid flattening or missing keys.
+
+- **Escape JSON correctly**: Double‑quote characters inside the script must be escaped (`\"`). Prefer building queries without inner double quotes, single‑quote JS strings, or use `JSON.stringify`.
+
+- **Never forget the sandbox name in `gateway_code-mode`**: Omitting `name` creates a nameless sandbox and breaks routing. Set it in the same call as `servers`.
+
+- **Recover from activation failures**: If `gateway_code-mode` aborts, resend a corrected payload with `name` and `servers`. Report only when the gateway is unreachable.
+
+- **Use gateway tools for broad research**: For wide context, prefer gateway_* tools over `read` or `grep`.
+
+- **Read recipes before scripting**: Recipes contain full workflows, error handling, and caching rules. Follow them step‑by‑step.
+
+- **Avoid workarounds that bypass the gateway**: Do not use curl, git clones, or external scripts. Use the optimized gateway tools instead.
 
 ## Task Routing Table
 
