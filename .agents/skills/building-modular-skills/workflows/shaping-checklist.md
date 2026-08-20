@@ -1,18 +1,18 @@
 # Workflow: Shaping Checklist — the Completion Gate
 
-Run this before declaring any skill complete — including this one. One unchecked box means the skill is NOT complete. The root's Completion Gate sentence points here, and this gate applies to this skill too.
+Run this before declaring any skill complete — including this one. One unchecked box means the skill is NOT complete. The root points here as the completion gate.
 
-**When to load:** before you declare a skill complete; after authoring or reworking a modular skill; whenever the root's Completion Gate sentence says "run the Shaping Checklist".
+**When to load:** before you declare a skill complete; after authoring or reworking a modular skill; whenever the root says "run the Shaping Checklist".
 
 ## How to run the gate
 
-1. Work through the 16 checks in order.
+1. Work through the 24 checks in order.
 2. Mark a box checked only when its pass statement holds.
 3. Run the self-audit command where one exists; confirm the output matches the stated pass.
 4. One unchecked box means the skill is NOT complete — fix the item, then re-run the gate from the top.
-5. The 16 checks map one-to-one to rules 1–16 in [references/guidance.md](../references/guidance.md); read the rule behind a failing check before fixing.
+5. The 24 checks map one-to-one to rules 1–24 in [references/guidance.md](../references/guidance.md); read the rule behind a failing check before fixing.
 
-## The 16 checks
+## The 24 checks
 
 1. **Root lean** — Pass: root SKILL.md ≤ ~90 lines, no sub-domain rule prose (see Rule 1).
    Run: `wc -l SKILL.md` — expect ≤ ~90.
@@ -27,8 +27,8 @@ Run this before declaring any skill complete — including this one. One uncheck
    List the terms the skill uses; confirm each appears in a Vocabulary line once.
    *If not:* fix per Rule 3 — define each term once in the relevant reference.
 
-4. **Writing style** — Pass: no nominalizations, stop-words, or passive constructions (see Rule 4).
-   Spot-check against [writing-style.instructions.md](../../../../.github/instructions/writing-style.instructions.md): kicker-first structure, one idea per sentence, concrete numbers.
+4. **Writing style** — Pass: prose complies with [writing-style.instructions.md](../../../../.opencode/instructions/writing-style.instructions.md) — kicker-first, one idea per sentence, concrete numbers (see Rule 4).
+   Spot-check a sample of body sentences against the style file.
    *If not:* fix per Rule 4 — rewrite each sentence with a clear subject and an active verb.
 
 5. **General** — Pass: no overfit to the originating task; specific applications sit in labeled "Example application:" sections at the end (see Rule 5).
@@ -68,13 +68,45 @@ Run this before declaring any skill complete — including this one. One uncheck
     *If not:* fix per Rule 13 — fix this skill, then re-run the gate.
 
 14. **Reader-benefit** — Pass: the reader path teaches the subject; no author-process content in body prose, headings, or fences; author-process history lives only in frontmatter `metadata.delta` (see Rule 14).
-    Run: the Rule 14 grep in [guidance.md](../references/guidance.md) (run from the skill's root) — expect zero matches in body prose; exceptions per Rule 14 in guidance.md.
+    Run: the Rule 14 audit command in [guidance.md](../references/guidance.md) (run from the skill's root) — expect no matches outside the exception categories Rule 14 documents: metadata.delta, the audit command itself, the rule's enumeration, label-placement guidance, and the checklist's gate text (checks 6, 14, 23).
     *If not:* fix per Rule 14 — delete or rewrite each hit to teach the subject; move author-process records to `metadata.delta`.
 
-15. **Fences valid** — Pass: every code fence valid for its declared language; every ```json fence parses with `json.loads`; no comment lines inside JSON fences; multi-document fragments wrapped in arrays or split (see Rule 15).
-    Run: the `json.loads` fence-audit script in [guidance.md](../references/guidance.md) Rule 15 (run from the skill's root directory) — expect zero lines printed.
+15. **Fences valid** — Pass: every code fence valid for its declared language; every ```json fence parses with `json.loads`; no comment lines inside JSON fences; multi-document fragments wrapped in arrays or split; `~~~~` fences audited like ``` fences (see Rule 15).
+    Run: `python3 scripts/audit_fences.py .` from the skill's root directory (see [guidance.md](../references/guidance.md) Rule 15) — expect zero violations printed.
     *If not:* fix per Rule 15 — wrap or split multi-document fences; strip comment lines from JSON fences; re-run until silent.
 
 16. **Examples match facts** — Pass: every example uses the shapes, schema, labels, and option keys the skill's own references define; no legacy or invented format contradicts a reference (see Rule 16).
     Run: the Rule 16 audit in [guidance.md](../references/guidance.md) — expect no example contradicting a reference the skill ships.
     *If not:* fix per Rule 16 — update the reference first, then rewrite every example that uses it.
+
+17. **Failure-mode-driven** — Pass: the description and When to Use name the agent failure mode the skill fixes; no structural mandate appears without a failure to justify it (see Rule 17).
+    Read the frontmatter description and When to Use; confirm they name a failure, not a topic.
+    *If not:* fix per Rule 17 — name the failure in the description; cut structure the failure does not require.
+
+18. **Description dialect** — Pass: the frontmatter description matches the invocation path — a human-facing one-liner for user-invoked skills, a trigger-rich model-facing description for model-invoked skills (see Rule 18).
+    Read the description; confirm the dialect matches how the skill gets invoked.
+    *If not:* fix per Rule 18 — rewrite the description for the invocation path.
+
+19. **Progressive disclosure** — Pass: always-loaded content minimal; detail in companion files; every reference section = one idea; budgets hold (see Rule 19).
+    Run: `wc -l SKILL.md references/*.md` — expect root ≤ ~90; flag a reference over ~250 lines for splitting unless it is the rules reference.
+    *If not:* fix per Rule 19 — push detail down or split the reference.
+
+20. **Executable with completion criteria** — Pass: every instruction executable or gated; steps state a "Done when:" signal; hard gates and honest out-of-scope lists present (see Rule 20).
+    Spot-check each step for a completion signal and each phase for a gate.
+    *If not:* fix per Rule 20 — add completion criteria per step; add gates and out-of-scope lists.
+
+21. **Positive prompting** — Pass: every behavioral prohibition carries a positive reframe; no no-op instructions in the reader path (see Rule 21).
+    Run: grep the teaching files (SKILL.md, references/, workflows/) for `Do not|Never|no ` — exempt structural negatives: "When Not to Use" scope sections, routing and scope statements, quoted examples that demonstrate a reframe, and this checklist's own pass statements. Expect every remaining negative beside a positive reframe.
+    *If not:* fix per Rule 21 — add the reframe next to each prohibition; prune no-ops.
+
+22. **Composed via explicit calls** — Pass: cross-skill invocation names the Skill tool explicitly; primitives referenced by path, not re-described (see Rule 22).
+    Read cross-skill references; confirm they name the tool and point to the primitive.
+    *If not:* fix per Rule 22 — name the tool; point to the primitive.
+
+23. **Nothing invented** — Pass: every fact and example verified against a trusted source or the skill's own references; no invented behavior; no user questions for look-up-able facts (see Rule 23).
+    Cross-check each factual claim and example against its source.
+    *If not:* fix per Rule 23 — verify, resolve, and look facts up yourself.
+
+24. **Single source of truth** — Pass: no content duplicated across files; duplicates replaced by path or URL references (see Rule 24).
+    Run: grep for phrase blocks repeated across files — expect no duplicate prose.
+    *If not:* fix per Rule 24 — keep one source of truth; reference by path.

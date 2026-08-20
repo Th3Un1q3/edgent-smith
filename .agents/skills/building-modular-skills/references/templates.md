@@ -11,7 +11,9 @@ Copy this skeleton for the root index-and-router.
 ---
 name: my-skill-name
 description: >
-  One-sentence summary of what this skill does, when to trigger, and what to exclude.
+  User-invoked skill: one-line human-facing summary of what this skill does.
+  Model-invoked skill: trigger-rich description that names the failure it fixes
+  and the user phrases that should fire it (Rules 17-18).
 license: MIT
 compatibility: Universal
 metadata:
@@ -58,9 +60,9 @@ Every file appears here; pick the row that matches your task.
 - `sibling-skill` — what it provides.
 ~~~~
 
-The root carries no author-process section — no Completion Gate, no provenance notes. Author-process records (version, delta) live in frontmatter `metadata.delta` (Rule 14).
+The root carries no author-process section; author-process records (version, delta) live in frontmatter `metadata.delta` (Rule 14).
 
-**Root leanness, routing completeness, versioning: Rules 1, 8, 12.**
+**Root leanness, routing completeness, versioning: Rules 1, 8, 12. Description dialect and failure-mode naming: Rules 17-18.**
 
 ## Workflow File Template
 
@@ -78,9 +80,11 @@ When to load: [when this workflow applies].
 
 ## Steps
 
-1. **Step one** — brief action and why.
-2. **Step two** — brief action and why.
-3. **Step three** — brief action and why.
+1. **Step one** — brief action and why. Done when: [observable completion signal].
+2. **Step two** — brief action and why. Done when: [observable completion signal].
+3. **Step three** — brief action and why. Done when: [observable completion signal].
+
+Gate: [hard stop — no [x], no next step] (Rule 20).
 
 ## Examples
 
@@ -98,9 +102,10 @@ Ask the user before proceeding if:
 
 - [Measurable check 1]
 - [Measurable check 2]
+- It's working if: [observable signal that the outcome holds]
 ~~~~
 
-**Fence validity:** See Rule 15. **No meta-commentary:** See Rule 14.
+**Fence validity:** See Rule 15. **No meta-commentary:** See Rule 14. **Completion criteria:** See Rule 20.
 
 The root links this file; place a copy-pasteable example adjacent to every numeric or behavioral rule in the steps.
 
@@ -132,4 +137,4 @@ console.log(option_a);
 ```
 ~~~~
 
-Define jargon once in the Vocabulary line; place a copy-pasteable example adjacent to each rule.
+Define jargon once in the Vocabulary line; place a copy-pasteable example adjacent to each rule. Keep each section to one idea; split a reference past ~250 lines into a sibling file (Rule 19).
