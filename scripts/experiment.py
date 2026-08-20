@@ -188,6 +188,94 @@ def build_local_loop_prompt(candidate_path: Path) -> str:
     )
 
 
+def _run_generated_hook_if_present(
+    *,
+    hooks_set: str | None,
+    hooks_dir: Path | None,
+    baseline_id: str,
+    iteration: int,
+    draft_path: Path,
+    title_path: Path,
+    body_path: Path,
+    candidate_path: Path,
+) -> None:
+    """Run the iteration's generated hook when a hooks dir is enabled."""
+    if hooks_dir is None:
+        return
+    if hooks_set is None:
+        raise ValueError("Hook set name is required when hooks are enabled.")
+    generated_hook = hooks_dir / GENERATED_HOOK_NAME
+    if generated_hook.exists():
+        run_hook_script(
+            generated_hook,
+            build_hook_env(
+                hooks_set=hooks_set,
+                baseline_id=baseline_id,
+                iteration=iteration,
+                draft_path=draft_path,
+                title_path=title_path,
+                body_path=body_path,
+                candidate_path=candidate_path,
+            ),
+        )
+
+
+def _resolve_promotion_result(baseline_id: str, result: dict[str, Any]) -> tuple[str, bool]:
+    """Promote the baseline when the candidate is ready; return (status, improved)."""
+    improved = result["status"] == "candidate_ready"
+    final_status = str(result["status"])
+    if improved:
+        try:
+            promote_baseline(baseline_id)
+            final_status = "succeeded"
+        except subprocess.CalledProcessError as exc:
+            log(f"Baseline promotion failed for {baseline_id}: {exc}")
+            final_status = "promotion_failed"
+    return final_status, improved
+
+
+def _run_completion_hook_if_present(
+    *,
+    hooks_set: str | None,
+    hooks_dir: Path | None,
+    baseline_id: str,
+    iteration: int,
+    draft_path: Path,
+    title_path: Path,
+    body_path: Path,
+    candidate_path: Path,
+    status: str,
+    improved: bool,
+    result: dict[str, Any],
+) -> None:
+    """Run the completion hook when a hooks dir is enabled; log (not raise) on failure."""
+    if hooks_dir is None:
+        return
+    if hooks_set is None:
+        raise ValueError("Hook set name is required when hooks are enabled.")
+    completion_hook = hooks_dir / COMPLETE_HOOK_NAME
+    if completion_hook.exists():
+        try:
+            run_hook_script(
+                completion_hook,
+                build_hook_env(
+                    hooks_set=hooks_set,
+                    baseline_id=baseline_id,
+                    iteration=iteration,
+                    draft_path=draft_path,
+                    title_path=title_path,
+                    body_path=body_path,
+                    candidate_path=candidate_path,
+                    status=status,
+                    improved=improved,
+                    baseline_score=int(result["baseline_score"]),
+                    candidate_score=int(result["candidate_score"]),
+                ),
+            )
+        except subprocess.CalledProcessError as exc:
+            log(f"Completion hook {completion_hook.name} failed: {exc}")
+
+
 def run_local_loop_iteration(
     *,
     iteration: int,
@@ -208,23 +296,16 @@ def run_local_loop_iteration(
         run_prepare_command(prepare_cmd)
 
     hooks_dir = resolve_hook_set_dir(hooks_set) if hooks_set else None
-    if hooks_dir is not None:
-        if hooks_set is None:
-            raise ValueError("Hook set name is required when hooks are enabled.")
-        generated_hook = hooks_dir / GENERATED_HOOK_NAME
-        if generated_hook.exists():
-            run_hook_script(
-                generated_hook,
-                build_hook_env(
-                    hooks_set=hooks_set,
-                    baseline_id=baseline_id,
-                    iteration=iteration,
-                    draft_path=draft_path,
-                    title_path=title_path,
-                    body_path=body_path,
-                    candidate_path=candidate_path,
-                ),
-            )
+    _run_generated_hook_if_present(
+        hooks_set=hooks_set,
+        hooks_dir=hooks_dir,
+        baseline_id=baseline_id,
+        iteration=iteration,
+        draft_path=draft_path,
+        title_path=title_path,
+        body_path=body_path,
+        candidate_path=candidate_path,
+    )
 
     refresh_local_spec_inputs(draft_path, title_path, body_path)
     checkpoint_local_spec(
@@ -246,44 +327,25 @@ def run_local_loop_iteration(
         state_path=state_path,
     )
 
-    improved = result["status"] == "candidate_ready"
-    final_status = str(result["status"])
-    if improved:
-        try:
-            promote_baseline(baseline_id)
-            final_status = "succeeded"
-        except subprocess.CalledProcessError as exc:
-            log(f"Baseline promotion failed for {baseline_id}: {exc}")
-            final_status = "promotion_failed"
+    final_status, improved = _resolve_promotion_result(baseline_id, result)
 
     final_result = dict(result)
     final_result["status"] = final_status
     final_result["improved"] = improved
 
-    if hooks_dir is not None:
-        if hooks_set is None:
-            raise ValueError("Hook set name is required when hooks are enabled.")
-        completion_hook = hooks_dir / COMPLETE_HOOK_NAME
-        if completion_hook.exists():
-            try:
-                run_hook_script(
-                    completion_hook,
-                    build_hook_env(
-                        hooks_set=hooks_set,
-                        baseline_id=baseline_id,
-                        iteration=iteration,
-                        draft_path=draft_path,
-                        title_path=title_path,
-                        body_path=body_path,
-                        candidate_path=candidate_path,
-                        status=final_status,
-                        improved=improved,
-                        baseline_score=int(result["baseline_score"]),
-                        candidate_score=int(result["candidate_score"]),
-                    ),
-                )
-            except subprocess.CalledProcessError as exc:
-                log(f"Completion hook {completion_hook.name} failed: {exc}")
+    _run_completion_hook_if_present(
+        hooks_set=hooks_set,
+        hooks_dir=hooks_dir,
+        baseline_id=baseline_id,
+        iteration=iteration,
+        draft_path=draft_path,
+        title_path=title_path,
+        body_path=body_path,
+        candidate_path=candidate_path,
+        status=final_status,
+        improved=improved,
+        result=result,
+    )
 
     return final_result
 

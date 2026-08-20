@@ -35,12 +35,15 @@ target-version = "py313"
 exclude = [".agents/skills/"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "S"]
+select = ["E", "F", "I", "UP", "B", "C901", "SIM", "S"]
 ignore = ["S603", "S607"]  # subprocess with list is fine
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]  # assert is idiomatic in pytest tests
 "**/tests/**" = ["S101"]  # ignore asserts in nested tests directories
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
 
 [tool.mypy]
 python_version = "3.13"

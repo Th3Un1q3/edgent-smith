@@ -8,6 +8,7 @@
  */
 import { Plugin } from '@opencode-ai/plugin'
 import type { PluginInput } from '@opencode-ai/plugin'
+import type { OpencodeClient } from '@opencode-ai/sdk'
 import Bun from 'bun'
 import { createEnvelope, hasEnvelope, resolveEnvelope } from './helpers/envelope-store'
 import type { EnvelopeMetadata } from './helpers/envelope-store'
@@ -36,6 +37,135 @@ async function buildSkillIndex(name: string, directory: string, $: PluginInput['
   catch {
     return `<skill_index>\n.agents/skills/${name}/SKILL.md\n</skill_index>`
   }
+}
+
+type ResolvedSkill = { name: string, content: string, mtimeMs: number }
+
+// Strip envelope tags whose payload is no longer resolvable (consumed or
+// never-created) from the prompt, preserving live tags. Returns the cleaned
+// prompt plus whether any live envelope tag survived. Fresh global regex per
+// scan to avoid lastIndex hazards (same technique as the chat.message hook).
+async function stripDeadEnvelopeTags(prompt: string): Promise<{ cleanedPrompt: string, hasLiveEnvelope: boolean }> {
+  const envelopeTagPattern = new RegExp(ENVELOPE_TAG_PATTERN.source, 'g')
+
+  const cleanedPrompt = prompt
+  let hasLiveEnvelope = false
+  let result = ''
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = envelopeTagPattern.exec(cleanedPrompt)) !== null) {
+    const tag = match[0]
+    const id = match[1]
+    if (await hasEnvelope(id)) {
+      // Live envelope — keep the tag and skip re-enveloping entirely.
+      hasLiveEnvelope = true
+      result += cleanedPrompt.slice(lastIndex, match.index) + tag
+    }
+    else {
+      // Dead (consumed or never-created) tag — strip it, preserving the
+      // surrounding text exactly like the chat.message hook strips
+      // unknown ids. It must never suppress fresh envelope creation.
+      result += cleanedPrompt.slice(lastIndex, match.index)
+    }
+    lastIndex = match.index + tag.length
+  }
+
+  return { cleanedPrompt: result + cleanedPrompt.slice(lastIndex), hasLiveEnvelope }
+}
+
+// Read one skill file. Returns undefined when the skill directory/file is
+// missing — the caller reports it as unresolved.
+async function readSkillFile(name: string, directory: string): Promise<Omit<ResolvedSkill, 'name'> | undefined> {
+  const filePath = `${directory}/.agents/skills/${name}/SKILL.md`
+  const file = Bun.file(filePath)
+
+  if (!file || !(await file.exists())) return undefined
+
+  const content = await file.text()
+  const stat = await file.stat()
+  return { content, mtimeMs: stat.mtimeMs }
+}
+
+// Load skill files referenced by the task args, tracking both resolved and
+// unresolved skills. Empty skills arrays are logged as a debug hint.
+async function loadSkillFiles(
+  skills: unknown,
+  directory: string | undefined,
+  client: OpencodeClient,
+): Promise<{ resolved: ResolvedSkill[], unresolved: string[] }> {
+  const resolved: ResolvedSkill[] = []
+  const unresolved: string[] = []
+
+  if (Array.isArray(skills) && skills.length === 0) {
+    await log(client, 'debug', 'skills array is empty — nothing to load')
+  }
+
+  if (!Array.isArray(skills) || skills.length === 0 || !directory) {
+    return { resolved, unresolved }
+  }
+
+  for (const name of skills) {
+    const skill = await readSkillFile(name, directory)
+    if (skill === undefined) {
+      await log(client, 'info', `Load the skill "${name}" by the name.`)
+      unresolved.push(name)
+      continue
+    }
+    resolved.push({ name, ...skill })
+  }
+
+  return { resolved, unresolved }
+}
+
+// Build the envelope placeholder tag from the loaded skill blocks. Returns ''
+// when there is nothing to wrap.
+async function buildEnvelopePrefix(
+  resolved: ResolvedSkill[],
+  unresolved: string[],
+  directory: string,
+  $: PluginInput['$'],
+): Promise<string> {
+  // Sort resolved by mtimeMs ascending (oldest/most-stable first)
+  const sortedResolved = [...resolved].sort((a, b) => a.mtimeMs - b.mtimeMs)
+
+  if (sortedResolved.length === 0 && unresolved.length === 0) return ''
+
+  // Build resolved skill blocks with path attribute and skill_index
+  const resolvedBlocks: string[] = []
+  for (const s of sortedResolved) {
+    const index = await buildSkillIndex(s.name, directory, $)
+    const path = `.agents/skills/${s.name}/SKILL.md`
+    resolvedBlocks.push(
+      `<skill name="${s.name}" path="${path}">\n${index}\n${s.content}\n</skill>`,
+    )
+  }
+
+  // Build unresolved skill blocks as reference tags
+  const unresolvedBlocks = unresolved.map(
+    name => `<skill name="${name}" reference="true">Load the skill "${name}" by the name.</skill>`,
+  )
+
+  const allBlocks = [...resolvedBlocks, ...unresolvedBlocks]
+
+  // Full payload — byte-identical to the previous direct-injection format
+  const payload = `<task_skills>\n${allBlocks.join('\n')}\n</task_skills>`
+
+  // Store the payload in the in-memory envelope store under a random key
+  const metadata: EnvelopeMetadata = {
+    skills: sortedResolved.map(s => ({ name: s.name, mtimeMs: s.mtimeMs })),
+    unresolved,
+  }
+  const key = await createEnvelope(payload, metadata)
+
+  // Inject ONLY a tiny generic self-closing envelope tag; the recipient
+  // unwraps it into the full payload. The description is a constant —
+  // skill names/content travel inside the payload itself, and a static
+  // description cannot be misread by the model as a directive to
+  // re-create, echo, or expand anything (the previous per-name array
+  // description was hallucinated back into prompts as a fake tag).
+  const description = 'Subtask will see complete description of skills where this placeholder is.'
+  return `<envelope id="${key}" description="${description}"/>`
 }
 
 export const skillsLoaderPlugin: Plugin = async ({ client, directory, $ }) => {
@@ -82,105 +212,15 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory, $ }) => {
       // Envelope tags are classified by LIVENESS, not just UUID shape: a tag
       // whose envelope was already consumed — or never existed (model echo or
       // hallucination) — is stripped from the prompt so it can neither
-      // suppress fresh envelope creation nor reach the recipient. Prose
-      // examples like `<envelope id="..." .../>` never match the pattern.
-      // Fresh global regex per scan to avoid lastIndex hazards (same technique
-      // as the chat.message hook).
-      const envelopeTagPattern = new RegExp(ENVELOPE_TAG_PATTERN.source, 'g')
-
-      let cleanedPrompt = existingPrompt
-      let isAlreadyEnveloped = false
-      let result = ''
-      let lastIndex = 0
-      let match: RegExpExecArray | null
-
-      while ((match = envelopeTagPattern.exec(cleanedPrompt)) !== null) {
-        const tag = match[0]
-        const id = match[1]
-        if (await hasEnvelope(id)) {
-          // Live envelope — keep the tag and skip re-enveloping entirely.
-          isAlreadyEnveloped = true
-          result += cleanedPrompt.slice(lastIndex, match.index) + tag
-        }
-        else {
-          // Dead (consumed or never-created) tag — strip it, preserving the
-          // surrounding text exactly like the chat.message hook strips
-          // unknown ids. It must never suppress fresh envelope creation.
-          result += cleanedPrompt.slice(lastIndex, match.index)
-        }
-        lastIndex = match.index + tag.length
-      }
-      cleanedPrompt = result + cleanedPrompt.slice(lastIndex)
+      // suppress fresh envelope creation nor reach the recipient.
+      const { cleanedPrompt, hasLiveEnvelope } = await stripDeadEnvelopeTags(existingPrompt)
 
       let prefix = ''
-
-      if (!isAlreadyEnveloped) {
+      if (!hasLiveEnvelope) {
         // --- Skill loading (optional) ---
-        const resolved: { name: string, content: string, mtimeMs: number }[] = []
-        const unresolved: string[] = []
-
-        if (Array.isArray(skills) && skills.length > 0 && directory) {
-          // Load skill files — track both resolved and unresolved
-          for (const name of skills) {
-            const skillPath = `.agents/skills/${name}/SKILL.md`
-            const filePath = `${directory}/${skillPath}`
-            const file = Bun.file(filePath)
-
-            if (!file || !(await file.exists())) {
-              await log(client, 'info', `Load the skill "${name}" by the name.`)
-              unresolved.push(name)
-              continue
-            }
-            const content = await file.text()
-            const stat = await file.stat()
-            const mtimeMs = stat.mtimeMs
-            resolved.push({ name, content, mtimeMs })
-          }
-        }
-        else if (Array.isArray(skills) && skills.length === 0) {
-          await log(client, 'debug', 'skills array is empty — nothing to load')
-        }
-
-        // Sort resolved by mtimeMs ascending (oldest/most-stable first)
-        const sortedResolved = [...resolved].sort((a, b) => a.mtimeMs - b.mtimeMs)
-
-        // --- Build envelope (skills + budget) ---
-        if (sortedResolved.length > 0 || unresolved.length > 0) {
-          // Build resolved skill blocks with path attribute and skill_index
-          const resolvedBlocks: string[] = []
-          for (const s of sortedResolved) {
-            const index = await buildSkillIndex(s.name, directory, $)
-            const path = `.agents/skills/${s.name}/SKILL.md`
-            resolvedBlocks.push(
-              `<skill name="${s.name}" path="${path}">\n${index}\n${s.content}\n</skill>`,
-            )
-          }
-
-          // Build unresolved skill blocks as reference tags
-          const unresolvedBlocks = unresolved.map(
-            name => `<skill name="${name}" reference="true">Load the skill "${name}" by the name.</skill>`,
-          )
-
-          const allBlocks = [...resolvedBlocks, ...unresolvedBlocks]
-
-          // Full payload — byte-identical to the previous direct-injection format
-          const payload = `<task_skills>\n${allBlocks.join('\n')}\n</task_skills>`
-
-          // Store the payload in the in-memory envelope store under a random key
-          const metadata: EnvelopeMetadata = {
-            skills: sortedResolved.map(s => ({ name: s.name, mtimeMs: s.mtimeMs })),
-            unresolved,
-          }
-          const key = await createEnvelope(payload, metadata)
-
-          // Inject ONLY a tiny generic self-closing envelope tag; the recipient
-          // unwraps it into the full payload. The description is a constant —
-          // skill names/content travel inside the payload itself, and a static
-          // description cannot be misread by the model as a directive to
-          // re-create, echo, or expand anything (the previous per-name array
-          // description was hallucinated back into prompts as a fake tag).
-          const description = 'Subtask will see complete description of skills where this placeholder is.'
-          prefix = `<envelope id="${key}" description="${description}"/>`
+        const { resolved, unresolved } = await loadSkillFiles(skills, directory, client)
+        if (directory) {
+          prefix = await buildEnvelopePrefix(resolved, unresolved, directory, $)
         }
       }
 

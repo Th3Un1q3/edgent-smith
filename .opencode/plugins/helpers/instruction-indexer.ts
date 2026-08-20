@@ -20,6 +20,70 @@ type IndexOptions = {
   log?: (message: string) => Promise<void>
 }
 
+const GLOBAL_APPLY_TO_PATTERNS = new Set(['', '**', '**/*.*', '**/*'])
+
+const isGlobalApplyTo = (applyTo: string): boolean =>
+  GLOBAL_APPLY_TO_PATTERNS.has(applyTo)
+
+const isAgentAllowed = (appliesToAgents: string, agent: string): boolean =>
+  isGlobMatch(appliesToAgents, agent)
+
+const isAgentExcluded = (excludeAgents: string | undefined, agent: string): boolean =>
+  Boolean(excludeAgents && isGlobMatch(excludeAgents, agent))
+
+const parseFrontmatter = <T extends CustomInstructionFrontMatter>(content: string): T | undefined => {
+  const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/)
+  if (!frontmatterMatch) return undefined
+
+  const frontmatterContent = frontmatterMatch[1]
+  if (!frontmatterContent) return undefined
+
+  try {
+    return load(frontmatterContent) as T
+  }
+  catch {
+    return undefined
+  }
+}
+
+const buildInstruction = async <T extends CustomInstructionFrontMatter>(
+  parsedFrontmatter: T,
+  filePath: string,
+  agent: string,
+  logger: (message: string) => Promise<void>,
+): Promise<InstructionMeta | undefined> => {
+  try {
+    const applyTo = parsedFrontmatter.applyTo || 'all'
+
+    if (isGlobalApplyTo(applyTo)) {
+      return undefined
+    }
+
+    const appliesToAgents = parsedFrontmatter.appliesToAgents || '**'
+
+    await logger(`Checking instruction file: ${filePath}, appliesToAgents: ${appliesToAgents}, agent: ${agent}`)
+
+    if (!isAgentAllowed(appliesToAgents, agent)) {
+      await logger(`Skipping instruction file: ${filePath}, appliesToAgents: ${appliesToAgents}, agent: ${agent}`)
+      return undefined
+    }
+
+    if (isAgentExcluded(parsedFrontmatter.excludeAgents, agent)) {
+      return undefined
+    }
+
+    return {
+      description: parsedFrontmatter.description || `Instruction applies to files matching the pattern "${applyTo}, instruction file: ${filePath}"`,
+      path: filePath,
+      applyTo,
+      excludePaths: parsedFrontmatter.excludePaths,
+    }
+  }
+  catch {
+    return undefined
+  }
+}
+
 const createIndex = async <T extends CustomInstructionFrontMatter>(options: IndexOptions) => {
   const logger = options.log || ((_message: string) => Promise.resolve())
   const instructionsGlob = new Glob(options.instructionsGlob)
@@ -32,48 +96,19 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
     const file = Bun.file(filePath)
     const content = await file.text()
 
-    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/)
-    if (!frontmatterMatch) {
+    const parsedFrontmatter = parseFrontmatter<T>(content)
+    if (!parsedFrontmatter) {
       continue
     }
 
-    const frontmatterContent = frontmatterMatch[1]
-
-    if (!frontmatterContent) {
+    const instruction = await buildInstruction(parsedFrontmatter, filePath, options.agent, logger)
+    if (!instruction) {
       continue
     }
 
-    try {
-      const parsedFrontmatter: T = load(frontmatterContent) as T
-      const applyTo = parsedFrontmatter.applyTo || 'all'
+    index[instruction.applyTo] ||= []
 
-      if (['', '**', '**/*.*', '**/*'].includes(applyTo)) {
-        continue
-      }
-
-      await logger(`Checking instruction file: ${filePath}, appliesToAgents: ${parsedFrontmatter.appliesToAgents || '**'}, agent: ${options.agent}`)
-
-      if (!isGlobMatch(parsedFrontmatter.appliesToAgents || '**', options.agent)) {
-        await logger(`Skipping instruction file: ${filePath}, appliesToAgents: ${parsedFrontmatter.appliesToAgents || '**'}, agent: ${options.agent}`)
-        continue
-      }
-
-      if (parsedFrontmatter.excludeAgents && isGlobMatch(parsedFrontmatter.excludeAgents, options.agent)) {
-        continue
-      }
-
-      index[applyTo] ||= []
-
-      index[applyTo].push({
-        description: parsedFrontmatter.description || `Instruction applies to files matching the pattern "${applyTo}, instruction file: ${filePath}"`,
-        path: filePath,
-        applyTo: applyTo,
-        excludePaths: parsedFrontmatter.excludePaths,
-      })
-    }
-    catch {
-      continue
-    }
+    index[instruction.applyTo].push(instruction)
   }
 
   const forFiles = async (filePaths: string[]): Promise<InstructionMeta[]> => {

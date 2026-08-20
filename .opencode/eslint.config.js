@@ -194,4 +194,29 @@ export default [
       ],
     },
   },
+
+  // Cyclomatic complexity — strict for plugin source, headroom for tests.
+  // Source: plugin root files + helpers/ + types/ + config/ (everything under
+  // plugins/ except tests/). If it fails here, fix it rather than release it.
+  {
+    files: [
+      '**/plugins/*.ts',
+      '**/plugins/helpers/**/*.ts',
+      '**/plugins/types/**/*.ts',
+      '**/plugins/config/**/*.ts',
+      '**/helpers/**/*.ts',
+      '**/types/**/*.ts',
+    ],
+    rules: {
+      complexity: ['error', { max: 8 }],
+    },
+  },
+  // Test files (incl. test helpers under plugins/tests/) get extra headroom.
+  // Must come AFTER the source block so later matching blocks win for any overlap.
+  {
+    files: ['**/plugins/tests/**/*.ts', '**/tests/*.test.ts'],
+    rules: {
+      complexity: ['error', { max: 15 }],
+    },
+  },
 ]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from typing import Annotated
+from typing import Annotated, Any
 
 import click
 from pydantic import BaseModel, StringConstraints, ValidationError
@@ -17,6 +17,15 @@ from cli.services.project_config import (
 )
 
 _IDENTIFIER_PATTERN = r"^[a-zA-Z0-9_-]+$"
+
+_VALIDATION_ERROR_MESSAGES: dict[tuple[tuple[Any, ...], str], str] = {
+    (("name",), "string_too_short"): "Project name cannot be empty.",
+    (("name",), "string_pattern_mismatch"): "Project name contains invalid characters.",
+    (("baseline_id",), "string_too_short"): "Baseline ID cannot be empty.",
+    (("baseline_id",), "string_pattern_mismatch"): "Baseline ID contains invalid characters.",
+    (("eval_model",), "string_too_short"): "Evaluation model cannot be empty.",
+    (("eval_model",), "string_pattern_mismatch"): "Evaluation model contains invalid characters.",
+}
 
 IdentifierInput = Annotated[
     str,
@@ -106,31 +115,21 @@ def run_init(
     click.echo(f"Created project configuration: {filename}")
 
 
-def _render_validation_error(exc: ValidationError) -> str:
-    first_error = exc.errors()[0]
-    error_location = first_error["loc"]
-    error_type = first_error["type"]
+def _validation_error_message(loc: tuple[Any, ...], error_type: str) -> str | None:
+    """Return the friendly message for a known (field, error type) pair, if any."""
+    return _VALIDATION_ERROR_MESSAGES.get((loc, error_type))
 
-    if error_location == ("name",):
-        if error_type == "string_too_short":
-            return "Project name cannot be empty."
-        if error_type == "string_pattern_mismatch":
-            return "Project name contains invalid characters."
 
-    if error_location == ("baseline_id",):
-        if error_type == "string_too_short":
-            return "Baseline ID cannot be empty."
-        if error_type == "string_pattern_mismatch":
-            return "Baseline ID contains invalid characters."
-
-    if error_location == ("eval_model",):
-        if error_type == "string_too_short":
-            return "Evaluation model cannot be empty."
-        if error_type == "string_pattern_mismatch":
-            return "Evaluation model contains invalid characters."
-
-    message = first_error["msg"]
+def _strip_value_error_prefix(message: str) -> str:
     value_error_prefix = "Value error, "
     if message.startswith(value_error_prefix):
         return message[len(value_error_prefix) :]
     return message
+
+
+def _render_validation_error(exc: ValidationError) -> str:
+    first_error = exc.errors()[0]
+    message = _validation_error_message(first_error["loc"], first_error["type"])
+    if message is not None:
+        return message
+    return _strip_value_error_prefix(first_error["msg"])

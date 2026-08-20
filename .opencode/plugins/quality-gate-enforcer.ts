@@ -23,6 +23,10 @@ function findMatchingGates(gates: GateConfig[], filePath: string): GateConfig[] 
   )
 }
 
+function isTargetedTool(tool: unknown, targetedTools: ReadonlySet<string>): boolean {
+  return typeof tool === 'string' && targetedTools.has(tool)
+}
+
 async function sendTransitionMessage(
   outcomes: GateRunOutcome[],
   sessionID: string | undefined,
@@ -110,12 +114,113 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
     return promise
   }
 
+  // Run a single gate for the pre-change hook. Returns a transition outcome
+  // when the gate's status changed and that transition has not been announced
+  // yet; undefined otherwise.
+  const runBeforeGate = async (
+    gate: GateConfig,
+    currentStatus: GateResult,
+    sessionID: string | undefined,
+  ): Promise<GateRunOutcome | undefined> => {
+    if (currentStatus !== 'unknown') return undefined
+
+    const result = await runGatePooled(gate)
+    const newStatus: 'pass' | 'fail' = result.exitCode === 0 ? 'pass' : 'fail'
+
+    if (sessionID) {
+      gatesState[gate.name] = {
+        lastStatus: newStatus,
+        lastExecutedAt: new Date(),
+        lastStdOut: result.stdout,
+        affectedSessions: [sessionID],
+      }
+      if (newStatus === 'pass') {
+        gatesState[gate.name].affectedSessions = []
+      }
+    }
+
+    if ((newStatus as GateResult) === currentStatus || beforeTransitionSent.has(gate.name)) return undefined
+    beforeTransitionSent.add(gate.name)
+    return { gate, previousStatus: currentStatus, newStatus, result }
+  }
+
+  // Run a single gate for the post-change hook. Returns a transition outcome
+  // when the gate's status changed since the pre-change snapshot; undefined otherwise.
+  const runAfterGate = async (
+    gate: GateConfig,
+    oldStatus: GateResult,
+    sessionID: string | undefined,
+  ): Promise<GateRunOutcome | undefined> => {
+    const result = await runGatePooled(gate)
+    const newStatus: 'pass' | 'fail' = result.exitCode === 0 ? 'pass' : 'fail'
+
+    gatesState[gate.name] = {
+      lastStatus: newStatus,
+      lastExecutedAt: new Date(),
+      lastStdOut: result.stdout,
+      affectedSessions: sessionID
+        ? [...(gatesState[gate.name]?.affectedSessions ?? []), sessionID].filter(
+            (s, index, array) => array.indexOf(s) === index,
+          )
+        : [],
+    }
+
+    if (newStatus === 'pass') {
+      gatesState[gate.name].affectedSessions = []
+    }
+
+    if (oldStatus === newStatus) return undefined
+    return { gate, previousStatus: oldStatus, newStatus, result }
+  }
+
+  // Append a summary of a child session's failing gates to the task output.
+  // No-op when the child session reports no failing gates.
+  const appendTaskFailingGates = (output: { output: string }, state: Record<string, unknown>): void => {
+    const gateStatuses = state.qualityGateStatuses as
+      Record<string, { dirty: boolean, status: string }> | undefined
+    if (!gateStatuses) return
+
+    const failingGates = Object.entries(gateStatuses)
+      .filter(([_, info]) => info.status === 'fail')
+      .map(([name]) => name)
+
+    if (failingGates.length === 0) return
+
+    const failMessage = `\n\n⚠️ FAILING QUALITY GATES: ${failingGates.join(', ')}`
+    output.output = (output.output || '') + failMessage
+  }
+
+  // Post-change handling for edit/write tools: run matched gates and report
+  // any status transitions.
+  const runTargetedToolAfter = async (
+    input: { tool: string, sessionID: string, args?: { filePath?: string } },
+  ): Promise<void> => {
+    if (!isTargetedTool(input.tool, targetedTools)) return
+
+    const filePath = extractFilePath(input, resolvedDirectory)
+    if (!filePath) return
+
+    const matchedGates = findMatchingGates(gates, filePath)
+    if (matchedGates.length === 0) return
+
+    const sessionID = input.sessionID
+    const gateStatuses = readGateStatuses(sessionID, sessionStorage)
+    const outcomes: GateRunOutcome[] = []
+
+    for (const gate of matchedGates) {
+      const outcome = await runAfterGate(gate, gateStatuses[gate.name] ?? 'unknown', sessionID)
+      if (outcome) outcomes.push(outcome)
+    }
+
+    await sendTransitionMessage(outcomes, sessionID, client)
+  }
+
   return {
     'tool.execute.before': async (
       input,
       output,
     ) => {
-      if (typeof input.tool !== 'string' || !targetedTools.has(input.tool)) return
+      if (!isTargetedTool(input.tool, targetedTools)) return
 
       const filePath = extractFilePath(
         { args: output?.args as { filePath?: string } | undefined },
@@ -131,33 +236,11 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
       const outcomes: GateRunOutcome[] = []
 
       for (const gate of matchedGates) {
-        const currentStatus = gateStatuses[gate.name] ?? 'unknown'
-        if (currentStatus !== 'unknown') continue
-
-        const result = await runGatePooled(gate)
-        const newStatus: 'pass' | 'fail' = result.exitCode === 0 ? 'pass' : 'fail'
-
-        if (sessionID) {
-          gatesState[gate.name] = {
-            lastStatus: newStatus,
-            lastExecutedAt: new Date(),
-            lastStdOut: result.stdout,
-            affectedSessions: [sessionID],
-          }
-          if (newStatus === 'pass') {
-            gatesState[gate.name].affectedSessions = []
-          }
-        }
-
-        if ((newStatus as GateResult) !== currentStatus && !beforeTransitionSent.has(gate.name)) {
-          beforeTransitionSent.add(gate.name)
-          outcomes.push({ gate, previousStatus: currentStatus, newStatus, result })
-        }
+        const outcome = await runBeforeGate(gate, gateStatuses[gate.name] ?? 'unknown', sessionID)
+        if (outcome) outcomes.push(outcome)
       }
 
-      if (outcomes.length > 0) {
-        await sendTransitionMessage(outcomes, sessionID, client, true)
-      }
+      await sendTransitionMessage(outcomes, sessionID, client, true)
     },
     'tool.execute.after': async (input, output) => {
       if (input.tool === 'task') {
@@ -167,61 +250,11 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
         const state = sessionStorage.readState(childSessionID, s => s as Record<string, unknown>)
         if (!state) return
 
-        const gateStatuses = state.qualityGateStatuses as
-          Record<string, { dirty: boolean, status: string }> | undefined
-        if (!gateStatuses) return
-
-        const failingGates = Object.entries(gateStatuses)
-          .filter(([_, info]) => info.status === 'fail')
-          .map(([name]) => name)
-
-        if (failingGates.length === 0) return
-
-        const failMessage = `\n\n⚠️ FAILING QUALITY GATES: ${failingGates.join(', ')}`
-        output.output = (output.output || '') + failMessage
+        appendTaskFailingGates(output, state)
         return
       }
 
-      if (!targetedTools.has(input.tool)) return
-
-      const filePath = extractFilePath(input, resolvedDirectory)
-      if (!filePath) return
-
-      const matchedGates = findMatchingGates(gates, filePath)
-      if (matchedGates.length === 0) return
-
-      const sessionID = input.sessionID
-      const gateStatuses = readGateStatuses(sessionID, sessionStorage)
-      const outcomes: GateRunOutcome[] = []
-
-      for (const gate of matchedGates) {
-        const oldStatus = gateStatuses[gate.name] ?? 'unknown'
-
-        const result = await runGatePooled(gate)
-
-        const newStatus: 'pass' | 'fail' = result.exitCode === 0 ? 'pass' : 'fail'
-
-        gatesState[gate.name] = {
-          lastStatus: newStatus,
-          lastExecutedAt: new Date(),
-          lastStdOut: result.stdout,
-          affectedSessions: sessionID
-            ? [...(gatesState[gate.name]?.affectedSessions ?? []), sessionID].filter(
-                (s, index, array) => array.indexOf(s) === index,
-              )
-            : [],
-        }
-
-        if (newStatus === 'pass') {
-          gatesState[gate.name].affectedSessions = []
-        }
-
-        if (oldStatus !== newStatus) {
-          outcomes.push({ gate, previousStatus: oldStatus, newStatus, result })
-        }
-      }
-
-      await sendTransitionMessage(outcomes, sessionID, client)
+      await runTargetedToolAfter(input)
     },
   }
 }
