@@ -4,6 +4,8 @@ import vitest from "@vitest/eslint-plugin"
 import stylistic from "@stylistic/eslint-plugin"
 
 const allFiles = ["**/plugins/**/*.ts", "**/helpers/**/*.ts", "**/types/**/*.ts"]
+const TEST_FILES = ["**/plugins/tests/**/*.ts", "**/tests/*.test.ts"]
+const PLUGIN_ROOT = "**/plugins/*.ts"
 
 // Custom rule: plugin root files (plugins/*.ts, NOT helpers/ tests/ types/) must only
 // export Plugin-typed values. Exporting unrelated constants/variables from a plugin
@@ -120,12 +122,12 @@ export default [
   {
     // Plugin root files (direct children of a plugins/ dir) must only export
     // Plugin-typed values. helpers/, tests/, and types/ are exempt.
-    files: ["**/plugins/*.ts"],
+    files: [PLUGIN_ROOT],
     plugins: { "plugin-export-guard": pluginExportGuard },
     rules: { "plugin-export-guard/no-non-plugin-export": "error" },
   },
   {
-    files: ["**/plugins/**/*.ts", "**/helpers/**/*.ts", "**/types/**/*.ts"],
+    files: allFiles,
     rules: {
       "@typescript-eslint/no-non-null-assertion": "error",
     },
@@ -195,28 +197,22 @@ export default [
     },
   },
 
-  // Cyclomatic complexity — strict for plugin source, headroom for tests.
+  // Cyclomatic complexity — uniform max 8 across plugin source and tests.
   // Source: plugin root files + helpers/ + types/ + config/ (everything under
-  // plugins/ except tests/). If it fails here, fix it rather than release it.
+  // plugins/ except tests/). Tests (incl. test helpers under plugins/tests/)
+  // are held to the same limit. Fix complexity rather than release it.
   {
     files: [
-      '**/plugins/*.ts',
+      PLUGIN_ROOT,
       '**/plugins/helpers/**/*.ts',
       '**/plugins/types/**/*.ts',
       '**/plugins/config/**/*.ts',
       '**/helpers/**/*.ts',
       '**/types/**/*.ts',
+      ...TEST_FILES,
     ],
     rules: {
       complexity: ['error', { max: 8 }],
-    },
-  },
-  // Test files (incl. test helpers under plugins/tests/) get extra headroom.
-  // Must come AFTER the source block so later matching blocks win for any overlap.
-  {
-    files: ['**/plugins/tests/**/*.ts', '**/tests/*.test.ts'],
-    rules: {
-      complexity: ['error', { max: 15 }],
     },
   },
 ]

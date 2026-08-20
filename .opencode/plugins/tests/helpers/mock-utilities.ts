@@ -21,31 +21,59 @@ const DEFAULT_AGENTS: Array<{ name: string, steps?: number }> = [
   { name: 'rug-expert', steps: 19 }, // floor(19*0.8) = 15
 ]
 
+/** Normalized client options used to build the session.get payload. */
+interface ResolvedClientOptions {
+  agent?: string
+  data?: Record<string, unknown>
+}
+
+/** Normalizes the options parameter: string shorthand becomes { agent }, otherwise the object itself (or {}). */
+function resolveClientOptions(options?: string | { agent?: string, data?: Record<string, unknown> }): ResolvedClientOptions {
+  if (typeof options === 'string') return { agent: options }
+  return options ?? {}
+}
+
+/** Builds the session.get payload: default data merged with the agent override, or the options agent when no override. */
+function buildSessionData(resolved: ResolvedClientOptions, agentOverride?: string): { data: Record<string, unknown> } {
+  return {
+    data: {
+      ...resolved.data,
+      ...(agentOverride && { agent: agentOverride }),
+      ...(resolved.agent && !agentOverride && { agent: resolved.agent }),
+    },
+  }
+}
+
+/** Returns the override agent list, falling back to the shared default. */
+function resolveAgentList(agentListOverride?: Array<{ name: string, steps?: number }>) {
+  return agentListOverride ?? DEFAULT_AGENTS
+}
+
 /** Default client factory for tests that need a minimal session.get mock. */
 export function defaultCreateClient(
   options?: string | { agent?: string, data?: Record<string, unknown> },
   agentOverride?: string,
   agentListOverride?: Array<{ name: string, steps?: number }>,
 ) {
-  const resolved = typeof options === 'string' ? { agent: options } : options ?? {}
+  const resolved = resolveClientOptions(options)
   return {
     // Top-level .session.get for tests that pass defaultCreateClient() directly and destructure { client } from PluginInput.
     session: {
-      get: vi.fn().mockResolvedValue({ data: { ...resolved.data, ...(agentOverride && { agent: agentOverride }), ...(resolved.agent && !agentOverride && { agent: resolved.agent }) } }),
+      get: vi.fn().mockResolvedValue(buildSessionData(resolved, agentOverride)),
     },
     // .client.session.get for tests that wrap the result as { client: defaultCreateClient(...), directory }.
     client: {
       session: {
-        get: vi.fn().mockResolvedValue({ data: { ...resolved.data, ...(agentOverride && { agent: agentOverride }), ...(resolved.agent && !agentOverride && { agent: resolved.agent }) } }),
+        get: vi.fn().mockResolvedValue(buildSessionData(resolved, agentOverride)),
       },
-      app: { agents: vi.fn().mockResolvedValue({ data: agentListOverride ?? DEFAULT_AGENTS }) },
+      app: { agents: vi.fn().mockResolvedValue({ data: resolveAgentList(agentListOverride) }) },
     },
     project: vi.fn(),
     directory: '/workspace',
     worktree: '/workspace/.git',
     experimental_workspace: { register: vi.fn() },
     serverUrl: new URL('http://localhost'),
-    app: { agents: vi.fn().mockResolvedValue({ data: agentListOverride ?? DEFAULT_AGENTS }) },
+    app: { agents: vi.fn().mockResolvedValue({ data: resolveAgentList(agentListOverride) }) },
     $: vi.fn(),
   } as unknown as ClientMock
 }

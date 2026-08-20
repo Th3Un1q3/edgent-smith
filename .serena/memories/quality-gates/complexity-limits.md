@@ -6,8 +6,9 @@ Established cyclomatic-complexity lint limits for this repo, enforced through th
 
 - ESLint core `complexity` rule in `.opencode/eslint.config.js` (flat config); blocks appended LAST so nothing overrides them, source block precedes test block:
   - `["error", { max: 8 }]` for plugin source: `plugins/*.ts`, `plugins/helpers/**`, `plugins/types/**`, `plugins/config/**`
-  - `["error", { max: 15 }]` for plugin tests: `plugins/tests/**`
+  - `["error", { max: 8 }]` for plugin tests: `plugins/tests/**` (uniform with source)
 - New rules under `.opencode/plugins/**` auto-enforce via the `opencode-lint` gate (`just .opencode/lint`).
+- Tests tightened from max 15 → max 8 in a follow-up (Aug 2026), uniform with source. The ONLY violation was `defaultCreateClient` (cx 11 → 1) in `plugins/tests/helpers/mock-utilities.ts`, refactored via extraction of `resolveClientOptions`/`buildSessionData`/`resolveAgentList` — a proven pattern for refactoring complex test helpers (mock factory shape preservation).
 
 ## Python
 

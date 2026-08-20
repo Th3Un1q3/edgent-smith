@@ -19,7 +19,7 @@ Covers the automated quality-gate system that runs checks against changed files 
 - **gate-configuration**: The `gates[]` TypeScript schema — gate name, trigger patterns, and the command sequence each gate runs.
 - **design-rules**: How to decide which check belongs on which target — narrow triggers, no irrelevant checks, early exit, debounce.
 - **runtime-behavior**: How gates fire on file changes, how results are tracked per session, and when a steering message is emitted.
-- **complexity-limits**: Established cyclomatic-complexity thresholds for the lint gates — ESLint `complexity` max 8 (plugin source) / 15 (plugin tests), Ruff C901 max 10.
+- **complexity-limits**: Established cyclomatic-complexity thresholds for the lint gates — ESLint `complexity` max 8 (plugin source and tests, uniform), Ruff C901 max 10.
 
 ## Related Domains
 
