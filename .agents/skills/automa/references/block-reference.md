@@ -250,6 +250,7 @@ Runs another workflow by ID (`executeId`/`workflowId`), optionally passing `glob
 ## Full catalog (61 blocks, grouped by category)
 
 ### General (`general`)
+
 | Label (JSON) | Display name | Purpose |
 |---|---|---|
 | `trigger` | Trigger | Starts the workflow on a schedule, event, or manual run |
@@ -267,6 +268,7 @@ Runs another workflow by ID (`executeId`/`workflowId`), optionally passing `glob
 | `parameter-prompt` | Parameter Prompt | Prompts the user for parameters before running |
 
 ### Browser (`browser`)
+
 | Label (JSON) | Display name | Purpose |
 |---|---|---|
 | `active-tab` | Active Tab | Uses the current tab |
@@ -286,6 +288,7 @@ Runs another workflow by ID (`executeId`/`workflowId`), optionally passing `glob
 | `cookie` | Cookie | Gets, sets, or removes cookies |
 
 ### Web interaction (`interaction`)
+
 | Label (JSON) | Display name | Purpose |
 |---|---|---|
 | `event-click` | Click Element | Clicks a matched element |
@@ -304,6 +307,7 @@ Runs another workflow by ID (`executeId`/`workflowId`), optionally passing `glob
 | `create-element` | Create Element | Creates an element and inserts it into the page |
 
 ### Control flow (`conditions`)
+
 | Label (JSON) | Display name | Purpose |
 |---|---|---|
 | `repeat-task` | Repeat Task | Repeats connected blocks N times |
@@ -315,6 +319,7 @@ Runs another workflow by ID (`executeId`/`workflowId`), optionally passing `glob
 | `loop-breakpoint` | Loop Breakpoint | Stops the enclosing loop; must match the loop's `loopId` |
 
 ### Data (`data`)
+
 | Label (JSON) | Display name | Purpose |
 |---|---|---|
 | `insert-data` | Insert Data | Appends rows to a table |
@@ -327,6 +332,7 @@ Runs another workflow by ID (`executeId`/`workflowId`), optionally passing `glob
 | `sort-data` | Sort Data | Sorts data items |
 
 ### Online services (`onlineServices`)
+
 | Label (JSON) | Display name | Purpose |
 |---|---|---|
 | `google-sheets` | Google Sheets | Reads/writes Google Sheets via the Sheets API |
@@ -334,6 +340,7 @@ Runs another workflow by ID (`executeId`/`workflowId`), optionally passing `glob
 | `google-drive` | Google Drive | Uploads files to Google Drive |
 
 ### Packages (`package`)
+
 | Label (JSON) | Display name | Purpose |
 |---|---|---|
 | `block-package` | Block Package | Runs a custom block package |

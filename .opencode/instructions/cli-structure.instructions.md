@@ -29,6 +29,7 @@ This repository uses a three-layer Click CLI with clear separation of concerns. 
 ```python
 from cli.commands.design import run_design
 
+
 @autoresearch.command()
 @click.argument("brief", required=False)
 @click.option("--config", "config_path", help="Path to project config.")
@@ -59,6 +60,7 @@ def design(brief: str | None, config_path: str | None) -> None:
 # cli/commands/design.py
 from cli.services.copilot_session import CopilotSessionService, PERMISSIVE_TOOLSET
 from .command_context import build_command_context
+
 
 def run_design(brief: str | None, config_path: str | None = None) -> None:
     """Command entry point (called from main.py)."""
@@ -96,10 +98,11 @@ def run_design(brief: str | None, config_path: str | None = None) -> None:
 @dataclass
 class CopilotSessionService:
     """Reusable Copilot CLI session manager."""
+
     alias: str
     model: str
     toolset: Toolset | None = None
-    
+
     def invoke(self, prompt: str) -> SessionResult:
         """Call Copilot CLI and return structured result."""
         # ...
@@ -148,15 +151,16 @@ from click.testing import CliRunner
 from cli.main import cli
 from unittest.mock import patch, MagicMock
 
+
 def test_design_with_brief(tmp_path):
     """Design runs successfully when brief is provided."""
     runner = CliRunner()
-    
+
     with runner.isolated_filesystem(temp_dir=tmp_path):
         with patch("cli.services.copilot_session.CopilotSessionService.send_message") as mock_send:
             mock_send.return_value = MagicMock(stdout="Experiment created.")
             result = runner.invoke(cli, ["autoresearch", "design", "--brief", "Test hypothesis"])
-        
+
         assert result.exit_code == 0
         mock_send.assert_called_once()
 ```

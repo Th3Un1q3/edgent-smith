@@ -6,7 +6,7 @@ Canonical copy-paste snippets for the [browser-automation-devtools workflow](../
 
 **Quoting:** the zero-backslash / zero-double-quote rule ([devtools-known-issues.md](./devtools-known-issues.md) #21) targets HAND-WRITTEN scripts and the JSON-encoding layer of `gateway_mcp_exec` — hand-written code that is not pre-verified gets mangled by the harness. The canonical snippets below are pre-checked to pass through that layer safely: paste them verbatim, do not re-escape, do not add backslashes. When writing NEW scripts, keep to single-quoted JS strings and avoid raw double quotes and backslashes inside them; build special characters with `String.fromCharCode`.
 
-**Contents**
+## Contents
 
 - [X — install helpers](#x-install-helpers-once-per-page-load)
 - [unwrap](#unwrap)

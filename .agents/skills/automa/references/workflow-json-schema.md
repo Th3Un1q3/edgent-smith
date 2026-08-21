@@ -378,4 +378,3 @@ Example — the correct pairing of `label` and `type` on a node.
   "type": "BlockBasic"
 }
 ```
-

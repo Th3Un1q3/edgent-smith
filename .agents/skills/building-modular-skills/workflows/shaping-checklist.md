@@ -71,7 +71,7 @@ Run this before declaring any skill complete — including this one. One uncheck
     Run: the Rule 14 audit command in [guidance.md](../references/guidance.md) (run from the skill's root) — expect no matches outside the exception categories Rule 14 documents: metadata.delta, the audit command itself, the rule's enumeration, label-placement guidance, and the checklist's gate text (checks 6, 14, 23).
     *If not:* fix per Rule 14 — delete or rewrite each hit to teach the subject; move author-process records to `metadata.delta`.
 
-15. **Fences valid** — Pass: every code fence valid for its declared language; every ```json fence parses with `json.loads`; no comment lines inside JSON fences; multi-document fragments wrapped in arrays or split; `~~~~` fences audited like ``` fences (see Rule 15).
+15. **Fences valid** — Pass: every code fence valid for its declared language; every ```json fence parses with `json.loads`; no comment lines inside JSON fences; multi-document fragments wrapped in arrays or split; `~~~~` fences audited like `` ``` `` fences (see Rule 15).
     Run: `python3 scripts/audit_fences.py .` from the skill's root directory (see [guidance.md](../references/guidance.md) Rule 15) — expect zero violations printed.
     *If not:* fix per Rule 15 — wrap or split multi-document fences; strip comment lines from JSON fences; re-run until silent.
 
@@ -96,7 +96,7 @@ Run this before declaring any skill complete — including this one. One uncheck
     *If not:* fix per Rule 20 — add completion criteria per step; add gates and out-of-scope lists.
 
 21. **Positive prompting** — Pass: every behavioral prohibition carries a positive reframe; no no-op instructions in the reader path (see Rule 21).
-    Run: grep the teaching files (SKILL.md, references/, workflows/) for `Do not|Never|no ` — exempt structural negatives: "When Not to Use" scope sections, routing and scope statements, quoted examples that demonstrate a reframe, and this checklist's own pass statements. Expect every remaining negative beside a positive reframe.
+    Run: grep the teaching files (SKILL.md, references/, workflows/) for `Do not|Never|no` — exempt structural negatives: "When Not to Use" scope sections, routing and scope statements, quoted examples that demonstrate a reframe, and this checklist's own pass statements. Expect every remaining negative beside a positive reframe.
     *If not:* fix per Rule 21 — add the reframe next to each prohibition; prune no-ops.
 
 22. **Composed via explicit calls** — Pass: cross-skill invocation names the Skill tool explicitly; primitives referenced by path, not re-described (see Rule 22).

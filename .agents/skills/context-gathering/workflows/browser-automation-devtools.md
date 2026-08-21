@@ -66,7 +66,7 @@ When a task designates a specific source of truth (for us: the devtools server f
 
 ## Acceptance, Exit and Clarification
 
-**Acceptance**
+### Acceptance
 - Sandbox activated with `devtools` + `serena` only, under a descriptive name.
 - Auth verified via `list_pages` before any navigation; login wall → STOP and escalate.
 - Structure discovery used a targeted `evaluate_script` first; any `take_snapshot` was inline and truncated in-script — one per flow, never for extraction.
@@ -79,12 +79,12 @@ When a task designates a specific source of truth (for us: the devtools server f
 - Fail-fast path executed (STOP + report) whenever no fallback worked.
 - Interactive-element discovery used the [snippet library](../references/snippets.md) (A–D): clickables listed with a limit, filtered by type/text with self-verified unique selectors, effect-verified clicks (WARNING on no state change), inputs filtrable with visibility flags, and the combined navigate+list flow.
 
-**Exit**
+### Exit
 - Task data is extracted, cached, and — where applicable — the extraction memory is current.
 - No operator tabs were touched beyond reading `list_pages`.
 - If extraction stopped early: the operator received the raw partial response and a clear reason.
 
-**Clarification Triggers (STOP — ask the operator before)**
+### Clarification Triggers (STOP — ask the operator before)
 - Touching or navigating tabs the agent did not create; any action that might log the session out (navigating the session tab away from authenticated domains, closing it).
 - Auth missing or a login wall (Step 2), or any bot-alert signal — report it immediately with the signal and the cached partials (Step 10).
 - Batch runs longer than N items, or exceeding the per-task action budget — N = the count of entities/results the operator requested; confirm the exact N first (required when the batch would exceed a known N, or when N is unknown — "~20" needs the exact count before starting).

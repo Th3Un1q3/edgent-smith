@@ -147,7 +147,7 @@ Run: `grep -rEn '^## Completion Gate|^## Source [Aa]nchors|Implements:|Example f
 
 ## Rule 15: Make every code fence valid
 
-Every code fence must be valid for its declared language. A ```json fence must parse with `json.loads`; JSON has no comments, so no `//` or `#` lines inside JSON fences. A fence holding several documents fails to parse — wrap multi-document fragments in a JSON array or split them into one fence per document. A partial fragment is still a valid JSON value (object, array, or scalar) that parses on its own. Fences that declare no language carry plain text only. The audit matches both ``` and `~~~~` fence runs so template files using `~~~~md` get the same coverage.
+Every code fence must be valid for its declared language. A ```json fence must parse with `json.loads`; JSON has no comments, so no `//` or `#` lines inside JSON fences. A fence holding several documents fails to parse — wrap multi-document fragments in a JSON array or split them into one fence per document. A partial fragment is still a valid JSON value (object, array, or scalar) that parses on its own. Fences that declare no language carry plain text only. The audit matches both `` ``` `` and `~~~~` fence runs so template files using `~~~~md` get the same coverage.
 
 A skill whose examples do not parse teaches broken output; a skill whose job is emitting JSON proves itself with fences that parse.
 

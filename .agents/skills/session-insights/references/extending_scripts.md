@@ -40,7 +40,7 @@ The compact transcript: one line per text and tool part, in session message orde
 
 Human-readable blocks, in order: PART blocks (by `--part-id`), then TOOL blocks (by `--tool-id`), then MESSAGE blocks (by `--message-id`); blank line between blocks. No matches → empty output, exit 0.
 
-- **part block** (`--part-id <prt_id>`): text and reasoning parts show `part <prt_id> (<type>, message <messageID>):` then `  text: <full text, untruncated>`; tool parts show truncated `input:` / `output:` / `output_length:` / `error:`; other types get the header only. `--part-id` is how you extract reasoning parts — any part type works by its `prt_...` id.
+- **part block** (`--part-id <prt_id>`): text and reasoning parts show `part <prt_id> (<type>, message <messageID>):` then `text: <full text, untruncated>`; tool parts show truncated `input:` / `output:` / `output_length:` / `error:`; other types get the header only. `--part-id` is how you extract reasoning parts — any part type works by its `prt_...` id.
 - **tool block** (`--tool-id <callID>`): header `tool <name> called <callID> (message <messageID>, status=<status>):`, then truncated `input:`; for completed calls, `output:` and `output_length:`; for errors, `error:`
 - **message block** (`--message-id <id>`): header `message <id> (role=<role>):`, then one line per part — `text:` (full, untruncated), `tool <name> called <callID>`, or bare part type
 
