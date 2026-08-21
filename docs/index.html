@@ -11,10 +11,20 @@
 
 		<link rel="stylesheet" href="node_modules/reveal.js/dist/reset.css" />
 		<link rel="stylesheet" href="node_modules/reveal.js/dist/reveal.css" />
-		<link rel="stylesheet" href="node_modules/reveal.js/dist/theme/black.css" />
+		<link rel="stylesheet" href="theme/blueprint.css" />
+
+		<!-- Fonts: Oswald / Inter / JetBrains Mono (variable, self-hosted) -->
+		<link rel="stylesheet" href="node_modules/@fontsource-variable/oswald/index.css" />
+		<link rel="stylesheet" href="node_modules/@fontsource-variable/inter/index.css" />
+		<link rel="stylesheet" href="node_modules/@fontsource-variable/jetbrains-mono/index.css" />
 
 		<!-- Theme used for syntax highlighted code -->
 		<link rel="stylesheet" href="node_modules/reveal.js/dist/plugin/highlight/monokai.css" />
+
+		<!-- CopyCode: copy-button styling -->
+		<link rel="stylesheet" href="node_modules/reveal.js-copycode/plugin/copycode/copycode.css" />
+		<!-- Appearance: entrance animations (bundles Animate.css keyframes) -->
+		<link rel="stylesheet" href="node_modules/reveal.js-appearance/plugin/appearance/appearance.css" />
 	</head>
 	<body>
 		<div class="reveal">
@@ -39,6 +49,12 @@
 		<script src="node_modules/reveal.js/dist/plugin/notes.js"></script>
 		<script src="node_modules/reveal.js/dist/plugin/markdown.js"></script>
 		<script src="node_modules/reveal.js/dist/plugin/highlight.js"></script>
+		<script src="node_modules/reveal.js/dist/plugin/search.js"></script>
+		<script src="node_modules/reveal.js/dist/plugin/zoom.js"></script>
+		<script src="node_modules/reveal.js-mermaid-plugin/plugin/mermaid/mermaid.js"></script>
+		<script src="node_modules/reveal.js-copycode/plugin/copycode/copycode.js"></script>
+		<script src="node_modules/reveal.js-appearance/plugin/appearance/appearance.js"></script>
+		<script src="node_modules/reveal.js-plugins/anything/plugin.js"></script>
 		<script>
 			// https://revealjs.com/initialization/ | https://revealjs.com/config/
 			Reveal.initialize({
@@ -48,7 +64,17 @@
 				slideNumber: "c/t",
 				center: true,
 				transition: "slide",
-				plugins: [RevealMarkdown, RevealHighlight, RevealNotes],
+				plugins: [
+					RevealMarkdown,
+					RevealHighlight,
+					RevealNotes,
+					RevealSearch,
+					RevealZoom,
+					RevealMermaid,
+					CopyCode,
+					Appearance,
+					RevealAnything,
+				],
 			});
 		</script>
 	</body>
