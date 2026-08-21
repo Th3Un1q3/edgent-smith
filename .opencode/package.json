@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.18.13",
-    "js-yaml": "5.2.0"
+    "js-yaml": "5.3.0"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^9.6.1",
