@@ -83,3 +83,6 @@ secrets/
 
 # Serena private memory namespace (devtools-derived output, PII — never commit)
 .serena/memories/private/
+
+# docs (reveal.js)
+docs/node_modules/

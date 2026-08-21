@@ -4,7 +4,9 @@ import vitest from "@vitest/eslint-plugin"
 import stylistic from "@stylistic/eslint-plugin"
 
 const allFiles = ["**/plugins/**/*.ts", "**/helpers/**/*.ts", "**/types/**/*.ts"]
-const TEST_FILES = ["**/plugins/tests/**/*.ts", "**/tests/*.test.ts"]
+const PLUGIN_TESTS = '**/plugins/tests/**/*.ts'
+const TOP_LEVEL_TESTS = '**/tests/*.test.ts'
+const TEST_FILES = [PLUGIN_TESTS, TOP_LEVEL_TESTS]
 const PLUGIN_ROOT = "**/plugins/*.ts"
 
 // Custom rule: plugin root files (plugins/*.ts, NOT helpers/ tests/ types/) must only
@@ -139,7 +141,7 @@ export default [
     },
   },
   {
-    files: ['**/plugins/tests/**/*.ts'],
+    files: [PLUGIN_TESTS],
     plugins: {
       vitest,
     },
@@ -156,7 +158,7 @@ export default [
 
   // Test file style rules: arrow functions, no abbreviations, one var per line
   {
-    files: ['**/tests/*.test.ts'],
+    files: [TOP_LEVEL_TESTS],
     plugins: {
       '@stylistic': stylistic,
     },
@@ -188,7 +190,7 @@ export default [
   },
 
   {
-    files: ['**/plugins/tests/**/*.ts'],
+    files: [PLUGIN_TESTS],
     rules: {
       '@typescript-eslint/no-restricted-imports': [
         'error',

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+		/>
+
+		<title>docs | reveal.js</title>
+
+		<link rel="stylesheet" href="node_modules/reveal.js/dist/reset.css" />
+		<link rel="stylesheet" href="node_modules/reveal.js/dist/reveal.css" />
+		<link rel="stylesheet" href="node_modules/reveal.js/dist/theme/black.css" />
+
+		<!-- Theme used for syntax highlighted code -->
+		<link rel="stylesheet" href="node_modules/reveal.js/dist/plugin/highlight/monokai.css" />
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+				<section data-markdown>
+					<textarea data-template>
+						## Slide 1
+						- bullet
+						- list
+					</textarea>
+				</section>
+				<section>
+					<h2>Slide 2</h2>
+					<pre><code data-trim data-noescape>
+						const greeting = "hello";
+					</code></pre>
+				</section>
+			</div>
+		</div>
+
+		<script src="node_modules/reveal.js/dist/reveal.js"></script>
+		<script src="node_modules/reveal.js/dist/plugin/notes.js"></script>
+		<script src="node_modules/reveal.js/dist/plugin/markdown.js"></script>
+		<script src="node_modules/reveal.js/dist/plugin/highlight.js"></script>
+		<script>
+			// https://revealjs.com/initialization/ | https://revealjs.com/config/
+			Reveal.initialize({
+				hash: true,
+				controls: true,
+				progress: true,
+				slideNumber: "c/t",
+				center: true,
+				transition: "slide",
+				plugins: [RevealMarkdown, RevealHighlight, RevealNotes],
+			});
+		</script>
+	</body>
+</html>

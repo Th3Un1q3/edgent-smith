@@ -28,7 +28,9 @@
 #   output to the same file, so npx failures show up right after the launch marker.
 #
 # This script is POSIX sh (dash-safe: no arrays, no local, no disown) and ALWAYS
-# exits 0 — a failure here must never block dev container creation.
+# exits 0 — a failure here must never block dev container creation. The only
+# detach tool used is `setsid`, and only when `command -v setsid` finds it
+# (guarded; macOS hosts fall back to plain nohup), so this stays dash-safe.
 
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*" >> .tmp/devtools-mcp.log; }
 
@@ -120,12 +122,22 @@ if ! command -v npx >/dev/null 2>&1; then
   exit 0
 fi
 
+# Launch the MCP bridge fully detached so it cannot hold the initializeCommand
+# hook open. A backgrounded child that inherits the hook's stdin keeps the hook's
+# pipe open, and dev container tools (VS Code, CLI, Cursor) wait for that pipe to
+# close before acknowledging setup — so stdin is redirected from /dev/null.
+# When setsid is present (Linux hosts) we also leave the CLI's process group/
+# session; macOS lacks setsid by default, so it falls back to plain nohup.
 log 'Launching devtools mcp (detached):'
-log '  ( nohup npx -y mcp-proxy@6.6.0 --port 9223 -- npx -y chrome-devtools-mcp@1.6.0 --autoConnect >> .tmp/devtools-mcp.log 2>&1 & )'
+log '  stdin from /dev/null; stdout/stderr -> .tmp/devtools-mcp.log; setsid if available'
 log 'Note: the first run downloads mcp-proxy and chrome-devtools-mcp via npx and can take a'
 log '      while — watch this log for progress or errors from the background process.'
 
-( nohup npx -y mcp-proxy@6.6.0 --port 9223 -- npx -y chrome-devtools-mcp@1.6.0 --autoConnect >> .tmp/devtools-mcp.log 2>&1 & )
+if command -v setsid >/dev/null 2>&1; then
+  ( setsid nohup npx -y mcp-proxy@6.6.0 --port 9223 -- npx -y chrome-devtools-mcp@1.6.0 --autoConnect </dev/null >> .tmp/devtools-mcp.log 2>&1 & )
+else
+  ( nohup npx -y mcp-proxy@6.6.0 --port 9223 -- npx -y chrome-devtools-mcp@1.6.0 --autoConnect </dev/null >> .tmp/devtools-mcp.log 2>&1 & )
+fi
 
 log 'init.sh done'
 exit 0

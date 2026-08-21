@@ -1,0 +1,108 @@
+# Dependabot config for edgent-smith.
+# Weekly grouped updates: one reviewable PR per group (prod/dev split where the
+# ecosystem supports dependency-type). No Dockerfile exists in this repo, so
+# container deps are covered via docker-compose + devcontainers ecosystems.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    commit-message:
+      prefix: "deps"
+    groups:
+      # Dev deps live in the [project.optional-dependencies] dev extra, which uv's
+      # dependabot ecosystem treats as production; no PEP 735 groups, so no dev group.
+      python-prod:
+        applies-to: version-updates
+        dependency-type: production
+        patterns:
+          - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/.opencode"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    commit-message:
+      prefix: "deps"
+    groups:
+      opencode-prod:
+        dependency-type: production
+        patterns:
+          - "*"
+      opencode-dev:
+        dependency-type: development
+        patterns:
+          - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/docs"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    commit-message:
+      prefix: "deps"
+    groups:
+      docs-prod:
+        dependency-type: production
+        patterns:
+          - "*"
+      docs-dev:
+        dependency-type: development
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/.devcontainer"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    commit-message:
+      prefix: "deps"
+    groups:
+      docker-compose:
+        patterns:
+          - "*"
+    ignore:
+      # Repo policy: gateway images stay digest-pinned (image@sha256:...)
+      # outside dependabot; tag bumps here are rejected/noise.
+      - dependency-name: "docker/mcp-gateway"
+      - dependency-name: "ghcr.io/oraios/serena"
+
+  - package-ecosystem: "devcontainers"
+    directory: "/.devcontainer"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    commit-message:
+      prefix: "deps"
+    groups:
+      devcontainer-features:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    commit-message:
+      prefix: "deps"
+    groups:
+      actions:
+        patterns:
+          - "*"

@@ -7,6 +7,7 @@ set dotenv-override := true
 set export := true
 
 UV := "uv"
+BUN := "bun"
 PYTEST := "${UV} run pytest"
 RUFF := "${UV} run ruff"
 MYPY := "${UV} run mypy"
@@ -160,3 +161,11 @@ md-lint:
 # Auto-fix fixable Markdown lint issues.
 md-fix:
     npm exec --yes --package=markdownlint-cli2@0.23.2 -- markdownlint-cli2 --fix
+
+# Install docs (reveal.js) dependencies.
+docs-deps:
+    cd docs && {{ BUN }} install
+
+# Serve the docs reveal.js presentation.
+docs-serve:
+    cd docs && {{ BUN }} run start
