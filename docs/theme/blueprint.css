@@ -297,6 +297,14 @@
 	border-bottom: none;
 }
 
+/* Mermaid diagrams: the plugin swaps the .mermaid container for an inline
+   <svg>, which would hug the left edge of the slide otherwise. Center it. */
+.reveal .mermaid svg {
+	max-width: 100%;
+	margin: 0 auto;
+	display: block;
+}
+
 /* Inline typography */
 .reveal sup {
 	vertical-align: super;

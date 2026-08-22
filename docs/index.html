@@ -7,7 +7,7 @@
 			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
 		/>
 
-		<title>docs | reveal.js</title>
+		<title>edgent-smith — System Documentation</title>
 
 		<link rel="stylesheet" href="node_modules/reveal.js/dist/reset.css" />
 		<link rel="stylesheet" href="node_modules/reveal.js/dist/reveal.css" />
@@ -29,19 +29,330 @@
 	<body>
 		<div class="reveal">
 			<div class="slides">
-				<section data-markdown>
-					<textarea data-template>
-						## Slide 1
-						- bullet
-						- list
-					</textarea>
-				</section>
+
+				<!-- 1 · Title -->
 				<section>
-					<h2>Slide 2</h2>
-					<pre><code data-trim data-noescape>
-						const greeting = "hello";
-					</code></pre>
+					<h1 class="animate__fadeInDown">edgent-smith</h1>
+					<p class="animate__fadeInUp">Agentic Experiment System — Python 3.13 · pydantic-ai</p>
+					<p><small class="animate__fadeIn">issue-driven experiment loop · DevContainer-first · multi-agent architecture</small></p>
 				</section>
+
+				<!-- 2 · Overview -->
+				<section>
+					<h2>Overview</h2>
+					<p class="fragment">A Python 3.13 agentic system built on <code>pydantic-ai</code> — it turns issues into evaluated experiments.</p>
+					<blockquote class="fragment">
+						<p>"An issue-driven experiment loop with DevContainer-first development, orchestrated by a multi-agent architecture."</p>
+					</blockquote>
+					<ul class="fragment">
+						<li>Runtime edge agents on pydantic-ai</li>
+						<li>OpenCode subagents &amp; GitHub Copilot custom agents</li>
+						<li>Issue → experiment → evaluation, end to end</li>
+					</ul>
+					<aside class="notes">
+						edgent-smith is not just a CLI: it is a multi-agent system where runtime edge agents
+						execute experiments, OpenCode subagents and Copilot custom agents support development,
+						and every idea flows through an issue-driven loop that ends in evaluation.
+					</aside>
+				</section>
+
+				<!-- 3 · World Model -->
+				<section>
+					<h2>World Model</h2>
+					<div class="mermaid"><pre>
+flowchart TB
+    subgraph compose["Docker Compose"]
+        subgraph dev["Dev Container"]
+            Agent["Agent (you)"] --> OpenCode["OpenCode"]
+            Agent --> CLI["Command Line (CLI)"]
+            OpenCode --> ProjectFiles["Project Files"]
+        end
+        subgraph gw["MCP Gateway Container"]
+            MCP["Docker MCP Gateway"]
+        end
+        OpenCode <--> MCP
+        CLI --> ProjectFiles
+    end
+    MCP <--> Outside["Outside World (GitHub / Web / Docs)"]
+					</pre></div>
+					<small>You live in the Dev Container; the Docker MCP Gateway brokers everything beyond it.</small>
+					<p class="fragment"><small>Hint: <strong>Alt+click</strong> the diagram to zoom in.</small></p>
+					<aside class="notes">
+						The MCP gateway reads its configuration from the project files, and the agent only
+						reaches the outside world — GitHub, web, docs — through that gateway.
+					</aside>
+				</section>
+
+				<!-- 4 · Architecture (vertical stack: code map / edge agent / CLI / evaluator) -->
+				<section>
+					<section>
+						<h2>Architecture</h2>
+						<p class="fragment">Three high-centrality components anchor the system.</p>
+						<table>
+							<thead>
+								<tr><th>Component</th><th>Type</th><th>Location</th><th>Role</th></tr>
+							</thead>
+							<tbody>
+								<tr><td><code>edge_agent</code></td><td>Agent Runtime</td><td><code>agents/edge.py</code></td><td>Primary agent executor with built-in tool access</td></tr>
+								<tr><td>CLI Entrypoint</td><td>Interface</td><td><code>cli/main.py</code></td><td>Main Click entry point and command routing hub</td></tr>
+								<tr><td>Evaluator</td><td>Test Runner</td><td><code>evals/runner.py</code></td><td>Orchestrates model benchmarks and baseline comparisons</td></tr>
+							</tbody>
+						</table>
+					</section>
+					<section>
+						<h3>Edge Agent</h3>
+						<pre><code data-trim data-noescape data-line-numbers="1,5-9,11">
+class AgentOutput(BaseModel):
+    answer: str = Field(description="Direct response")
+    confidence: ConfidenceEnum = "abstain"
+
+edge = Agent(
+    model=resolve_model_config("edge"),
+    output_type=AgentOutput,
+    system_prompt=_SYSTEM,
+)
+
+result = await run_edge_agent("What is 2+2?")
+						</code></pre>
+						<ul>
+							<li>Structured output (<code>AgentOutput</code>) for type-safe downstream use</li>
+							<li>Inline tools: calculator, current_datetime, web_search_stub</li>
+							<li>Model resolved from <code>EDGENT_MODEL_ALIAS</code> at runtime</li>
+						</ul>
+						<small>Illustrative — condensed from <code>agents/edge.py</code></small>
+					</section>
+					<section>
+						<h3>CLI</h3>
+						<pre><code data-trim data-noescape data-line-numbers="1,5-9">
+@click.group()
+def cli() -> None:
+    """Command line interface for edgent-smith."""
+
+@cli.command("memory-viz")
+@click.option("--output", default="memory-graph.html")
+def memory_viz(output: str) -> None:
+    """Generate a graph of the Serena memory store."""
+    run_memory_viz(output=output)
+						</code></pre>
+						<ul>
+							<li>Routing only in <code>cli/main.py</code> — logic lives in <code>commands/</code></li>
+							<li>Shared, stateless logic in <code>cli/services/</code></li>
+							<li>Experiment lifecycle: create / start / finish / show / list</li>
+						</ul>
+						<small>Illustrative — condensed from <code>cli/main.py</code></small>
+					</section>
+					<section>
+						<h3>Evaluator</h3>
+						<pre><code data-trim data-noescape data-line-numbers="1,3-7,10">
+def load_dataset(set_spec: str):
+    """Resolve "smoke" or "module:attr" to a dataset."""
+    if not set_spec or set_spec == "smoke":
+        return smoke_dataset
+
+    if ":" in set_spec:
+        module, attr = set_spec.split(":", 1)
+        return getattr(importlib.import_module(module), attr)
+
+report = run_eval(build_edge_agent(), load_dataset("smoke"))
+						</code></pre>
+						<ul>
+							<li>Provider auto-detected: GitHub Copilot when <code>GITHUB_COPILOT_API_TOKEN</code> is set, Ollama otherwise</li>
+							<li>Baselines compared via <code>pydantic_evals</code> reports</li>
+							<li>Run through <code>just eval</code> / <code>just eval-ci</code></li>
+						</ul>
+						<small>Illustrative — condensed from <code>evals/runner.py</code></small>
+					</section>
+				</section>
+
+				<!-- 5 · Project Structure (vertical stack: tree / conventions / anti-patterns) -->
+				<section>
+					<section>
+						<h2>Project Structure</h2>
+						<pre><code data-trim data-noescape>
+/workspace/
+├── .devcontainer/      # Python 3.13 + Ollama sidecar config
+├── .github/            # CI, custom agents, prompts, instructions
+├── .opencode/          # OpenCode agent framework (subagents, skills)
+├── .agents/skills/     # Project-specific pydantic-ai skills
+├── agents/             # Runtime agents (edge_agent.py)
+├── agent_utils/        # Notifications &amp; agent helpers
+├── cli/                # Click CLI: main.py, commands/, services/
+├── evals/              # Runner config, smoke tests, baseline data
+├── experiments/        # Experiment state storage
+├── scripts/            # Automation &amp; specialized runners
+├── tests/              # Comprehensive test suite
+└── justfile            # Task runner interface
+						</code></pre>
+					</section>
+					<section>
+						<h3>Conventions</h3>
+						<ul>
+							<li>Python 3.13 with modern type annotations — <code>from __future__ import annotations</code></li>
+							<li>Click: routing in <code>cli/main.py</code>, logic in <code>commands/</code>, services in <code>cli/services/</code></li>
+							<li><code>just</code> is the task runner for all primary workflows</li>
+							<li>DevContainers for consistent execution across local and CI</li>
+						</ul>
+						<blockquote>
+							<p>"Prefer <code>uv run</code> or <code>just</code> — no manual venv activation."</p>
+						</blockquote>
+					</section>
+					<section>
+						<h3>Anti-Patterns</h3>
+						<blockquote>
+							<p>"No <code>src/</code> layout — root-level packages simplify import resolution in edge runtimes."</p>
+						</blockquote>
+						<ul>
+							<li>No manual venv activation — use <code>uv run</code> or <code>just</code></li>
+							<li>Do not duplicate command logic — shared setup belongs in <code>cli/services/</code></li>
+							<li>No generic instructions in project files</li>
+						</ul>
+					</section>
+				</section>
+
+				<!-- 6 · Commands & Lookup (vertical stack: just recipes / where to look) -->
+				<section>
+					<section>
+						<h2>Commands &amp; Lookup</h2>
+						<table>
+							<thead>
+								<tr><th>Recipe</th><th>Purpose</th></tr>
+							</thead>
+							<tbody>
+								<tr><td><code>just test</code></td><td>Run the full unit test suite</td></tr>
+								<tr><td><code>just lint</code></td><td>Static analysis and formatting checks</td></tr>
+								<tr><td><code>just format</code></td><td>Code auto-formatting (Ruff)</td></tr>
+								<tr><td><code>just typecheck</code></td><td>Python type checking (Mypy/Pyright)</td></tr>
+								<tr><td><code>just --list</code></td><td>List recipes — use the justfile closest to your target directory</td></tr>
+							</tbody>
+						</table>
+					</section>
+					<section>
+						<h3>Where to Look</h3>
+						<table>
+							<thead>
+								<tr><th>Task</th><th>Location</th><th>Notes</th></tr>
+							</thead>
+							<tbody>
+								<tr><td>Core Agent Logic</td><td><code>agents/</code></td><td>Runtime implementations of pydantic-ai agents</td></tr>
+								<tr><td>CLI Commands</td><td><code>cli/commands/</code></td><td>All user-facing command logic and routing via Click</td></tr>
+								<tr><td>Evaluation Setup</td><td><code>evals/</code></td><td>Runner configuration, smoke tests, baseline data</td></tr>
+								<tr><td>Workflow Config</td><td><code>.github/workflows/</code></td><td>CI automation and auto-research experiment triggers</td></tr>
+							</tbody>
+						</table>
+					</section>
+				</section>
+
+				<!-- 7 · Workflows & Experiments (vertical stack: loop / registry / taxonomy / detail) -->
+				<section>
+					<section>
+						<h2>Workflows &amp; Experiments</h2>
+						<div class="mermaid"><pre>
+sequenceDiagram
+    participant I as Issue / Idea
+    participant E as Edge Agent
+    participant T as Tools (CLI)
+    participant X as Experiments State
+    participant V as Evals
+    I->>E: Experiment idea
+    E->>T: Run experiment
+    T->>X: Write state files
+    E->>V: Evaluate result
+    V-->>E: Baseline comparison
+    E-->>I: Outcome recorded
+						</pre></div>
+						<small>Every idea enters the loop; every outcome is recorded against a baseline.</small>
+						<aside class="notes">
+							The loop is issue-driven: ideas arrive as issues, the edge agent runs them through the
+							CLI, state lands in experiments/, and evals compare against baselines before the
+							outcome is recorded back to the issue.
+						</aside>
+					</section>
+					<section>
+						<h3>Dual Experiment Registry</h3>
+						<table>
+							<thead>
+								<tr><th>Registry</th><th>Managed by</th><th>Storage</th></tr>
+							</thead>
+							<tbody>
+								<tr><td>CLI experiments</td><td>CLI commands</td><td><code>experiments/index.json</code></td></tr>
+								<tr><td>Script-run state</td><td>Scripts / conductor</td><td><code>experiments/&lt;issue&gt;.state.json</code></td></tr>
+							</tbody>
+						</table>
+						<small>Two views of the same loop: manual CLI runs versus automated script runs.</small>
+					</section>
+					<section>
+						<h3>Taxonomy</h3>
+						<div class="mermaid"><pre>
+flowchart LR
+    subgraph Agents["Agents"]
+        RT["Runtime (pydantic-ai)"] --> EA["edge_agent"]
+        FW["Framework (OpenCode)"] --> SA["Subagents / Skills"]
+    end
+    subgraph Workflows["Workflows"]
+        CI["GitHub CI/CD"] --> AR["Auto-research triggers"]
+        CO["Conductor"] --> DW["Design / Discovery / Execution"]
+    end
+						</pre></div>
+					</section>
+					<section>
+						<h3>Taxonomy in Detail</h3>
+						<div style="display: flex; gap: 3em; justify-content: center; align-items: flex-start;">
+							<div>
+								<h4>Agents</h4>
+								<ul>
+									<li><strong>Runtime</strong> — pydantic-ai agents in <code>agents/</code> (e.g. <code>edge_agent</code>)</li>
+									<li><strong>Framework</strong> — OpenCode agents in <code>.opencode/</code></li>
+								</ul>
+							</div>
+							<div>
+								<h4>Workflows</h4>
+								<ul>
+									<li><strong>GitHub</strong> — CI/CD plus auto-research triggers in <code>.github/workflows/</code></li>
+									<li><strong>Conductor</strong> — Design / Discovery / Execution workers in <code>scripts/conductor/</code></li>
+								</ul>
+							</div>
+						</div>
+					</section>
+				</section>
+
+				<!-- 8 · Interactive features -->
+				<section>
+					<h2>Interactive Features</h2>
+					<table>
+						<thead>
+							<tr><th>Feature</th><th>How</th></tr>
+						</thead>
+						<tbody>
+							<tr><td>Search</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></td></tr>
+							<tr><td>Zoom</td><td><kbd>Alt</kbd>+click a diagram</td></tr>
+							<tr><td>Jump to slide</td><td><kbd>G</kbd></td></tr>
+							<tr><td>Copy code</td><td>Hover any code block — copy button</td></tr>
+							<tr><td>Speaker notes</td><td><kbd>S</kbd></td></tr>
+						</tbody>
+					</table>
+					<p class="fragment">Default fragment — fades in</p>
+					<p class="fragment grow">Grow — <code>fragment grow</code></p>
+					<p class="fragment highlight-blue">Highlight-blue</p>
+					<p class="fragment fade-in-then-out">Fade-in-then-out</p>
+				</section>
+
+				<!-- 9 · Closing -->
+				<section>
+					<h2>Documentation Lives in AGENTS.md</h2>
+					<p>
+						<a href="../AGENTS.md">AGENTS.md</a> ·
+						<a href="../justfile">justfile</a> ·
+						<a href="../.github/instructions/">.github/instructions/</a>
+					</p>
+					<blockquote>
+						<p>"The world model is the map; the deck is the legend."</p>
+					</blockquote>
+					<aside class="notes">
+						Keep this deck in sync with AGENTS.md — the world model, code map, conventions and
+						anti-patterns all live there as the source of truth.
+					</aside>
+				</section>
+
 			</div>
 		</div>
 
@@ -64,6 +375,20 @@
 				slideNumber: "c/t",
 				center: true,
 				transition: "slide",
+				// Mermaid diagrams: blueprint palette on the base theme
+				// (the plugin spreads these into mermaid.initialize)
+				mermaid: {
+					theme: 'base',
+					themeVariables: {
+						primaryColor: '#0d2b52',
+						primaryTextColor: '#eaf2ff',
+						primaryBorderColor: '#1f6fb2',
+						lineColor: '#7fd4ff',
+						secondaryColor: '#123f7a',
+						tertiaryColor: '#0a1f3c',
+						fontSize: '16px',
+					},
+				},
 				plugins: [
 					RevealMarkdown,
 					RevealHighlight,
