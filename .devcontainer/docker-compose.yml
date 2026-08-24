@@ -6,7 +6,14 @@ services:
     volumes:
       - ..:/workspace:cached
       - opencode_data:/home/vscode/.local/share/opencode
-      - dsh_data:/home/vscode/.dsh
+      # ~/.dsh is the dsh harness home. Instead of an anonymous named volume
+      # (wiped on rebuild), bind it to the repo's `.dsh/` directory so the
+      # harness home IS a workdir directory: config (settings.yaml,
+      # cordis.patch.yml, agent-presets/) is tracked config-as-code and the
+      # machine state (profiles/, sessions/, storages/, .pnpm-store/) persists
+      # durably in the repo (gitignored). `../.dsh` resolves from this file to
+      # the repo root.
+      - ../.dsh:/home/vscode/.dsh
     command: sleep infinity
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -94,7 +101,6 @@ networks:
 volumes:
   ollama_data:
   opencode_data:
-  dsh_data:
   mcp_images:
 
 secrets:

@@ -1,0 +1,7 @@
+name: RUG Mode
+description: >-
+  Repeat Until Good orchestration (per .opencode/agents/rug.md). Top level: the
+  orchestrator holds a trajectory (goal + todo ledger) and decomposes,
+  delegates, and validates. Lower level: worker subagents do every piece of
+  implementation; validation is always a separate worker; iterate until good.
+order: 5

@@ -86,3 +86,12 @@ secrets/
 
 # docs (reveal.js)
 docs/node_modules/
+# dsh harness home (.dsh/ is bind-mounted to ~/.dsh — config-as-code, see
+# .dsh/README.md): track settings.yaml, cordis.patch.yml, agent-presets/ and
+# README.md; ignore the machine-state the harness generates.
+/.dsh/profiles/
+/.dsh/sessions/
+/.dsh/storages/
+/.dsh/.pnpm-store/
+/.dsh/.env
+/.dsh/.credentials.yaml

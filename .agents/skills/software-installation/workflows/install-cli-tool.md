@@ -61,9 +61,20 @@ sudo chown -R $(id -u):$(id -g) /home/vscode/.dsh
 
 Done when: the dev user writes into the mounted directory without sudo.
 
-## Step 6 — Restore config as code
+## Step 6 — Config as code
 
-Store tool config templates in the repo under `.devcontainer/<tool>/` and restore them idempotently. Home-dir config (~/.dsh) wipes on rebuild; the workspace mount persists, so the template is the source of truth — dsh's are `settings.yaml` and `cordis.patch.yml`. `cp -u` copies only when the source is newer, so a user edit with a newer mtime survives. Guard the copy with `[[ -f ]]` so first-run absence does not error.
+Preferred pattern: make the tool's home dir a **workdir mount** so config needs
+no restore. dsh's `~/.dsh` is bind-mounted from the repo's `.dsh/` directory
+(`.devcontainer/docker-compose.yml`: `- ../.dsh:/home/vscode/.dsh`) — tracked
+config lives in `.dsh/`, machine state is gitignored, and nothing is copied.
+Migrate an existing container once: `rsync -a --exclude='.agent-presets' ~/.dsh/ /workspace/.dsh/`, then rebuild.
+
+Fallback pattern (home not mounted from the workdir): store templates under
+`.devcontainer/<tool>/` and restore idempotently. Home-dir config (~/.dsh)
+wipes on rebuild; the workspace mount persists, so the template is the source
+of truth — dsh's are `settings.yaml` and `cordis.patch.yml`. `cp -u` copies
+only when the source is newer, so a user edit with a newer mtime survives.
+Guard the copy with `[[ -f ]]` so first-run absence does not error.
 
 ```bash
 mkdir -p ~/.dsh
@@ -101,4 +112,4 @@ Done when: a fresh clone plus rebuild reproduces the install from the docs alone
 
 ## Example application: dsh MCP runner
 
-This repo installs `@deepseek-ai/dsh@0.1.1-rc.2` via postCreate. The same steps apply: pinned rc tag → version guard → `--allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs` → `export PATH="$(npm prefix -g)/bin:$PATH"` → chown `/home/vscode/.dsh` → config restored from `.devcontainer/dsh/` → `dsh --dump-config` plus a bounded smoke classified PASS or FAIL.
+This repo installs `@deepseek-ai/dsh@0.1.1-rc.2` via postCreate. The same steps apply: pinned rc tag → version guard → `--allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs` → `export PATH="$(npm prefix -g)/bin:$PATH"` → chown `/home/vscode/.dsh` → home is a workdir bind mount (`.dsh/` → `~/.dsh`; no config restore needed) → `dsh --dump-config` plus a bounded smoke classified PASS or FAIL.

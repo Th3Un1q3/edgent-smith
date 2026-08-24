@@ -20,7 +20,18 @@ A package WITHOUT tool bundle metadata (no `dsh.bundle`) installs as a plain dep
 
 ## Config-as-code restore
 
-Store templates under `.devcontainer/<tool>/`; create the target dir, then restore with a guarded `cp -u` (full block: [workflows/install-cli-tool.md](../workflows/install-cli-tool.md) Step 6). Home-dir config (`~/.dsh`) wipes on rebuild, and the workspace mount persists, so the template is the source of truth:
+Preferred pattern — the harness home is the workdir. dsh's home (`~/.dsh`) is
+bind-mounted from the repo's `.dsh/` directory (`.devcontainer/docker-compose.yml`:
+`- ../.dsh:/home/vscode/.dsh`), so `~/.dsh` writes ARE workdir writes: tracked
+config (`settings.yaml`, `cordis.patch.yml`, `agent-presets/`) persists with the
+repo and survives rebuilds with **no copy step at all**. Machine state
+(`profiles/`, `sessions/`, `storages/`, `.pnpm-store/`) is gitignored (root
+`.gitignore` section "dsh harness home"). Roster discovery is unmemoized, so
+preset edits in `.dsh/agent-presets/` are live for the next session.
+
+Fallback pattern (tools whose home dir is NOT a workdir mount): store templates
+under `.devcontainer/<tool>/`, create the target dir, then restore with a
+guarded `cp -u` (full block: [workflows/install-cli-tool.md](../workflows/install-cli-tool.md) Step 6):
 
 ```bash
 if [[ -f .devcontainer/dsh/settings.yaml ]]; then

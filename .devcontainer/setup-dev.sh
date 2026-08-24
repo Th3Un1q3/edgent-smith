@@ -42,7 +42,10 @@ fi
 
 # Install dsh (DeepSeek Harness CLI) - pinned rc, allow-scripts whitelist for native deps (node-pty, koffi, dsh-subprocess-local)
 export PATH="$(npm prefix -g)/bin:$PATH"
-# Ensure dsh home is writable (fresh dsh_data volume is root-owned on rebuild)
+# ~/.dsh is bind-mounted from the workdir (.dsh/ -> ~/.dsh, see
+# docker-compose.yml), so the harness home persists with the repo: config
+# files are tracked, machine state is gitignored, and nothing needs to be
+# copied or restored here. Keep the mount point writable as a safety net.
 mkdir -p /home/vscode/.dsh
 sudo chown -R $(id -u):$(id -g) /home/vscode/.dsh
 DSH_VERSION="0.1.1-rc.2"
@@ -51,12 +54,6 @@ if ! command -v dsh &> /dev/null || [[ "$(dsh --version 2>/dev/null)" != "$DSH_V
   npm install -g --allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs "@deepseek-ai/dsh@${DSH_VERSION}"
 else
   echo "dsh v${DSH_VERSION} already installed"
-fi
-
-# Restore dsh config from repo templates (config-as-code; user edits in ~/.dsh are kept)
-if [[ -f /workspace/.devcontainer/dsh/settings.yaml ]]; then
-  cp -u /workspace/.devcontainer/dsh/settings.yaml /home/vscode/.dsh/settings.yaml
-  cp -u /workspace/.devcontainer/dsh/cordis.patch.yml /home/vscode/.dsh/cordis.patch.yml
 fi
 
 echo "Setup complete!"
