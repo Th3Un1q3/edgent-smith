@@ -5,8 +5,16 @@ description: >
 license: MIT
 compatibility: github-copilot
 metadata:
-  version: "1.0"
+  version: "1.2"
   author: "edgent-smith team"
+  delta: >
+    1.2 — hardened task sizing into a MANDATORY split gate in Step 1 (Decompose the
+    Request) and scoped resume (task_id) to finishing near-complete tasks only; prompted
+    by 4+ recurrences of task rightsizing failures (subagent budget burned on
+    investigation, resume used as the primary strategy for work that should have been split).
+    1.1 — added budget-aware task sizing and ground-truth smoke-test rules to Step 1
+    (Decompose the Request); prompted by recurring delegation failures (subagent budget
+    exhaustion, config tasks passing declarative introspection while failing at runtime).
 ---
 
 # Task Delegation Workflow
@@ -27,6 +35,7 @@ Break the user's request into discrete tasks. Each task should satisfy all of th
 - **Independently completable** — no task depends on another producing intermediate results that it then reads; if they do, the dependent task must receive its input as explicit parameters in the subagent prompt
 - **Bounded scope** — can be completed by a single agent invocation without requiring follow-up clarification about what to work on next
 - **Verifiable outcome** — has clear acceptance criteria that a validation subagent can check
+- **Fits the subagent budget** — completable within ~20 tool calls; the per-subagent session budget is 24
 
 ### Decomposition Checklist
 
@@ -38,6 +47,41 @@ Before launching any subagent, verify each task:
 | Bounded scope? | Can an agent complete this without needing to ask clarifying questions about what to work on next? |
 | Verifiable outcome? | Is there a concrete acceptance criterion I can check when the subagent reports back? |
 | Independent? | Does this task require reading output from another task before it starts? If yes, pass that information as explicit context in the prompt. |
+| Fits budget? | Can an agent complete this within ~20 tool calls (24-call session budget)? |
+
+### Budget-Aware Task Sizing
+
+Every delegated task must be completable within ~20 tool calls; the per-subagent session budget is 24, leaving headroom for discovery and verification. Decompose further when a task has:
+
+- **More than 3 requirement areas** — split by area into separate tasks
+- **More than 2 phases** — investigate, write, and verify must be separate tasks
+
+Example: "Implement a CLI command with tests and docs" mixes 3 phases — split it into investigate, write, and verify tasks.
+
+When a task cannot be decomposed further, the prompt must include a **resume plan**: expected remaining calls and what the resumer should do first.
+
+### Mandatory Split Gate
+
+Run this gate before launching ANY subagent — task sizing is mandatory, not advisory:
+
+- A task estimated to need BOTH investigation AND execution MUST be split into:
+  (a) a research/decide subagent that returns a concrete plan, and
+  (b) a write+verify subagent that executes that plan
+- A task estimated at more than ~20 tool calls MUST be split the same way
+- Resume (`task_id`) is ONLY for finishing a near-complete task — e.g. recovering a silent
+  failure via a status-report resume ("report what you did and what remains") — never the
+  primary strategy for work that should have been split
+- If a task burned its budget on investigation, resuming to finish is acceptable — the split
+  rule is what prevents the burn
+
+Example: "Implement a CLI command with tests and docs" is 3 phases — launch a research/decide
+subagent for the plan, then a write+verify subagent to execute it. Never one rug-swe task.
+
+### Ground-Truth Smoke Tests for Config Tasks
+
+Config and install tasks MUST include a bounded ground-truth smoke test — run the configured system once and verify it behaves — with at most 2 fix iterations, then report. Declarative introspection (`--dump-config`, schema reads) cannot prove runtime behavior: a config that parses can still fail at startup.
+
+Example: a settings.yaml schema bug is invisible to `--dump-config` but crashes the runtime; the task's acceptance criteria must include "start the service and confirm it responds."
 
 ## Step 2: Route to the Correct Agent
 

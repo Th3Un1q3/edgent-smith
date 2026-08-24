@@ -4,8 +4,17 @@ description: >
   Teaches the RUG (Repeat Until Good) orchestrator pattern for decomposing user requests into discrete, independently-completable agent subagent tasks and routing them to specialized agents based on scope, expertise, and limitations.
 license: MIT
 metadata:
-  version: "1.0"
+  version: "1.2"
   author: "Th3Un1qu3"
+  delta: >
+    1.2 — added the Parity and Porting Tasks Require a Surface Inventory mandate
+    (surface-mapping discovery before decomposition, no-silent-skips, enumerated
+    scope questions, mapping-checked validation); prompted by a session review where
+    an "as close as possible to opencode" port silently skipped plugins and MCP servers.
+    1.1 — routed task-delegation-workflow.md in the Well-Known Workflows table and added
+    budget-aware task sizing plus ground-truth smoke-test rules to that workflow; prompted
+    by recurring delegation failures (subagent budget exhaustion, config tasks passing
+    declarative introspection while failing at runtime).
 ---
 
 # Task Delegation Skill
@@ -22,6 +31,15 @@ Teaches the RUG (Repeat Until Good) orchestrator pattern for decomposing user re
 6. Use the `todowrite` tool to track progress and ensure that each subagent completes their task successfully.
 7. Use the `question` tool to ask for clarification or additional information from the user as needed.
 8. Validate the results of each subagent's work independently, and iterate until the overall task is completed successfully.
+
+## Parity and Porting Tasks Require a Surface Inventory
+
+When the request is a parity or porting task — "as close as possible to X", "mirror", "port", "replicate", "match" — decomposition MUST begin with a source→target surface-mapping discovery, never with task breakdown:
+
+- **Inventory first.** Launch a discovery subagent that inventories EVERY element of the source system (plugins, MCP servers, config files, commands, agents, instructions, env vars, tooling) and maps each to a target disposition: IMPLEMENTED / MIGRATE / DROP-WITH-REASON / DEFER.
+- **No silent skips.** Every non-implemented element carries a reason; every DEFER/DROP is documented in the target's user-facing docs (README) before the task counts as done. A skip without a documented reason is a failure.
+- **Scope questions enumerate.** When a scope-locking question uses a domain word with repo-specific meaning ("plugins", "MCPs", "harness"), the options must list what it concretely includes in THIS repo — inventory first, then ask.
+- **Validation checks the mapping.** Give the validation subagent the mapping table; it must verify each row's disposition (implemented actually implemented; migrate actually wired; defer/drop documented), not just the acceptance criteria. This extends asymmetric validation: the validator judges parity-surface completeness, not merely instruction-following.
 
 ## What Not to Do
 
@@ -53,6 +71,7 @@ Step-by-step task specific guides, explaining what agent team to use, how to rou
 
 | Workflow | File | Purpose |
 |----------|------|---------|
+| Task Delegation | [task-delegation-workflow.md](./workflows/task-delegation-workflow.md) | Decompose, route, prompt, validate, and iterate RUG delegation; includes budget-aware task sizing and config-task smoke tests |
 | Sample | [sample-workflow.md](./workflows/sample-workflow.md) | Example of using the RUG orchestrator pattern |
 | Installing new software | not implemented | The right approach to install software (eg. using package managers like apt, yum, or brew) |
 | Installing python libraries | not implemented | Not implemented |

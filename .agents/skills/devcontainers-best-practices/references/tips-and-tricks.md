@@ -83,6 +83,8 @@ Use the `mounts` property so a volume survives rebuilds while letting VS Code re
 
 Adjust paths if you use a non-root `remoteUser`. See [Tips and Tricks – Persisting user profile](https://code.visualstudio.com/docs/devcontainers/tips-and-tricks#persisting-user-profile).
 
+- **Named volumes mounted into the dev user's home:** a fresh named volume mounts root-owned (root:root 755), so the dev user gets EACCES on every operation inside it. Make the mount writable in `postCreateCommand` — mirror the opencode `.local/` precedent: `mkdir -p <mount>` + `sudo chown -R $(id -u):$(id -g) <mount>`.
+
 ---
 
 ## Reporting issues

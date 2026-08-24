@@ -281,6 +281,22 @@ requested in the task.
 
 **Verification:** After cache writes, check that every cache entry's `source:` header matches the allowed source. If a cache entry from a disallowed source appears, discard it and flag the prompt for revision.
 
+## Schema source of truth
+
+When writing configuration for a third-party tool, confirm the schema from the INSTALLED package's own docs/types (or the official docs) BEFORE writing the config. Blog posts and third-party examples are leads, not source of truth — their nested shapes and map assumptions can be silently rejected by the tool's schema and only surface at runtime or verification.
+
+**When to apply:**
+- Writing any config for a third-party tool (e.g. a `settings.yaml` or an MCP client `servers:` block).
+- Adapting an example found in a blog post, tutorial, or third-party snippet.
+
+**Pattern:**
+```
+Confirm <tool>'s schema from its installed package docs/types (or official docs) before
+writing config; treat blog/third-party examples as leads only.
+```
+
+**Example:** a blog's `agent-default-model` nested shape was silently rejected by the dsh `settings.yaml` schema, and the assumed `servers:` map did not match dsh-mcp-client's real per-server `serverName` schema — both caught only at runtime/verification.
+
 ## Generalized skeleton
 
 One compact script per SOURCE batch, phases labeled CHECK → FETCH → STORE → SYNTHESIZE (canonical checkpoints: [caching-rules.md](../references/caching-rules.md)). Split by source into a few `mcp-exec` calls — a monolithic batch with MANY tool calls can hit the gateway timeout (-32001) mid-loop. All loops live inside the script; no cross-call state is needed (variables do not persist between mcp-exec calls).

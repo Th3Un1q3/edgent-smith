@@ -99,6 +99,7 @@ Current public `just` entrypoints are split between the Click-backed `autoresear
 | `just run-experiment ...` | `uv run python scripts/experiment.py run` | Local script-backed experiment execution with a required prompt and forwarded flags |
 | `just run-experiment-loop ...` | `uv run python scripts/experiment.py local-loop` | Local foreground experiment loop with forwarded flags |
 | `just promote-baseline ...` | `uv run python scripts/experiment.py promote-baseline` | Baseline promotion for an existing candidate result |
+| `just dsh ...` | `dsh` (DeepSeek Harness CLI, npm-installed) | Web UI via `just dsh web` (`http://127.0.0.1:3080`) or one-shot headless via `just dsh --profile headless "task"` |
 
 - `just autoresearch init --name NAME` verifies the `copilot` CLI alias and authentication before it writes `NAME.config.toml`. The generated config now includes a `[baseline]` section with `id` defaulting to `NAME` and `eval_model` defaulting to `edge_agent_default`. If the GitHub Copilot CLI is missing, the command points to `npm install -g @github/copilot`.
 - `just autoresearch validate --config PATH` validates a specific project config. When `--config` is omitted, `validate` auto-discovers the lexicographically first `*.config.toml` file in the current directory.
@@ -275,6 +276,52 @@ just fix
 ```
 
 `just edge-agent` now runs the existing `edge_agent_local_openrouter` alias and prints local Jaeger trace lookup details alongside the agent response. Open `http://localhost:16686` to inspect the full span tree after a run.
+
+---
+
+## DeepSeek Harness (dsh)
+
+DeepSeek Harness (`dsh`) is DeepSeek AI's agent harness — the runtime that turns an LLM into a coding agent with tools, a sandbox, and sessions. Everything is a plugin on the Cordis kernel, and the harness is model-agnostic. It is installed in the DevContainer pinned to `@deepseek-ai/dsh@0.1.1-rc.2`.
+
+### Running
+
+```bash
+# Web UI at http://127.0.0.1:3080 (auto-opens the browser)
+just dsh web
+
+# One-shot headless run (exits 0 on completion)
+just dsh --profile headless "task"
+```
+
+On first run, add a model key in **Settings**: the OpenRouter key from the environment is pre-wired as the default model; DeepSeek native is available once `DEEPSEEK_API_KEY` is set. The harness config is verified valid — a headless run boots and reaches the provider authenticated, but the environment `OPENROUTER_API_KEY` has exhausted its account quota (OpenRouter 403 "Key limit exceeded"), so a first run may show that error until a fresh key or `DEEPSEEK_API_KEY` is provided.
+
+### Configuration
+
+Config lives in `~/.dsh/`:
+
+| File | Purpose |
+|------|---------|
+| `settings.yaml` | Providers and default model |
+| `cordis.patch.yml` | Layered plugin patches (hot-reload) |
+
+Inspect the effective config with `dsh --dump-config`. Plugins are added per profile with `dsh plugin --profile web add <package>` (pnpm-based). `dsh` loads `AGENTS.md` like opencode, and on rebuild the config is restored from repo templates (`.devcontainer/dsh/`) into the `dsh_data` volume. The `sandbox-policy` is pinned to `workspace-write` in `cordis.patch.yml`: bwrap is installed but broken in this unprivileged OrbStack container (EPERM creating namespaces), so the Landlock backend is auto-selected (no namespaces needed). The enabled `tool-web` search backend (`web-search-deepseek`) needs `DEEPSEEK_API_KEY`, which is not set today: fetch works, search fails loud until a key exists.
+
+### opencode parity
+
+| Dimension | opencode | dsh |
+|-----------|----------|-----|
+| Run | `just oc` | `just dsh` |
+| UI | `opencode` | `dsh web` |
+| Config | `~/.config/opencode/` | `~/.dsh/` — done |
+| Plugins | `.opencode/plugins/` | Cordis plugins — implemented: `agent-instructions`, `tool-todo`, `tool-skill`, sessions; configured: MCP client (inert); deferred: quality gates, skill-usage tracking, tool budgets, agents port, commands port; dropped: `afk-enforcer`, `rtk`, opencode-specific instructions, notifier |
+| MCP | `opencode.json` `mcp` servers | configured — gateway bridge to the repo's MCP gateway (serena + 9 catalog servers); NO auth header (matches the header-less opencode gateway); inactive pending upstream `dsh.bundle` |
+| Provider | `provider.local` — 8 models, `http://host.docker.internal:1289/v1` | dsh `llm-pi-ai` `local` provider (8 models, mirrors `provider.local`), plus `openrouter` and `opencode-go` — done; default model is `local/qwen3.6-28b-reap20-a3b` (smoke-verified; the gateway serves 5 of the 8 declared models, so local runs require a served model id + the dummy `LOCAL_GATEWAY_API_KEY` credential) |
+| Compaction | `{auto: true, prune: false, reserved: 10000}` | `compaction-basic` enabled — auto, thresholdRatio 0.8, retainRatio 0.16, reserved≈10000 (per-model ratios for the 128k/256k-ctx models) — done |
+| Instructions | AGENTS.md | ✓ (both) |
+
+Remaining gaps — deferred: quality gates (no lint/test gate hooks in `cordis.patch.yml`), skill-usage tracking (telemetry stays off), tool budgets (no per-tool quota surface), agents port (dsh sessions supersede opencode subagents), commands port (no command-router equivalent), notifier. Per-command permission rules (`git * ask`, `curl * deny`, `gateway_*` allow-list) are NOT reproducible in dsh's mode-based permission model — guardrail delta. MCP bridge: `@deepseek-ai/dsh-mcp-client@0.0.1-rc.1` ships no `dsh.bundle`, so the gateway bridge row is inert until a release gains one (then it auto-activates); re-check on dsh plugin updates. Dropped: `afk-enforcer`, `rtk` wrappers, opencode-specific instructions — opencode-internal or superseded by dsh-native features (`agent_utils`, the dsh CLI).
+
+---
 
 ## Autofix workflow
 

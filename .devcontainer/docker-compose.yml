@@ -6,6 +6,7 @@ services:
     volumes:
       - ..:/workspace:cached
       - opencode_data:/home/vscode/.local/share/opencode
+      - dsh_data:/home/vscode/.dsh
     command: sleep infinity
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -93,6 +94,7 @@ networks:
 volumes:
   ollama_data:
   opencode_data:
+  dsh_data:
   mcp_images:
 
 secrets:

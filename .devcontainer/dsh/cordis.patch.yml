@@ -1,0 +1,60 @@
+# Home-level patch layer for all dsh profiles (outranks profile patches).
+# Intent (2026-08-22): opencode parity for a coding-agent harness —
+#   re-enable the tool/instruction plugins the web profile disables, pin the
+#   sandbox to workspace-write (deterministic; Landlock auto-selected since
+#   bwrap is broken in this OrbStack container), and leave telemetry DISABLED
+#   (dsh default — matches the repo telemetry-off stance).
+# Format: top-level YAML array of plugin-entry patches ({id, config?, disabled?}).
+- id: tool-bash
+  disabled: false            # shell execution (opencode bash parity)
+- id: tool-fs
+  disabled: false            # file read/write (opencode read/write parity)
+- id: tool-fs-search
+  disabled: false            # grep/glob search (opencode grep/glob parity)
+- id: tool-skill
+  disabled: false            # skill loading (opencode skills parity)
+- id: tool-subagent
+  disabled: false            # subagent spawning (opencode agents parity)
+- id: tool-subagent-control
+  disabled: false            # subagent lifecycle control
+- id: tool-subagent-list-agents
+  disabled: false            # list available subagents
+- id: tool-subagent-fork
+  disabled: false            # fork-mode subagents
+- id: plan-mode
+  disabled: false            # plan-then-implement workflow (opencode plan-mode parity)
+- id: tool-todo
+  disabled: false            # todo tracking (opencode todo parity)
+- id: tool-goal
+  disabled: false            # goal tracking
+- id: agent-instructions
+  disabled: false            # auto-load AGENTS.md (repo parity; dsh-native)
+- id: tool-str-replace-editor
+  disabled: false            # surgical file edits (opencode edit parity)
+- id: tool-web
+  disabled: false            # web search/fetch; NOTE: search backend
+                             # web-search-deepseek needs DEEPSEEK_API_KEY
+                             # (absent today) — fetch:false stays, search
+                             # fails loud until a key exists
+- id: sandbox-policy
+  config:
+    mode: workspace-write    # deterministic default; Landlock chosen by
+                             # capability probe (bwrap broken in OrbStack:
+                             # EPERM creating namespaces, seccomp)
+
+# MCP bridge to the repo's MCP gateway (serena memory + 9 catalog servers); NO client auth — matches opencode.jsonc mcp.gateway. Inert until @deepseek-ai/dsh-mcp-client ships a dsh.bundle.
+- id: mcp-client
+  name: '@deepseek-ai/dsh-mcp-client'
+  config:
+    serverName: gateway
+    transport: streamable-http
+    url: http://mcp_gateway:8080
+# Compaction parity with opencode.jsonc {auto:true, prune:false, reserved:10000}
+- id: compaction-basic
+  disabled: false
+  config:
+    auto: true
+    thresholdRatio: 0.8
+    retainRatio: 0.16
+    # modelPolicies dropped: schema expects an array, not a map. reserved≈10000 parity
+    # would need per-model {model, thresholdRatio} entries; global thresholdRatio 0.8 applies.

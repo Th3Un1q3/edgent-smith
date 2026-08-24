@@ -1,0 +1,6 @@
+tool: github search_issues
+query: host process killed SIGKILL crash random
+date: 2026-08-22
+source: github
+
+{"incomplete_results":false,"items":[{"html_url":"https://github.com/orbstack/orbstack/issues/2579","number":2579,"state":"open","title":"random crash with sig kill"},{"html_url":"https://github.com/orbstack/orbstack/issues/2601","number":2601,"state":"open","title":"OrbStack Helper repeatedly killed by SIGKILL during Docker workloads; containers disappear after restart"},{"html_url":"https://github.com/orbstack/orbstack/issues/2361","number":2361,"state":"open","title":"Unexpected crash"},{"html_url":"https://github.com/orbstack/orbstack/issues/2252","number":2252,"state":"open","title":"Server crashed"},{"html_url":"https://github.com/orbstack/orbstack/issues/308","number":308,"state":"open","title":"Exited abnormally with signal 9"},{"html_url":"https://github.com/orbstack/orbstack/issues/2314","number":2314,"state":"open","title":"OrbStack Bug Report: Silent VM Death with Prolonged Downtime Before Auto-Restart"},{"html_url":"https://github.com/orbstack/orbstack/issues/2319","number":2319,"state":"closed","title":"crash on macos26.2"},{"html_url":"https://github.com/orbstack/orbstack/issues/1942","number":1942,"state":"closed","title":"Stopped unexpectedly: killed (SIGKILL)"}],"total_count":46}

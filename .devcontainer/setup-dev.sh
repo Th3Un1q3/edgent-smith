@@ -40,5 +40,23 @@ if ! command -v conductor &> /dev/null; then
   CONDUCTOR_INSTALL_FORCE=1 curl -sSfL https://aka.ms/conductor/install.sh | sh -s -- --source "git+https://github.com/microsoft/conductor.git@v0.1.18"
 fi
 
+# Install dsh (DeepSeek Harness CLI) - pinned rc, allow-scripts whitelist for native deps (node-pty, koffi, dsh-subprocess-local)
+export PATH="$(npm prefix -g)/bin:$PATH"
+# Ensure dsh home is writable (fresh dsh_data volume is root-owned on rebuild)
+mkdir -p /home/vscode/.dsh
+sudo chown -R $(id -u):$(id -g) /home/vscode/.dsh
+DSH_VERSION="0.1.1-rc.2"
+if ! command -v dsh &> /dev/null || [[ "$(dsh --version 2>/dev/null)" != "$DSH_VERSION" ]]; then
+  echo "Installing dsh v${DSH_VERSION}..."
+  npm install -g --allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs "@deepseek-ai/dsh@${DSH_VERSION}"
+else
+  echo "dsh v${DSH_VERSION} already installed"
+fi
+
+# Restore dsh config from repo templates (config-as-code; user edits in ~/.dsh are kept)
+if [[ -f /workspace/.devcontainer/dsh/settings.yaml ]]; then
+  cp -u /workspace/.devcontainer/dsh/settings.yaml /home/vscode/.dsh/settings.yaml
+  cp -u /workspace/.devcontainer/dsh/cordis.patch.yml /home/vscode/.dsh/cordis.patch.yml
+fi
 
 echo "Setup complete!"

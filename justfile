@@ -73,6 +73,10 @@ pull-ollama-model:
 oc *ARGS:
     opencode {{ ARGS }}
 
+# Run DeepSeek Harness (dsh). use `web --no-open` to serve web UI only.
+dsh *ARGS:
+    dsh {{ ARGS }}
+
 # Script-backed experiment runner entrypoint: run experiment execution locally with a prompt.
 # This is separate from the `autoresearch experiment` local experiment registry CRUD surface.
 # The prompt is required; additional flags are forwarded to experiment.py.
