@@ -1,0 +1,1531 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+	<title>New Presentation</title>
+
+	<link rel="stylesheet" href="node_modules/reveal.js/dist/reset.css" />
+	<link rel="stylesheet" href="node_modules/reveal.js/dist/reveal.css" />
+	<link rel="stylesheet" href="theme/blueprint.css" />
+
+	<!-- Fonts: Oswald / Inter / JetBrains Mono (variable, self-hosted) -->
+	<link rel="stylesheet" href="node_modules/@fontsource-variable/oswald/index.css" />
+	<link rel="stylesheet" href="node_modules/@fontsource-variable/inter/index.css" />
+	<link rel="stylesheet" href="node_modules/@fontsource-variable/jetbrains-mono/index.css" />
+
+	<!-- Theme used for syntax highlighted code -->
+	<link rel="stylesheet" href="node_modules/reveal.js/dist/plugin/highlight/monokai.css" />
+
+	<!-- CopyCode: copy-button styling -->
+	<link rel="stylesheet" href="node_modules/reveal.js-copycode/plugin/copycode/copycode.css" />
+	<!-- Appearance: entrance animations (bundles Animate.css keyframes) -->
+	<link rel="stylesheet" href="node_modules/reveal.js-appearance/plugin/appearance/appearance.css" />
+</head>
+
+<body>
+	<div class="reveal">
+		<div class="slides">
+
+			<!-- 1 · Intro — minimal title slide -->
+			<section>
+				<h1 class="animate__fadeInDown">AI Adoption</h1>
+				<p class="animate__fadeInUp">Making AI Adoption Work</p>
+				<aside class="notes">
+					[Name], thanks for the time. We have about an hour, and I want to spend it on AI adoption at [Company]
+					and where I can help you with it. Before this meeting I interviewed people from several teams to
+					triangulate the current state of adoption, then read it through my own experience and case studies
+					from Lyft and Uber. Expect that some of what I found you already know. Some of it may not have
+					reached you directly.
+				</aside>
+			</section>
+
+			<!-- 2 · Disclaimer -->
+			<section>
+				<div style="border: 1px solid rgba(234,242,255,0.9); padding: 1.5em 2em; border-radius: 6px;">
+					<h2>Disclaimer</h2>
+					<p class="fragment">Content may not reflect [Company]'s complete context</p>
+					<p class="fragment">I made it to explore how to scale AI adoption and help increase the ROI from it
+					</p>
+				</div>
+				<aside class="notes">
+					Keep the disclaimer humble and goal-focused: incomplete context + ROI goal.
+				</aside>
+			</section>
+
+			<!-- 3 · Where We Stand (vertical stack: middle management / signals &amp; measurements / next steps &amp; champions) -->
+			<section>
+				<section>
+					<h2>Where [Company] Stands</h2>
+					<p>Current State Snapshot</p>
+					<aside class="notes">
+						Before I share what I found, a few questions. The people I interviewed could not CLEARLY answer
+						these,
+						so I want to learn from you,
+						Your answers tell me whether my understanding of where [Company] stands is accurate.
+					</aside>
+				</section>
+				<section>
+					<h3>Middle Management</h3>
+					<ul>
+						<li class="fragment">Do middle managers understand their role in AI adoption?</li>
+					</ul>
+					<aside class="notes">
+						Do middle managers understand their role in AI adoption? Do they know what good output looks
+						like and what does not? Do they know their team's priority and the roadmap they must follow? And
+						do they know how to handle the frustration points when adoption stalls?
+					</aside>
+				</section>
+				<section>
+					<h3>Signals &amp; Measurements</h3>
+					<ul>
+						<li class="fragment">What is the direction of eNPS?</li>
+						<li class="fragment">What is the current change lead time?</li>
+					</ul>
+					<aside class="notes">
+						Follow-ups: How do the other DORA metrics look — deployment frequency, change failure rate, time
+						to restore service? Are there DX measurements tied to AI tooling?
+						What signals do we have today on AI adoption? Which direction is eNPS moving, and is there a
+						measurable shift? What is the change lead time from DORA, and what is the broader DORA state? I
+						want these signals because honest measurements tell us what is real and what is only anecdote.
+					</aside>
+				</section>
+				<section>
+					<h3>Adoption Horizon</h3>
+					<ul>
+						<li class="fragment">What is the current top prio/initiative?</li>
+						<li class="fragment">Who champions the adoption?</li>
+					</ul>
+					<aside class="notes">
+						What's flagship initiative?
+						Apart from you, who are the adoption champions right now, and what are their next steps? I am
+						asking so I can adjust what I share and avoid covering ground you already have in hand.
+					</aside>
+				</section>
+			</section>
+
+			<!-- 4 · Chapter: Bottlenecks & Risks (vertical stack: silos / slop / PR review bottleneck / one-off environments / no agent portability &amp; isolation / missing roadmap / decisions without knowledge) -->
+			<section>
+				<section>
+					<h2>Observations &amp; Risks Found</h2>
+					<p class="fragment">What slows AI adoption at [Company] down</p>
+					<aside class="notes">
+						- I'd like to list my findings from talks with [Employees],
+						- These driven ideas to follow.
+					</aside>
+				</section>
+				<section>
+					<h3>PR Review Noise</h3>
+					<table>
+						<tr class="fragment">
+							<th>What it looks like</th>
+							<td>Each PR collects peer review, SonarCloud audit, non-actionable AWS security-agent
+								feedback, lint, and tests</td>
+						</tr>
+						<tr class="fragment">
+							<th>How it's proven</th>
+							<td>Alerts and bot comments per PR keep climbing; change lead time grows while reviewers
+								approve unread and click resolve to unblock merges</td>
+						</tr>
+						<tr class="fragment">
+							<th>Why it matters</th>
+							<td>Integration slows down; resolving becomes the path of least resistance, so compliance
+								checks stop meaning anything</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						This finding shares a root with the next one: too much low-trust automation at the PR stage.
+						This slide covers the input side. Each pull request collects peer review, SonarCloud, the
+						security agent, lint, and tests. That is too many channels for one person to triage. The
+						measurements back it up. Alerts and bot comments per PR keep climbing. Change lead time grows
+						while reviewers approve without reading and click resolve just to unblock merges. When resolving
+						is the path of least resistance, automated compliance stops meaning anything. Lead time sits on
+						this slide deliberately, not under Slop. Slop is about what changes contain. This is about how
+						many signals bury them.
+					</aside>
+				</section>
+				<section>
+					<h3>Slop</h3>
+					<table>
+						<tr class="fragment">
+							<th>What it looks like</th>
+							<td>PRs and task requirements carry slop: low-quality AI-generated content, growing
+								volume, growing size</td>
+						</tr>
+						<tr class="fragment">
+							<th>How it's proven</th>
+							<td>Average PR size trends above baseline; comment counts land at extremes, near-zero or
+								flooded; eNPS drifts down as cleanup piles up</td>
+						</tr>
+						<tr class="fragment">
+							<th>Why it matters</th>
+							<td>Output quality declines; fighting slop daily feeds resistance to AI adoption</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Slop is the output half of the same root. The problem here is the content of the changes
+						themselves: low-quality AI output and inflated change size. Everyone I spoke with complained
+						about slop, and that matches my own experience. Default setups produce it unless someone tunes
+						them for quality. My evidence is partly anecdotal, so the slide leans on three checkable
+						measures. Average PR size runs above baseline. Comment counts land at extremes, either silent
+						approval or flooding. eNPS drifts down because people who constantly clean up slop enjoy their
+						work less. Together that breeds resistance to AI adoption: people who fight slop every day
+						conclude that AI makes things worse.
+					</aside>
+				</section>
+				<section>
+					<h3>No Agent Portability &amp; Isolation</h3>
+					<table>
+						<tr class="fragment">
+							<th>What it looks like</th>
+							<td>Agents run only where someone manually configured them, on individual developer
+								machines; every agent needs hands-on setup</td>
+						</tr>
+						<tr class="fragment">
+							<th>How it's proven</th>
+							<td>Environments take days to build, reproduce, install, and configure; no two developers'
+								setups match; zero agent runs outside laptops</td>
+						</tr>
+						<tr class="fragment">
+							<th>Why it matters</th>
+							<td>Agents cannot scale beyond developer machines; unguarded machines risk runaway agents
+							</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Every agent exists only where someone manually configured it, which means one developer's
+						machine. Nothing reproduces, so nothing moves. No cloud run, no shared runner, no reuse. The
+						proof is the environment itself. Days to build, impossible to duplicate exactly, a different
+						snowflake on every laptop. Agents therefore cannot scale beyond developer machines, and an
+						unguarded machine invites runaway agents doing unintended work. Dev containers and dev pods fix
+						this by making the environment reproducible; they come later in the Ideas chapter.
+					</aside>
+				</section>
+				<section>
+					<h3>Silos</h3>
+					<table>
+						<tr class="fragment">
+							<th>What it looks like</th>
+							<td>Teams sit at visibly different adoption stages; each picks its own pace and tooling,
+								and nobody shares a bar for progress</td>
+						</tr>
+						<tr class="fragment">
+							<th>How it's proven</th>
+							<td>Teams rebuild the same tools, MCP configs, and skills across the org</td>
+						</tr>
+						<tr class="fragment">
+							<th>Why it matters</th>
+							<td>Nobody builds the paved road; effort is duplicated, and lessons do not travel between
+								teams</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Every team still figures out its tooling on its own, even though the push to adopt AI is
+						strong. Look across the org and the teams sit at visibly different stages. Different MCPs,
+						different skills, different setups. The duplication doubles as the measurement: teams solve the
+						same problems again and again. Nobody builds a paved road that way. Effort goes to waste, and
+						lessons stay trapped inside team boundaries, which drives individual frustration.
+					</aside>
+				</section>
+				<section>
+					<h3>One-Off Agent Environments</h3>
+					<table>
+						<tr class="fragment">
+							<th>What it looks like</th>
+							<td>Agent environments are one-offs — they do not represent a system</td>
+						</tr>
+						<tr class="fragment">
+							<th>How it's proven</th>
+							<td>Everyone configures own agentic env</td>
+						</tr>
+						<tr class="fragment">
+							<th>Why it matters</th>
+							<td>Hard to maintain, learn from mistakes, evolve, audit and fix</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Most of the agentic environments are not portable. They exist only on a developer's machine and
+						vary from developer to developer. That stops us from learning from mistakes and limits how the
+						system can evolve. We are paying for that as a company, not just on individual desks.
+					</aside>
+				</section>
+				<section>
+					<h3>Missing Unified Roadmap</h3>
+					<table>
+						<tr class="fragment">
+							<th>What it looks like</th>
+							<td>No roadmap tells teams the next step, how far they have
+								come, or whether they move the right way</td>
+						</tr>
+						<tr class="fragment">
+							<th>How it's proven</th>
+							<td>Adoption activity spikes during workshops and dies right after; people switch to
+								passive mode, and skills appear only when a workshop forces them</td>
+						</tr>
+						<tr class="fragment">
+							<th>Why it matters</th>
+							<td>Effort does not compound; momentum dies between events, so today's PR and quality
+								bottlenecks persist</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Workshops on things like spec-driven development are working, and credit goes to the people
+						running them. Look at the pattern, though. Progress shows up during the event. Once it ends,
+						people switch to passive mode. Skills appear only when a workshop forces them, and contribution
+						stops between events. Without a roadmap nobody can tell how far adoption has come or whether it
+						moves in the right direction. Teams have direction without a sequence. So effort does not
+						compound. Harness engineering and infrastructure stay under-prioritized, and the PR and quality
+						bottlenecks persist.
+					</aside>
+				</section>
+				<section>
+					<h3>Decisions Without Knowledge</h3>
+					<table>
+						<tr class="fragment">
+							<th>What it looks like</th>
+							<td>Institutional knowledge doesn't power better decisions — agents can't validate plans
+								against the architecture or judge architectural decisions</td>
+						</tr>
+						<tr class="fragment">
+							<th>How it's proven</th>
+							<td>ADRs exist but aren't integrated with agents</td>
+						</tr>
+						<tr class="fragment">
+							<th>Why it matters</th>
+							<td>Plans drift from the architecture; architectural decisions go unjudged</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Agents still depend on institutional knowledge that is provided manually. They cannot be powered
+						by the ADRs, so they cannot spot conflicts between ADRs, and they cannot look back at
+						post-mortems to avoid repeating the same mistake. The result is that feedback loops and
+						knowledge are not being captured, preserved, and made available to the agents. Every agent run
+						then starts from a weaker position than it should.
+					</aside>
+				</section>
+				<section>
+					<h3>Cross-Domain Ownership Blur</h3>
+					<table>
+						<tr class="fragment">
+							<th>What it looks like</th>
+							<td>AI lowers the bar to jump between stacks — frontend, backend, Jenkins, and infra land in
+								the same PRs, and no one owns the boundaries</td>
+						</tr>
+						<tr class="fragment">
+							<th>How it's proven</th>
+							<td>Mixed PRs with cross-stack changes; confusion about who owns major codebase areas</td>
+						</tr>
+						<tr class="fragment">
+							<th>Why it matters</th>
+							<td>Blurred responsibility — PRs get merged by people who don't fully understand every part
+								they touch</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						AI makes it cheap to be productive in a stack you don't own, and it shows. Frontend devs change
+						backend code; backend devs change Jenkins and infra. PRs get bigger, and the person approving
+						doesn't fully understand part of the change. That blurs ownership of the major areas of our
+						codebase and starts arguments about who is responsible. The fix is not to forbid it — it's
+						defaults that make the boundaries visible and permissioned, which is the Governance &amp;
+						Defaults idea in the Ideas chapter.
+					</aside>
+				</section>
+				<section>
+					<h3>AI Fatigue &amp; Social Erosion</h3>
+					<table>
+						<tr class="fragment">
+							<th>What it looks like</th>
+							<td>The push to "use AI" is wearing people down — AI-generated ad-hoc text, project stories,
+								and automated replies clutter channels and erode trust</td>
+						</tr>
+						<tr class="fragment">
+							<th>How it's proven</th>
+							<td>Devs report being tired of the AI message; channel signal is drowning in AI-generated
+								noise</td>
+						</tr>
+						<tr class="fragment">
+							<th>Why it matters</th>
+							<td>Noise drowns signal — trust and collaboration norms erode, and the adoption message
+								stops landing</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						The other side of adoption is the people who are tired of hearing about it. Combined with
+						AI-generated text in channels and automated replies, the message gets loud and the signal gets
+						thin. That erodes the trust and collaboration norms the push depends on. The path forward is a
+						calmer, measurement-first message from middle management — that is what the Middle Management
+						Briefing idea covers. Less hype, more proof.
+					</aside>
+				</section>
+				<section>
+					<h3>Technology &amp; Language Inequality</h3>
+					<table>
+						<tr class="fragment">
+							<th>What it looks like</th>
+							<td>AI value is uneven across stacks — big wins in TypeScript and Python; legacy,
+								specialized, and low-level stacks see little of it</td>
+						</tr>
+						<tr class="fragment">
+							<th>How it's proven</th>
+							<td>AI assisted coding receives negative estimate from non-mainstream langs devs; active
+								resistance from older, experienced engineers</td>
+						</tr>
+						<tr class="fragment">
+							<th>Why it matters</th>
+							<td>Uneven adoption — the engineers with the deepest context resist a change AI can't serve
+							</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						The wins we celebrate are real, but they cluster in TypeScript and Python. In the core network
+						team, working in C, the models don't understand much of the context, and the senior engineers
+						there feel the push ignores their reality. That is where the active resistance comes from. The
+						answer is not to push harder but to build the per-stack skills and context that make AI useful
+						in those domains — the Centralized Skills Repository idea starts there.
+					</aside>
+				</section>
+			</section>
+
+			<!-- 5 · Chapter: Ideas (catalogue: knowledge &amp; context / agent setup / skills &amp; quality / readiness / review &amp; governance / feedback / closing) -->
+			<section>
+				<section>
+					<h2>Ideas</h2>
+					<p>Components of systematic AI adoption</p>
+					<ul
+						style="display:flex; flex-wrap:wrap; justify-content:center; gap:0 2em; list-style:none; padding:0; margin:0; font-size:0.55em; line-height:1.2;">
+						<li style="flex:1 1 45%; max-width:50%; min-width:0; margin:0.1em 0; text-align:left;">
+							<strong>Knowledge and Context</strong>
+							<ul style="margin:0; padding-left:1.2em;">
+								<li style="margin:0.05em 0;"><a href="#/4/1">Serving Institutional Knowledge</a></li>
+								<li style="margin:0.05em 0;"><a href="#/4/2">Knowledge Pipeline</a></li>
+								<li style="margin:0.05em 0;"><a href="#/4/3">Tribal Knowledge Extraction</a></li>
+								<li style="margin:0.05em 0;"><a href="#/4/4">Knowledge Collector</a></li>
+							</ul>
+						</li>
+						<li style="flex:1 1 45%; max-width:50%; min-width:0; margin:0.1em 0; text-align:left;">
+							<strong>Agent Setup</strong>
+							<ul style="margin:0; padding-left:1.2em;">
+								<li style="margin:0.05em 0;"><a href="#/4/5">📌 Agent Infrastructure — the Sidecar</a>
+								</li>
+								<li style="margin:0.05em 0;"><a href="#/4/6">📌 Dev Containers &amp; Dev Pods</a></li>
+							</ul>
+						</li>
+						<li style="flex:1 1 45%; max-width:50%; min-width:0; margin:0.1em 0; text-align:left;">
+							<strong>Skills &amp; Quality</strong>
+							<ul style="margin:0; padding-left:1.2em;">
+								<li style="margin:0.05em 0;"><a href="#/4/7">Centralized Skills Repository</a></li>
+								<li style="margin:0.05em 0;"><a href="#/4/8">📌 Skill Evaluation Pipeline</a></li>
+								<li style="margin:0.05em 0;"><a href="#/4/9">Task-Based Skill Evaluation</a></li>
+								<li style="margin:0.05em 0;"><a href="#/4/10">📌 Skill Usage Tracking &amp;
+										Harvesting</a>
+								</li>
+							</ul>
+						</li>
+						<li style="flex:1 1 45%; max-width:50%; min-width:0; margin:0.1em 0; text-align:left;">
+							<strong>Readiness</strong>
+							<ul style="margin:0; padding-left:1.2em;">
+								<li style="margin:0.05em 0;"><a href="#/4/11">📌 Repository Readiness Checklist</a></li>
+								<li style="margin:0.05em 0;"><a href="#/4/12">📌 Quality Gates Hardening</a></li>
+								<li style="margin:0.05em 0;"><a href="#/4/13">📌 Middle Management Briefing</a></li>
+							</ul>
+						</li>
+						<li style="flex:1 1 45%; max-width:50%; min-width:0; margin:0.1em 0; text-align:left;">
+							<strong>Review &amp; Governance</strong>
+							<ul style="margin:0; padding-left:1.2em;">
+								<li style="margin:0.05em 0;"><a href="#/4/14">Governance &amp; Defaults</a></li>
+								<li style="margin:0.05em 0;"><a href="#/4/15">Risk-Based PR Review</a></li>
+								<li style="margin:0.05em 0;"><a href="#/4/16">📌 CI Autofix</a></li>
+								<li style="margin:0.05em 0;"><a href="#/4/17">Integrated Quality Gates</a></li>
+							</ul>
+						</li>
+						<li style="flex:1 1 45%; max-width:50%; min-width:0; margin:0.1em 0; text-align:left;">
+							<strong>Feedback</strong>
+							<ul style="margin:0; padding-left:1.2em;">
+								<li style="margin:0.05em 0;"><a href="#/4/18">🚧 Feedback Loops</a></li>
+								<li style="margin:0.05em 0;"><a href="#/4/19">Adoption Metrics</a></li>
+							</ul>
+						</li>
+						<li style="flex:1 1 45%; max-width:50%; min-width:0; margin:0.1em 0; text-align:left;">
+							<strong>Closing</strong>
+							<ul style="margin:0; padding-left:1.2em;">
+								<li style="margin:0.05em 0;"><a href="#/4/20">How It All Fits Together</a></li>
+								<!-- <li style="margin:0.05em 0;"><a href="#/4/21">Prioritized Roadmap</a></li> -->
+							</ul>
+						</li>
+					</ul>
+					<aside class="notes">
+						The catalogue is the entry point — every idea is one click away.
+					</aside>
+				</section>
+				<section>
+					<h3>Serving Institutional Knowledge</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Decisions Without Knowledge</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Knowledge graph parses ADRs, post-mortems, lessons</li>
+									<li>Agents query via graph MCP + navigation skill</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Every decision carries the institution's context</td>
+						</tr>
+					</table>
+					<div class="mermaid">
+						<pre>
+flowchart LR
+    KG["Knowledge Graph"] -->|queried via| MCP["Graph MCP + Skill"]
+    MCP -->|context| AG["Agent"]
+    AG -.->|decides with context| D["Decisions With Context"]
+						</pre>
+					</div>
+					<aside class="notes">
+						Group framing: Institutional &amp; tribal knowledge served to every agent
+						Institutional knowledge as a graph — agents query it, never act blind.
+					</aside>
+				</section>
+				<section>
+					<h3>Knowledge Pipeline</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Decisions Without Knowledge</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Agents submit knowledge candidates in real time</li>
+									<li>Aggregator reworks them into persistent knowledge</li>
+									<li>Returned to agents via MCP &amp; skill</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>The knowledge base never goes stale</td>
+						</tr>
+					</table>
+					<div class="mermaid">
+						<pre>
+flowchart LR
+    A["Agent"] -->|submits knowledge candidate| AG["Aggregator"]
+    AG -->|reworked into| PK["Persistent Knowledge"]
+    PK -->|accessed via MCP &amp; skill| A
+						</pre>
+					</div>
+
+					<aside class="notes">
+						Pipeline diagram — agents submit candidates in real time, the loop keeps feeding.
+					</aside>
+				</section>
+				<section>
+					<h3>Tribal Knowledge Extraction</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Decisions Without Knowledge</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Sidecar aggregates sessions, extracts lessons</li>
+									<li>Splits project-local vs exportable knowledge</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Tribal knowledge leaves heads and enters the loop</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Tribal knowledge is extracted by the sidecar — project-local vs exportable.
+					</aside>
+				</section>
+				<section>
+					<h3>Knowledge Collector</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Decisions Without Knowledge</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Scans PRs, distill discussions, documents for improvement ideas</li>
+									<li>Gathers from project management and running agents</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Knowledge grows from PRs, discussions, and agent sessions</td>
+						</tr>
+					</table>
+					<p><a href="#/4">Back to index</a></p>
+					<aside class="notes">
+						Knowledge collector closes the group — PRs, discussions, and running agents.
+					</aside>
+				</section>
+				<section>
+					<h3>Agent Infrastructure — the Sidecar</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Silos · One-Off Agent Environments · Plugin Distribution &amp; Adoption Gap</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Sidecar is the shared optimization layer</li>
+									<li>Synchronizes installs, governs config, injects context</li>
+									<li>Tracks and updates skills; optional PII filter</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>The same baseline, everywhere, maintained as a system</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Group framing: One sidecar baseline, reproducible everywhere
+						The sidecar is the shared optimization layer — sync, govern, inject context.
+					</aside>
+				</section>
+				<section>
+					<h3>Dev Containers &amp; Dev Pods</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>No Agent Portability &amp; Isolation</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Dev containers — reproducible, stateless local env</li>
+									<li>Dev pods run the same env in the cloud</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Agents run and scale beyond dev machines — isolated, full tool access</td>
+						</tr>
+					</table>
+					<p><a href="#/4">Back to index</a></p>
+					<aside class="notes">
+						Dev containers locally, dev pods in the cloud — same environment, full powers.
+					</aside>
+				</section>
+				<section>
+					<h3>Centralized Skills Repository</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Slop · Technology &amp; Language Inequality</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Crawls existing skills into one overview</li>
+									<li>Surfaces duplication; skills keep scoped isolation</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Every skill in one place — current, visible, no duplicates</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Group framing: One repository, every skill measured
+						Centralized skills repository — one overview, duplication surfaced.
+					</aside>
+				</section>
+				<section>
+					<h3>Skill Evaluation Pipeline</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Slop</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Every skill and skill change runs evaluations</li>
+									<li>Linters, task-based evals, performance vs expectations</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Slop never ships — every skill change runs the gates</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Every skill change runs evaluations — linters, tasks, expectations.
+					</aside>
+				</section>
+				<section>
+					<h3>Task-Based Skill Evaluation</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Slop</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Inject skill into repository + task</li>
+									<li>Run agent, judge output against criteria</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Every skill proves itself on real tasks</td>
+						</tr>
+					</table>
+					<div class="mermaid">
+						<pre>
+flowchart LR
+    SK["Skill"] -->|injected into| RT["Repository + Task"]
+    RT -->|agent runs| O["Output"]
+    O -->|judged against| C["Criteria"]
+    C -->|tracks expectations| SK
+						</pre>
+					</div>
+
+					<aside class="notes">
+						Diagram — skill injected into a repository + task, quality measured not assumed.
+					</aside>
+				</section>
+				<section>
+					<h3>Skill Usage Tracking &amp; Harvesting</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Slop</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Sidecar tracks which skills load and how often</li>
+									<li>Mines long sessions for missing skills, harvests them</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>The toolbox grows from real usage</td>
+						</tr>
+					</table>
+					<div class="mermaid">
+						<pre>
+flowchart LR
+    S["Session"] -->|sidecar tracks| L["Skill Loads"]
+    L -->|long session exposes| M["Missing Skill"]
+    M -->|harvested into| R["Skill Repository"]
+    R -.->|new capability| S
+						</pre>
+					</div>
+					<p><a href="#/4">Back to index</a></p>
+					<aside class="notes">
+						Group framing: one repository, every skill measured
+						Tracking skill usage is different from evaluating skill quality — this is telemetry, not
+						grading.
+					</aside>
+				</section>
+				<section>
+					<h3>Repository Readiness Checklist</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Missing Unified Roadmap</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Checklist: assess, containers, skill sync &amp; CI, agents, knowledge</li>
+									<li>Supplied as an evolving skill — starts small, grows</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Every repo ends ready for agents — path spelled out</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Group framing: Repos made ready for AI adoption
+						Executable checklist — assess, containers, CI, agents, knowledge.
+					</aside>
+				</section>
+				<section>
+					<h3>Quality Gates Hardening</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Missing Unified Roadmap</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>Tests &amp; coverage, mutation tests, linters tracking complexity</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Adopted AI meets the same bar as shipped code</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Quality gates hold adopted AI to the same bar as shipped code.
+					</aside>
+				</section>
+				<section>
+					<h3>Middle Management Briefing</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Missing Roadmap · AI Fatigue &amp; Social Erosion</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Briefings on system, roadmap, evals &amp; skills</li>
+									<li>Dev containers &amp; dev pods — how agent environments work</li>
+									<li>Retrospectives to improve DX; guidance for high-value adoption</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Managers understand the system — and back it</td>
+						</tr>
+					</table>
+					<p><a href="#/4">Back to index</a></p>
+					<aside class="notes">
+						Group framing: repos made ready for AI adoption
+						The briefing is the knowledge layer for the people who steer adoption — they can't champion what
+						they don't understand.
+					</aside>
+				</section>
+				<section>
+					<h3>Governance &amp; Defaults</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>PR Review Noise · Cross-Domain Ownership Blur</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Sidecar regulates actions — which run, which need permission</li>
+									<li>Learns acceptable risk per project; prompts only when needed</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Safe by default — humans step in only when it matters</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Group framing: Permissions, review, and automation — minimal human effort
+						Defaults learn acceptable risk — approval prompts only when necessary.
+					</aside>
+				</section>
+				<section>
+					<h3>Risk-Based PR Review</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>PR Review Noise</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>Auto-approve low-risk changes; flag high-risk for proper review</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Reviewers see only what needs human eyes</td>
+						</tr>
+					</table>
+					<div class="mermaid">
+						<pre>
+flowchart LR
+    PR["Pull Request"] -->|risk assessed| RV["Risk Model"]
+    RV -->|low risk| AA["Auto-approve"]
+    RV -->|high risk| HR["Human Review"]
+    AA -.->|less noise| FI["Unblocked Integration"]
+						</pre>
+					</div>
+					<aside class="notes">
+						Risk-based review — auto-approve low risk, flag the rest.
+					</aside>
+				</section>
+				<section>
+					<h3>CI Autofix</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>PR Review Noise</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>Standalone dev pod agent reacts to CI messages, applies fixes</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>CI failures fix themselves — no human round-trip</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						CI Autofix — a dev pod agent reacts to CI messages and fixes.
+					</aside>
+				</section>
+				<section>
+					<h3>Integrated Quality Gates</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>PR Review Noise · Spec-Driven Trajectory Deviation</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Sonar, tests, linters run inside every agent run</li>
+									<li>Unavoidable — pre-commit hook on every generation</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Every agent output runs the gates — no skipping</td>
+						</tr>
+					</table>
+					<div class="mermaid">
+						<pre>
+flowchart LR
+    AG["Agent Run"] -->|generates| O["Output"]
+    O -->|Sonar, tests, linters| G["Quality Gates"]
+    G -->|pass| OK["Accepted Output"]
+    G -.->|fail - rework| AG
+						</pre>
+					</div>
+					<p><a href="#/4">Back to index</a></p>
+					<aside class="notes">
+						Group framing: permissions, review, and automation — minimal human effort
+						This is the 'pre-commit hook' idea applied to agent output — the gates are always-on, not
+						opt-in.
+					</aside>
+				</section>
+				<section>
+					<h3>Feedback Loops</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Ties Ideas Together</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Skill usage &amp; updates feed the repository</li>
+									<li>Lessons learned feed institutional knowledge</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Every run feeds knowledge and skills</td>
+						</tr>
+					</table>
+					<div class="mermaid">
+						<pre>
+flowchart LR
+    R["Running Systems"] -->|lessons learned| K["Institutional Knowledge"]
+    R -->|skill usage &amp; updates| SK["Skills Repository"]
+    K -.->|context| R
+    SK -.->|capabilities| R
+						</pre>
+					</div>
+					<aside class="notes">
+						Group framing: The loop that closes
+						Lessons flow back into knowledge and skills — the system improves itself.
+					</aside>
+				</section>
+				<section>
+					<h3>Adoption Metrics</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr>
+							<th>Addresses</th>
+							<td>Ties Ideas Together</td>
+						</tr>
+						<tr>
+							<th>Implementation</th>
+							<td>
+								<ul style="margin:0; padding-left:1.1em;">
+									<li>Rework rate, acceptance rate, PR lead time &amp; velocity</li>
+									<li>Attention &amp; friction balance — fewest clicks, block only high risk</li>
+								</ul>
+							</td>
+						</tr>
+						<tr>
+							<th>Outcome</th>
+							<td>Adoption is measured — metrics prove the ideas work</td>
+						</tr>
+					</table>
+					<p><a href="#/4">Back to index</a></p>
+					<aside class="notes">
+						Group framing: the loop that closes
+						These four metrics are the instrumentation of adoption — they show whether the levers are
+						working.
+					</aside>
+				</section>
+				<section>
+					<h2>How It All Fits Together</h2>
+					<p class="fragment">Every subsystem feeds the others — the loop closes</p>
+					<p class="fragment">Environments → Infrastructure → Knowledge, Skills &amp; automation → Feedback →
+						back to Knowledge &amp; Skills</p>
+					<div class="mermaid">
+						<pre>
+	%%{init: { "theme": "base", "themeVariables": { "primaryColor": "#0d2b52", "primaryTextColor": "#eaf2ff", "primaryBorderColor": "#1f6fb2", "lineColor": "#7fd4ff", "secondaryColor": "#123f7a", "tertiaryColor": "#0a1f3c", "fontSize": "12px", "clusterBkg": "#081a33", "clusterBorder": "#1f6fb2", "titleColor": "#eaf2ff" }, "flowchart": { "nodeSpacing": 15, "rankSpacing": 20, "useMaxWidth": true } } }%%
+	flowchart TB
+	
+	    subgraph readiness [Readiness]
+	        direction LR
+	        readiness-checklist["Readiness Checklist"]
+	        gates-hardening["Quality Gates Hardening"]
+	        mgmt-briefing["Mgmt Briefing"]
+	    end
+	
+	    subgraph agent-setup [Agent Setup]
+	        direction LR
+	        dev-containers["Dev Containers &amp; Dev Pods"]
+	        sidecar["The Sidecar"]
+	    end
+	
+	    subgraph knowledge [Knowledge &amp; Context]
+	        direction LR
+	        serving-ik["Serving IK"]
+	        knowledge-pipeline["Knowledge Pipeline"]
+	        tribal-extraction["Tribal Extraction"]
+	        knowledge-collector["Knowledge Collector"]
+	    end
+	
+	    subgraph skills [Skills &amp; Quality]
+	        direction LR
+	        central-skills["Centralized Skills"]
+	        eval-pipeline["Eval Pipeline"]
+	        task-eval["Task-Based Eval"]
+	        usage-tracking["Skill Usage Tracking"]
+	    end
+	
+	    subgraph review [Review &amp; Governance]
+	        direction LR
+	        governance-defaults["Governance &amp; Defaults"]
+	        risk-pr["Risk-Based PR"]
+	        ci-autofix["CI Autofix"]
+	        integrated-gates["Integrated Gates"]
+	    end
+	
+	    subgraph feedback [Feedback]
+	        direction LR
+	        feedback-loops["Feedback Loops"]
+	        adoption-metrics["Adoption Metrics"]
+	    end
+	
+	    readiness-checklist -.->|prepares repos| sidecar
+	    dev-containers -->|foundation| sidecar
+	    sidecar -->|context| serving-ik
+	    sidecar -->|skills| central-skills
+	    sidecar -->|governance| governance-defaults
+	    serving-ik --> feedback-loops
+	    central-skills --> feedback-loops
+	    governance-defaults --> feedback-loops
+	    feedback-loops -->|measured by| adoption-metrics
+	    feedback-loops -.->|lessons learned| serving-ik
+	    feedback-loops -.->|usage &amp; updates| central-skills
+						</pre>
+					</div>
+
+					<p><a href="#/4">Back to index</a></p>
+					<aside class="notes">
+						Impact diagram — environments, infrastructure, subsystems, and the feedback loop.
+					</aside>
+				</section>
+
+				<section>
+					<h2>Prioritized Roadmap</h2>
+					<p class="fragment">Highest value first</p>
+					<ol class="fragment">
+						<li>Agent Environments — dev pods &amp; dev containers</li>
+						<li>Agent Infrastructure — the sidecar</li>
+						<li>Institutional Knowledge — knowledge graph &amp; tribal extraction</li>
+						<li>Skills Subsystem — centralized repository &amp; evaluation</li>
+						<li>Repository Readiness — onboarding checklist</li>
+						<li>Supporting Subsystems — CI Autofix · Governance &amp; PR Review</li>
+						<li>Feedback Loops</li>
+					</ol>
+					<p><a href="#/4">Back to index</a></p>
+					<aside class="notes">
+						Roadmap ordered by value — environments first, feedback last.
+					</aside>
+				</section>
+			</section>
+
+			<section>
+				<h2>Share your thoughts!</h2>
+				<p class="fragment">What applies to [Company]?</p>
+				<p class="fragment">What blockers you see?</p>
+				<aside class="notes">
+
+				</aside>
+			</section>
+
+			<section>
+				<h2>System Diagram</h2>
+				<div class="mermaid">
+					<pre>
+%%{init: { "theme": "base", "themeVariables": { "primaryColor": "#0d2b52", "primaryTextColor": "#eaf2ff", "primaryBorderColor": "#1f6fb2", "lineColor": "#7fd4ff", "secondaryColor": "#123f7a", "tertiaryColor": "#0a1f3c", "fontSize": "16px", "clusterBkg": "#081a33", "clusterBorder": "#1f6fb2", "titleColor": "#eaf2ff" } } }%%
+flowchart TB
+
+classDef risk fill:#7f1d1d,stroke:#fca5a5,color:#fef2f2
+classDef issue fill:#7f1d1d,stroke:#fca5a5,stroke-dasharray:5 5,color:#fef2f2
+classDef solution fill:#14532d,stroke:#86efac,color:#f0fdf4
+classDef default fill:#123f7a,stroke:#64b5f6,color:#eaf2ff
+classDef resource fill:#4a148c,stroke:#ce93d8,color:#f3e5f5
+classDef action fill:#006064,stroke:#4dd0e1,color:#e0f7fa
+classDef gate fill:#b45309,stroke:#fcd34d,color:#fffbeb
+classDef gap fill:#37474f,stroke:#90a4ae,color:#eceff1,stroke-dasharray:5 5
+classDef chain fill:#f9c74f,stroke:#b45309,stroke-width:3px,color:#1f2937
+
+subgraph risks [Bottlenecks and Risks Found]
+    risk-silos{{"Silos"}}:::risk
+    risk-slop{{"Slop"}}:::risk
+    risk-pr-bottleneck{{"PR Review Noise"}}:::risk
+    risk-oneoff{{"One-off environments"}}:::risk
+    risk-unisolated{{"No Agent Portability &amp; Isolation"}}:::chain
+    risk-ownership{{"Cross-Domain Ownership Blur"}}:::risk
+    risk-fatigue{{"AI Fatigue &amp; Social Erosion"}}:::risk
+    risk-inequality{{"Technology &amp; Language Inequality"}}:::risk
+    risk-spec{{"Spec-Driven Trajectory Deviation"}}:::risk
+    risk-plugin-dist{{"Plugin Distribution &amp; Adoption Gap"}}:::risk
+    shared-defaults(["Shared defaults"]):::solution
+end
+
+subgraph people [People and Adoption Drivers]
+    coding-agents(("Coding agents")):::gap
+    people-dev(("Developers")):::gap
+    people-stakeholders(("Non-technical stakeholders")):::gap
+    people-managers(("Middle managers")):::gap
+    people-champions(("AI champions")):::gap
+end
+
+subgraph envs [1. Agent Environments]
+    dev-containers("Dev containers"):::chain
+    dev-pods("Dev pods (remote)"):::chain
+end
+
+subgraph infra [2. Agent Infrastructure - Sidecar]
+    sidecar(["Sidecar / CLI"]):::solution
+    sync-install("Sync and install")
+    gov-defaults("Governance and defaults")
+    agent-hooks("Agent hooks")
+end
+
+subgraph ik [3. Institutional Knowledge]
+    knowledge-graph("Knowledge graph")
+    ik-mcp("MCP access")
+    ik-skill("IK navigation skill")
+    aggregator("Aggregator")
+    persistent-knowledge[("Persistent knowledge")]:::resource
+    tribal-extraction("Tribal knowledge extraction")
+end
+
+subgraph skills [4. Skills Subsystem]
+    skills-repo("Skills repository")
+    crawler("Crawler")
+    skill-isolation("Isolation and scoping")
+    eval-pipeline("Evaluation pipeline")
+    eval-skill[("Skill")]:::resource
+    eval-repo-task("Repository and task")
+    eval-output[/"Output"/]:::action
+    eval-criteria[("Criteria")]:::resource
+end
+
+subgraph readiness [5. Repository Readiness]
+    step-assess[/"1 Assess current state"\]:::gate
+    step-devcontainers[/"2 Set up dev containers"\]:::gate
+    step-sync-ci[/"3 Sync skills and CI"\]:::gate
+    step-configure-agents[/"4 Configure coding agents"\]:::gate
+    step-integrate-ik[/"5 Integrate institutional knowledge"\]:::gate
+    gate-tests[/"Tests and coverage"\]:::gate
+    gate-mutation[/"Mutation tests"\]:::gate
+    gate-linters[/"Linters"\]:::gate
+end
+
+subgraph support [6. Supporting Subsystems]
+    ci-autofix("CI autofix"):::chain
+    governance("Governance"):::chain
+    pr-review("PR review"):::chain
+    ci-messages[("CI messages")]:::resource
+end
+
+subgraph feedback [7. Feedback Loops]
+    feedback-hub(["Feedback loops"]):::solution
+end
+
+outcome-auto-pr[/"Automatic PR reviews and fixes"/]:::chain
+
+risk-unisolated == partially isolated by ==> dev-containers
+risk-unisolated == partially isolated by ==> dev-pods
+dev-containers == no manual setup ==> people-dev
+dev-pods == remote access ==> people-stakeholders
+dev-pods == hosts ==> ci-autofix
+ci-autofix == enables ==> outcome-auto-pr
+pr-review == enables ==> outcome-auto-pr
+governance == enables ==> outcome-auto-pr
+
+dev-containers -->|foundation| sidecar
+sidecar -->|context| knowledge-graph
+sidecar -->|skills| skills-repo
+sidecar -->|automation| ci-autofix
+knowledge-graph --> feedback-hub
+skills-repo --> feedback-hub
+ci-autofix --> feedback-hub
+
+step-assess --> step-devcontainers
+step-devcontainers --> step-sync-ci
+step-sync-ci --> step-configure-agents
+step-configure-agents --> step-integrate-ik
+
+eval-skill -->|injected into| eval-repo-task
+eval-repo-task -->|agent runs| eval-output
+eval-output -->|judged against| eval-criteria
+eval-criteria -->|tracks expectations| eval-skill
+
+coding-agents -->|submits candidates| aggregator
+aggregator -->|reworked into| persistent-knowledge
+persistent-knowledge -->|accessed via MCP and skill| coding-agents
+
+risk-silos -->|solved by| shared-defaults
+shared-defaults -->|includes| skills-repo
+shared-defaults -->|includes| sidecar
+shared-defaults -->|includes| step-assess
+risk-slop -->|solved by task-based evaluation| eval-pipeline
+risk-pr-bottleneck -->|solved by risk-based review| pr-review
+risk-oneoff -->|solved by shared baseline| sidecar
+risk-ownership -->|solved by permissioned defaults| governance
+risk-fatigue -->|solved by measured adoption| feedback-hub
+risk-inequality -->|solved by per-stack skills| skills-repo
+risk-spec -->|solved by evaluated output| eval-pipeline
+risk-plugin-dist -->|solved by synchronized installs| sidecar
+
+sidecar -->|synchronizes MCP| ik-mcp
+sidecar -->|sets up required skills| ik-skill
+sidecar -->|extracts from sessions| tribal-extraction
+sync-install -->|updates and syncs skills| skills-repo
+agent-hooks -->|inject checks and context| coding-agents
+gov-defaults -->|provides effective defaults| coding-agents
+crawler -->|crawls and surfaces duplication| skills-repo
+skills-repo -->|evaluates every change| eval-pipeline
+skill-isolation -->|isolates and scopes| eval-pipeline
+
+feedback-hub-.->|lessons learned|knowledge-graph
+feedback-hub-.->|skill usage and updates|skills-repo
+
+risk-silos-.->|lessons don't travel|knowledge-graph
+risk-oneoff-.->|hinders learning from mistakes|knowledge-graph
+governance-.->|learns acceptable risk|pr-review
+ci-messages-.->|trigger|ci-autofix
+persistent-knowledge-.->|stored in|knowledge-graph
+tribal-extraction-.->|feeds|knowledge-graph
+feedback-hub-.->|updated expectations|eval-criteria
+feedback-hub-.->|evolves checklist|step-assess
+feedback-hub-.->|evolves infrastructure|sidecar
+gate-mutation-.->|same bar|eval-criteria
+step-devcontainers-.->|activates|dev-containers
+step-sync-ci-.->|activates|sync-install
+step-configure-agents-.->|configures|coding-agents
+step-integrate-ik-.->|integrates with|knowledge-graph
+						</pre>
+				</div>
+				<aside class="notes"></aside>
+			</section>
+
+			<!-- 7 · Tech Stack — Open-Source Foundations (vertical stack: entry / agent environments / sidecar infrastructure &amp; governance / institutional knowledge / skills &amp; quality / review, automation &amp; metrics) -->
+			<section>
+				<section>
+					<h2>Tech Stack — Open-Source Foundations</h2>
+					<p class="fragment">One paved road for every team — agent-neutral picks, org-wide governance ·
+						verified against GitHub, Aug 2026</p>
+					<ul class="fragment">
+						<li style="margin:0.05em 0;"><a href="#/6/1">Environments &amp; Infrastructure</a></li>
+						<li style="margin:0.05em 0;"><a href="#/6/3">Knowledge &amp; Skills</a></li>
+						<li style="margin:0.05em 0;"><a href="#/6/5">Delivery &amp; Measurement</a></li>
+					</ul>
+					<aside class="notes">
+						Method note — five research tracks; every repo checked live (license, stars, maintenance) on
+						2026-08-24; picks favor what the org already runs (GitHub + Copilot, DevContainers) and stay
+						agent-neutral where team stacks differ — project-specific tools appear only as per-team options.
+					</aside>
+				</section>
+				<section>
+					<h3>Agent Environments</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr class="fragment">
+							<th>Local environments</th>
+							<td>Dev Container spec + Features — already the org baseline; devenv/Nix optional hermetic
+								layer</td>
+						</tr>
+						<tr class="fragment">
+							<th>Cloud dev pods</th>
+							<td>Coder (AGPL-3.0 · ~14k★ · very active) — self-hosted on [Company] infra; alt: DevPod
+								(MPL-2.0 · ~15k★ · maintenance stalled)</td>
+						</tr>
+						<tr class="fragment">
+							<th>Runaway-agent isolation</th>
+							<td>gVisor on Kubernetes (Apache-2.0 · ~19k★); alt: E2B sandboxes (Apache-2.0 · ~13k★) for
+								untrusted-code APIs</td>
+						</tr>
+						<tr class="fragment">
+							<th>One environment contract</th>
+							<td>Prebuilt OCI image via devcontainer CLI — one artifact consumed by VS Code, Coder
+								templates, and CI</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Docker alone does not stop a prompt-injected agent holding credentials — a gVisor/microVM
+						boundary is needed. Daytona went closed-source (2026-06) — avoid.
+					</aside>
+				</section>
+				<section>
+					<h3>Sidecar — Infrastructure &amp; Governance</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr class="fragment">
+							<th>Toolchain sync</th>
+							<td>devcontainer Features + mise pins inside the image — extends, not replaces, current
+								setup</td>
+						</tr>
+						<tr class="fragment">
+							<th>Config governance</th>
+							<td>Copilot org settings — org-wide custom instructions, custom agents served from
+								/agents/*.md in the org .github repo, model policies; Claude Code managed-settings.json
+								floors; AGENTS.md carries the shared baseline</td>
+						</tr>
+						<tr class="fragment">
+							<th>Context &amp; check injection</th>
+							<td>Git-carried AGENTS.md baseline (+ CLAUDE.md shim for Claude Code); per-agent hooks
+								enforce checks — Claude Code managed deny rules are non-overridable; lefthook for
+								git-level gates</td>
+						</tr>
+						<tr class="fragment">
+							<th>Action regulation</th>
+							<td>Docker MCP Gateway interceptors (+ Cedar policy evaluator) — digest-pinned MCP catalog
+								(catalog.yaml) + --block-secrets, deployed org-wide</td>
+						</tr>
+						<tr class="fragment">
+							<th>Skill distribution</th>
+							<td>OCI artifacts with digest lockfile + cosign signing — mirrors gateway pinning
+								discipline; SKILL.md reads natively in Copilot and Codex</td>
+						</tr>
+						<tr class="fragment">
+							<th>PII filtering</th>
+							<td>Presidio (MIT · ~10k★) as a gateway after-interceptor</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Learns acceptable risk and a cross-agent permission/hook compiler are greenfield — no healthy
+						OSS exists (checked Aug 2026); budget a thin internal generator/sync. Platform floors differ per
+						agent: govern centrally, carry content in git.
+					</aside>
+				</section>
+				<section>
+					<h3>Institutional Knowledge</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr class="fragment">
+							<th>Knowledge graph + MCP</th>
+							<td>Graphiti (Apache-2.0 · ~30k★) over Neo4j CE (GPLv3) — built-in MCP server; both
+								deployable via mcp/catalog.yaml; alt: LightRAG (MIT · ~39k★)</td>
+						</tr>
+						<tr class="fragment">
+							<th>ADR source format</th>
+							<td>Current MADR-conformant ADR layout — frontmatter already machine-parseable;
+								adr-tools/log4brains dormant, skip</td>
+						</tr>
+						<tr class="fragment">
+							<th>Knowledge pipeline</th>
+							<td>Lightweight aggregation service merges candidates into the central graph-backed store
+								via MCP — dedupe/merge is a bespoke build; implementation stack follows the platform
+								team</td>
+						</tr>
+						<tr class="fragment">
+							<th>Tribal extraction</th>
+							<td>Mine agent-session exports for lessons — project-local vs exportable split;
+								session-mining OSS is early-stage everywhere</td>
+						</tr>
+						<tr class="fragment">
+							<th>PR/discussion collector</th>
+							<td>github-mcp-server ingestion + PR-Agent distillation, both through the Gateway</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						KùzuDB archived (2025-10); Zep Community Edition discontinued (2025-04); Microsoft GraphRAG is
+						batch-shaped — wrong fit for live agent queries. Session-mining OSS is early-stage everywhere —
+						expect a thin-service build.
+					</aside>
+				</section>
+				<section>
+					<h3>Skills &amp; Quality</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr class="fragment">
+							<th>Central repository</th>
+							<td>Org-level skills monorepo synced into repos by git — SKILL.md reads natively in Copilot
+								and Codex; scoped isolation preserved</td>
+						</tr>
+						<tr class="fragment">
+							<th>Duplication detection</th>
+							<td>Embedding-overlap scan (NVIDIA SkillEvaluator Tier-2 pattern, Apache-2.0) — tooling
+								young; treat as recipe, not dependency</td>
+						</tr>
+						<tr class="fragment">
+							<th>Skill linting</th>
+							<td>Spec/frontmatter lint in CI + bespoke negation-word rule — negation-heavy steering
+								measured as top external-skill gap; no mature SKILL.md linter exists</td>
+						</tr>
+						<tr class="fragment">
+							<th>Task-based evaluation</th>
+							<td>inspect-ai (Apache-2.0 · ~2.6k★) docker sandboxes + mini-swe-agent loop for Python-heavy
+								teams; promptfoo (MIT · ~24k★) rubric gating for JS-heavy CI — output judged against
+								versioned criteria either way</td>
+						</tr>
+						<tr class="fragment">
+							<th>Usage tracking &amp; harvesting</th>
+							<td>Langfuse (core MIT · ~33k★) self-hosted + thin per-agent plugins emitting skill-load
+								spans; harvest missing-skill candidates from long-session queries</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						OTel GenAI semantic conventions still Development status mid-2026 — pin attribute names
+						internally. pydantic-evals stays pilot-only until the first internal eval lands. openai/evals
+						shuts down Nov 2026 — do not adopt.
+					</aside>
+				</section>
+				<section>
+					<h3>Review, Automation &amp; Metrics</h3>
+					<table style="width:100%; font-size:0.65em; margin:0.5em auto 1em;">
+						<tr class="fragment">
+							<th>Risk-based PR review</th>
+							<td>PR-Agent (MIT core · ~12k★) + CODEOWNERS/rulesets — low-risk paths auto-approved,
+								high-risk paths force human review; alt: claude-code-action (MIT · ~8k★)</td>
+						</tr>
+						<tr class="fragment">
+							<th>CI autofix</th>
+							<td>claude-code-action wired to failed workflow_run events; strategic end state:
+								webhook-triggered agent on a dev pod</td>
+						</tr>
+						<tr class="fragment">
+							<th>Always-on quality gates</th>
+							<td>pre-commit + per-agent file-write hook gates (Claude Code PreToolUse/PostToolUse hooks,
+								Copilot review config, OpenCode plugins) — Sonar, tests, linters run on every
+								generation, not just CI</td>
+						</tr>
+						<tr class="fragment">
+							<th>Gate hardening</th>
+							<td>mutmut + StrykerJS (mutation), ruff PL/C90 + eslint complexity rules, coverage.py +
+								vitest</td>
+						</tr>
+						<tr class="fragment">
+							<th>Adoption metrics</th>
+							<td>Apache DevLake (Apache-2.0, graduated) — DORA, rework rate, lead time on self-hosted
+								Grafana; Copilot metrics API supplies AI acceptance rates</td>
+						</tr>
+						<tr class="fragment">
+							<th>Feedback loop wiring</th>
+							<td>Langfuse traces + DevLake metrics feed the aggregator → knowledge graph &amp; skills
+								repo</td>
+						</tr>
+					</table>
+					<aside class="notes">
+						Dead ends verified this round: Sweep (stale), four-keys (archived 2024), llm-guard (archived
+						2026), Phoenix license caveat (Elastic v2). No healthy OSS CodeRabbit-class reviewer exists.
+					</aside>
+				</section>
+			</section>
+
+		</div>
+	</div>
+
+	<script src="node_modules/reveal.js/dist/reveal.js"></script>
+	<script src="node_modules/reveal.js/dist/plugin/notes.js"></script>
+	<script src="node_modules/reveal.js/dist/plugin/markdown.js"></script>
+	<script src="node_modules/reveal.js/dist/plugin/highlight.js"></script>
+	<script src="node_modules/reveal.js/dist/plugin/search.js"></script>
+	<script src="node_modules/reveal.js/dist/plugin/zoom.js"></script>
+	<script src="node_modules/reveal.js-mermaid-plugin/plugin/mermaid/mermaid.js"></script>
+	<script src="node_modules/reveal.js-copycode/plugin/copycode/copycode.js"></script>
+	<script src="node_modules/reveal.js-appearance/plugin/appearance/appearance.js"></script>
+	<script src="node_modules/reveal.js-plugins/anything/plugin.js"></script>
+	<script>
+		// https://revealjs.com/initialization/ | https://revealjs.com/config/
+		Reveal.initialize({
+			hash: true,
+			controls: true,
+			progress: true,
+			slideNumber: "c/t",
+			center: true,
+			transition: "slide",
+			// Mermaid diagrams: blueprint palette on the base theme
+			// (the plugin spreads these into mermaid.initialize)
+			mermaid: {
+				theme: 'base',
+				themeVariables: {
+					primaryColor: '#0d2b52',
+					primaryTextColor: '#eaf2ff',
+					primaryBorderColor: '#1f6fb2',
+					lineColor: '#7fd4ff',
+					secondaryColor: '#123f7a',
+					tertiaryColor: '#0a1f3c',
+					fontSize: '16px',
+				},
+			},
+			plugins: [
+				RevealMarkdown,
+				RevealHighlight,
+				RevealNotes,
+				RevealSearch,
+				RevealZoom,
+				RevealMermaid,
+				CopyCode,
+				Appearance,
+				RevealAnything,
+			],
+		});
+	</script>
+</body>
+
+</html>

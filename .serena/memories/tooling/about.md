@@ -14,3 +14,5 @@ Conventions and operational knowledge for JS/bun/docs tooling in edgent-smith: r
 - External research on reveal.js/bun versions and package internals: mem:researches/revealjs-bun-setup.
 - Diagnosis/root-causing of runtime failures: mem:troubleshooting/about.
 - General dev-container change-management process (dsh-specific persistence facts stay in this domain): mem:devcontainer-workflows/about.
+
+- docs/ deck artifact knowledge (new-deck.html): file/purpose, structure, conventions, invariant counts, environment limits, speaker notes — mem:tooling/docs-revealjs-deck-ai-adoption and siblings.

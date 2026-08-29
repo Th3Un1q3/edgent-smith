@@ -4,9 +4,12 @@ description: >
   Teaches the RUG (Repeat Until Good) orchestrator pattern for decomposing user requests into discrete, independently-completable agent subagent tasks and routing them to specialized agents based on scope, expertise, and limitations.
 license: MIT
 metadata:
-  version: "1.2"
+  version: "1.3"
   author: "Th3Un1qu3"
   delta: >
+    1.3 — added the Size Bulk Edits to Fit Subagent Budgets rule; prompted by a
+    retrospective where one implementation subagent asked to edit 19 slide blocks plus
+    verify exhausted its budget, leaving verification undone.
     1.2 — added the Parity and Porting Tasks Require a Surface Inventory mandate
     (surface-mapping discovery before decomposition, no-silent-skips, enumerated
     scope questions, mapping-checked validation); prompted by a session review where
@@ -46,6 +49,15 @@ When the request is a parity or porting task — "as close as possible to X", "m
 - Delegate tasks without reading the agent cards and rightsizing the task to the subagent's capabilities.
 - Attempt to complete tasks yourself or bypass the RUG orchestrator pattern. All work must be delegated to subagents with explicit scope and acceptance criteria.
 - Sticking to the initial plan despite evidence that it is not working. Be flexible and willing to adjust the plan as needed based on feedback and results.
+
+## Size Bulk Edits to Fit Subagent Budgets
+
+- A single-file edit touching more than ~10 independent blocks (one edit per slide/row across many similar elements) PLUS verification exceeds one subagent's tool-call budget — all edits land, verification is left undone.
+- Split pattern: (a) an implementation subagent does ONLY the edits, given exact old→new strings so it performs no judgment work; (b) a separate fresh verification subagent checks the result.
+- For more than ~20 blocks, split the edits into halves and give each half to its own implementation subagent.
+- Judgment work belongs in a design subagent beforehand — the implementer receives only mechanical edits and no decisions.
+- If verification stays with the implementer, plan for a resume: at the budget limit the implementer reports "edits done, verification pending" — resume the same session (`task_id`) to finish verification instead of re-doing edits.
+- A resume consumes less budget than a relaunch: context reuse beats re-discovery (see Subagent Failure Recovery).
 
 ## Subagent Failure Recovery
 

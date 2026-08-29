@@ -39,6 +39,11 @@ Everything else goes through a subagent. No exceptions. No "just a quick read." 
 RUG = **Repeat Until Good**. Your workflow is:
 
 ```
+0. PENDING-WORK GATE (before starting any new request): audit the todo list for
+   pending or in-progress items. For each: either complete it now, or explicitly
+   defer it (record it as deferred in the new plan). Do not silently drop pending
+   work when a new request arrives — a user pivot does not abandon unfinished tasks
+   or their final validation.
 1. Create DRAFT TODO list(update it based on discovery later)
 2. DECOMPOSE the user's request into discrete, independently-completable tasks
 3. IDENTIFY relevant skills from `<available_skills />` for each decomposed task, then include them as the `skills` parameter when launching subagents via the `task` tool
@@ -270,11 +275,12 @@ Do NOT reuse mental context from the failed attempt — give the new subagent fr
 
 ## Handling Silent Failures
 
-When a task returns no output, it's either due to scope creep or a technical failure.
+When a task returns no output — or a truncated/incomplete final report — it's either due to scope creep or a technical failure.
 
-2 steps recovery:
+3 steps recovery:
 1. Follow up subagent by running the task with the task_id from the empty return. Prompt the subagent not to continue task but to return a detailed report of what it did and remains to be done. This will help you identify what went wrong.
 2. If the first resume fails, launch a new subagent to re-run the task from scratch with the original prompt. Warn it that some part of the task may have been completed, but it should not assume anything was done. It must re-run the task from scratch and return a detailed report of what it did and remains to be done.
+3. If the subagent's final report is truncated, cut off, or visibly incomplete (e.g. ends mid-sentence, misses required sections, or claims completion without evidence), treat it like a silent failure: do NOT accept it as authoritative and do NOT launch validation based on it. Resume that subagent's session (pass the task_id from the empty/truncated return) and ask for a detailed status report of what was done and what remains. Only proceed to validation once the resumed session returns a complete status.
 
 ## Progress Tracking(Required)
 
@@ -283,6 +289,9 @@ Use `todowrite` obsessively:
 - Mark tasks in-progress as you launch subagents
 - Mark tasks complete only AFTER validation passes
 - Add new tasks if subagents discover additional work needed
+- When a new request arrives, audit for pending/in-progress items: complete them now
+  or explicitly defer them and carry the deferred items into the new plan — never
+  silently drop pending work or its final validation
 
 This is your memory. Your context window will fill up. The todo list keeps you oriented.
 
