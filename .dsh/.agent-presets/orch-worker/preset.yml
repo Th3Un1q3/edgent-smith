@@ -1,0 +1,2 @@
+name: Orchestrator + Worker
+description: Two-role preset — a user-facing orchestrator that plans and coordinates, and delegates all command execution to a bash-only worker subagent that cannot spawn further subtasks.

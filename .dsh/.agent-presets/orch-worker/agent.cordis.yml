@@ -1,0 +1,46 @@
+# Orchestrator + Worker agent preset.
+#
+# Two roles, one session:
+#   * orchestrator — the ONLY agent the user talks to. Its tool catalog is
+#     kept minimal at the preset level (persona + the `worker` delegation
+#     tool). This deployment registers a large global tool layer (host tools +
+#     the centrally-configured MCP gateway) that every in-process agent
+#     inherits; the preset cannot strip it (platform limitation).
+#   * worker — an OUT-OF-PROCESS harness (Option B). The `worker` tool below
+#     is `dsh-tool-subagent` bound to the `dsh-sdk` provider, which spawns
+#     each worker as a complete, separate Harness runtime in its own process,
+#     booted from `.dsh/child-runtime/cordis.yml` (tracked, version
+#     controlled). That composition defines the worker's OWN tools — bash, fs,
+#     ask-user, todo, and the MCP gateway client — independently of this
+#     preset and of the parent's process.
+#
+# The `dsh-sdk` provider is registered host-side by the deployment's
+# `cordis.patch.yml` (insert row `subagent-dsh-sdk`); setup-dev.sh installs
+# the provider packages into the web profile. Restart the host once after a
+# container (re)build so the provider registers, then the `worker` tool
+# activates. The child harness owns its recursion budget
+# (`maxDepth: provider-managed`) and rejects parent-enforced tool filters,
+# personas, and structured output by design.
+
+# ── orchestrator persona ──────────────────────────────────────────────────────
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: >-
+      You are an orchestrator agent powered by the {{model}} model. Your working directory is {{cwd}}.
+
+      You are the only agent the user talks to. Divide the work into tasks and delegate execution to the worker subagent by calling the `worker` tool with a complete, self-contained task. The worker runs as a separate harness process with its own tools (bash, files, MCP); it sees no conversation history, so give it everything it needs. Collect its result and continue.
+
+# ── the worker delegation tool (out-of-process) ───────────────────────────────
+
+# `dsh-tool-subagent` bound to the host-registered `dsh-sdk` provider. The
+# child is a fresh harness runtime; `maxDepth: provider-managed` leaves the
+# recursion budget to the child's own composition.
+- id: tool-worker
+  name: '@deepseek-ai/dsh-tool-subagent'
+  config:
+    provider: dsh-sdk
+    toolName: worker
+    backgroundMode: one-shot
+    maxDepth: provider-managed

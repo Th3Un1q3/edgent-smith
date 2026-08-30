@@ -86,12 +86,22 @@ secrets/
 
 # docs (reveal.js)
 docs/node_modules/
-# dsh harness home (.dsh/ is bind-mounted to ~/.dsh — config-as-code, see
-# .dsh/README.md): track settings.yaml, cordis.patch.yml, agent-presets/ and
-# README.md; ignore the machine-state the harness generates.
+# dsh harness home (.dsh/ is the SOURCE for the container's ~/.dsh, not the
+# live home — see .dsh/README.md): track the config-as-code (settings.yaml,
+# cordis.patch.yml, agent-presets/, README.md); ignore the secret/dummy seed
+# files. The machine-state dirs below now live in volumes (dropped on recreate
+# or held in dsh_persistent) and are ignored as a safety net for dsh runs
+# outside the container and for leftovers from the old whole-directory mount.
 /.dsh/profiles/
 /.dsh/sessions/
 /.dsh/storages/
 /.dsh/.pnpm-store/
 /.dsh/.env
 /.dsh/.credentials.yaml
+# Out-of-process worker subagent runtime (Option B): node_modules is rebuilt
+# from the tracked package.json + pnpm-lock.yaml by .devcontainer/setup-dev.sh.
+/.dsh/child-runtime/node_modules/
+# Scratch downloads used to inspect the dsh-sdk stack (never commit).
+/.dsh-sdk-src/
+# pnpm store accidentally created at the repo root during a local install.
+/.pnpm-store/

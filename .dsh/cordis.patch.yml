@@ -42,13 +42,19 @@
                              # capability probe (bwrap broken in OrbStack:
                              # EPERM creating namespaces, seccomp)
 
-# MCP bridge to the repo's MCP gateway (serena memory + 9 catalog servers); NO client auth — matches opencode.jsonc mcp.gateway. Inert until @deepseek-ai/dsh-mcp-client ships a dsh.bundle.
-- id: mcp-client
-  name: '@deepseek-ai/dsh-mcp-client'
-  config:
-    serverName: gateway
-    transport: streamable-http
-    url: http://mcp_gateway:8080
+# MCP bridge to the repo's MCP gateway (serena memory + 9 catalog servers); NO client
+# auth — matches opencode.jsonc mcp.gateway. MUST use `insert:`: a bare `- id:` patch
+# OVERRIDES an existing bundle entry, and mcp-client ships in no bundle, so cordis drops
+# it (`patch: entry "mcp-client" not found`). Tools surface as mcp__gateway__<tool>.
+- insert:
+    - id: mcp-gateway
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: gateway
+        transport: streamable-http
+        url: http://mcp_gateway:8080/mcp
+        failOnStartupError: true    # loud boot failure if the gateway is unreachable
+        toolCallTimeoutMs: 30000
 # Compaction parity with opencode.jsonc {auto:true, prune:false, reserved:10000}
 - id: compaction-basic
   disabled: false
@@ -58,3 +64,29 @@
     retainRatio: 0.16
     # modelPolicies dropped: schema expects an array, not a map. reserved≈10000 parity
     # would need per-model {model, thresholdRatio} entries; global thresholdRatio 0.8 applies.
+
+# ── out-of-process worker subagent provider (Option B) ─────────────────────────
+# Registers the `dsh-sdk` subagent provider host-side (a provider name may only
+# be registered once per process, so this row must stay here, never in a
+# preset). Each delegated child is a complete harness runtime spawned via
+# `node --expose-internals <dsh-sdk-jsonrpc-demo bin> <child cordis.yml>`. The
+# child composition is the version-controlled `.dsh/child-runtime/cordis.yml`
+# (own tools: bash, fs, ask-user, todo, MCP gateway client). setup-dev.sh
+# installs the provider packages into the web profile; restart the host once
+# after a container (re)build so the provider registers. The child runs on the
+# isolated dsh home `.dsh/child-home/` (created by setup-dev.sh), so its
+# sessions never collide with the parent's.
+- insert:
+    - id: subagent-dsh-sdk
+      name: '@deepseek-ai/dsh-subagent-dsh-sdk'
+      config:
+        providerName: dsh-sdk
+        command: node
+        args:
+          - --expose-internals
+          - !!js process.env.HOME + '/.dsh/child-runtime/node_modules/@deepseek-ai/dsh-sdk-jsonrpc-demo/lib/bin.js'
+          - !!js process.env.HOME + '/.dsh/child-runtime/cordis.yml'
+        maxTokens: 49152
+        env:
+          DSH_HOME: !!js process.env.HOME + '/.dsh/child-home'
+          DEEPSEEK_API_KEY: !!js process.env.DEEPSEEK_API_KEY
