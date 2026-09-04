@@ -6,7 +6,7 @@
 |--------|-------------|
 | **Servers** | `deepwiki` — semantic repository Q&A over code/docs; `github` — issue search and repository metadata |
 | **When to use** | Exploring a GitHub repository's code, documentation, or issues to understand architecture, find relevant discussions, or troubleshoot unexpected behavior |
-| **Combines with** | `store-memories` — persist findings (repo architecture notes, issue analysis) for later reuse |
+| **Combines with** | `store-memory` — persist findings (repo architecture notes, issue analysis) for later reuse |
 
 ## Prerequisites
 
@@ -15,6 +15,25 @@
 3. Activate code-mode: `gateway_code-mode({"name": "github-insights", "servers": ["deepwiki", "github"]})`
 
 ## Scripts
+
+### DeepWiki pre-validate & fallback
+
+Pre-check repo existence before `ask_question`: `list_memories({topic:'cache/deepwiki/<repo-slug>'})` hit means cached answer reusable; otherwise `github search_code({query:'repo:owner/repo'})` confirms repo exists. If not indexed (`DEEPWIKI-REPO-NOT-INDEXED`) or `ask_question` returns empty/generic, fallback `tavily_search({query:'<repo> <question>'})` → `fetch({url})` and cross-check with `github search_issues({query:'repo:owner/repo <keywords>'})`. Escalation row: deepwiki empty/generic/`DEEPWIKI-REPO-NOT-INDEXED` → tavily_search → fetch (github search_issues cross-check). See [truncation-examples.md §B](../references/truncation-examples.md) for status line.
+
+```javascript
+// Pre-validate deepwiki index; fallback to tavily_search → fetch on miss.
+// Tool call pattern: list_memories({topic:'cache/deepwiki/<repo-slug>'}) or github search_code
+// Response: HIT reuse; MISS check github search_code for repo existence; if (!indexed) fallback
+try {
+  var hit = JSON.parse(list_memories({topic:'cache/deepwiki/<repo-slug>'})).memories || [];
+  if (hit.length) { return 'HIT cache/deepwiki/<repo-slug>'; }
+  var code = JSON.parse(search_code({query:'repo:owner/repo', perPage:1})); // github search_code existence probe
+  if (!code.items || !code.items.length) { return 'DEEPWIKI-REPO-NOT-INDEXED repo:owner/repo not found'; }
+  var ans = ask_question({repoName:'owner/repo', question:'<question>'});
+  if (!ans || !ans.trim() || /not indexed|generic/i.test(ans)) { return 'DEEPWIKI-REPO-NOT-INDEXED fallback: tavily_search -> fetch'; }
+  return ans;
+} catch (e) { return 'ERROR pre-validate: ' + e.message; }
+```
 
 ### Semantic repository Q&A
 
@@ -138,7 +157,7 @@ try {
 - **Include repo owner in the repo name.** Always use `"owner/repo"` format. `deepwiki` requires the full qualified name (e.g., `"pydantic/pydantic-ai"`, not `"pydantic-ai"`).
 - **Use issue search filters to reduce noise.** Narrow by `repo:`, `label:`, `is:issue`, or `is:open` in the query string. The `github` server supports standard GitHub search syntax.
 - **Correlate issues with code, not just other issues.** An issue title alone is rarely enough to understand root cause. Always follow issue search with a `deepwiki` query against the relevant repository.
-- **Store findings for later reuse.** After completing an investigation, write the key insights (architecture overview, resolved issue patterns) using the `store-memories` recipe. This avoids repeating the same `deepwiki` queries on future tasks.
+- **Store findings for later reuse.** After completing an investigation, write the key insights (architecture overview, resolved issue patterns) using the `store-memory` recipe. This avoids repeating the same `deepwiki` queries on future tasks.
 
 ## Common pitfalls
 

@@ -29,20 +29,22 @@ All recipes use the **devtools** MCP server via a code-mode environment (`code-m
 
 Build the batch URL list from site search, not hand-collected URLs: direct URLs fail without notice (rebranding, restructuring, slug updates), and an entity's canonical page may live at a decentralized location (regional subdomains, separate sites). **How:** navigate to the site's search page (or its search URL), run [discover](../references/snippets.md#discover-targeted-structure-discovery) or snippet [A](../references/snippets.md#a-list-clickables) on the results to collect result links, and apply the site's search-result-title-verification rule — LinkedIn's `mem:browser-automation/linkedin/search-result-title-verification` is the worked example. Navigation tolerance (address-bar vs. in-page clicks) is per-site — record it in the site's extraction memory (workflow Step 3).
 
-## Batch loop
+## Batch loop — per-source split with verify checkpoint
+
+Per-source verify: each NAVIGATE and EXTRACTION is its own exec; never combine. After each batch of ≤2 entities, write checkpoint then `verifyAfterWrite([checkpointName], 100)` + `snapshot()` and emit `COUNT N fetched → N cached → N verified`. Respect 2× retry cap per tool/target and ≤2 KB budget per return.
 
 ```text
 per entity:
-  NAVIGATE exec call:    new_page({url}) alone — {ok:true} | {ok:false, error}   (#22: evaluate in the NEXT call)
+  NAVIGATE exec call:    new_page({url}) alone — {ok:true} | {ok:false, error}   (#22: evaluate in the NEXT call) → snapshot()
   if ok:
-    EXTRACTION exec call: unwrap + X install + extractor — {title, data, url}
+    EXTRACTION exec call: unwrap + X install + extractor — {title, data, url} → snapshot()
     verify url matches the entity; a mismatch is a failure — never read an unverified page
-    on failure: fallback rung 1 (same-page re-extract) → ... → mark incomplete
+    on failure: fallback rung 1 (same-page re-extract) → ... → mark incomplete (2× retry cap)
   append result
-at each batch boundary (≤2 entities):
-  write checkpoint mem:private/<site>-research/batch-<N>-<YYYY-MM-DD>  →  read back and verify
+at each batch boundary (≤2 entities, ≤5 exec calls per batch):
+  write checkpoint mem:private/<site>-research/batch-<N>-<YYYY-MM-DD> → verifyAfterWrite([name], 100) → COUNT line → snapshot() ≤2 KB read-back
 at end:
-  consolidate checkpoints into mem:private/<site>/<task>-<YYYY-MM-DD>  →  archive/delete checkpoints
+  consolidate checkpoints into mem:private/<site>/<task>-<YYYY-MM-DD> → verifyAfterWrite → archive/delete checkpoints
 ```
 
 ## Scripts
@@ -164,7 +166,7 @@ Each attempt must differ from the last. Never retry the same failing script — 
 - **Budget.** 2 `gateway_mcp_exec` calls per entity (NAVIGATE + EXTRACTION); ≤5 DEVTOOLS calls per batch (the checkpoint write + read-back are serena calls and do not count against the devtools cap) → ≤2 entities per batch; 20 entities = 10 batches of 2 = 40 exec calls + 2 smoke-test calls (NAVIGATE + EXTRACTION on entity 1) = 42 total; checkpoint written at each batch boundary; the per-task ≤40-action budget ([truncation-examples §E](../references/truncation-examples.md)) spans the whole task including all `evaluate_script` bodies — a batch run that would exceed it → confirm scope with the operator first (workflow clarification trigger) or split into separate tasks; ≥1 s pacing between entities.
 - **Two-artifact cache scheme.** Task result cache — ONE dated memory per task `mem:private/<site>/<task>-<YYYY-MM-DD>`; partials written as work proceeds; UPDATE the same memory, never a second one. This is the FINAL result. Batch checkpoints — INTERMEDIATE progress memories `mem:private/<site>-research/batch-<N>-<YYYY-MM-DD>`, one per batch; at task end consolidate them into the task result cache, then archive/delete the checkpoints (per `mem:browser-automation/general/batch-checkpoint-template` rule 3).
 - **Store names may drift** — always `list_memories({topic: 'private/<site>'})` and pattern-match, never assume exact names.
-- **Checkpoint read-back.** After each checkpoint write, read it back and confirm the content is present and correct before starting the next batch (verify every write).
+- **Checkpoint read-back.** After each checkpoint write, run `verifyAfterWrite([checkpointName], 100)` — read back 1–2 entries, confirm `COUNT N fetched → N cached → N verified`, `snapshot()` ≤2 KB excerpts — before starting the next batch (verify every write). See [truncation-examples.md §B](../references/truncation-examples.md).
 - **Smoke-test the extractor before the batch.** One run on the first entity; iterate until non-empty before the loop (BLOCKING GATE above).
 - **Verify auth before the batch.** Run the auth check (browser-automation-devtools Step 2) once before the batch, not per entity.
 - **Pace between entities.** ≥1 s between entities — the sleep lives INSIDE the async `evaluate_script` body (devtools-known-issues #2); top-level code-mode scripts must stay synchronous (scripting-workflow).
@@ -189,7 +191,7 @@ Each attempt must differ from the last. Never retry the same failing script — 
 - [ ] Snippet X installed inside the EXTRACTION call after every navigation (no `H is undefined`).
 - [ ] Auth verified before the first batch via `list_pages` or `new_page` probe.
 - [ ] Extractor smoke-tested on the first entity before the batch loop; empty returns iterated to non-empty (BLOCKING GATE).
-- [ ] Batch checkpoints written to `mem:private/<site>-research/batch-<N>-<YYYY-MM-DD>` at each batch boundary (≤2 entities) AND read back.
+- [ ] Batch checkpoints written to `mem:private/<site>-research/batch-<N>-<YYYY-MM-DD>` at each batch boundary (≤2 entities, ≤5 exec calls per batch) AND `verifyAfterWrite([name], 100)` read-back with `COUNT N fetched → N cached → N verified` + `snapshot()` ≤2 KB.
 - [ ] At task end, checkpoints consolidated into the task cache `mem:private/<site>/<task>-<YYYY-MM-DD>` (updated in place, never a second one), then archived/deleted.
 - [ ] Fallback extraction is same-page-only; no data read from the previously selected page under a failed entity's name.
 - [ ] ≥1 s pacing between entities (sleep inside the async `evaluate_script` body).

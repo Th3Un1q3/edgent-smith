@@ -11,3 +11,7 @@
 **Config:** Reveal.initialize({hash, controls, progress, slideNumber, center, transition, plugins}).
 
 **Gotchas:** workspace .gitignore has NO node_modules entry (add docs/node_modules/); root gitignore "dist/" would ignore a copied docs/dist/. bun init -y is non-interactive; bun add saves to package.json by default.
+
+## Cached sources
+- mem:cache/fetch/bun-sh/docs — Bun workflow facts
+- mem:cache/fetch/registry-npmjs-org/fast-xml-parser-latest — XML parsing deps context

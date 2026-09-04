@@ -11,3 +11,8 @@ Untrusted-code isolation: gVisor (Apache-2.0, ~19k stars) on Kubernetes; E2B (Ap
 Contract: environments ship as a prebuilt OCI image produced by the devcontainer CLI, consumed uniformly by VS Code, Coder, and CI.
 
 Security insight: Docker alone does not stop prompt-injected agents holding credentials; kernel-level isolation (gVisor) or API sandboxes (E2B) are required for hostile input.
+
+## Cached sources
+- mem:cache/fetch/code.visualstudio.com/docs-devcontainers-containers — Dev Container spec baseline
+- mem:cache/fetch/docs.docker.com/engine-network-drivers-bridge — container isolation context
+- mem:researches/agent-sidecar-governance-stack-2026-08 — companion governance stack (cross-ref)

@@ -52,3 +52,8 @@ Delivery Hero | +7 | 10K+ | 3,211 | live; pts 6,671->7,116 (home tab)
 Scout24 SE | +5 | 259 | 259 | live; pts 264->278
 init SE | - | - | - | no-data; About view, chart absent
 Vector Informatik | +3 | 2,024 | 2,024 | live; pts 2,396->2,464
+
+## Cached sources
+- mem:researches/german-it-companies/summary
+- mem:researches/german-it-companies/lessons-learned
+- mem:events/extraction/batch-linkedin-2026-08

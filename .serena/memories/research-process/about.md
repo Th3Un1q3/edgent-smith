@@ -1,3 +1,14 @@
+# Research & Documentation-Search Process — SUPERSEDED
+
+> **SUPERSEDED 2026-09-01 — moved to mem:skills/research/about per OpenViking typed-scope consolidation.**
+> This about is retained as a pointer so existing mem:research-process/* refs resolve. New content goes to mem:skills/research/*.
+
+## Moved topics
+- mem:research-process/conflict-resolution → mem:skills/research/conflict-resolution
+- mem:research-process/permission-aware-probing → mem:skills/research/permission-aware-probing
+- mem:research-process/software/finding-known-github-issues → mem:skills/research/software/finding-known-github-issues
+
+## Original content (archived)
 # Research & Documentation-Search Process
 
 Process learnings for documentation research, web/GitHub-issue exploration, and validation probing inside orchestrator-driven sessions.

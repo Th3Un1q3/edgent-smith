@@ -20,3 +20,6 @@ LinkedIn hiring trends research for the 50 German IT companies (47 live / 3 no-d
 - mem:researches/german-it-companies/company-data — full 50-company dataset
 - `mem:researches/german-it-companies/sector-insights` — sector analysis
 - `mem:researches/german-it-companies/lessons-learned` — methodology lessons
+
+## Typed entity note (2026-09-01)
+Leaves `researches/german-it-companies/company-*` are entity profiles (see mem:entities/about and typed-memory-scopes.md). Aggregated typed view at mem:entities/companies/german-it-sector. Index at mem:researches/german-it-companies/overview.

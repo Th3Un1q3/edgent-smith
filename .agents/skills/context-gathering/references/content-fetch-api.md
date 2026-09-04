@@ -1,6 +1,6 @@
 # Reference: Content-Fetch API — Tools & Response Formats
 
-Canonical tool list and return formats for scripting the **tavily**, **youtube-transcript**, **deepwiki**, **github**, **fetch**, and **serena** MCP servers in code-mode for external content caching and cache-first research. All tool calls must be **synchronous** — no `async`/`await`. Serena memory formats are NOT duplicated here — see [serena-memory-api.md](./serena-memory-api.md); this reference only records content-fetch/research-specific observations (e.g., the undocumented `max_chars`).
+Canonical tool list and return formats for scripting the **tavily**, **youtube-transcript**, **deepwiki**, **github**, **fetch**, and **serena** MCP servers in code-mode for external content caching and cache-first research. All tool calls must be **synchronous** — no `async`/`await`. Serena memory formats are NOT duplicated here — see [serena-memory](../../serena-memory/SKILL.md); this reference only records content-fetch/research-specific observations (e.g., the undocumented `max_chars`).
 
 ## Server identity
 
@@ -73,6 +73,6 @@ Every `fetch` call first probes `robots.txt`. `'Failed to fetch robots.txt ... c
 - **`max_chars` undocumented**: not in the documented serena surface — pass it large on cache writes; a small or omitted value may truncate multi-page content silently.
 - **Request full content for caching**: `fetch` returns only what fits `max_length` — pass a large value (e.g. 100000) and paginate via `start_index` to capture the whole page; combined with a large `max_chars` on `write_memory`, cache entries hold full content, not truncated excerpts.
 - **No cross-call state**: variables do not persist between mcp-exec calls — all loops and aggregation live inside one script per batch.
-- **Serena formats**: memory-name case sensitivity, `write_memory` overwrite semantics, and the `read_memory` dual return format are covered in [serena-memory-api.md](./serena-memory-api.md) — reference it, do not re-derive.
+- **Serena formats**: memory-name case sensitivity, `write_memory` overwrite semantics, and the `read_memory` dual return format are covered in [serena-memory](../../serena-memory/SKILL.md) — reference it, do not re-derive.
 
-Cross-links: pipeline usage and generalized skeleton — [external-content-caching](../recipes/external-content-caching.md); cache-first research pipeline — [research-with-caching](../recipes/research-with-caching.md); serena helpers and return formats — [serena-memory-api.md](./serena-memory-api.md).
+Cross-links: pipeline usage and generalized skeleton — [external-content-caching](../recipes/external-content-caching.md); cache-first research pipeline — [research-with-caching](../recipes/research-with-caching.md); serena helpers and return formats — [serena-memory](../../serena-memory/SKILL.md).

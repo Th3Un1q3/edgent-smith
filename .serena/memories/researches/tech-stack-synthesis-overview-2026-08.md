@@ -26,3 +26,8 @@ Requiring at least 3 candidates per requirement plus a separate dead-end list wo
 
 ## Dead ends (rejected; do not re-evaluate without new evidence)
 Daytona closed-source 2026-06 | DevPod stalled since 2025-11 | KuzuDB archived 2025-10 | Zep CE discontinued 2025-04 | llm-guard archived 2026-07 | openai/evals shutdown Nov 2026 | sweep stale Sep 2025 | log4brains dormant | four-keys archived Jan 2024 | Phoenix Elastic-v2 license caveat | vscode-dev-containers archived (moved to devcontainers org).
+
+## Cached sources
+- mem:cache/fetch/agentic-patterns.com/patterns-context-memory-category-2026-08-06 — agentic patterns context
+- mem:researches/agent-environments-stack-2026-08 — environment baseline
+- mem:researches/agent-sidecar-governance-stack-2026-08 — governance stack

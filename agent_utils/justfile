@@ -215,3 +215,26 @@ afk action="status":
             exit 1
             ;;
     esac
+
+# ---------------------------------------------------------------------------
+# Validate
+# ---------------------------------------------------------------------------
+# Validate Serena memory frontmatter, links, and fences (3-script pre-commit gate).
+# Usage: just agent_utils::validate-memories
+validate-memories:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    python3 "/workspace/agent_utils/scripts/validate_memory_frontmatter.py" --path "/workspace/.serena/memories"
+    python3 "/workspace/agent_utils/scripts/validate_memory_frontmatter.py" --path "/workspace/.agents/skills/serena-memory"
+    python3 "/workspace/agent_utils/scripts/validate_md_links.py" "/workspace/.agents/skills/serena-memory" "/workspace/.agents/skills/context-gathering" "/workspace/.agents/skills/building-modular-skills"
+    python3 "/workspace/agent_utils/scripts/audit_fences.py" "/workspace/.agents/skills/serena-memory" "/workspace/.agents/skills/context-gathering" "/workspace/.agents/skills/building-modular-skills"
+
+# Validate any skill against the shaping line budgets and audits.
+# Usage: just agent_utils::validate-skill serena-memory
+validate-skill name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Checking {{ name }} budgets: SKILL.md ≤160, refs ≤120"
+    wc -l "/workspace/.agents/skills/{{ name }}/SKILL.md" "/workspace/.agents/skills/{{ name }}/references"/*.md "/workspace/.agents/skills/{{ name }}/workflows"/*.md || true
+    python3 "/workspace/agent_utils/scripts/validate_md_links.py" "/workspace/.agents/skills/{{ name }}"
+    python3 "/workspace/agent_utils/scripts/audit_fences.py" "/workspace/.agents/skills/{{ name }}"

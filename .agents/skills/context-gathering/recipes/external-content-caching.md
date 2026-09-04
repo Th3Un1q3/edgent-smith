@@ -6,7 +6,7 @@
 |--------|-------------|
 | **Servers** | `tavily` (web search/harvest), `fetch` / `deepwiki` / `github` (source-specific fetchers), `youtube-transcript` (video transcripts — used by the YouTube example below), `serena` (memory store) |
 | **When to use** | Fetch and cache external content of ANY kind — web pages, library docs, search results, API responses, transcripts — verbatim, with verification — so the model context stays tiny, every fetched part is stored under `cache/{source}/...`, and any part can be revisited later via `list_memories` + `read_memory` without re-fetching |
-| **Combines with** | [store-memories](./store-memories.md) — cache entries are serena memories written about-first; [collect-relevant-memories](./collect-relevant-memories.md) — revisit cached content selectively via topic list + read; [codebase-exploration](./codebase-exploration.md) — pair external findings with local code; [research-with-caching](./research-with-caching.md) — interactive per-topic variant (deepwiki/github/fetch), cache-first by default |
+| **Combines with** | [store-memory](../../serena-memory/workflows/store-memory.md) — cache entries are serena memories written about-first; [recall-memory](../../serena-memory/workflows/recall-memory.md) — revisit cached content selectively via topic list + read; [codebase-exploration](./codebase-exploration.md) — pair external findings with local code; [research-with-caching](./research-with-caching.md) — interactive per-topic variant (deepwiki/github/fetch), cache-first by default |
 
 **Orientation:** the pipeline below is generic; a labeled YouTube-transcript example application follows it at the end of this file.
 
@@ -19,7 +19,7 @@ One `gateway_mcp-exec` call runs the entire pipeline: harvest candidate targets,
 1. Follow [Setup](../workflows/setup.md) — discover servers, activate code-mode
 2. Follow [Scripting workflow](../workflows/scripting-workflow.md) — sync JS, error handling, mcp-exec patterns
 3. Activate code-mode: `gateway_code-mode({"name": "code-mode-content-cache", "servers": ["tavily", "fetch", "deepwiki", "github", "youtube-transcript", "serena"]})` — the tool is exposed to mcp-exec under the returned prefixed name; activate only the servers the target source needs
-4. API facts: [content-fetch-api](../references/content-fetch-api.md); serena formats: [serena-memory-api](../references/serena-memory-api.md)
+4. API facts: [content-fetch-api](../references/content-fetch-api.md); serena formats: see [serena-memory](../../serena-memory/SKILL.md)
 
 ## Generic pipeline: cache any external content
 
@@ -27,39 +27,49 @@ One `gateway_mcp-exec` call runs the entire pipeline: harvest candidate targets,
 
 All scripts are sync-only, single-quoted strings, array-join for multi-line content, per-op try/catch, and success confirmed by substring checks — never by `JSON.parse` on plain-text tools.
 
-**Script hygiene:** gateway mcp-exec scripts must be valid JSON — quote keys and string values correctly; a malformed script wastes a call and dumps error text into context. Before exec, sanity-check quotes/braces. Combine multiple MCP ops into ONE script where possible (batching), and keep per-call output to status lines. **Scope every list_memories with a topic prefix** (e.g., {topic:'cache/{source}'} or {topic:'researches'}) — topic-scope to exactly the domains you need instead of enumerating the whole store. The one exception is the PRE-EXISTING DOMAINS FIRST survey ([Memory Convention](../references/memory-convention.md)), which intentionally runs `list_memories({})` to decide domain placement before creating a new domain; outside that survey, an untopic'd full-store enumeration (~140 names) is pure context waste.
+**Script hygiene:** gateway mcp-exec scripts must be valid JSON — quote keys and string values correctly; a malformed script wastes a call and dumps error text into context. Before exec, sanity-check quotes/braces. Combine multiple MCP ops into ONE script where possible (batching), and keep per-call output to status lines. **Scope every list_memories with a topic prefix** (e.g., {topic:'cache/{source}'} or {topic:'researches'}) — topic-scope to exactly the domains you need instead of enumerating the whole store. The one exception is the PRE-EXISTING DOMAINS FIRST survey ([typing](../../serena-memory/references/typing.md)), which intentionally runs `list_memories({})` to decide domain placement before creating a new domain; outside that survey, an untopic'd full-store enumeration (~140 names) is pure context waste.
 
-### One-script skeleton (primary walkthrough)
+### Per-source skeleton (primary walkthrough — split exec)
 
-One compact script runs the entire pipeline, phases labeled HARVEST → VERIFY → FETCH → STORE → VERIFY → REPORT. FETCH is the only source-specific stage — swap `get_transcript` for `tavily_extract` (library docs) or any paginated fetch; everything else stays identical. This is ONE `gateway_mcp-exec` call: all loops live inside the script, and no cross-call state is needed (variables do not persist between mcp-exec calls).
+Split by source — never combine tavily + fetch + write in one exec. HARVEST → VERIFY → per-source FETCH → STORE → VERIFY repeats per source. Each source is its own `gateway_mcp-exec` with `snapshot()` and `verifyAfterWrite([names], minChars)` before the next source. FETCH is the only source-specific stage — swap `get_transcript` for `tavily_extract` or any paginated fetch; everything else stays identical. Variables do not persist between exec calls.
 
 ```javascript
-// Generalized external-content-caching skeleton (sync-only, single-quoted strings).
-// Phases: HARVEST -> VERIFY -> FETCH -> STORE -> VERIFY -> REPORT.
-// FETCH is source-agnostic: get_transcript (video) / tavily_extract (docs) / any
-// paginated fetch — the rest of the pipeline is unchanged.
+// Per-source external-content-caching skeleton (sync-only, single-quoted strings).
+// Exec 1 — HARVEST + VERIFY: tavily_search JSON; surface 429 "error" key as FAIL
+// Exec 2 — FETCH (tavily) alone: tavily_extract / tavily_search → snapshot() → STORE cache/tavily/... → verifyAfterWrite
+// Exec 3 — FETCH (fetch) alone: fetch → snapshot() → STORE cache/fetch/... → verifyAfterWrite
+// Each exec: ≤2 KB return via snapshot(), 2× retry cap, COUNT line after verify.
 var NL = String.fromCharCode(10);
 var report = [];
+function snapshot(s){ return s.length>2048? s.slice(0,2048)+"\n[...truncated]": s }
 function ok(s) { return typeof s === 'string' && (s.indexOf('written') >= 0 || s.indexOf('deleted') >= 0); }
+function verifyAfterWrite(names, minChars){
+  var v=0; for(var i=0;i<Math.min(names.length,2);i++){
+    try{ var c=read_memory({memory_name:names[i]}); var body; try{body=JSON.parse(c).content||c}catch(e){body=c}
+      if(body.length>=minChars) v++; else { try{delete_memory({memory_name:names[i]})}catch(e){}
+        report.push('FAIL '+names[i]+': verify length '+body.length+' < '+minChars); continue; }
+      report.push('OK   '+names[i]+' chars='+body.length); report.push('     excerpt: '+body.slice(0,700));
+    }catch(e){ report.push('FAIL '+names[i]+': '+e.message); }
+  } report.unshift('COUNT '+names.length+' fetched -> '+names.length+' cached -> '+v+' verified'); return report.join(NL);
+}
 function store(name, content) {
   try {
     var r = write_memory({ memory_name: name, content: content, max_chars: 100000 });
     report.push((ok(r) ? 'OK   ' : 'FAIL ') + name + (ok(r) ? ' chars=' + content.length : ': ' + r));
-  } catch (e) { report.push('FAIL ' + name + ': ' + e.message); }
+    return ok(r);
+  } catch (e) { report.push('FAIL ' + name + ': ' + e.message); return false; }
 }
 try {
-  // HARVEST — tavily_search JSON; surface 429 "error" key as a FAIL line
-  var search = JSON.parse(tavily_search({ query: '<query>', max_results: 10, search_depth: 'advanced' }));
-  if (search.error) { report.push('FAIL harvest: ' + search.error.message); return report.join(NL); }
+  // HARVEST — tavily_search alone (one tool per exec) → snapshot() → STORE cache/tavily/... → verifyAfterWrite([name], 100)
   // VERIFY — source-specific metadata filter, dedupe by canonical key
-  // FETCH — paginated full-text loop with hard page cap and plain-text error checks
-  // STORE (write checkpoint — mandatory on successful fetch) — cache/about first, then cache/{source}/{scope}/{descriptor} per item
-  // VERIFY — read back 1–2 entries and confirm stored content matches fetched
+  // FETCH — per-source isolated: tavily_extract alone OR fetch alone (hard page cap ~9, plain-text error checks)
+  // STORE — cache/about first (once), then cache/{source}/{scope}/{descriptor} per item → verifyAfterWrite
+  // REPORT — snapshot(report.join(NL)) ≤2 KB; never return raw content
   report.push('OK   pipeline done');
 } catch (e) {
   report.push('ERROR: ' + e.message);
 }
-return report.join(NL); // tiny per-op status lines only — raw content never returned
+return snapshot(report.join(NL)); // tiny per-op status lines only — raw content never returned
 ```
 
 ### Stage 1 — Harvest candidate targets
@@ -175,7 +185,7 @@ return 'OK   fetch pages=' + f.pages + ' chars=' + f.content.length;
 
 ### Stage 4 — Ensure cache/about first
 
-`write_memory cache/about before topic writes when the domain is new; extend cache/about only if it grows a new source/scope. NEVER overwrite an existing about — check existence first via list_memories on the DOMAIN PREFIX, then test membership (exact-name topic lookups return {} and never match; see store-memories.md).`
+`write_memory cache/about before topic writes when the domain is new; extend cache/about only if it grows a new source/scope. NEVER overwrite an existing about — check existence first via list_memories on the DOMAIN PREFIX, then test membership (exact-name topic lookups return {} and never match; see serena-memory/workflows/store-memory.md).`
 
 ```javascript
 // The cache domain's about exists before any topic write (serena convention).
@@ -327,8 +337,11 @@ return report.join(NL);
 
 ## Best practices
 
+- **Adopt private-path**: Verify authenticated/devtools excerpts go to `private/cache/{source}/...` via `gateway_code-mode`, never `cache/`; public `mem:` refs never link into `private/cache` per `references/caching-rules.md` §12 and `references/okf-sidecar-and-uri.md`.
+
+
 - This pipeline handles public sources only (tavily search, fetch, GitHub, YouTube transcripts) — content stays in the public cache/ namespaces. Authenticated-session extraction (devtools) is the only private path: its output goes to `private/` per the browser-automation workflow.
-- One `mcp-exec` per batch — a whole harvest + fetch + store runs in a single call; loops live inside the script (no cross-call state; variables do not persist between calls).
+- Per-source exec — tavily_search alone → `snapshot()` → `write_memory cache/tavily/...` → `verifyAfterWrite([name], minChars)` → fetch alone → same. One source per `gateway_mcp-exec`; never combine tavily+fetch+write. Each return truncated to ≤2 KB, 2× retry cap, COUNT line after each verify. Batch gate ≤2 entities per checkpoint.
 - Per-op try/catch plus success-substring checks (`written`, `deleted`) — a failure reports a FAIL line and does not abort sibling operations.
 - Never `JSON.parse` plain-text tools: `write_memory`, `delete_memory`, and `get_available_languages` return plain text; `tavily_search`, `get_video_info`, `get_transcript` (success) and `list_memories` return JSON strings. `get_transcript` FAILURES return a plain-text error string — wrap the `JSON.parse` and fall back to the error-prefix check.
 - Check error substrings: tavily 429 arrives as a JSON `"error"` key (not an exception); YouTube rate limits / IP bans arrive as plain-text `Error executing tool get_transcript: ...` strings (repeated calls in quick succession trip them) — handle both before treating a page as content.

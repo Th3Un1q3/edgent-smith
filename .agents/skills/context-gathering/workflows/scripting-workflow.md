@@ -14,7 +14,8 @@ Make sure to perform servers discovery and code mode activation steps in the [Se
 
 - ReferenceError for a tool name indicates the tool is not provided by any server, used to activate `gateway_code-mode`. Verify tool names match names returned when activating code mode, and that the correct servers are included in the `servers` list in the `gateway_code-mode` call.
 - Setup Error handlers on every tool call and processing stage, ensure to exit early, and provide information required to troubleshoot the issue. (if parsing failed, output raw response, and previous steps responses, to understand what was supplied to parsing, and what exactly the error was)
-- Prefer ONE `mcp_exec` call for a fixed batch of writes or reads: per-op try/catch, per-op success checks, a per-op status report, no early abort. Split into multiple calls only when debugging a failing write/read, when the payload is exploratory and you need intermediate output to decide the next step, or when a later call depends on an earlier call's result. See the store-memories recipe's "Batch multiple writes in one call" section for the pattern.
+- Guard every gateway_mcp-exec return for empty/silent failure — immediately after each raw return run: `if (!raw || raw.trim()==="" || /Access denied|No such file/.test(raw)) throw new Error("empty gateway return → retry")` — this captures stderr (`Access denied`, `No such file`) as empty. Cap returned text via `function snapshot(s){ return s.length>2048? s.slice(0,2048)+"\n[...truncated]": s }` (2KB) before returning to model; use `snapshot(raw)` in every return path.
+- Prefer ONE `mcp_exec` call for a fixed batch of writes or reads: per-op try/catch, per-op success checks, a per-op status report, no early abort. Split into multiple calls only when debugging a failing write/read, when the payload is exploratory and you need intermediate output to decide the next step, or when a later call depends on an earlier call's result. For persistent-memory batch patterns see [serena-memory store-memory](../../serena-memory/workflows/store-memory.md); for transient cache batch sizing see [truncation-examples](../references/truncation-examples.md).
 
 ## JSON Escaping in mcp-exec Scripts
 
@@ -65,14 +66,15 @@ try {
 
 ## Examples
 
-**Scenario**: Defensive scripting with error handling and response validation.
+**Scenario**: Defensive scripting with error handling, empty-guard, and 2KB cap.
 
 ```javascript
+function snapshot(s){ return s.length>2048? s.slice(0,2048)+"\n[...truncated]": s }
 const parseJsonWithErrorHandling = (jsonString, toolName) => {
   try {
     return JSON.parse(jsonString);
   } catch (error) {
-    throw new Error(`ERROR parsing JSON response from ${toolName}: ${error.message}. Raw response: ${jsonString}`);
+    throw new Error(`ERROR parsing JSON response from ${toolName}: ${error.message}. Raw response: ` + snapshot(jsonString));
   }
 };
 
@@ -80,35 +82,39 @@ const catchToolError = (toolName) => () => (error) => {
   return `ERROR from ${toolName} tool call: ${error.message}`;
 };
 
+var raw;
 try {
-  const toolResponse = globalThis['hyphen-tool-name']({ query: "my  query" });
+  raw = globalThis['hyphen-tool-name']({ query: "my  query" });
 } catch (error) {
   return catchToolError('hyphen-tool-name')(error);
 }
+if (!raw || raw.trim()==="" || /Access denied|No such file/.test(raw)) throw new Error("empty gateway return → retry");
+var toolResponse = snapshot(raw);
 
 const parsedResponse = parseJsonWithErrorHandling(toolResponse, 'hyphen-tool-name');
 
 if(!parsedResponse.expectedField) {
-  return "ERROR: Expected field 'expectedField' is missing in the tool response. Raw response: " + toolResponse;
+  return "ERROR: Expected field 'expectedField' is missing in the tool response. Raw response: " + snapshot(toolResponse);
 }
 
+var raw2;
 try {
-  const anotherToolResponse = anotherTool(parsedResponse.someField);
+  raw2 = anotherTool(parsedResponse.someField);
 } catch (error) {
   return catchToolError('anotherTool')(error);
 }
-
-if(!anotherToolResponse) {
+if (!raw2 || raw2.trim()==="" || /Access denied|No such file/.test(raw2)) throw new Error("empty gateway return → retry");
+if(!raw2) {
   return "ERROR: anotherTool returned an empty response.";
 }
 
-const parsedAnotherToolResponse = parseJsonWithErrorHandling(anotherToolResponse, 'anotherTool');
+const parsedAnotherToolResponse = parseJsonWithErrorHandling(snapshot(raw2), 'anotherTool');
 
 if(parsedAnotherToolResponse.length === 0) {
-  return "ERROR: anotherTool returned an empty array response. Raw response: " + anotherToolResponse;
+  return "ERROR: anotherTool returned an empty array response. Raw response: " + snapshot(raw2);
 }
 
 const finalShortResult = parsedAnotherToolResponse.filter(item => item.is_active).map(item => item.result);
 
-return finalShortResult;
+return snapshot(finalShortResult.join("\n"));
 ```

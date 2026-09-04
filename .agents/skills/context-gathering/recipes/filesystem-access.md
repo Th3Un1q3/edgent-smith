@@ -6,7 +6,7 @@
 |--------|-------------|
 | **Servers** | `filesystem` — the Rust `rust-mcp-filesystem` server; reads, lists, searches, and writes files, restricted to its configured allowed directories |
 | **When to use** | Reading, listing, searching, or writing files on disk through the gateway when direct `read`/`grep` access is unavailable or you want server-side path enforcement (allowed-directory sandboxing) |
-| **Combines with** | [codebase-exploration](./codebase-exploration.md) — use serena for symbol/reference queries and this recipe for raw file content; [store-memories](./store-memories.md) — read project files, then persist findings as memories |
+| **Combines with** | [codebase-exploration](./codebase-exploration.md) — use serena for symbol/reference queries and this recipe for raw file content; [store-memory](../../serena-memory/workflows/store-memory.md) — read project files, then persist findings as memories |
 
 ## Prerequisites
 

@@ -90,6 +90,8 @@ A rule scoped to one instance reads as a special case. Readers miss the general 
 
 Every file gets a routing row in the root — templates included. The routing table is the completeness contract. Adding a file without a row is a defect.
 
+Exception: shared tooling under `agent_utils/scripts/` (`audit_fences.py`, `validate_md_links.py`) is single source per Rule 24; do not copy into per-skill `scripts/` and do not add routing rows for these shared scripts. Per-skill `scripts/` holds domain-specific helpers only.
+
 An unlinked file never loads; the model cannot reach it. The routing table makes file coverage checkable at a glance.
 
 **Applied in:** [SKILL.md](../SKILL.md) Task Routing Table. [shaping-checklist.md](../workflows/shaping-checklist.md) check 8 verifies it.
@@ -151,9 +153,10 @@ Every code fence must be valid for its declared language. A ```json fence must p
 
 A skill whose examples do not parse teaches broken output; a skill whose job is emitting JSON proves itself with fences that parse.
 
-**Audit method:** run the fence audit from the skill's root directory:
-Run: `python3 scripts/audit_fences.py .` — expect zero violations printed.
-The script lives under `scripts/` per Rule 19; it audits both ``` and `~~~~` fences and parses every ```json fence with `json.loads`.
+**Audit method:** run the shared fence audit (single source per Rule 24):
+Run: `python3 agent_utils/scripts/audit_fences.py .agents/skills/<name>` — or `python3 agent_utils/scripts/audit_fences.py .` from the skill root — expect zero violations printed.
+Run: `python3 agent_utils/scripts/validate_md_links.py .agents/skills/<name>` — expect zero broken links.
+The scripts live in `agent_utils/scripts/` as single source; do not copy into per-skill `scripts/` (Rule 8 shared-tooling exception). The fence audit matches both ``` and `~~~~` fences and parses every ```json fence with `json.loads`.
 
 **Applied in:** every skill file's examples; [shaping-checklist.md](../workflows/shaping-checklist.md) check 15.
 
@@ -189,13 +192,13 @@ A trigger list in a human-facing line reads as noise; a model-facing one-liner n
 
 ## Rule 19: Disclose progressively; sprawl is the failure mode
 
-Keep always-loaded content minimal; push detail into companion files that load on match. Push too little down and the top bloats; push too much and you hide material the agent actually needs. Budgets: root ≤ ~90 lines (Rule 1); each reference section = one idea; a reference that passes ~250 lines splits its detail into a sibling file — the rules reference keeps every rule in one file so the rule→check mapping stays checkable. Reusable audit tooling lives under `scripts/`; one-line greps stay with the rule that teaches them.
+Keep always-loaded content minimal; push detail into companion files that load on match. Push too little down and the top bloats; push too much and you hide material the agent actually needs. Budgets: root ≤ ~90 lines (Rule 1); each reference section = one idea; a reference that passes ~250 lines splits its detail into a sibling file — the rules reference keeps every rule in one file so the rule→check mapping stays checkable. Reusable audit tooling lives in `agent_utils/scripts/` as single source per Rule 24 (exception to Rule 8); domain-specific helpers live under per-skill `scripts/`; one-line greps stay with the rule that teaches them.
 
 Sprawl is the failure mode: a document simply too long buries the actionable step.
 
 **Example:** a ~90-line root carries one pointer line per file; the 30-line option detail sits in `references/options.md`, loaded on match.
 
-**Applied in:** [SKILL.md](../SKILL.md) root; [templates.md](./templates.md) root template; [authoring-workflow.md](../workflows/authoring-workflow.md) step 3; [audit_fences.py](../scripts/audit_fences.py).
+**Applied in:** [SKILL.md](../SKILL.md) root; [templates.md](./templates.md) root template; [authoring-workflow.md](../workflows/authoring-workflow.md) step 3; `agent_utils/scripts/audit_fences.py`.
 
 ## Rule 20: Make every instruction executable or gated
 

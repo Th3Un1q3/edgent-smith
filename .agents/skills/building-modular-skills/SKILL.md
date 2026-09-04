@@ -14,8 +14,9 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "3.5.0"
+  version: "3.6.0"
   delta: |
+    3.6.0 (deduplicate audit tooling): Remove per-skill audit scripts; single source agent_utils/scripts/audit_fences.py + validate_md_links.py per Rule 24; Rule 8 exception documented; Rules 15/19, authoring-workflow step 9, shaping-checklist check 15 updated to shared path.
     3.5.0 (audit-consistency pass): Rule 14 audit narrowed to target author-process machinery (## Completion Gate and ## Source anchors headings, marker strings) with a documented concept-usage exception; Rule 15 fence audit moved to scripts/audit_fences.py; check 21 exempts structural "When Not to Use" sections and quoted reframe examples.
     3.5.0 — research applied (mattpocock/skills): rules 17-24 added (failure-mode-driven design, description dialects, progressive disclosure with reference budgets, executable instructions with completion criteria, positive prompting with no-op pruning, explicit skill-tool composition, never-invent verification, single source of truth); references/anti-patterns.md maps 9 anti-patterns to preventing rules; Rule 14 audit extended with "the table is the completeness contract"; fence audit covers ~~~~ fences; writing-style pointers pinned to the canonical .opencode copy; root reader-path prose stripped of readership and design commentary — this meta-skill's gate-exception rationale moved here; 16:16 → 24:24.
     3.4.0 — added scripts/validate_md_links.py: cross-skill Markdown link validator
@@ -67,8 +68,8 @@ Every file in the skill tree appears here; pick the row that matches your task.
 | Need the rules, Vocabulary line, or the guidance behind the checks | [references/guidance.md](./references/guidance.md) |
 | Avoid the 9 failure patterns skills fall into | [references/anti-patterns.md](./references/anti-patterns.md) |
 | Need copy-pasteable file templates | [references/templates.md](./references/templates.md) |
-| Validate Markdown links across a skills tree | [scripts/validate_md_links.py](./scripts/validate_md_links.py) |
-| Audit code fences in a skill tree | [scripts/audit_fences.py](./scripts/audit_fences.py) |
+
+Shared audit tooling lives in `agent_utils/scripts/` — `audit_fences.py` and `validate_md_links.py` — as single source per Rule 24. Do not copy into per-skill `scripts/` (Rule 8 exception).
 
 ## Related Skills
 

@@ -1,5 +1,7 @@
 # Reference: DevTools Browser Automation — Snippet Library
 
+> Shaping exemption: canonical spec / snippet library — single source per Rule19/Rule24, split would duplicate truth. Flag threshold 250, not 120.
+
 Canonical copy-paste snippets for the [browser-automation-devtools workflow](../workflows/browser-automation-devtools.md). Snippets are standalone but expect the helpers from [X](#x-install-helpers-once-per-page-load) and the [`unwrap`](#unwrap) helper.
 
 **When to load:** when a workflow step points here (Steps 3–6, Shared rules), or any time you need a ready-made `evaluate_script` body for clickable/input discovery, effect-verified clicks, navigation probes, paced click-throughs, chart extraction, structure discovery, sentinel drift probes, or pagination loops.

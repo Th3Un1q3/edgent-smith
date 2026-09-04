@@ -2,7 +2,7 @@
 
 Copy-pasteable JS for the skill's numeric context-budget rules: the ≤2 KB snapshot cap, ≤700-char verification read-back, ≤3 KB aggregate cap, 2× retry cap, and browser pacing/action budget. Every example implements an existing prose rule, cited inline. Scripts assume the `gateway_mcp-exec` code-mode environment: sync-only top level, tools exposed as functions (`read_memory`, `list_memories`, `write_memory`, `delete_memory`), no persistence between calls — every helper keeps its own state inside one script.
 
-**When to load:** whenever a script returns tool output, reads back a memory/file for verification, aggregates rows, retries a tool, or paces browser actions — any time the ≤2 KB / ≤700-char / ≤3 KB / 2× / ≤40-action rules apply. Wired from: [caching-rules.md](./caching-rules.md) context budget, [browser-automation-devtools.md](../workflows/browser-automation-devtools.md), [devtools-known-issues.md](./devtools-known-issues.md), [github-insights.md](../recipes/github-insights.md), [filesystem-access.md](../recipes/filesystem-access.md), [research-with-caching.md](../recipes/research-with-caching.md).
+**When to load:** whenever a script returns tool output, reads back a memory/file for verification, aggregates rows, retries a tool, or paces browser actions — any time the ≤2 KB / ≤700-char / ≤3 KB / 2× / ≤40-action rules apply. Wired from: [caching-rules.md](./caching-rules.md) context budget, [browser-automation-devtools.md](../workflows/browser-automation-devtools.md), [devtools-known-issues.md](./devtools-known-issues.md), [github-insights.md](../recipes/github-insights.md), [filesystem-access.md](../recipes/filesystem-access.md), [research-with-caching.md](../recipes/research-with-caching.md). Disclosure budgets: see [serena-memory/references/frontmatter.md § Search Method](../../serena-memory/references/frontmatter.md).
 
 ## Contents
 
@@ -30,6 +30,19 @@ function snapshot(s, opts) {
   var head = Math.floor(MAX * 0.6);
   return s.slice(0, head) + '\n[...truncated ' + (s.length - MAX) + ' chars...]\n' + s.slice(s.length - (MAX - head));
 }
+// ponytail minimal — 2KB cap without keyword window (use when window not needed):
+// function snapshot(s){ return s.length>2048? s.slice(0,2048)+"\n[...truncated]": s }
+// empty guard — after every gateway_mcp-exec raw return (captures stderr):
+// if (!raw || raw.trim()==="" || /Access denied|No such file/.test(raw)) throw new Error("empty gateway return → retry");
+```
+
+Minimal 2KB cap + empty guard — gateway template (copy-pasteable):
+
+```javascript
+function snapshot(s){ return s.length>2048? s.slice(0,2048)+"\n[...truncated]": s }
+var raw = someTool({ query: "x" });
+if (!raw || raw.trim()==="" || /Access denied|No such file/.test(raw)) throw new Error("empty gateway return → retry");
+return snapshot(raw);
 ```
 
 **(1) Head snippet — first N chars** (smallest; enough for structure discovery):
@@ -112,6 +125,8 @@ function verifyAfterWrite(writtenNames, minChars) {
 ```
 
 (Transcript-specific length expectations are NOT generic — see the YouTube example section in [external-content-caching.md](../recipes/external-content-caching.md).)
+
+**DeepWiki not-indexed status:** when pre-validate (`list_memories` / `search_code`) shows repo not indexed, return `DEEPWIKI-REPO-NOT-INDEXED repo:owner/repo` as a FAIL line and escalate `tavily_search` → `fetch` (cross-check `github search_issues`). Example: `FAIL deepwiki owner/repo: DEEPWIKI-REPO-NOT-INDEXED — fallback tavily_search -> fetch`.
 
 ## C. Aggregate ≤3 KB enforcement
 

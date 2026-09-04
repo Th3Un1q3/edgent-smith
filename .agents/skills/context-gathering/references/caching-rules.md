@@ -4,19 +4,17 @@ The skill's cache rulebook: cache-first default, context budgets, READ/WRITE che
 
 **When to load:** whenever a research task fetches external content (deepwiki, github, fetch, tavily, youtube), checks `cache/{source}/...` for a HIT, writes cache entries, or returns per-op status reports — any time the cache-first pipeline, budgets, verification, or reporting rules apply.
 
+> **Storage invariant:** `cache/`, `researches/`, `private/` are Serena memory domains (`write_memory`/`read_memory` via serena server), never filesystem paths under `/workspace/cache/`. Do not use filesystem `write_file` for cache entries; use `write_memory({memory_name:\"cache/...\", max_chars:100000})` only. Lint: `just agent_utils::validate-memories` and filesystem guard in [filesystem-server-api.md](./filesystem-server-api.md).
+
 ## §1 Cache-first default
 
 Cache first, always: every research fetch (deepwiki ask_question, github issue/search, fetch) checks `cache/{source}/...` before calling the tool, writes the full raw response on miss, and cites entries with `mem:` refs in any `researches/{topic}` memory. This is the default — no reminding needed.
 
-Before answering from memory: run [collect-relevant-memories](../recipes/collect-relevant-memories.md) (list domains → read `about` → fetch matching) first.
+Before answering from memory: run serena-memory recall (list domains → read about → fetch matching) — see [recall-memory](../../serena-memory/workflows/recall-memory.md) first.
 
 ## §2 Context budgets
 
-**Context budget (hard, ~60K tokens for research subagents):** all tool returns must be truncated in-script — snapshot ≤2 KB; fetched content of ANY kind (transcript pages, doc pages, search results, raw tool responses) is CACHED to `cache/{source}/…`, NOT returned to the model; search results trimmed to {title, url}. Returning >5KB of raw content to the model is a violation.
-
-**This applies to ALL tool returns AND file reads:** every snapshot (fetch output, memory read-back, file read, search results, enumeration output) returned to the model must be truncated in-script to ≤2 KB; memory read-backs for verification return only header + length + ≤700-char excerpt; full content stays in cache/files, NEVER in context. **Operating-memory exception:** the ≤700-char cap applies to VERIFICATION read-backs of result caches only — operating memories (extraction memories `browser-automation/<site>/<task>-extraction`, site-specific how-to memories) are read in FULL because they ARE the operating instructions; never act on a truncated selector list.
-
-**Read-back integrity:** slicing a single memory/file into multiple reads whose concatenation returns the full content DEFEATS the ≤2KB rule — verification read-backs return ONLY header + length + ≤700-char excerpt (or aggregated scalar fields totaling ≤3KB), never the full content, even split across calls. Returning >5KB of raw content (from any source) to the model is a violation. Cross-referenced in [external-content-caching.md](../recipes/external-content-caching.md).
+See [serena-memory/references/frontmatter.md § Search Method](../../serena-memory/references/frontmatter.md) for canonical budgets. All tool returns truncated in-script — see [truncation-examples.md](./truncation-examples.md) `snapshot()` and `verifyAfterWrite()` for worked examples.
 
 ## §3 READ checkpoints (CHECK)
 
@@ -49,6 +47,8 @@ Every research task → SYNTHESIZE `researches/about` first, then `researches/{t
 
 **Verify cache writes:** after each cache-write batch, read back 1–2 entries via `read_memory`, confirm the stored content is present and matches what was fetched, and report counts as 'N fetched → N cached → N verified'. Any entry failing verification = FAIL: delete it and redo. (Length expectations are source-specific — see the labeled YouTube example in [external-content-caching.md](../recipes/external-content-caching.md) for transcript-specific guidance.)
 
+**Per-source verify:** split tavily, fetch, deepwiki, github into separate `gateway_mcp-exec` calls. After each source's STORE, run `verifyAfterWrite([names], minChars)` and `snapshot()` (see [truncation-examples.md §B](./truncation-examples.md)) before the next source. Return `COUNT N fetched → N cached → N verified` plus per-op `OK/FAIL <name> chars=<n>` lines. All returns truncated in-script to ≤2 KB. Respect 2× retry cap per tool/target — never exceed 2 attempts on the same target.
+
 General principle: SKILL.md Principles — "Verify every write".
 
 ## §9 Status-report requirement
@@ -66,3 +66,10 @@ General principle: SKILL.md Principles — "Verify every write".
 ---
 
 Rules here are referenced from the root ([SKILL.md](../SKILL.md), one pointer line) and from [research-with-caching.md](../recipes/research-with-caching.md) / [external-content-caching.md](../recipes/external-content-caching.md). Worked JS examples for budgets/read-back: [truncation-examples.md](./truncation-examples.md).
+
+## §12 Private cache layer
+
+Session-private devtools output goes to `private/{site}-research/*` and `private/cache/devtools/...` — never to public `cache/{source}/...`. `cache/` holds public verbatim fetches (tavily, fetch, deepwiki, github on public content) and is regenerable. `private/` is gitignored, session-derived, and must not be `mem:`-referenced from public `researches/*` or `cache/*`. Sources: `cache/` = public verbatim; `private/` = devtools authenticated output and PII.
+
+For persistent memory disclosure see serena-memory/references/disclosure.md
+

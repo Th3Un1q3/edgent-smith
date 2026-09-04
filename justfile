@@ -6,6 +6,8 @@ set dotenv-load := true
 set dotenv-override := true
 set export := true
 
+mod agent_utils
+
 UV := "uv"
 BUN := "bun"
 PYTEST := "${UV} run pytest"
@@ -131,6 +133,7 @@ autoresearch +ARGS:
 
 # Generate an interactive graph of the Serena memory store as a single
 # self-contained HTML file (vis-network, no build step, no server).
+
 # Usage: just memory-viz [--memories-dir PATH] [--output PATH] [--open]
 [positional-arguments]
 memory-viz +ARGS:

@@ -1,5 +1,7 @@
 # Reference: Filesystem Server — Tools & Response Formats
 
+> `cache`/`researches`/`private` are Serena memories (serena server), never filesystem — if you need raw file use `serena read_memory`, not filesystem `read_text_file`. **Guard:** Never create `/workspace/cache/` files; cache writes use `write_memory({memory_name:\"cache/...\"})` only. Lint: `just agent_utils::validate-memories` rejects filesystem cache; delete `/workspace/cache/` if present.
+
 Canonical tool list and return formats for scripting the **filesystem** MCP server in code-mode. All tool calls must be **synchronous** — no `async`/`await`. None of these tool names are hyphenated, so call them directly (no `globalThis['...']`).
 
 ## Server identity

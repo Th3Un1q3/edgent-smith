@@ -37,3 +37,8 @@ Org-level config floor: Copilot org settings + Claude Code managed-settings.json
 - NeMo Guardrails (NVIDIA, Apache-2.0): built-in Presidio input/output rails; GLiNER-PII NIM option.
 - Guardrails AI (Apache-2.0): validator hub.
 - AVOID llm-guard: repo ARCHIVED Jul 2026 after ProtectAI/Palo Alto deal - dormant-library trap confirmed.
+
+## Cached sources
+- mem:cache/fetch/docs.docker.com/reference-cli-docker-container-run — container isolation (gVisor/E2B context)
+- mem:cache/fetch/docs.github.com/en-code-security-reference-supply-chain-security-supported-ecosystems-and-repositories — supply-chain governance
+- mem:cache/github/general/search-host-docker-internal-connection-refused — devcontainer networking probe

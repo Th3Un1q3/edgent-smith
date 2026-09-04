@@ -7,3 +7,9 @@
 6. Workforce platforms declining: New Work SE -30% (485->341 chart) - structural decline, most negative of all 50.
 7. Corporate ventures: CARIAD 0%, Mercedes-Benz Tech Innovation 0% - stable headcounts.
 8. Scope caveats: Siemens/NTT global shown as 10K+ range; several pages show DE counts (Siemens 44,274, NTT 717, GFT 625, Bosch 28,167, Infineon 10,433).
+
+## Cached sources
+- mem:researches/german-it-companies/summary
+- mem:cache/fetch/linkedin/company-growth-chart
+- mem:browser-automation/linkedin/company-growth-chart-points-extraction
+- mem:events/extraction/batch-linkedin-2026-08

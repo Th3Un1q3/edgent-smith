@@ -55,6 +55,8 @@ Every file appears here; pick the row that matches your task.
 | Run a recipe | [recipes/x.md](./recipes/x.md) |
 | Run a script | [scripts/x.md](./scripts/x.md) |
 
+Domain helpers live under per-skill `scripts/`; shared `audit_fences.py`/`validate_md_links.py` are not scaffolded — reference `agent_utils/scripts/` per Rule 24.
+
 ## Related Skills
 
 - `sibling-skill` — what it provides.

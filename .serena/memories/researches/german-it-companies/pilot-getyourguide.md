@@ -36,3 +36,9 @@ And more hiring trends
 - Per-point labels live in aria-labels of chart points: e.g. August 2025, 1,338. Growth trends.; the a11y chart summary gives axis ranges only.
 - Extracted 2026-08-17 via devtools on logged-in LinkedIn session; no bot alert. Chart lazy-renders; scroll + wait 4s required.
 - Extractor recipe: find block containing Growth trends; grep [role=img]/[aria-label] inside the Chart with N data points container for monthly points.
+
+
+## Cached sources
+- mem:researches/german-it-companies/summary
+- mem:browser-automation/linkedin/company-growth-chart-points-extraction
+- mem:events/extraction/batch-linkedin-2026-08

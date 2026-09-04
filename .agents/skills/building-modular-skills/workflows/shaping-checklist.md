@@ -43,9 +43,9 @@ Run this before declaring any skill complete — including this one. One uncheck
    Check the root Principles; confirm each states a general invariant.
    *If not:* fix per Rule 7 — restate the invariant generally in the root; apply it per instance in recipes.
 
-8. **Routing complete** — Pass: every file has a routing row — workflows, references, recipes, scripts, templates included; an unlisted file is a defect (see Rule 8).
-   Run: `grep -c '^| ' SKILL.md` — expect one row per file in the skill tree plus one for the header row; skill-tree files = every file under `workflows/`, `references/`, `recipes/`, `scripts/`, templates included.
-   *If not:* fix per Rule 8 — add one routing row per file and re-count.
+8. **Routing complete** — Pass: every file has a routing row — workflows, references, recipes, domain scripts, templates included; shared audit tooling in `agent_utils/scripts/` exempt per Rule 8 exception (see Rule 8).
+   Run: `grep -c '^| ' SKILL.md` — expect one row per file in the skill tree plus one for the header row; skill-tree files = every file under `workflows/`, `references/`, `recipes/`, `scripts/` (domain helpers only), templates included; exclude shared `audit_fences.py`/`validate_md_links.py`.
+   *If not:* fix per Rule 8 — add one routing row per domain file and re-count.
 
 9. **Oriented** — Pass: every recipe and workflow opens with tools (or a pointer to them), prerequisites, and order of operations (see Rule 9).
    Open each workflow and recipe; confirm the header names tools, prerequisites, and the first step's order.
@@ -72,8 +72,8 @@ Run this before declaring any skill complete — including this one. One uncheck
     *If not:* fix per Rule 14 — delete or rewrite each hit to teach the subject; move author-process records to `metadata.delta`.
 
 15. **Fences valid** — Pass: every code fence valid for its declared language; every ```json fence parses with `json.loads`; no comment lines inside JSON fences; multi-document fragments wrapped in arrays or split; `~~~~` fences audited like `` ``` `` fences (see Rule 15).
-    Run: `python3 scripts/audit_fences.py .` from the skill's root directory (see [guidance.md](../references/guidance.md) Rule 15) — expect zero violations printed.
-    *If not:* fix per Rule 15 — wrap or split multi-document fences; strip comment lines from JSON fences; re-run until silent.
+   Run: `python3 agent_utils/scripts/audit_fences.py .agents/skills/<name>` — or `python3 agent_utils/scripts/audit_fences.py .` from the skill root (see [guidance.md](../references/guidance.md) Rule 15) — expect zero violations printed. Also run `python3 agent_utils/scripts/validate_md_links.py .agents/skills/<name>` per Rule 15.
+   *If not:* fix per Rule 15 — wrap or split multi-document fences; strip comment lines from JSON fences; re-run until silent.
 
 16. **Examples match facts** — Pass: every example uses the shapes, schema, labels, and option keys the skill's own references define; no legacy or invented format contradicts a reference (see Rule 16).
     Run: the Rule 16 audit in [guidance.md](../references/guidance.md) — expect no example contradicting a reference the skill ships.

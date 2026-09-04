@@ -6,7 +6,7 @@
 |--------|-------------|
 | **Servers** | `deepwiki` (ask_question docs answers), `github` (search_issues / issue_read known issues), `fetch` (doc pages), `serena` (memory store) |
 | **When to use** | ANY research topic — cache-first is the default: answer questions from docs, check known GitHub issues, fetch doc pages — without re-fetching or flooding the model context |
-| **Combines with** | [external-content-caching](./external-content-caching.md) (bulk/harvest variant), [store-memories](./store-memories.md), [collect-relevant-memories](./collect-relevant-memories.md), [github-insights](./github-insights.md) |
+| **Combines with** | [external-content-caching](./external-content-caching.md) (bulk/harvest variant), [store-memory](../../serena-memory/workflows/store-memory.md), [recall-memory](../../serena-memory/workflows/recall-memory.md), [github-insights](./github-insights.md) |
 
 ## Why cache-first
 
@@ -17,7 +17,7 @@ One `gateway_mcp-exec` loop per source batch: check `cache/{source}/...` → fet
 1. Follow [Setup](../workflows/setup.md) — discover servers, activate code-mode
 2. Follow [Scripting workflow](../workflows/scripting-workflow.md) — sync JS, error handling, mcp-exec patterns
 3. Activate code-mode: `gateway_code-mode({"name": "code-mode-research-cache", "servers": ["deepwiki", "github", "fetch", "serena"]})` — the tool is exposed to mcp-exec under the returned prefixed name
-4. API facts: [content-fetch-api](../references/content-fetch-api.md); serena formats: [serena-memory-api](../references/serena-memory-api.md); cache convention: `mem:cache/about`
+4. API facts: [content-fetch-api](../references/content-fetch-api.md); serena formats: see [serena-memory](../../serena-memory/SKILL.md); cache convention: `mem:cache/about`
 
 ## Cache-key formation
 
@@ -297,38 +297,50 @@ writing config; treat blog/third-party examples as leads only.
 
 **Example:** a blog's `agent-default-model` nested shape was silently rejected by the dsh `settings.yaml` schema, and the assumed `servers:` map did not match dsh-mcp-client's real per-server `serverName` schema — both caught only at runtime/verification.
 
-## Generalized skeleton
+## Generalized skeleton — per-source split with verify checkpoint
 
-One compact script per SOURCE batch, phases labeled CHECK → FETCH → STORE → SYNTHESIZE (canonical checkpoints: [caching-rules.md](../references/caching-rules.md)). Split by source into a few `mcp-exec` calls — a monolithic batch with MANY tool calls can hit the gateway timeout (-32001) mid-loop. All loops live inside the script; no cross-call state is needed (variables do not persist between mcp-exec calls).
+One compact script per SOURCE — never combine tavily + fetch + write in one exec. Each source runs its own `gateway_mcp-exec`: CHECK → FETCH (one tool) → `snapshot()` → STORE → `verifyAfterWrite([name], minChars)` → REPORT. Split by source into `mcp-exec` calls — a monolithic batch with MANY tool calls hits the gateway timeout (-32001) mid-loop. Respect 2× retry cap per tool/target and ≤2 KB budget per return (see [truncation-examples.md §A/B](../references/truncation-examples.md)). All loops live inside the script; no cross-call state persists between exec calls.
 
 ```javascript
-// Generalized research-with-caching skeleton (sync-only, single-quoted strings).
-// Phases per source batch: CHECK (read checkpoint — cache hit = reuse, miss = proceed to fetch)
-// -> FETCH (on MISS) -> STORE (write checkpoint — mandatory on successful fetch) -> REPORT.
-// One mcp-exec per source (deepwiki / github / fetch) to avoid batch timeouts.
+// Per-source split skeleton (sync-only, single-quoted strings).
+// Exec 1 — tavily_search alone → snapshot() → STORE cache/tavily/... → verifyAfterWrite
+// Exec 2 — fetch alone → snapshot() → STORE cache/fetch/... → verifyAfterWrite
+// Exec 3 — deepwiki / github similarly isolated — one source per exec.
 var NL = String.fromCharCode(10);
 var report = [];
+function snapshot(s){ return s.length>2048? s.slice(0,2048)+"\n[...truncated]": s }
 function slugify(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60); }
 function ok(s) { return typeof s === 'string' && (s.indexOf('written') >= 0 || s.indexOf('edited') >= 0); }
+function verifyAfterWrite(names, minChars){
+  var v=0; for(var i=0;i<Math.min(names.length,2);i++){
+    try{ var c=read_memory({memory_name:names[i]}); var body; try{body=JSON.parse(c).content||c}catch(e){body=c}
+      if(body.length>=minChars) v++; else { try{delete_memory({memory_name:names[i]})}catch(e){}
+        report.push('FAIL '+names[i]+': verify length '+body.length+' < '+minChars); continue; }
+      report.push('OK   '+names[i]+' chars='+body.length); report.push('     header: '+body.slice(0,200).split(NL)[0]); report.push('     excerpt: '+body.slice(0,700));
+    }catch(e){ report.push('FAIL '+names[i]+': '+e.message); }
+  } report.unshift('COUNT '+names.length+' fetched -> '+names.length+' cached -> '+v+' verified'); return report.join(NL);
+}
 function store(name, content) {
   try {
     var r = write_memory({ memory_name: name, content: content, max_chars: 500000 });
     report.push((ok(r) ? 'OK   ' : 'FAIL ') + name + (ok(r) ? ' chars=' + content.length : ': ' + r));
-  } catch (e) { report.push('FAIL ' + name + ': ' + e.message); }
+    return ok(r);
+  } catch (e) { report.push('FAIL ' + name + ': ' + e.message); return false; }
 }
 try {
-  // CHECK (read checkpoint — cache hit = reuse, miss = proceed to fetch) — list_memories({topic: 'cache/<source>/<scope>'}) + read the exact key → HIT skips fetch
-  // FETCH — per tool: deepwiki PLAIN TEXT (no JSON.parse); github JSON (check error/incomplete_results);
-  //         fetch 'Contents of' prefix; robots.txt probe failure = unreachable host, never cached
-  // STORE (write checkpoint — mandatory on successful fetch) — one cache entry per fetched URL: header (tool, URL, date, source line) + FULL raw returned content under the deterministic key cache/fetch/{host-slug}/{path-slug}; pagination rounds of one URL consolidate into that URL's single entry (assembled content, note truncation in the header)
-  // SYNTHESIZE — separate call: researches/about first, then researches/{topic-slug} with a
-  //              '## Cached sources' list of mem: refs for every cache entry used
+  // CHECK — list_memories({topic: 'cache/<source>/<scope>'}) + read exact key → HIT skips fetch
+  // FETCH — this exec does ONE tool only: tavily_search JSON (check error key) OR fetch 'Contents of' prefix OR deepwiki plain text OR github JSON
+  // SNAPSHOT — snapshot(raw) ≤2 KB before any store; never return raw
+  // STORE — one cache entry per URL: header + FULL raw content under deterministic key
+  // VERIFY — verifyAfterWrite([writtenNames], 100) then COUNT line; next source is a separate exec
   report.push('OK   source batch done');
 } catch (e) {
   report.push('ERROR: ' + e.message);
 }
-return report.join(NL); // tiny per-op status lines only — raw content never returned
+return snapshot(report.join(NL)); // ≤2 KB; raw content never returned
 ```
+
+**Batch checkpoint (≤2 entities):** after each ≤2 entities, write `private/<site>-research/batch-N-YYYY-MM-DD` with processed list + `mem:` refs, then read back 1–2 entries and emit `COUNT N fetched → N cached → N verified`. Batch gate ≤2 respected; ≤5 exec calls per batch total.
 
 ## Best practices
 

@@ -21,3 +21,6 @@ Recipes and dated result caches for driving host Chrome through the devtools MCP
 Start with the target site's extraction recipe, e.g., `mem:browser-automation/<site>/<task>-extraction`.
 
 Maintenance: when a new site subnamespace is added, update this about's Scope.
+
+## OpenViking typed-scope pointer (2026-09-01)
+- Reusable cases distilled from recipes live at mem:cases/about (e.g., mem:cases/browser-automation/linkedin-growth-chart). Experiences (cross-case patterns) at mem:experiences/about. See mem:cases/about Boundaries for evolution gate (3 cases → 1 trajectory → 1 experience).

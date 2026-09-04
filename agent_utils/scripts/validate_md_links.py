@@ -44,33 +44,50 @@ def iter_links(text: str):
             yield lineno, target.split("#", 1)[0].split("?", 1)[0]
 
 
+DEFAULT_EXCLUDES = [".dsh", "node_modules", ".serena/cache", "researches"]
+
+def _is_excluded(path: pathlib.Path, excludes: list[str]) -> bool:
+    s = str(path)
+    return any(e in s for e in excludes)
+
+
 def main(argv: list[str] | None = None) -> int:
     default_root = str(pathlib.Path(__file__).resolve().parents[2])
     parser = argparse.ArgumentParser(description="Validate Markdown links across a skills tree.")
-    parser.add_argument("root", nargs="?", default=default_root,
-                        help="skills root to scan (default: %(default)s)")
+    parser.add_argument("roots", nargs="*", default=None,
+                        help="skills root(s) to scan (default: %(default)s)")
+    parser.add_argument("--exclude", action="append", default=[], dest="excludes",
+                        help="exclude any path containing this substring (repeatable)")
     args = parser.parse_args(argv)
 
-    root = pathlib.Path(args.root)
-    if not root.is_dir():
-        print(f"error: not a directory: {root}", file=sys.stderr)
-        return 2
+    excludes = list(DEFAULT_EXCLUDES) + list(args.excludes or [])
+    roots = args.roots if args.roots else [default_root]
+    # argparse with nargs=* sets default None but when no args it gives []; handle
+    if not roots:
+        roots = [default_root]
 
     files_scanned = 0
     links_checked = 0
     broken = 0
-    for md in sorted(root.rglob("*.md")):
-        files_scanned += 1
-        try:
-            text = md.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
-            print(f"{md}: unreadable: {exc}")
-            continue
-        for lineno, target in iter_links(text):
-            links_checked += 1
-            if not (md.parent / target).resolve().exists():
-                broken += 1
-                print(f"{md}:{lineno}: broken link -> {target}")
+    for root_str in roots:
+        root = pathlib.Path(root_str)
+        if not root.is_dir():
+            print(f"error: not a directory: {root}", file=sys.stderr)
+            return 2
+        for md in sorted(root.rglob("*.md")):
+            if _is_excluded(md, excludes):
+                continue
+            files_scanned += 1
+            try:
+                text = md.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                print(f"{md}: unreadable: {exc}")
+                continue
+            for lineno, target in iter_links(text):
+                links_checked += 1
+                if not (md.parent / target).resolve().exists():
+                    broken += 1
+                    print(f"{md}:{lineno}: broken link -> {target}")
 
     print(f"files scanned: {files_scanned}; links checked: {links_checked}; broken: {broken}")
     return 1 if broken else 0

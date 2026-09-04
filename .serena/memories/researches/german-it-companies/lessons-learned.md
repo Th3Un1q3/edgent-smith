@@ -6,3 +6,9 @@
 - Selector-quoting: unquoted attribute selectors throw (a[href*=x]); filter querySelectorAll(a) in JS instead.
 - Search-first captured this session: Vector Informatik, Allgeier Group, Trivago, Scout24 SE, GetYourGuide, q.beyond AG, Materna (correct entity), NTT global range, Siemens global range.
 - Memory cache must hold EVERY company: gaps (no-data entries) cost full re-capture.
+
+## Cached sources
+- mem:researches/german-it-companies/summary
+- mem:cache/fetch/linkedin/company-growth-chart
+- mem:browser-automation/linkedin/company-growth-chart-points-extraction
+- mem:events/extraction/batch-linkedin-2026-08
