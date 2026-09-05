@@ -64,7 +64,7 @@ jobs:
         run: bash scripts/check_labeler.sh
 
       # ── 1. Checkout ────────────────────────────────────────────────────────
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: auto_research
           fetch-depth: 0
