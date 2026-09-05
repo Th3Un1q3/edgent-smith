@@ -120,9 +120,9 @@ fi
 #    its pinned dependencies installed when node_modules is absent.
 if [[ -f "$DSH_SEED_DIR/child-runtime/package.json" ]]; then
   mkdir -p "$DSH_HOME/child-runtime"
-  cp -f "$DSH_SEED_DIR/child-runtime/package.json" "$DSH_HOME/child-runtime/package.json"
+  cp -f "$DSH_SEED_DIR/child-runtime/package.json" "$DSH_HOME/child-runtime/package.json" || true
   cp -f "$DSH_SEED_DIR/child-runtime/pnpm-workspace.yaml" "$DSH_HOME/child-runtime/pnpm-workspace.yaml" 2>/dev/null || true
-  cp -f "$DSH_SEED_DIR/child-runtime/cordis.yml" "$DSH_HOME/child-runtime/cordis.yml"
+  cp -f "$DSH_SEED_DIR/child-runtime/cordis.yml" "$DSH_HOME/child-runtime/cordis.yml" || true
   cp -f "$DSH_SEED_DIR/child-runtime/pnpm-lock.yaml" "$DSH_HOME/child-runtime/pnpm-lock.yaml" 2>/dev/null || true
   command -v pnpm &> /dev/null || npm install -g pnpm@10 || echo "WARNING: pnpm install failed"
   if [[ ! -d "$DSH_HOME/child-runtime/node_modules" ]]; then
