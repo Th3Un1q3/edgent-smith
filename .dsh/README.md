@@ -1,69 +1,61 @@
 # dsh harness config source (.dsh → ~/.dsh)
 
-This directory is the **source** for the container's dsh home, not the live
-home. The devcontainer mounts the `dsh_persistent` named volume at `~/.dsh` and
-layers this directory on top of it (see
-`.devcontainer/docker-compose.yml`):
+This directory is the **source** for the container's dsh home and, via a single
+bind mount, the live home (see `.devcontainer/docker-compose.yml`):
 
 ```yaml
-      - dsh_persistent:/home/vscode/.dsh
-      - ../.dsh/cordis.patch.yml:/home/vscode/.dsh/cordis.patch.yml:ro
-      - ../.dsh/README.md:/home/vscode/.dsh/README.md:ro
-      - ../.dsh/agent-presets:/home/vscode/.dsh/agent-presets
-      - /home/vscode/.dsh/profiles
-      - /home/vscode/.dsh/.pnpm-store
-      - /home/vscode/.dsh/.agent-presets
+      - ../.dsh:/home/vscode/.dsh
+      - opencode_data:/home/vscode/.local/share/opencode
 ```
 
-Three layers, most specific path wins: the named volume carries machine state,
-the bind mounts deliver tracked config, and the anonymous volumes carry derived
-caches that rebuild from scratch.
+The repo directory `../.dsh` is bind-mounted to `~/.dsh` (from this file's
+location `../.dsh` resolves to the repo root). Tracked config
+(`cordis.patch.yml`, `agent-presets/`, `child-runtime/`) is live immediately;
+machine state (`sessions/`, `storages/`, `.pnpm-store/`) persists in the repo
+(gitignored) and survives rebuilds. `opencode_data` remains a named volume for
+opencode. `setup-dev.sh` ensures `~/.dsh` exists and is owned by `vscode`
+before seeding or installing.
 
 ## Path disposition
 
 | Path | Content | Disposition |
 |---|---|---|
-| `cordis.patch.yml` | Home-level plugin patch for all profiles (holds the `mcp-gateway` entry in `insert:` form AND the `subagent-dsh-sdk` out-of-process worker provider) | bind-mounted `:ro`, hot-reloaded |
-| `README.md` | This file | bind-mounted `:ro` |
-| `agent-presets/` | User-authored agent presets (e.g. `rug/` = RUG Mode) | bind-mounted rw |
-| `child-runtime/` | Version-controlled worker harness for the out-of-process subagent provider (Option B): `package.json` + `pnpm-lock.yaml` pin the child's plugin stack, `cordis.yml` is the child's OWN composition (bash, fs, ask-user, todo, MCP gateway client). `node_modules/` is gitignored and installed by `setup-dev.sh` | source only (materialized into `~/.dsh/child-runtime` by setup-dev.sh) |
-| `settings.yaml` | Provider/model settings | seeded into `dsh_persistent`, then owned by dsh |
-| `.env` | `LOCAL_GATEWAY_API_KEY=local` (dummy) | seeded into `dsh_persistent`, gitignored |
-| `.credentials.yaml` | Real `OPENCODE_GO_API_KEY` | seeded into `dsh_persistent`, gitignored, never committed and never auto-generated |
-| `sessions/`, `storages/` | Harness runtime state | `dsh_persistent` — survives a recreate |
-| `profiles/` | Per-profile dirs incl. `node_modules` | anonymous volume — dropped on recreate |
-| `.pnpm-store/` | pnpm cache | anonymous volume — dropped on recreate |
-| `.agent-presets/` | dsh-generated preset cache | anonymous volume — dropped on recreate |
+| `cordis.patch.yml` | Home-level plugin patch for all profiles (holds the `mcp-gateway` entry in `insert:` form AND the `subagent-dsh-sdk` out-of-process worker provider) | via `../.dsh` bind, live, tracked |
+| `README.md` | This file | via `../.dsh` bind |
+| `agent-presets/` | User-authored agent presets (e.g. `rug/` = RUG Mode) | via `../.dsh` bind, rw, live |
+| `child-runtime/` | Version-controlled worker harness for the out-of-process subagent provider (Option B): `package.json` + `pnpm-lock.yaml` pin the child's plugin stack, `cordis.yml` is the child's OWN composition (bash, fs, ask-user, todo, MCP gateway client). `node_modules/` is gitignored and installed by `setup-dev.sh` | via `../.dsh` bind; `setup-dev.sh` also materializes and runs `pnpm install` when `node_modules` missing |
+| `settings.yaml` | Provider/model settings | via `../.dsh` bind; seeded by `setup-dev.sh` only if absent (idempotent) |
+| `.env` | `LOCAL_GATEWAY_API_KEY=local` (dummy) | via `../.dsh` bind; seeded if absent, gitignored |
+| `.credentials.yaml` | Real `OPENCODE_GO_API_KEY` | via `../.dsh` bind; seeded if absent, gitignored, never auto-generated |
+| `sessions/`, `storages/` | Harness runtime state | via `../.dsh` bind — persists in repo (gitignored), survives recreate |
+| `profiles/` | Per-profile dirs incl. `node_modules` | via `../.dsh` bind — also generated from bundle if missing |
+| `.pnpm-store/` | pnpm cache | via `../.dsh` bind (gitignored) |
+| `.agent-presets/` | dsh-generated preset cache | via `../.dsh` bind (gitignored) |
 
 Ignore rules for this directory live in the root `.gitignore` (section "dsh
 harness home").
 
-## Why three files are seeded instead of bind-mounted
+## Why three files are seeded instead of bind-mounted (legacy note)
 
-- **`settings.yaml`** — dsh rewrites it atomically: write a temp file, then
-  `rename()` it over the target. Renaming onto a mount point fails with
-  `EBUSY`. A file bind also pins the inode at mount time, so later repo edits
-  would never reach the container.
-- **`.env` and `.credentials.yaml`** — both gitignored, so a fresh clone has no
-  source file. Docker then silently creates a **directory** at the mount path
-  instead of failing, and dsh reads neither.
-
-`.devcontainer/setup-dev.sh` does the seeding: it copies each file from this
-directory into `~/.dsh` only when that file is absent. The copy is idempotent —
-a second run is a no-op, so the repo stays the canonical initial config while
-every change dsh or its UI makes afterwards survives a recreate.
+With the current single directory bind (`../.dsh:/home/vscode/.dsh`) a file
+rename inside `~/.dsh` succeeds (same filesystem) and a fresh clone keeps files
+as files. Seeding remains idempotent: `setup-dev.sh` copies `settings.yaml`,
+`.env`, `.credentials.yaml` from `/workspace/.dsh` to `~/.dsh` only when absent,
+so the repo provides the initial config and later edits survive a recreate.
+Historically a `dsh_persistent` named volume with per-file `:ro` binds caused
+`EBUSY` on rename and Docker creating a directory when a gitignored source was
+missing; the seed logic handled that case.
 
 ## Lifecycle
 
-- **`docker compose down -v`** deletes `dsh_persistent` with the other named
-  volumes; the next boot re-seeds from this repo. That is the factory reset.
-  To reset a single file instead, delete it from the volume.
-- **`docker compose down`** keeps `dsh_persistent` and drops the three
-  anonymous volumes.
-- **A plain restart** keeps everything, anonymous volumes included.
-- The caches are anonymous volumes rather than tmpfs: tmpfs is RAM-backed and
-  wipes on every stop. `profiles/` cold-regenerates from dsh's own bundle with
-  no network and no `pnpm install`.
+- **`docker compose down -v`** deletes named volumes (`opencode_data`,
+  `ollama_data`, `mcp_images`) but **not** `../.dsh` — it is a host bind, so
+  its contents persist. Factory reset: `rm -rf .dsh/sessions .dsh/storages` or
+  delete a single file from `.dsh/`.
+- **`docker compose down`** keeps the bind contents and named volumes.
+- **A plain restart** keeps everything.
+- `profiles/` cold-regenerates from dsh's bundle with no network and no
+  `pnpm install` if removed.
 
 ## Out-of-process worker subagents (Option B)
 

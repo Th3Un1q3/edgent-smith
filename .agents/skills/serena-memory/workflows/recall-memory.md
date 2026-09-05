@@ -154,10 +154,35 @@ var excerpt = full.slice(0, 700);
 excerpt
 ```
 
+## Gateway Health-Check Guard + Return Ritual (MANDATORY)
+
+Snapshot 2 KB before every gateway call; enforce list_memories → read_memory before responding.
+
+```javascript
+function snapshot(s){ return s.length>2048 ? s.slice(0,2048)+"\n[...truncated]" : s; }
+// Before gateway_mcp-exec:
+var snap = snapshot(JSON.stringify(parsed.memories || []).slice(0,2048));
+var res = gateway_mcp_exec({tool:"list_memories", args:{topic:"cache"}});
+if(!res || !res.content || res.content.length===0 || /Access denied/.test(String(res))){
+  // 0 retries — immediate bash fallback
+  var fallback = bash("cat .serena/memories/cache/github/edgent-smith/actions/runs-failed-2026-09-04.md | head -c 2048");
+}
+// Return ritual — gate fails if missing:
+var ids = JSON.parse(res).memories || [];
+if(ids.length===0) throw new Error("list_memories empty → fallback already taken");
+var payload = read_memory({memory_name: ids[0]}); // verify 1765c before synthesis
+if(!payload || payload.trim()==="") throw new Error("read_memory empty → use bash cat fallback");
+```
+
+Rules:
+- Every `list_memories` must be followed by `read_memory({memory_name: ids[0]})` before you answer; responding from names alone fails the gate.
+- Snapshot 2 KB first; on empty `content:[]` fall back to `bash cat .serena/memories/<id>.md` with 0 gateway retries.
+
 ## Acceptance Criteria
 
-- Done when: L0 scan complete, top-K reranked at L1 4000c, L2 fetched only for K≤5 verified hits, mem: refs cited.
+- Done when: L0 scan complete, top-K reranked at L1 4000c, L2 fetched only for K≤5 verified hits, mem: refs cited, and return ritual verified (`read_memory` payload cited, not just `list_memories` names).
 
 ## Related Skills
 
 - Call context-gathering via Skill tool on context-gathering/SKILL.md when external research supplements recall.
+- See .opencode/instructions/serena-gateway.instructions.md for the global health-check guard.

@@ -143,6 +143,15 @@ fetchL1s("entities/person")
 // Implements: Q3 topic prefix slice 4000c/700c
 ```
 
+Hyphen prefix bug — `list_memories` prefix filter splits on `-`: `topic:"ci-failures"` returns `{}` (0) while `topic:"ci"` returns 1. Workaround — use `topic:"ci"` + client filter, or underscore id `ci_failures`. Normalize before filter: `topic.replace(/-/g,"_")`. Rename `researches/ci-failures*` → `researches/ci_failures*` when promoting; document hyphen as unsupported in prefix search.
+
+```javascript
+function safeTopic(t){ return t.replace(/-/g,"_"); } // use before list_memories
+var ids = JSON.parse(list_memories({topic: safeTopic("ci-failures").split("_")[0]})).memories || [];
+ids.filter(function(m){ return m.indexOf("ci-failures")>=0; });
+// Implements: hyphen workaround — prefix ci + filter
+```
+
 Budgets: L0 256c, L1 4000c, 700c excerpt, 2048c cap.
 
 ## Templates

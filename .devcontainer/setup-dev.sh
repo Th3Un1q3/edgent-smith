@@ -12,7 +12,7 @@ export PATH="/home/vscode/.opencode/bin:$PATH"
 
 if ! command -v rtk &> /dev/null; then
   echo "Installing rtk..."
-  curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+  curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh || echo "WARNING: rtk install failed"
   echo "" | RTK_TELEMETRY_DISABLED=1 rtk init -g --opencode 2>/dev/null || true
 fi
 
@@ -23,21 +23,16 @@ fi
 
 
 echo "Running uv sync..."
-uv sync --dev --all-extras
+uv sync --dev --all-extras || echo "WARNING: uv sync failed (hardlink warning on overlayfs is expected)"
 
 if ! uv tool list | grep -q "huggingface_hub"; then
   echo "Installing huggingface_hub..."
-  uv tool install --force huggingface_hub
-fi
-
-if ! command -v gh &> /dev/null; then
-  echo "Installing GitHub CLI via npm..."
-  npm install -g @github/copilot
+  uv tool install --force huggingface_hub || echo "WARNING: huggingface_hub install failed"
 fi
 
 if ! command -v conductor &> /dev/null; then
   echo "Installing conductor..."
-  CONDUCTOR_INSTALL_FORCE=1 curl -sSfL https://aka.ms/conductor/install.sh | sh -s -- --source "git+https://github.com/microsoft/conductor.git@v0.1.18"
+  CONDUCTOR_INSTALL_FORCE=1 curl -sSfL https://aka.ms/conductor/install.sh | sh -s -- --source "git+https://github.com/microsoft/conductor.git@v0.1.18" || echo "WARNING: conductor install failed"
 fi
 
 # Install dsh (DeepSeek Harness CLI) - pinned rc, allow-scripts whitelist for native deps (node-pty, koffi, dsh-subprocess-local)
@@ -57,7 +52,7 @@ sudo find /home/vscode/.dsh -mindepth 1 -maxdepth 1 -type d -exec chown -R "$(id
 DSH_VERSION="0.1.1-rc.2"
 if ! command -v dsh &> /dev/null || [[ "$(dsh --version 2>/dev/null)" != "$DSH_VERSION" ]]; then
   echo "Installing dsh v${DSH_VERSION}..."
-  npm install -g --allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs "@deepseek-ai/dsh@${DSH_VERSION}"
+  npm install -g --allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs "@deepseek-ai/dsh@${DSH_VERSION}" || echo "WARNING: dsh install failed"
 else
   echo "dsh v${DSH_VERSION} already installed"
 fi
@@ -129,6 +124,7 @@ if [[ -f "$DSH_SEED_DIR/child-runtime/package.json" ]]; then
   cp -f "$DSH_SEED_DIR/child-runtime/pnpm-workspace.yaml" "$DSH_HOME/child-runtime/pnpm-workspace.yaml" 2>/dev/null || true
   cp -f "$DSH_SEED_DIR/child-runtime/cordis.yml" "$DSH_HOME/child-runtime/cordis.yml"
   cp -f "$DSH_SEED_DIR/child-runtime/pnpm-lock.yaml" "$DSH_HOME/child-runtime/pnpm-lock.yaml" 2>/dev/null || true
+  command -v pnpm &> /dev/null || npm install -g pnpm@10 || echo "WARNING: pnpm install failed"
   if [[ ! -d "$DSH_HOME/child-runtime/node_modules" ]]; then
     echo "Installing child harness runtime dependencies (Option B worker)..."
     (cd "$DSH_HOME/child-runtime" && pnpm install --frozen-lockfile) \

@@ -43,7 +43,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pre-build and push devcontainer image
-        uses: devcontainers/ci@v0.3
+        uses: devcontainers/ci@v0.3.1900000450
         with:
           imageName: ghcr.io/th3un1q3/edgent-smith
           cacheFrom: ghcr.io/th3un1q3/edgent-smith
@@ -72,8 +72,11 @@ jobs:
           echo -n > .devcontainer/.env
 
       # Run everything inside the existing DevContainer – no separate Python setup.
-      - uses: devcontainers/ci@v0.3
+      - uses: devcontainers/ci@v0.3.1900000450
         with:
           cacheFrom: ghcr.io/th3un1q3/edgent-smith
+          env: |
+            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+            DEVCONTAINER=true
           runCmd: |
             just ci

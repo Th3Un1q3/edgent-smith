@@ -76,6 +76,7 @@ The system is architected around high-centrality components in the following mod
 - **Click Architecture**: Strict separation between command routing (`cli/main.py`), logic (`commands/*.py`), and services (`services/*.py`).
 - **Task Runner**: All primary workflows are exposed via the `just` CLI tool.
 - **Environment Management**: Heavy reliance on DevContainers for consistent execution across local and CI environments.
+- **Serena Gateway:** Snapshot 2 KB before every `gateway_mcp-exec`; on empty `content:[]` fall back immediately to `bash cat .serena/memories/<id>.md` with 0 retries; every `list_memories` must be followed by `read_memory` before responding — see `.opencode/instructions/serena-gateway.instructions.md`.
 
 ## ANTI-PATTERNS (THIS PROJECT)
 - **No `src/` layout**: Packages like `agents`, `cli`, and `evals` reside at the project root to simplify import resolution in certain runtimes.

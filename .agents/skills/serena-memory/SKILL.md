@@ -5,8 +5,8 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.3.0"
-  delta: "1.3.0 — Routing: add pre-step external/research → context-gathering first; clarify transient researches/* exempt belongs to context-gathering"
+  version: "1.4.0"
+  delta: "1.4.0 — Gateway health-check guard: snapshot 2KB + bash fallback on empty content:[]; return ritual enforced via serena-gateway instruction"
   author: Th3Un1qu3
 ---
 
@@ -45,6 +45,7 @@ Gateway pre-flight (MANDATORY):
 - **Verify staleness before consolidating:** check confidence, hotness, and claim status via references/claims.md and references/lifecycle.md; merge only with human trigger.
 - **Evolve claims into typed memories:** promote 3 cases → 1 trajectory → 1 experience with score ≥3 and human gate via workflows/evolve-memory.md.
 - **Handle truncation:** list_memories truncates silently — always prefix filter topic:"<domain>" + slice(0,32) + sort; youtube cursor loop (next_cursor, MAX_PAGES=9) is separate from serena pagination, do not mix — see workflows/recall-memory.md.
+- **Guard gateway intermittency with snapshot + fallback:** snapshot 2 KB before every gateway_mcp-exec (`snapshot(s){return s.length>2048?s.slice(0,2048)+"\n[...truncated]":s}`); on empty `content:[]` or `Access denied` fall back immediately to `bash cat .serena/memories/<id>.md` with 0 gateway retries; log flake once per call — see .opencode/instructions/serena-gateway.instructions.md.
 
 ## Routing pre-step
 
