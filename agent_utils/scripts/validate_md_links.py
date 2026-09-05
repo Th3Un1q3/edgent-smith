@@ -18,6 +18,7 @@ import argparse
 import pathlib
 import re
 import sys
+from collections.abc import Iterator
 
 FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
@@ -25,7 +26,7 @@ LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 IGNORED_SCHEMES = ("http://", "https://", "ftp://", "mailto:")
 
 
-def iter_links(text: str):
+def iter_links(text: str) -> Iterator[tuple[int, str]]:
     """Yield (line_number, target) for each link outside fences and code spans."""
     fence_char = None
     for lineno, line in enumerate(text.splitlines(), 1):
@@ -39,12 +40,17 @@ def iter_links(text: str):
             continue
         for target in LINK_RE.findall(INLINE_CODE_RE.sub("", line)):
             target = target.strip()
-            if not target or target.startswith(("#", "/", "//")) or target.startswith(IGNORED_SCHEMES):
+            if (
+                not target
+                or target.startswith(("#", "/", "//"))
+                or target.startswith(IGNORED_SCHEMES)
+            ):
                 continue
             yield lineno, target.split("#", 1)[0].split("?", 1)[0]
 
 
 DEFAULT_EXCLUDES = [".dsh", "node_modules", ".serena/cache", "researches"]
+
 
 def _is_excluded(path: pathlib.Path, excludes: list[str]) -> bool:
     s = str(path)
@@ -54,10 +60,16 @@ def _is_excluded(path: pathlib.Path, excludes: list[str]) -> bool:
 def main(argv: list[str] | None = None) -> int:
     default_root = str(pathlib.Path(__file__).resolve().parents[2])
     parser = argparse.ArgumentParser(description="Validate Markdown links across a skills tree.")
-    parser.add_argument("roots", nargs="*", default=None,
-                        help="skills root(s) to scan (default: %(default)s)")
-    parser.add_argument("--exclude", action="append", default=[], dest="excludes",
-                        help="exclude any path containing this substring (repeatable)")
+    parser.add_argument(
+        "roots", nargs="*", default=None, help="skills root(s) to scan (default: %(default)s)"
+    )
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        dest="excludes",
+        help="exclude any path containing this substring (repeatable)",
+    )
     args = parser.parse_args(argv)
 
     excludes = list(DEFAULT_EXCLUDES) + list(args.excludes or [])

@@ -30,6 +30,7 @@ Vocabulary: frontmatter â€” YAML block between --- delimiters at file top; L0 â€
 | claim_ids | array | no | [claims/a, claims/b] |
 | provenance | string | no | Source memory or docs |
 | L0_table | array | about only | Aggregated child L0s |
+
 ### ADR (architecture/adr/*)
 
 | Key | Type | Required | Notes |
@@ -39,6 +40,7 @@ Vocabulary: frontmatter â€” YAML block between --- delimiters at file top; L0 â€
 | status | enum | yes | proposed/accepted/superseded |
 | date | date | yes | YYYY-MM-DD |
 | scope | string | no | Affected area |
+
 ### About (typed parent: profile/about, entities/about, etc.)
 
 | Key | Type | Required | Notes |
@@ -48,6 +50,7 @@ Vocabulary: frontmatter â€” YAML block between --- delimiters at file top; L0 â€
 | L0_table | array | yes | Sorted child L0s, cap 32 |
 | version | int | no | Increment on aggregation |
 | freshness | date | no | YYYY-MM-DD |
+
 ### Cache Limited Header (cache/* only, exempt)
 
 | Key | Type | Required | Notes |

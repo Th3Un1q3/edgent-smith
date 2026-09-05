@@ -72,4 +72,3 @@ Rules here are referenced from the root ([SKILL.md](../SKILL.md), one pointer li
 Session-private devtools output goes to `private/{site}-research/*` and `private/cache/devtools/...` — never to public `cache/{source}/...`. `cache/` holds public verbatim fetches (tavily, fetch, deepwiki, github on public content) and is regenerable. `private/` is gitignored, session-derived, and must not be `mem:`-referenced from public `researches/*` or `cache/*`. Sources: `cache/` = public verbatim; `private/` = devtools authenticated output and PII.
 
 For persistent memory disclosure see serena-memory/references/disclosure.md
-

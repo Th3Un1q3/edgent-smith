@@ -69,6 +69,11 @@
     // blocks (e.g., starting at 5); neither "one" nor "ordered" style fits.
     "MD029": false,
 
+    // MD036: docs use italic lines as visual section separators (e.g.,
+    // `*Making AI Adoption Work*` in ai-adoption-brief.md and `*Legend*`
+    // in system-overview.md). These are deliberate emphasis, not headings.
+    "MD036": false,
+
     // MD024: allow duplicate headings as long as they are in different
     // sections (e.g., repeated "## Example" per rule) — only flag siblings.
     "MD024": {
@@ -82,7 +87,7 @@
       "allowed_elements": [
         "analysis", "analysis-metadata", "analysis-questions", "domain",
         "issue", "output", "profile", "short", "skill", "subdomain",
-        "topic", "Action", "Recipe"
+        "topic", "Action", "Recipe", "tool", "js", "unique"
       ]
     }
   }

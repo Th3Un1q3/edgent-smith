@@ -32,8 +32,13 @@ def _is_excluded(path: pathlib.Path, excludes: list[str]) -> bool:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Audit code fences in a skill tree.")
     parser.add_argument("roots", nargs="*", default=None, help="roots to scan")
-    parser.add_argument("--exclude", action="append", default=[], dest="excludes",
-                        help="exclude any path containing this substring (repeatable)")
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        dest="excludes",
+        help="exclude any path containing this substring (repeatable)",
+    )
     args = parser.parse_args(argv)
 
     excludes = list(DEFAULT_EXCLUDES) + list(args.excludes or [])
@@ -67,7 +72,11 @@ def main(argv: list[str] | None = None) -> int:
                         violations += 1
                         print(f"{md}: fence {i}: {exc}")
 
-    print(f"files scanned: {files_scanned}; fences audited: {fences_audited}; json violations: {violations}")
+    print(
+        f"files scanned: {files_scanned}; "
+        f"fences audited: {fences_audited}; "
+        f"json violations: {violations}"
+    )
     return 1 if violations else 0
 
 

@@ -5,17 +5,34 @@ When to load: when you create or edit any .md in serena-memory; run before decla
 
 Usage: python scripts/validate_memory_frontmatter.py [--path .agents/skills/serena-memory]
 """
-import pathlib, re, sys, json
+
+from __future__ import annotations
+
+import json
+import pathlib
+import re
+import sys
 
 ROOT = pathlib.Path(".agents/skills/serena-memory")
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL | re.MULTILINE)
 FENCE_BACKTICK_RE = re.compile(r"^```", re.MULTILINE)
 FENCE_TILDE_RE = re.compile(r"^~~~~", re.MULTILINE)
-ALLOWED_TYPES = {"profile","preferences","entities","events","cases","trajectories","experiences","claims","cache"}
-ADR_STATUSES = {"proposed","accepted","superseded"}
+ALLOWED_TYPES = {
+    "profile",
+    "preferences",
+    "entities",
+    "events",
+    "cases",
+    "trajectories",
+    "experiences",
+    "claims",
+    "cache",
+}
+ADR_STATUSES = {"proposed", "accepted", "superseded"}
 
-def check_frontmatter(text, path):
+
+def check_frontmatter(text: str, path: pathlib.Path) -> list[str]:  # noqa: C901
     m = FRONTMATTER_RE.search(text)
     if not m:
         return []  # workflows/references may omit frontmatter — not an error
@@ -32,7 +49,9 @@ def check_frontmatter(text, path):
         if line.startswith(" "):
             leading = len(line) - len(line.lstrip(" "))
             if leading != 2:
-                errors.append(f"{path}:{i}: indent must be 0 or 2 spaces, got {leading}: {repr(line)}")
+                errors.append(
+                    f"{path}:{i}: indent must be 0 or 2 spaces, got {leading}: {repr(line)}"
+                )
         else:
             # col-0 key — must be key: value
             if ":" not in line and line.strip():
@@ -48,12 +67,12 @@ def check_frontmatter(text, path):
                     errors.append(f"{path}:{i}: L0 exceeds 256c ({len(val)})")
         # type in 9-type set or ADR allowlist
         if re.match(r"^\s*type\s*:", line):
-            tv = line.split(":",1)[1].strip().strip('"').strip("'")
+            tv = line.split(":", 1)[1].strip().strip('"').strip("'")
             if tv not in ALLOWED_TYPES:
                 errors.append(f"{path}:{i}: type '{tv}' not in 9-type set {ALLOWED_TYPES}")
         # id equals memory_name check is deferred to runtime; validate format here
         if re.match(r"^\s*id\s*:", line):
-            iv = line.split(":",1)[1].strip()
+            iv = line.split(":", 1)[1].strip()
             if not iv:
                 errors.append(f"{path}:{i}: empty id")
     # type or ADR check: if no type but has title/status, verify ADR status
@@ -70,7 +89,8 @@ def check_frontmatter(text, path):
                 errors.append(f"{path}: missing frontmatter key: {k}")
     return errors
 
-def check_fences(text, path):
+
+def check_fences(text: str, path: pathlib.Path) -> list[str]:
     backtick = len(FENCE_BACKTICK_RE.findall(text))
     tilde = len(FENCE_TILDE_RE.findall(text))
     errs = []
@@ -84,18 +104,25 @@ def check_fences(text, path):
         except Exception as e:
             errs.append(f"{path}: invalid JSON block: {e}")
     # --- balance: count delimiter lines
-    dash_lines = [l for l in text.splitlines() if l.strip() == "---"]
+    dash_lines = [s for s in text.splitlines() if s.strip() == "---"]
     if len(dash_lines) % 2 != 0:
         errs.append(f"{path}: unbalanced --- delimiters ({len(dash_lines)})")
-    # no leading/trailing space already in frontmatter, check whole file trailing spaces for FM lines
+    # no leading/trailing space already in frontmatter,
+    # check whole file trailing spaces for FM lines
     for i, line in enumerate(text.splitlines(), 1):
-        if line != line.rstrip() and "---" not in line:
-            # only flag FM-like lines with trailing space
-            if re.match(r"^\s*(id|type|L0|hotness|ttl|version|freshness|directory|claim_ids|provenance|L0_table|title|status|date|scope)\s*:", line):
-                errs.append(f"{path}:{i}: trailing space in FM-like line")
+        if (
+            line != line.rstrip()
+            and "---" not in line
+            and re.match(
+                r"^\s*(id|type|L0|hotness|ttl|version|freshness|directory|claim_ids|provenance|L0_table|title|status|date|scope)\s*:",
+                line,
+            )
+        ):
+            errs.append(f"{path}:{i}: trailing space in FM-like line")
     return errs
 
-def main():
+
+def main() -> None:
     args = sys.argv[1:]
     if "--path" in args:
         idx = args.index("--path")
@@ -116,11 +143,12 @@ def main():
         except SyntaxError as e:
             errors.append(f"{p}: python syntax error: {e}")
     if errors:
-        for e in errors:
-            print(e)
+        for err in errors:
+            print(err)
         print(f"FAIL: {len(errors)} issue(s)")
         sys.exit(1)
     print("PASS: frontmatter and fences valid")
+
 
 if __name__ == "__main__":
     main()

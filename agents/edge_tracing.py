@@ -46,9 +46,9 @@ def bootstrap_local_tracing() -> None:
 
 def flush_tracing() -> None:
     """Flush spans before the process exits so the local backend can query them."""
-    from opentelemetry import trace
+    from opentelemetry.trace import get_tracer_provider
 
-    tracer_provider = trace.get_tracer_provider()
+    tracer_provider = get_tracer_provider()
     force_flush = getattr(tracer_provider, "force_flush", None)
     if callable(force_flush):
         force_flush()

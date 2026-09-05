@@ -29,7 +29,7 @@ Experiences aggregate 3 trajectories → hint describes experience content, not 
 | # | Type | Serena Path | Example Name | Notes |
 |---|---|---|---|---|
 | 1 | profile | profile/ | profile/user/background | Identity and soul are sub-paths: profile/identity/voice, profile/soul/values |
-| 2 | preferences | preferences/ | preferences/editor/theme | User choices, settings; profile subpaths only identity/soul — preferences/* flat vs profile/preferences/* nested (top-level preferences:0 empty, use profile/preferences) |
+| 2 | preferences | preferences/ | preferences/editor/theme | User choices, settings; profile subpaths only identity/soul — preferences/*flat vs profile/preferences/* nested (top-level preferences:0 empty, use profile/preferences) |
 | 3 | entities | entities/ | entities/person/alice | People, systems, orgs |
 | 4 | events | events/ | events/2026-05-01-meeting-notes | Time-stamped observations |
 | 5 | cases | cases/ | cases/bugfix/auth-timeout | Single failure + fix |
@@ -44,7 +44,7 @@ Experiences aggregate 3 trajectories → hint describes experience content, not 
 |---|---|---|
 | `serena/*`, `cache/*`, `researches/*` (synthesis), `private/*`, `browser-automation/*` | exempt from Typed + Disclosed | Untyped until promoted; not a gate error |
 
-Identity/soul rule: store under profile/ — profile/identity/* for voice/role, profile/soul/* for values/beliefs; never create top-level identity/ or soul/ domains.
+Identity/soul rule: store under profile/ — profile/identity/*for voice/role, profile/soul/* for values/beliefs; never create top-level identity/ or soul/ domains.
 
 About inheritance: each typed scope aggregates children into */about with About FM — See [frontmatter.md § Inheritance](./frontmatter.md) for L0_table sorted cap 32 and 0.10 update rule.
 

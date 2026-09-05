@@ -112,7 +112,7 @@ flowchart TD
 Pick one branch; for server choice see [references/server-selection.md](./references/server-selection.md).
 
 - **Need persistent memory?** → Call serena-memory via Skill tool on serena-memory/SKILL.md first (recall/store), then context-gathering. _Example: "remember Alice's editor theme" → serena-memory preferences/editor/theme, then context-gathering to verify._
-- **Need external fetch & cache verbatim?** → [recipes/external-content-caching.md](./recipes/external-content-caching.md) (tavily_extract). _Example: "cache https://example.com/guide verbatim" → cache/fetch/example-com/guide._
+- **Need external fetch & cache verbatim?** → [recipes/external-content-caching.md](./recipes/external-content-caching.md) (tavily_extract). _Example: "cache <https://example.com/guide> verbatim" → cache/fetch/example-com/guide._
 - **Need synthesis/research with mem: refs?** → [recipes/research-with-caching.md](./recipes/research-with-caching.md) (cache-check → fetch → synthesize). _Example: "research vector DB options" → researches/vector-db with mem: refs._
 - **Need filesystem/codebase exploration?** → [recipes/filesystem-access.md](./recipes/filesystem-access.md) / [recipes/codebase-exploration.md](./recipes/codebase-exploration.md). _Example: "where is edge_agent defined?" → serena find_symbol._
 
@@ -140,6 +140,7 @@ Every file appears here; pick the row that matches your task. The tree above dec
 | Browser automation snippets | [references/snippets.md](./references/snippets.md) |
 | Cache rulebook — budgets, key scheme, status lines | [references/caching-rules.md](./references/caching-rules.md) |
 | Store/recall persistent memory — typed, gated, disclosure | [serena-memory/SKILL.md](../serena-memory/SKILL.md) |
+
 ## ADR-002 Invariants
 
 - **Preserve invariants**: Single-source, domain/about, and verify-every-write extend to serena-memory — see serena-memory for typed-scope and gating details.

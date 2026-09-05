@@ -33,7 +33,7 @@ Present when "I feel ___" implies what the other did to you.
 
 Real-feeling inventory (video): angry, scared, disappointed, hurt, anxious, frustrated, lonely, tense, nervous, annoyed, worried.
 
-Probes: Can you say "I feel that I am ___" or "like I was ___" after it? If yes, it is faux. What sensation lives in your body?
+Probes: Can you say "I feel that I am ___" or "like I was___" after it? If yes, it is faux. What sensation lives in your body?
 Repair: "I feel manipulated" → "I feel frustrated and anxious because I think I was not given a choice."
 
 ## 3. Need as Strategy (Need Containing "You" or a Location)

@@ -251,7 +251,7 @@ flowchart TB
 
 ---
 
-## Share your thoughts!
+## Share your thoughts
 
 - What applies to [Company]?
 - What blockers you see?

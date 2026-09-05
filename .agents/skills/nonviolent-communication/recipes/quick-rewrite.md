@@ -8,10 +8,10 @@ When to load: you need a fast rewrite without running the full 7-step workflow; 
 
 "When I [observation], I feel [feeling] because I need [need]. Would you be willing to [request]?"
 
- - [observation] — camera-test fact: exact words/time/place. Passes "what would a video show?"
- - [feeling] — body feeling from real list (angry, scared, disappointed, hurt, anxious, frustrated, lonely). No faux-feeling.
- - [need] — universal noun, no "you", no strategy. Example: serenity, order, safety, respect, understanding, connection.
- - [request] — positive, concrete, present, doable, choice-honoring: "Would you be willing to…?"
+- [observation] — camera-test fact: exact words/time/place. Passes "what would a video show?"
+- [feeling] — body feeling from real list (angry, scared, disappointed, hurt, anxious, frustrated, lonely). No faux-feeling.
+- [need] — universal noun, no "you", no strategy. Example: serenity, order, safety, respect, understanding, connection.
+- [request] — positive, concrete, present, doable, choice-honoring: "Would you be willing to…?"
 
 ## 60-Second Steps
 

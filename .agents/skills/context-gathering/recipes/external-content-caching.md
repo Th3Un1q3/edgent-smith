@@ -339,7 +339,6 @@ return report.join(NL);
 
 - **Adopt private-path**: Verify authenticated/devtools excerpts go to `private/cache/{source}/...` via `gateway_code-mode`, never `cache/`; public `mem:` refs never link into `private/cache` per `references/caching-rules.md` §12 and `references/okf-sidecar-and-uri.md`.
 
-
 - This pipeline handles public sources only (tavily search, fetch, GitHub, YouTube transcripts) — content stays in the public cache/ namespaces. Authenticated-session extraction (devtools) is the only private path: its output goes to `private/` per the browser-automation workflow.
 - Per-source exec — tavily_search alone → `snapshot()` → `write_memory cache/tavily/...` → `verifyAfterWrite([name], minChars)` → fetch alone → same. One source per `gateway_mcp-exec`; never combine tavily+fetch+write. Each return truncated to ≤2 KB, 2× retry cap, COUNT line after each verify. Batch gate ≤2 entities per checkpoint.
 - Per-op try/catch plus success-substring checks (`written`, `deleted`) — a failure reports a FAIL line and does not abort sibling operations.

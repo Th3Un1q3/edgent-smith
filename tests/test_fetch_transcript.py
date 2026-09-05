@@ -3,6 +3,7 @@
 Covers: videoId extraction from all URL forms, validation, CLI flags,
 formatting, error exit codes, retry/backoff, httpx fallback, no MCP dep.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -32,12 +33,15 @@ def load_module():
 # 1. File existence + syntax
 # ---------------------------------------------------------------------------
 
+
 def test_script_exists():
     assert SCRIPT.exists(), f"Script must exist at {SCRIPT}"
 
 
 def test_py_compile():
-    result = subprocess.run([sys.executable, "-m", "py_compile", str(SCRIPT)], capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, "-m", "py_compile", str(SCRIPT)], capture_output=True, text=True
+    )
     assert result.returncode == 0, f"py_compile failed: {result.stderr}"
 
 
@@ -61,7 +65,9 @@ def test_help_works():
 
 def test_no_mcp_dependency():
     text = SCRIPT.read_text(encoding="utf-8")
-    assert ("mcp" not in text.lower() or "no mcp" in text.lower()) and "gateway" not in text.lower(), "script must not depend on MCP gateway"
+    assert (
+        "mcp" not in text.lower() or "no mcp" in text.lower()
+    ) and "gateway" not in text.lower(), "script must not depend on MCP gateway"
     # stricter: ensure no import of mcp
     assert "import mcp" not in text.lower()
 
@@ -69,6 +75,7 @@ def test_no_mcp_dependency():
 # ---------------------------------------------------------------------------
 # 2. VideoId extraction — all URL forms
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "url,expected",
@@ -117,14 +124,21 @@ def test_validate_video_id():
 # 3. CLI validation & exit codes
 # ---------------------------------------------------------------------------
 
+
 def test_cli_invalid_url_extract_fails():
-    result = subprocess.run([sys.executable, str(SCRIPT), "--url", "https://example.com/notyoutube"], capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--url", "https://example.com/notyoutube"],
+        capture_output=True,
+        text=True,
+    )
     assert result.returncode == 6
     assert "could not extract videoid" in result.stderr.lower()
 
 
 def test_cli_invalid_video_id_fails():
-    result = subprocess.run([sys.executable, str(SCRIPT), "--video-id", "short"], capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--video-id", "short"], capture_output=True, text=True
+    )
     assert result.returncode == 6
     assert "invalid" in result.stderr.lower()
 
@@ -139,9 +153,13 @@ def test_cli_missing_both_required():
 # 4. Formatting helpers (pure, no network)
 # ---------------------------------------------------------------------------
 
+
 def test_format_text():
     mod = load_module()
-    segs = [{"text": "Hello world", "start": 0.0, "duration": 1.0}, {"text": "Second line", "start": 1.0, "duration": 1.5}]
+    segs = [
+        {"text": "Hello world", "start": 0.0, "duration": 1.0},
+        {"text": "Second line", "start": 1.0, "duration": 1.5},
+    ]
     assert mod.format_text(segs) == "Hello world\nSecond line"
 
 
@@ -156,7 +174,10 @@ def test_format_json():
 
 def test_format_srt():
     mod = load_module()
-    segs = [{"text": "Hello world", "start": 0.0, "duration": 2.0}, {"text": "Second", "start": 2.0, "duration": 1.5}]
+    segs = [
+        {"text": "Hello world", "start": 0.0, "duration": 2.0},
+        {"text": "Second", "start": 2.0, "duration": 1.5},
+    ]
     srt = mod.format_srt(segs)
     assert "00:00:00,000 --> 00:00:02,000" in srt
     assert "00:00:02,000 --> 00:00:03,500" in srt
@@ -174,6 +195,7 @@ def test_srt_timestamp_helper():
 # ---------------------------------------------------------------------------
 # 5. Error handling — mapped exceptions & retries
 # ---------------------------------------------------------------------------
+
 
 def test_fetch_error_exit_codes():
     mod = load_module()
@@ -203,13 +225,15 @@ def test_map_yta_exception():
         Fake.__name__ = name
         exc = Fake("dummy")
         mapped = mod._map_yta_exception(exc)
-        assert mapped.exit_code == expected_code, f"{name} should map to {expected_code}, got {mapped.exit_code}"
+        assert mapped.exit_code == expected_code, (
+            f"{name} should map to {expected_code}, got {mapped.exit_code}"
+        )
 
 
 def test_retry_on_429_with_mock():
     """Ensure fetch_with_yta retries on TooManyRequests (exponential backoff stubbed)."""
     mod = load_module()
-    # Simulate youtube_transcript_api not installed => should fallback to httpx path, but we mock yta available
+    # Simulate yta not installed => fallback to httpx path, but we mock yta
     # Instead test httpx retry path directly with mocked httpx.Client
     # We patch time.sleep to avoid delay
     with patch("time.sleep", return_value=None):
@@ -228,7 +252,9 @@ def test_retry_on_429_with_mock():
 
         mock_resp_timed = MagicMock()
         mock_resp_timed.status_code = 200
-        mock_resp_timed.text = json.dumps({"events": [{"segs": [{"utf8": "Hello"}], "tStartMs": 0, "dDurationMs": 1000}]})
+        mock_resp_timed.text = json.dumps(
+            {"events": [{"segs": [{"utf8": "Hello"}], "tStartMs": 0, "dDurationMs": 1000}]}
+        )
 
         mock_client = MagicMock()
         # watch page fetch + timedtext fetch
@@ -244,6 +270,7 @@ def test_retry_on_429_with_mock():
 # ---------------------------------------------------------------------------
 # 6. Fallback message when yta not installed
 # ---------------------------------------------------------------------------
+
 
 def test_graceful_missing_yta_message():
     """If youtube_transcript_api missing, script should hint install but not crash on import."""

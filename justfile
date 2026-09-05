@@ -6,7 +6,7 @@ set dotenv-load := true
 set dotenv-override := true
 set export := true
 
-mod agent_utils
+mod? agent_utils
 
 UV := "uv"
 BUN := "bun"
