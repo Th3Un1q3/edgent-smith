@@ -1,0 +1,5 @@
+# Re-audit System A vs B — cached findings 2026-09-05
+
+Scope: agents/, config.py, pyproject.toml, cli/, evals/, tests/, .dsh/settings.yaml, .dsh/cordis.patch.yml, .dsh/child-runtime/cordis.yml, .dsh/agent-presets/rug/, mcp/catalog.yaml, opencode.jsonc, .devcontainer/docker-compose.yml, justfile
+
+Result: System A (Custom Pydantic Orchestrator) owns agents/edge.py 334L, agents/edge_tracing.py 152L, config.py 186L, pyproject.toml 59L, evals/*, cli/*, tests/* — evidence: pydantic-ai imports, ModelConfig, TestModel, no cordis/dsh refs. System B (Harness-Native RUG) owns .dsh/* (69+92+465L), .opencode/agents/rug* (27K md), mcp/catalog.yaml 105L, .devcontainer/docker-compose.yml 106L. Shared: experiments/, env, mcp_gateway URL, file-based handoff only. Cross-import grep: from agents in .dsh => 0 hits, cordis in agents/*.py => 0 hits, dsh in config.py => 0 hits, pydantic in .dsh => 1 doc ref only. Integration surface: none in code, only workspace files + experiments/index.json + env. See final report delivered via chat for 5-section detail.

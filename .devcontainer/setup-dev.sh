@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+FAST_MODE=false; if [[ "${1:-}" == "--fast" ]]; then FAST_MODE=true; fi
+
 echo "Starting development environment setup..."
 
 # Enable persistence volume for opencode
@@ -22,17 +24,19 @@ fi
 # codegraph install --target=auto --location=local --yes
 
 
-echo "Running uv sync..."
-uv sync --dev --all-extras || echo "WARNING: uv sync failed (hardlink warning on overlayfs is expected)"
+if [[ "$FAST_MODE" == false ]]; then
+  echo "Running uv sync..."
+  uv sync --dev --all-extras || echo "WARNING: uv sync failed (hardlink warning on overlayfs is expected)"
 
-if ! uv tool list | grep -q "huggingface_hub"; then
-  echo "Installing huggingface_hub..."
-  uv tool install --force huggingface_hub || echo "WARNING: huggingface_hub install failed"
-fi
+  if ! uv tool list | grep -q "huggingface_hub"; then
+    echo "Installing huggingface_hub..."
+    uv tool install --force huggingface_hub || echo "WARNING: huggingface_hub install failed"
+  fi
 
-if ! command -v conductor &> /dev/null; then
-  echo "Installing conductor..."
-  CONDUCTOR_INSTALL_FORCE=1 curl -sSfL https://aka.ms/conductor/install.sh | sh -s -- --source "git+https://github.com/microsoft/conductor.git@v0.1.18" || echo "WARNING: conductor install failed"
+  if ! command -v conductor &> /dev/null; then
+    echo "Installing conductor..."
+    CONDUCTOR_INSTALL_FORCE=1 curl -sSfL https://aka.ms/conductor/install.sh | sh -s -- --source "git+https://github.com/microsoft/conductor.git@v0.1.18" || echo "WARNING: conductor install failed"
+  fi
 fi
 
 # Install dsh (DeepSeek Harness CLI) - pinned rc, allow-scripts whitelist for native deps (node-pty, koffi, dsh-subprocess-local)
@@ -49,12 +53,14 @@ mkdir -p /home/vscode/.dsh
 sudo chown "$(id -u):$(id -g)" /home/vscode/.dsh
 sudo find /home/vscode/.dsh -mindepth 1 -maxdepth 1 -type d -exec chown -R "$(id -u):$(id -g)" {} + \
   || echo "WARNING: could not chown every ~/.dsh subdirectory (read-only mounts are expected)"
-DSH_VERSION="0.1.1-rc.2"
-if ! command -v dsh &> /dev/null || [[ "$(dsh --version 2>/dev/null)" != "$DSH_VERSION" ]]; then
-  echo "Installing dsh v${DSH_VERSION}..."
-  npm install -g --allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs "@deepseek-ai/dsh@${DSH_VERSION}" || echo "WARNING: dsh install failed"
-else
-  echo "dsh v${DSH_VERSION} already installed"
+if [[ "$FAST_MODE" == false ]]; then
+  DSH_VERSION="0.1.1-rc.2"
+  if ! command -v dsh &> /dev/null || [[ "$(dsh --version 2>/dev/null)" != "$DSH_VERSION" ]]; then
+    echo "Installing dsh v${DSH_VERSION}..."
+    npm install -g --allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs "@deepseek-ai/dsh@${DSH_VERSION}" || echo "WARNING: dsh install failed"
+  else
+    echo "dsh v${DSH_VERSION} already installed"
+  fi
 fi
 
 # Seed the three files the volume starts empty of. They are not bind-mountable:
@@ -108,28 +114,40 @@ fi
 #    from dsh's bundle on recreate, so this re-runs and re-adds them).
 if command -v dsh &> /dev/null; then
   dsh plugin --profile web add \
+    "@deepseek-ai/dsh-sdk-protocol@0.1.1-rc.2" \
     "@deepseek-ai/dsh-subagent-dsh-sdk@0.1.1-rc.2" \
     "@deepseek-ai/dsh-sdk-client@0.1.1-rc.2" \
     "@deepseek-ai/dsh-sdk-jsonrpc-demo@0.1.1-rc.2" \
-    "@deepseek-ai/dsh-sdk-jsonrpc-server@0.1.1-rc.2" \
-    || echo "WARNING: could not add dsh-sdk subagent packages to the web profile"
+    "@deepseek-ai/dsh-sdk-jsonrpc-server@0.1.1-rc.2"
+  if ! dsh plugin --profile web list | grep -q "dsh-subagent-dsh-sdk"; then
+    echo "ERROR: dsh-sdk subagent provider not found in web profile after add" >&2
+    exit 1
+  fi
+else
+  echo "ERROR: dsh not found — cannot add subagent provider" >&2
+  exit 1
 fi
 
 # 2) The child harness runtime (own tools: bash, fs, ask-user, todo, MCP
 #    gateway client) is materialized from the repo into the persistent home and
-#    its pinned dependencies installed when node_modules is absent.
+#    its pinned dependencies installed unconditionally (CI=true avoids prompts).
 if [[ -f "$DSH_SEED_DIR/child-runtime/package.json" ]]; then
   mkdir -p "$DSH_HOME/child-runtime"
-  cp -f "$DSH_SEED_DIR/child-runtime/package.json" "$DSH_HOME/child-runtime/package.json" || true
-  cp -f "$DSH_SEED_DIR/child-runtime/pnpm-workspace.yaml" "$DSH_HOME/child-runtime/pnpm-workspace.yaml" 2>/dev/null || true
-  cp -f "$DSH_SEED_DIR/child-runtime/cordis.yml" "$DSH_HOME/child-runtime/cordis.yml" || true
-  cp -f "$DSH_SEED_DIR/child-runtime/pnpm-lock.yaml" "$DSH_HOME/child-runtime/pnpm-lock.yaml" 2>/dev/null || true
-  command -v pnpm &> /dev/null || npm install -g pnpm@10 || echo "WARNING: pnpm install failed"
-  if [[ ! -d "$DSH_HOME/child-runtime/node_modules" ]]; then
-    echo "Installing child harness runtime dependencies (Option B worker)..."
-    (cd "$DSH_HOME/child-runtime" && pnpm install --frozen-lockfile) \
-      || echo "WARNING: child harness runtime install failed"
-  fi
+  safe_cp() {
+    local src="$1" dst="$2"
+    if [[ ! -e "$src" ]]; then return 0; fi
+    if [[ -e "$src" && -e "$dst" ]] && test "$src" -ef "$dst"; then return 0; fi
+    if [[ -f "$src" && -f "$dst" ]] && cmp -s "$src" "$dst"; then return 0; fi
+    mkdir -p "$(dirname "$dst")"
+    cp -u --preserve=mode "$src" "$dst"
+  }
+  safe_cp "$DSH_SEED_DIR/child-runtime/package.json" "$DSH_HOME/child-runtime/package.json"
+  safe_cp "$DSH_SEED_DIR/child-runtime/pnpm-workspace.yaml" "$DSH_HOME/child-runtime/pnpm-workspace.yaml"
+  safe_cp "$DSH_SEED_DIR/child-runtime/cordis.yml" "$DSH_HOME/child-runtime/cordis.yml"
+  safe_cp "$DSH_SEED_DIR/child-runtime/pnpm-lock.yaml" "$DSH_HOME/child-runtime/pnpm-lock.yaml"
+  command -v pnpm &> /dev/null || npm install -g pnpm@10
+  echo "Installing child harness runtime dependencies (Option B worker)..."
+  CI=true pnpm --dir "$DSH_HOME/child-runtime" install --frozen-lockfile
   # 3) Isolated dsh home for child processes so their sessions never collide
   #    with the parent's (the provider passes DSH_HOME=~/.dsh/child-home).
   mkdir -p "$DSH_HOME/child-home"

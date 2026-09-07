@@ -40,6 +40,9 @@ updates:
         dependency-type: development
         patterns:
           - "*"
+    ignore:
+      - dependency-name: "typescript"
+        versions: [">=7.0.0"]
 
   - package-ecosystem: "npm"
     directory: "/docs"
@@ -106,3 +109,6 @@ updates:
       actions:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: "actions/checkout"
+        versions: [">=7.0.0"]

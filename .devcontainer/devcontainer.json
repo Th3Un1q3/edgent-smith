@@ -46,6 +46,7 @@
   },
   "initializeCommand": "sh .devcontainer/init.sh",
   "postCreateCommand": "bash .devcontainer/setup-dev.sh",
+  "postStartCommand": "bash .devcontainer/setup-dev.sh --fast",
   "remoteUser": "vscode",
   "forwardPorts": [
     8000,

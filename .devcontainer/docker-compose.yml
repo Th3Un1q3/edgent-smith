@@ -7,10 +7,11 @@ services:
       # ~/.dsh is the dsh harness home. Instead of an anonymous named volume
       # (wiped on rebuild), bind it to the repo's `.dsh/` directory so the
       # harness home IS a workdir directory: config (settings.yaml,
-      # cordis.patch.yml, agent-presets/) is tracked config-as-code and the
-      # machine state (profiles/, sessions/, storages/, .pnpm-store/) persists
-      # durably in the repo (gitignored). `../.dsh` resolves from this file to
-      # the repo root.
+      # cordis.patch.yml, .agent-presets/ [DOT USER_PRESET_DIR per DSH
+      # lib/index.js:851 + dsh-agent-presets README — scanned via
+      # includeUserRoot:true]) is tracked config-as-code and the machine state
+      # (profiles/, sessions/, storages/, .pnpm-store/) persists durably in
+      # the repo (gitignored). `../.dsh` resolves from this file to the repo root.
       - ../.dsh:/home/vscode/.dsh
     command: sleep infinity
     extra_hosts:
