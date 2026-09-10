@@ -15,8 +15,8 @@ Usage
     just eval "edge_agent_default"
 
     # CI / local variants
-    just eval-ci
-    just eval-local
+    just evals::ci
+    just evals::local
 """
 
 from __future__ import annotations

@@ -1,3 +1,9 @@
+set shell := ["bash", "-euo", "pipefail", "-c"]
+set dotenv-load := true
+set dotenv-override := true
+set export := true
+set working-directory := "."
+
 # Install dependencies for CI
 deps:
     bun install

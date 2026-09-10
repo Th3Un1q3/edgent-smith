@@ -1,0 +1,47 @@
+set shell := ["bash", "-euo", "pipefail", "-c"]
+set dotenv-load := true
+set dotenv-override := true
+set export := true
+set working-directory := ".."
+
+UV := "uv"
+EVAL := "${UV} run python evals/runner.py"
+
+# Run the eval runner with the default model.
+# Arguments after the baseline ID are forwarded directly to the underlying
+# Python script (for example: `--set smoke`, `--set extended`, `--baseline-id`, `--model`).
+[positional-arguments]
+eval *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # If no args, use default baseline; if first arg is flag, pass through; else treat as baseline_id
+    if [ $# -eq 0 ]; then
+        {{ EVAL }} --baseline-id edge_agent_default
+    elif [[ "$1" == -* ]]; then
+        {{ EVAL }} "$@"
+    else
+        baseline="$1"; shift
+        if [[ "$baseline" == --* ]]; then
+            {{ EVAL }} "$baseline" "$@"
+        else
+            {{ EVAL }} --baseline-id "$baseline" "$@"
+        fi
+    fi
+
+# For local development: run only the fast 'smoke' dataset.
+# Example: `just evals::local` -> `python evals/runner.py --baseline-id local_openrouter --set smoke --model edge_agent_local_openrouter`
+local:
+    {{ EVAL }} --baseline-id local_openrouter --set smoke --model edge_agent_local_openrouter
+
+# For CI: run all available datasets to detect regressions across sets.
+# We explicitly pass the known sets to ensure CI stability.
+ci:
+    {{ EVAL }} --baseline-id auto_research
+
+# Output candidate vs baseline status for the requested baseline ID.
+baseline-status baseline_id:
+    @bash scripts/baseline_status.sh "{{ baseline_id }}"
+
+# Script-backed experiment runner entrypoint: promote a candidate baseline when its score is higher than the current baseline.
+promote-baseline baseline_id:
+    {{ UV }} run python scripts/experiment.py promote-baseline --baseline-id "{{ baseline_id }}"

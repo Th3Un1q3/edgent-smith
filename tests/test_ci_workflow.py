@@ -35,13 +35,15 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
                 "with log_path.open('a', encoding='utf-8') as handle:\n",
                 "    handle.write('just ' + ' '.join(sys.argv[1:]) + '\\n')\n",
                 "command = tuple(sys.argv[1:])\n",
-                "if command == ('format-check',):\n",
+                "if command == ('verify-agents',):\n",
+                "    sys.stdout.write('verify-agents ok\\n')\n",
+                "elif command == ('format-check',):\n",
                 "    sys.stdout.write('format ok\\n')\n",
                 "elif command == ('lint',):\n",
                 "    sys.stdout.write(os.environ['CI_TEST_LINT_OUTPUT'])\n",
                 "    raise SystemExit(1)\n",
-                "elif command == ('md-lint',):\n",
-                "    sys.stdout.write('md-lint ok\\n')\n",
+                "elif command == ('docs::lint',):\n",
+                "    sys.stdout.write('docs::lint ok\\n')\n",
                 "elif command == ('typecheck',):\n",
                 "    sys.stdout.write('typecheck ok\\n')\n",
                 "elif command == ('test',):\n",
@@ -101,9 +103,10 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
 
     assert result.returncode == 1
     assert command_log.read_text().splitlines() == [
+        "just verify-agents",
         "just format-check",
         "just lint",
-        "just md-lint",
+        "just docs::lint",
         "just typecheck",
         "just test",
         "uv run python scripts/validate_workflow_security.py",
@@ -115,8 +118,8 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
     ]
 
     output = result.stdout
+    assert output.index("── verify-agents") < output.index("── format-check")
     assert output.index("── format-check") < output.index("── lint")
-    assert output.index("── lint") < output.index("── typecheck")
     assert output.index("── lint") < output.index("── markdownlint")
     assert output.index("── markdownlint") < output.index("── typecheck")
     assert output.index("── typecheck") < output.index("── test")
@@ -129,7 +132,7 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
     assert "format ok" in output
     assert "lint line 01" in output
     assert ":END" in output
-    assert "md-lint ok" in output
+    assert "docs::lint ok" in output
     assert "typecheck ok" in output
     assert "test ok" in output
     assert "workflow security failed" in output

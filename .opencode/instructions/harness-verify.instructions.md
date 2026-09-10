@@ -13,7 +13,7 @@ Run the 5-step live verification ledger **before** editing any file matched by `
 
 - **Verify the binary first, write second.** Every `.dsh/*` or `docs/deepseek-harness/**` edit must be preceded by live `dsh` and file-system checks.
 - **Fail fast on hallucinations.** The following strings must never appear in harness docs: `dsh agent-presets`, `dsh run`, `setup-dev.sh`, `.dsh/sessions/*.jsonl`, `pydantic-ai`, `FunctionToolset`. Add a negative grep gate for each.
-- **Pin line counts and server counts.** Use `wc -l` and `grep -c "  type:"` to assert topology; never swap 69↔92 or 351↔465.
+- **Verify topology via just verify-agents.** Run `just verify-agents` to assert topology; avoid hardcoding line or server counts.
 - **Distinguish template from runtime.** Repo `.dsh/` is template; runtime is `~/.dsh/` via `DSH_HOME`. Session dirs live at `~/.dsh/sessions/<id>/`, not `.dsh/sessions/`.
 
 ## Step-by-Step Workflow
@@ -34,15 +34,13 @@ dsh --profile web --dump-config 2>&1 | grep -c subagent-dsh-sdk
 # expect: >=1 in web
 dsh --profile headless --dump-config 2>&1 | grep -q "ERR_MODULE_NOT_FOUND.*dsh-subagent-dsh-sdk" && echo "headless missing provider (expected unless pnpm added)"
 
-# 3. File sizes — fail on swapped counts
-wc -l .dsh/settings.yaml .dsh/cordis.patch.yml .dsh/child-runtime/cordis.yml
-# expect: 69 settings.yaml, 92 cordis.patch.yml, 465 cordis.yml (not 92/69, not 351/465 swapped)
-wc -c .dsh/.credentials.yaml
-# expect: ~117B
+# 3. Topology — verify via just verify-agents
+just verify-agents
+# or: ls -l .dsh/settings.yaml .dsh/cordis.patch.yml .dsh/child-runtime/cordis.yml && test -f .dsh/.credentials.yaml
 
 # 4. MCP catalog
 grep -c "  type:" mcp/catalog.yaml
-# expect: 9 (not 15)
+# verify via just verify-agents (no hardcoded count)
 
 # 5. Session persistence — HOME, not repo
 ls ~/.dsh/sessions/ 2>&1 | head

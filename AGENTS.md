@@ -65,7 +65,14 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 ├── experiments/        # State storage: index.json (CLI) + <issue>.state.json (script)
 ├── scripts/conductor/  # Conductor scaffold — Python workers (YAML planned)
 ├── tests/              # Comprehensive test suite covering CLI, agents, and evals
-└── justfile            # Task execution interface (dev workflows, testing, linting)
+├── justfile            # Root — global quality gates (cross-cutting, no domain deps) + mod imports — see CONVENTIONS
+├── evals/justfile      # eval workflows (smoke/CI/baselines)
+├── scripts/justfile    # experiment & DSH workflows
+├── docs/justfile       # docs toolchain (lint/fix/deps/serve via bun)
+├── agents/justfile     # edge agent runtime
+├── cli/justfile        # CLI workflows (autoresearch/memory-viz/git)
+├── agent_utils/justfile # agent utilities (notify/skills/sessions)
+└── opencode/justfile → .opencode/justfile # plugin SDK
 ```
 
 ## WHERE TO LOOK
@@ -101,7 +108,7 @@ The system is architected around high-centrality components in the following mod
 
 - **Python 3.13**: Uses modern type annotations (`from __future__ import annotations`) and standard library features.
 - **Click Architecture**: Strict separation between command routing (`cli/main.py`), logic (`commands/*.py`), and services (`services/*.py`).
-- **Task Runner**: All primary workflows are exposed via the `just` CLI tool.
+- **Task Runner**: Root `justfile` is global quality gates only (`test`, `lint`, `typecheck`, `format`, `format-check`, `ci`, `clean`, `verify-agents`) + `mod` imports; scoped recipes live in `evals/`, `scripts/`, `docs/`, `agents/`, `cli/`, `agent_utils/`, `opencode/` and run as `just <module>::<recipe>` (e.g., `just evals::eval`). Do not add domain recipes to root — see `.opencode/instructions/justfiles.instructions.md:0`.
 - **Environment Management**: Heavy reliance on DevContainers for consistent execution across local and CI environments.
 - **Serena Gateway:** Snapshot 2 KB before every `gateway_mcp-exec`; on empty `content:[]` fall back immediately to `bash cat .serena/memories/<id>.md` with 0 retries; every `list_memories` must be followed by `read_memory` before responding — see `.opencode/instructions/serena-gateway.instructions.md`.
 
@@ -122,16 +129,25 @@ The system is architected around high-centrality components in the following mod
 just is the primary task runner for the project. There are multiple justfiles in the project scoped to different directories. Search for `find justfile **/justfile .*/justfile -maxdepth 3` to find them all and use `just --list` to see available recipes. The following are the most commonly used commands(for the root justfile):
 
 ```bash
-# Core Workflows
+# Global gates (root justfile)
 just test                # Run the full unit test suite
 just lint                 # Static analysis and formatting checks
 just format               # Code auto-formatting (Ruff)
 just typecheck            # Python type checking (Mypy/Pyright)
+just ci                  # CI sequence (includes verify-agents boundary check)
+just verify-agents       # Verify AGENTS.md gates + justfile boundary (root only 10 globals + 7 mods)
 
-just --list                # List all available justfile recipes from directory where justfile is located
+# Scoped modules — invoke via just <module>::<recipe>
+just evals::eval                    # eval workflows (smoke/CI/baselines)
+just evals::local                   # local eval (smoke)
+just scripts::run-experiment "prompt"     # experiment & DSH workflows
+just docs::lint                        # docs toolchain (lint/fix/deps/serve via bun)
+just agents::edge-agent "prompt"          # edge agent runtime
+just cli::autoresearch fix                # CLI workflows (autoresearch/memory-viz/git)
+just agent_utils::validate-memories       # agent utilities (notify/skills/sessions)
+
+just --list                # List root globals; scoped modules appear as `evals ...` etc.
 ```
-
-Use justfile that is located closer to the target directory for more specific commands. For example, `justfile` in `agent_utils/` contains recipes for executing agentic helpers.
 
 ## AGENT & WORKFLOW TAXONOMY
 
@@ -203,7 +219,9 @@ ls .github/agents/*.agent.md
 # 5. Conductor exists
 ls scripts/conductor/
 # 6. MCP catalog + Serena memories (gateway only)
-ls mcp/catalog.yaml && grep -c "  type:" mcp/catalog.yaml  # expect 9 servers
+ls mcp/catalog.yaml && grep -c "  type:" mcp/catalog.yaml
 # 7. Skill marketplace count
-ls .agents/skills/ | wc -l  # expect 40
+ls .agents/skills/ | wc -l
+# 8. Justfile boundary (root is 10 globals + 7 mods only)
+just verify-agents
 ```

@@ -405,7 +405,7 @@ environments. The unified runner auto-detects the right provider:
 - **Copilot** is used when `GITHUB_COPILOT_API_TOKEN` is set in the environment.
 - **Ollama** is used otherwise.
 
-For the local eval lane only, `just eval-local` uses the OpenRouter-backed
+For the local eval lane only, `just evals::local` uses the OpenRouter-backed
 `edge_agent_local_openrouter` model and writes results under the
 `local_openrouter` baseline lane. That path requires `OPENROUTER_API_KEY`.
 Generic eval behavior, including `just eval` and `edge_agent_default`, is

@@ -7,4 +7,4 @@ Root `/workspace/justfile` pattern for JS/bun recipes:
 - `{{ BUN }}` interpolation; recipe bodies start `cd docs && {{ BUN }} ...`.
 - Precedent: `.opencode/justfile` `deps:` recipe runs bare `bun install`.
 
-Existing recipes: `just docs-deps` -> `cd docs && bun install`; `just docs-serve` -> `cd docs && bun run start`.
+Existing recipes: `just docs::deps` -> `cd docs && bun install`; `just docs::serve` -> `cd docs && bun run start`.

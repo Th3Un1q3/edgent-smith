@@ -1,0 +1,33 @@
+set shell := ["bash", "-euo", "pipefail", "-c"]
+set dotenv-load := true
+set dotenv-override := true
+set export := true
+set working-directory := ".."
+
+UV := "uv"
+
+# Run the Python autofix workflow using the hooks defined in autofix.toml.
+fix *ARGS:
+    {{ UV }} run python -m cli autoresearch fix {{ ARGS }}
+
+# Click-backed public CLI surface: `init`, `validate`, `design`, `fix`, and `experiment`.
+# `validate` accepts `--config PATH`; otherwise it auto-discovers the first `*.config.toml` file.
+# `experiment` is the local experiment registry CRUD surface only; execution stays on the script-backed recipes above.
+# Usage: just autoresearch <subcommand> [args]
+[positional-arguments]
+autoresearch +ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ UV }} run python -m cli autoresearch "$@"
+
+# Generate an interactive graph of the Serena memory store as a single
+# self-contained HTML file (vis-network, no build step, no server).
+# Usage: just memory-viz [--memories-dir PATH] [--output PATH] [--open]
+[positional-arguments]
+memory-viz +ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ UV }} run python -m cli memory-viz "$@"
+
+git_todos:
+    sh scripts/git_todos.sh

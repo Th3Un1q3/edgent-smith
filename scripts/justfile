@@ -1,0 +1,87 @@
+set shell := ["bash", "-euo", "pipefail", "-c"]
+set dotenv-load := true
+set dotenv-override := true
+set export := true
+set working-directory := ".."
+
+UV := "uv"
+
+# Pull the model before running the experiment.
+pull-ollama-model:
+    bash scripts/pull_ollama_model.sh
+
+# Run DeepSeek Harness (dsh). use `web --no-open` to serve web UI only.
+dsh *ARGS:
+    dsh {{ ARGS }}
+
+# Script-backed experiment runner entrypoint: run experiment execution locally with a prompt.
+# This is separate from the `autoresearch experiment` local experiment registry CRUD surface.
+# The prompt is required; additional flags are forwarded to experiment.py.
+#
+# Local behaviour vs CI:
+#   - No git push (the workflow owns all git operations).
+#   - No GitHub issue labels or comments (workflow-only side effects).
+#   - State is written to experiments/manual.state.json.
+# - Pass --local to signal local-only mode (no-op today, available for hooks).
+run-experiment prompt *ARGS:
+    {{ UV }} run python scripts/experiment.py run \
+      --prompt '{{ prompt }}' \
+      --local \
+      {{ ARGS }}
+
+# Script-backed experiment runner entrypoint: run the local foreground experiment loop.
+# Arguments are forwarded directly to the local-loop command in experiment.py.
+alias experiment-loop := run-experiment-loop
+
+run-experiment-loop *ARGS:
+    {{ UV }} run python scripts/experiment.py local-loop {{ ARGS }}
+
+# AI Approval gate
+approve prompt:
+    echo "Approved to perform {{ prompt }}"
+
+# Transform vscode mcp config to copilot cli mcp config.
+dev-sync-mcp:
+    scripts/transform_mcp_json.sh
+
+# Live DSH watch: tails .dsh/sessions/**/*.jsonl.zstd + manual.state.json (zip fallback)
+# Replaces manual GUI zip export — live JSONL is authoritative, zip is export of same JSONL.
+watch-worker *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "== live tail: .dsh/sessions/**/*.jsonl.zstd + experiments/manual.state.json =="
+    echo "== zip fallback: .tmp/dsh-session-*.zip (GUI export) if live empty =="
+    if ls .tmp/dsh-session-*.zip 1>/dev/null 2>&1; then echo "[zip fallback available]"; unzip -l .tmp/dsh-session-*.zip 2>/dev/null | head -20 || true; fi
+    "{{ UV }}" run python scripts/tail_sessions.py {{ ARGS }}
+
+# Inspect one session + state: live JSONL decompressed via python zstandard, jq on manual.state.json
+# Handles both zip fallback and live JSONL fallback per requirements.
+inspect-session session_id="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "== experiments/manual.state.json =="; jq '.attempts | .[-3:]' experiments/manual.state.json 2>/dev/null || cat experiments/manual.state.json
+    echo "== live sessions (newest 5) =="; ls -lt .dsh/sessions/--workspace--/*/session.jsonl.zstd 2>/dev/null | head -5; ls -lt .dsh/child-home/sessions/--workspace--/*/session.jsonl.zstd 2>/dev/null | head -5 || true
+    if [ -n "{{ session_id }}" ]; then echo "== filter {{ session_id }} =="; "{{ UV }}" run python scripts/tail_sessions.py --once 2>&1 | grep -i "{{ session_id }}" || true; else "{{ UV }}" run python scripts/tail_sessions.py --once; fi
+    echo "== while sleep 2 tail (Ctrl-C to stop): rg job_output/status =="
+    echo 'hint: while sleep 2; do rg -a "job_output|isError|status.*failed|subagent run failed" .dsh/sessions --no-heading | tail -20; jq . experiments/manual.state.json | tail -20; done'
+
+# Self-iteration loop: run-experiment + watch-worker until pass or max attempts.
+# Usage: just iterate-experiment "your prompt" 3  — loops run → watch --once → check STATE
+iterate-experiment prompt max_attempts="3":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for i in $(seq 1 {{max_attempts}}); do
+        echo "== iterate $i/{{max_attempts}}: run-experiment =="
+        just scripts::run-experiment "{{prompt}}" --baseline auto_research || true
+        echo "== iterate $i: watch-worker --once =="
+        just scripts::watch-worker --once || true
+        if jq -e '.attempts[-1].status == "succeeded"' experiments/manual.state.json > /dev/null 2>&1; then
+            echo "== succeeded on attempt $i =="
+            break
+        fi
+        if jq -e '.attempts[-1].status == "passed"' experiments/manual.state.json > /dev/null 2>&1; then
+            echo "== passed on attempt $i =="
+            break
+        fi
+        sleep 2
+    done

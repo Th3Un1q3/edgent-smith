@@ -1142,7 +1142,7 @@ def test_local_loop_baseline_id_remains_literal_with_model_alias(
 
 
 def test_run_experiment_loop_recipe_uses_local_loop_owner() -> None:
-    justfile = (REPO_ROOT / "justfile").read_text()
+    justfile = (REPO_ROOT / "scripts" / "justfile").read_text()
 
     assert "run-experiment-loop *ARGS:" in justfile
     assert "alias experiment-loop := run-experiment-loop" in justfile
@@ -1150,8 +1150,8 @@ def test_run_experiment_loop_recipe_uses_local_loop_owner() -> None:
 
 
 def test_edge_agent_recipe_uses_local_openrouter_without_ollama_bootstrap() -> None:
-    justfile = (REPO_ROOT / "justfile").read_text()
-    match = re.search(r"^edge-agent prompt:.*?(?=^\S|\Z)", justfile, re.MULTILINE | re.DOTALL)
+    justfile = (REPO_ROOT / "agents" / "justfile").read_text()
+    match = re.search(r"^edge-agent\b.*?:.*?(?=^\S|\Z)", justfile, re.MULTILINE | re.DOTALL)
 
     assert match is not None
     recipe = match.group(0)

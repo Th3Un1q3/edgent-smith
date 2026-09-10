@@ -8,6 +8,28 @@ excludeAgents: "rug"
 
 Use `justfile` as the canonical source for project commands, not as a place for ad hoc shell scripts.
 
+## 0. Module boundary — root is global gates only (enforced)
+
+Root `justfile` owns exactly 8 global quality gates plus `mod` imports. No scoped recipe belongs in root. Every domain recipe lives in its module directory and runs as `just <module>::<recipe>`.
+
+- **Root allows only:** `test`, `lint`, `typecheck`, `format`, `format-check`, `ci`, `clean`, `verify-agents` + `mod` imports. No other recipe in root.
+- **Mods imported by root:** `mod? agent_utils`, `mod evals`, `mod scripts`, `mod docs`, `mod agents`, `mod cli`, `mod opencode` (`opencode/justfile` → `.opencode/justfile` symlink; fallback `just --justfile .opencode/justfile <recipe>`).
+- **Scoped ownership (invoke as `just <module>::<recipe>`):**
+
+| Module | File | Scope | Example |
+|---|---|---|---|
+| `evals` | `evals/justfile` | eval workflows (smoke/CI/baselines) | `just evals::eval` |
+| `scripts` | `scripts/justfile` | experiment & DSH workflows | `just scripts::run-experiment "prompt"` |
+| `docs` | `docs/justfile` | docs toolchain (lint/fix/deps/serve via bun) | `just docs::lint` |
+| `agents` | `agents/justfile` | edge agent runtime | `just agents::edge-agent "prompt"` |
+| `cli` | `cli/justfile` | CLI workflows (autoresearch/memory-viz/git) | `just cli::autoresearch fix` |
+| `agent_utils` | `agent_utils/justfile` | agent utilities (notify/skills/sessions) | `just agent_utils::notify` |
+| `opencode` | `opencode/justfile` → `.opencode/justfile` | plugin SDK | `just opencode::test` (fallback: `just --justfile .opencode/justfile test`) |
+
+- **Rule — do not add to root:** Do not add a new recipe to root `justfile` unless it is a global quality gate with zero domain dependencies (`test`, `lint`, `typecheck`, `format`, `format-check`, `ci`, `clean`, `verify-agents`). For any domain-specific work, create or update the scoped `justfile` in that module directory, add the recipe there, and ensure root imports it via `mod <module>` or `mod? <module>`. If the module has no `justfile` yet, create one with `set shell := ["bash", "-euo", "pipefail", "-c"]`, `set dotenv-load := true`, `set export := true`, `set working-directory := ".."` (when recipes reference repo root).
+- **Enforcement — CI gate:** `just verify-agents` verifies the boundary (in addition to its 7 topology gates). It checks that root `justfile` contains only the 8 globals plus `mod` lines and that no scoped recipe (e.g., `eval`, `run-experiment`, `lint`, `edge-agent`, `autoresearch`) appears in root. CI (`just ci` → `scripts/ci.sh`) runs this gate. Fix a violation by moving the recipe to its scoped file and re-running `just verify-agents`.
+- **Invocation:** From repo root, run `just <module>::<recipe>` (e.g., `just evals::local`, `just scripts::watch-worker`). Run `just --list` to see globals; scoped modules appear as `agent_utils ...`, `agents ...`, etc. — expand with `just --unstable --list` or read the module `justfile` directly.
+
 ## 1. Configure execution explicitly
 - Set a well-defined shell:
   ```just

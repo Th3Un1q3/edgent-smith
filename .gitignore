@@ -88,10 +88,15 @@ secrets/
 docs/node_modules/
 # dsh harness home (.dsh/ is the SOURCE for the container's ~/.dsh, not the
 # live home — see .dsh/README.md): track the config-as-code (settings.yaml,
-# cordis.patch.yml, agent-presets/, README.md); ignore the secret/dummy seed
+# cordis.patch.yml, .agent-presets/, README.md); ignore the secret/dummy seed
 # files. The machine-state dirs below now live in volumes (dropped on recreate
 # or held in dsh_persistent) and are ignored as a safety net for dsh runs
 # outside the container and for leftovers from the old whole-directory mount.
+# PRIMARY authority: dsh 0.1.1-rc.2 scans DOT via USER_PRESET_DIR (.agent-presets)
+# with includeUserRoot:true + trust:user (lib/index.js:851, dsh-agent-presets
+# README "Append <dshHome>/.agent-presets as a user root"). DOT is the tracked
+# live preset root — do NOT ignore it. Legacy .dsh/agent-presets/ (NO dot) is
+# NOT scanned (dump-config shows default:standard only) — kept empty with .gitkeep.
 /.dsh/profiles/
 /.dsh/sessions/
 /.dsh/storages/
@@ -105,3 +110,8 @@ docs/node_modules/
 /.dsh-sdk-src/
 # pnpm store accidentally created at the repo root during a local install.
 /.pnpm-store/
+/.dsh/child-home/
+
+# Experiment state & baseline artifacts (machine-generated)
+experiments/*.state.json
+auto_research*.json

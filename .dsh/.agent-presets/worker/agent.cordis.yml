@@ -1,0 +1,32 @@
+# The `worker` agent preset: Bash-only executor — no workflow, no delegation.
+#
+# Role: WORKER is a bash-only senior engineer. It executes tasks via shell and
+# cannot delegate further — it has NO workflow/subagent tools. It has NO
+# filesystem/search/editor surface as separate entries because bash covers
+# everything via shell (cat, grep, sed, echo, python, uv, just, etc.) so a
+# dedicated fs layer is redundant and would widen surface needlessly. Minimal
+# surface: persona + bash only, flat with no isolate groups. Host's
+# sandbox-policy workspace-write and compaction-basic auto:true cover worker
+# globally, so no need to redeclare planning/compaction/delegation here.
+#
+# Omitted intentionally (flat minimal — worker does not orchestrate):
+# - filesystem + search + editor omitted: bash handles all file ops via shell
+# - todo / goal / skill / ask-user / web / jobs omitted: no orchestration state
+# - workflow + subagent + ralph omitted: worker cannot delegate further
+# - planning / compaction / delegation groups omitted: host covers globally
+#
+
+# ── identity ────────────────────────────────────────────────────────────────
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: |-
+      You are WORKER — a senior software engineer with 10+ years of professional experience across the full stack. You execute tasks via BASH ONLY. You have NO workflow/subagent tools — you cannot delegate further. You write clean, production-grade code via shell. Use bash for all file operations (cat, sed, echo, python, uv, just). If blocked, report via output.
+
+# ── shell ───────────────────────────────────────────────────────────────────
+
+# bash is the ONLY active tool. Disabled guard mirrors rug (prevents load on Windows).
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'

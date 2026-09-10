@@ -98,7 +98,7 @@ If a task spans multiple scopes, use the highest relevant scope.
   - Lint: `just lint`
   - Type checks: `just typecheck`
   - Formatting fixes (if needed): `just format`
-- DO NOT: run broad evals or CI suites (`just eval`, `just eval-ci`) unless the change affects runtime behavior.
+- DO NOT: run broad evals or CI suites (`just eval`, `just evals::ci`) unless the change affects runtime behavior.
 - Add or update tests only if behavior changed and existing coverage is insufficient.
 
 ### Scope 2 validation
@@ -116,7 +116,7 @@ If a task spans multiple scopes, use the highest relevant scope.
   - `just typecheck` (static types)
   - `just format` (format/auto-fix where supported)
   - `just fix` (attempt automatic fixes via scripts)
-  - Eval runs: `just eval` (baseline), `just eval-local` (local debug), `just eval-ci` (CI smoke suite)
+  - Eval runs: `just eval` (baseline), `just evals::local` (local debug), `just evals::ci` (CI smoke suite)
   - Compare candidate vs baseline: `just baseline-status "<id>"`
 
 Examples:
@@ -252,8 +252,8 @@ If you are inside the DevContainer, run directly:
 
 ```bash
 just eval "edge_agent_default"
-just eval-ci
-just eval-local
+just evals::ci
+just evals::local
 ```
 
 If you are outside the DevContainer, prefix each command with `devcontainer exec --workspace-folder . --`.

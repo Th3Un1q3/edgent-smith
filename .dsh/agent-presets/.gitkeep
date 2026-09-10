@@ -1,0 +1,1 @@
+# LEGACY — presets moved to ../.agent-presets/ (DOT, USER_PRESET_DIR per DSH lib/index.js:851 + dsh-agent-presets README). This dir kept empty for backward compat, NOT scanned by harness. See .dsh/README.md

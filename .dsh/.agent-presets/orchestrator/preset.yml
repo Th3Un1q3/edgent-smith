@@ -1,0 +1,3 @@
+name: Orchestrator
+description: Pure orchestrator — plans and delegates via workflow/subagent, never touches code or shell
+order: 10

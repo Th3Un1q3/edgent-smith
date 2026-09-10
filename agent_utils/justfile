@@ -5,6 +5,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 set dotenv-load := true
 set dotenv-override := true
 set export := true
+set working-directory := ".."
 
 # Notify via ntfy.sh using event and message arguments.
 notify event message:

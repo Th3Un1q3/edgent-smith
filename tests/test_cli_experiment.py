@@ -42,7 +42,7 @@ def _read_json(path: pathlib.Path) -> JsonObject:
 
 def test_just_autoreseach_recipe_alias_routes_to_python_cli() -> None:
     result = subprocess.run(
-        ["just", "--dry-run", "autoresearch", "experiment", "list"],
+        ["just", "--dry-run", "cli::autoresearch", "experiment", "list"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -60,7 +60,14 @@ def test_just_autoresearch_create_forwards_multiline_description_without_reparsi
     description = "line1\n# heading\nline3"
     title = "multiline-hash-description"
     isolated_justfile = tmp_path / "justfile"
-    isolated_justfile.write_text((REPO_ROOT / "justfile").read_text())
+    # Minimal justfile that forwards to cli without requiring mod imports
+    isolated_justfile.write_text(
+        """set shell := ["bash", "-euo", "pipefail", "-c"]
+[positional-arguments]
+autoresearch +ARGS:
+    uv run python -m cli autoresearch "$@"
+"""
+    )
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(REPO_ROOT)

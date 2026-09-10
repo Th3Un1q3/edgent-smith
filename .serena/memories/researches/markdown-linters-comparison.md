@@ -21,11 +21,11 @@ Note: docs/ + AGENTS.md + README.md are the main lint targets; .opencode/ TS too
 
 ## justfile recipe (root, follows repo UV/bash conventions)
 MARKDOWNLINT := "npm exec --yes --package=markdownlint-cli2@0.23.2 -- markdownlint-cli2"
-md-lint:
+lint:
     {{ MARKDOWNLINT }} "**/*.{md,markdown}"
 
 ## CI (repo pattern: scripts/ci.sh run_check lines, executed by ci.yml via devcontainers/ci just ci)
-Add to scripts/ci.sh: run_check markdownlint just md-lint
+Add to scripts/ci.sh: run_check markdownlint just docs::lint
 Alternative: davidanson/markdownlint-cli2-action GitHub Action with config input.
 
 ## Gotchas

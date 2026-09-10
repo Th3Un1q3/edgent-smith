@@ -75,21 +75,28 @@
 # child composition is the version-controlled `.dsh/child-runtime/cordis.yml`
 # (own tools: bash, fs, ask-user, todo, MCP gateway client). setup-dev.sh
 # installs the provider packages into the web profile; restart the host once
-# after a container (re)build so the provider registers. The child runs on the
-# isolated dsh home `.dsh/child-home/` (created by setup-dev.sh), so its
-# sessions never collide with the parent's.
-# FIXME Statement below is commented due to not working. 
-# - insert:
-#     - id: subagent-dsh-sdk
-#       name: '@deepseek-ai/dsh-subagent-dsh-sdk'
-#       config:
-#         providerName: dsh-sdk
-#         command: node
-#         args:
-#           - --expose-internals
-#           - !!js process.env.HOME + '/.dsh/child-runtime/node_modules/@deepseek-ai/dsh-sdk-jsonrpc-demo/lib/bin.js'
-#           - !!js process.env.HOME + '/.dsh/child-runtime/cordis.yml'
-#         maxTokens: 49152
-#         env:
-#           DSH_HOME: !!js process.env.HOME + '/.dsh/child-home'
-#           DEEPSEEK_API_KEY: !!js process.env.DEEPSEEK_API_KEY
+# after a container (re)build so the provider registers.
+# Child shares parent DSH_HOME so sessions appear in ~/.dsh/sessions for UI (UUIDs prevent collision); isolation via toolset not via home.
+- insert:
+    - id: subagent-dsh-sdk
+      name: '@deepseek-ai/dsh-subagent-dsh-sdk'
+      config:
+        providerName: dsh-sdk
+        provider: opencode-go
+        model: deepseek-v4-flash
+        command: node
+        args:
+          - --expose-internals
+          - !!js process.env.HOME + '/.dsh/child-runtime/node_modules/@deepseek-ai/dsh-sdk-jsonrpc-demo/lib/bin.js'
+          - !!js process.env.HOME + '/.dsh/child-runtime/cordis.yml'
+        maxTokens: 49152
+        env:
+          # Credentials: primary is .dsh/.credentials.yaml + .dsh/child-home/.credentials.yaml
+          # via dsh-credentials-local (OPENCODE_GO_API_KEY via file store). Env forwarding
+          # is fallback only — process.env.OPENCODE_GO_API_KEY is empty in container
+          # unless exported, so empty-string forwarding would shadow file. Keep
+          # OPENROUTER/LOCAL which have host env values; OPENCODE forwarded only if non-empty.
+          DEEPSEEK_API_KEY: !!js process.env.DEEPSEEK_API_KEY
+          OPENCODE_GO_API_KEY: !!js process.env.OPENCODE_GO_API_KEY || undefined
+          OPENROUTER_API_KEY: !!js process.env.OPENROUTER_API_KEY
+          LOCAL_GATEWAY_API_KEY: !!js process.env.LOCAL_GATEWAY_API_KEY

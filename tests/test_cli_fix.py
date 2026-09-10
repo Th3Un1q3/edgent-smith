@@ -92,7 +92,7 @@ def _write_project_config(config_path: pathlib.Path, *, alias: str = "copilot") 
 
 def test_just_fix_recipe_routes_to_python_cli() -> None:
     result = subprocess.run(
-        ["just", "--dry-run", "fix", "--continue"],
+        ["just", "--dry-run", "cli::fix", "--continue"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

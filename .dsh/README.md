@@ -10,11 +10,13 @@ bind mount, the live home (see `.devcontainer/docker-compose.yml`):
 
 The repo directory `../.dsh` is bind-mounted to `~/.dsh` (from this file's
 location `../.dsh` resolves to the repo root). Tracked config
-(`cordis.patch.yml`, `agent-presets/`, `child-runtime/`) is live immediately;
+(`cordis.patch.yml`, `.agent-presets/`, `child-runtime/`) is live immediately;
 machine state (`sessions/`, `storages/`, `.pnpm-store/`) persists in the repo
 (gitignored) and survives rebuilds. `opencode_data` remains a named volume for
 opencode. `setup-dev.sh` ensures `~/.dsh` exists and is owned by `vscode`
 before seeding or installing.
+
+> **PRIMARY authority** on preset location: DSH 0.1.1-rc.2 code — `USER_PRESET_DIR = dshHome/.agent-presets` (DOT) with `includeUserRoot:true` + `trust:user` (`lib/index.js:851`, `dsh-agent-presets` README "Append `<dshHome>/.agent-presets` as a user root"). `dsh --dump-config` shows only `default: standard` with no roots override, so only DOT is scanned. This README/docs are SECONDARY — if they diverge, upstream code wins.
 
 ## Path disposition
 
@@ -22,7 +24,7 @@ before seeding or installing.
 |---|---|---|
 | `cordis.patch.yml` | Home-level plugin patch for all profiles (holds the `mcp-gateway` entry in `insert:` form AND the `subagent-dsh-sdk` out-of-process worker provider) | via `../.dsh` bind, live, tracked |
 | `README.md` | This file | via `../.dsh` bind |
-| `agent-presets/` | User-authored agent presets (e.g. `rug/` = RUG Mode) | via `../.dsh` bind, rw, live |
+| `.agent-presets/` | User presets (orchestrator, rug, worker, orch-worker) — **DSH `USER_PRESET_DIR` (DOT) scanned via `includeUserRoot:true` + `trust:user` (lib/index.js:851, dsh-agent-presets README)** — live preset root | via `../.dsh` bind, rw, live, **TRACKED** |
 | `child-runtime/` | Version-controlled worker harness for the out-of-process subagent provider (Option B): `package.json` + `pnpm-lock.yaml` pin the child's plugin stack, `cordis.yml` is the child's OWN composition (bash, fs, ask-user, todo, MCP gateway client). `node_modules/` is gitignored and installed by `setup-dev.sh` | via `../.dsh` bind; `setup-dev.sh` also materializes and runs `pnpm install` when `node_modules` missing |
 | `settings.yaml` | Provider/model settings | via `../.dsh` bind; seeded by `setup-dev.sh` only if absent (idempotent) |
 | `.env` | `LOCAL_GATEWAY_API_KEY=local` (dummy) | via `../.dsh` bind; seeded if absent, gitignored |
@@ -30,7 +32,7 @@ before seeding or installing.
 | `sessions/`, `storages/` | Harness runtime state | via `../.dsh` bind — persists in repo (gitignored), survives recreate |
 | `profiles/` | Per-profile dirs incl. `node_modules` | via `../.dsh` bind — also generated from bundle if missing |
 | `.pnpm-store/` | pnpm cache | via `../.dsh` bind (gitignored) |
-| `.agent-presets/` | dsh-generated preset cache | via `../.dsh` bind (gitignored) |
+| `agent-presets/` | **LEGACY — moved to `.agent-presets/` (DOT USER_PRESET_DIR)** — kept as empty dir with `.gitkeep` for backward compat; NOT scanned by harness | via `../.dsh` bind (empty, tracked placeholder) |
 
 Ignore rules for this directory live in the root `.gitignore` (section "dsh
 harness home").
@@ -88,17 +90,8 @@ gets a working `worker` tool. The child rejects parent-enforced
 
 ## Authoring presets
 
-- Presets are directories under `agent-presets/<id>/` holding an
-  `agent.cordis.yml` (+ optional `preset.yml`). Copy an existing one (e.g.
-  `standard` with the GUI's create flow) or author directly.
-- The mount is rw, so the GUI preset-create flow writes straight into the repo.
-- Roster discovery is unmemoized and re-reads the filesystem per call, so
-  editing a preset here is live for the next session — no restart.
-- Deleting a preset = delete its directory here. The roster's `remove()`
-  realpath check may refuse (it requires the literal home root path), so the
-  directory in this repo is the authoritative delete.
-- ⚠️ `agent-presets/` is currently **empty**: its only contents
-  (`rug/agent.cordis.yml`, `rug/preset.yml`) are deleted but not yet committed,
-  and git cannot track empty directories. On a fresh clone the directory will
-  not exist, and the bind mount has no source. Commit a real preset or a
-  tracked placeholder file to restore it.
+- Presets are directories under `.agent-presets/<id>/` (DOT, `USER_PRESET_DIR` per upstream `lib/index.js:851` + `dsh-agent-presets` README) holding an `agent.cordis.yml` (+ optional `preset.yml`). Copy an existing one (e.g. `standard` with the GUI's create flow) or author directly. **Do NOT use `agent-presets/` (NO dot) — it is legacy and NOT scanned.**
+- The mount is rw, so the GUI preset-create flow writes straight into `~/.dsh/.agent-presets/` which is the repo's `.dsh/.agent-presets/` via bind.
+- Roster discovery is unmemoized and re-reads the filesystem per call, so editing a preset here is live for the next session — no restart. Discovery scans ONLY DOT (`~/.dsh/.agent-presets/`) when `dump-config` shows no roots override.
+- Deleting a preset = delete its directory under `.agent-presets/`. The roster's `remove()` realpath check may refuse (it requires the literal home root path), so the directory in this repo is the authoritative delete.
+- `.agent-presets/` holds tracked presets (`orchestrator/`, `rug/`, `worker/`, `orch-worker` — each with `agent.cordis.yml` + `preset.yml`) referenced by `settings.yaml:agent-presets.default: orch-worker`. `agent-presets/` (NO dot) is legacy empty dir kept with `.gitkeep` for backward compat.

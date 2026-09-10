@@ -1,0 +1,35 @@
+set shell := ["bash", "-euo", "pipefail", "-c"]
+set dotenv-load := true
+set dotenv-override := true
+set export := true
+set working-directory := ".."
+
+UV := "uv"
+
+# Run the edge agent with timing, tools used, output, and local OTLP trace metadata.
+[positional-arguments]
+edge-agent *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
+        echo "Usage: just agents::edge-agent <prompt>"
+        echo "Run the edge agent with timing, tools used, output, and local OTLP trace metadata."
+        echo "  <prompt>  User prompt to pass to the agent (required)"
+        echo "  --help, -h  Show this help"
+        exit 0
+    fi
+    # Join args as prompt; if no args prompt is empty
+    prompt="$*"
+    if [ -z "$prompt" ]; then
+        echo "Executing edge agent with local OpenRouter model and OTLP tracing."
+        PROMPT="" EDGENT_MODEL_ALIAS=edge_agent_local_openrouter {{ UV }} run python agents/edge.py
+    else
+        echo "Executing edge agent with local OpenRouter model and OTLP tracing."
+        PROMPT="$prompt" EDGENT_MODEL_ALIAS=edge_agent_local_openrouter {{ UV }} run python agents/edge.py
+    fi
+
+# Print the current Ollama status.
+ollama-status:
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    {{ UV }} run python scripts/ollama_status.py

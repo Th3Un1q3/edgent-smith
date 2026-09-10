@@ -1,5 +1,6 @@
 # Basic project tasks for this repo.
 # Use `just <recipe>` to run the common workflow commands.
+# Global quality gates only — scoped commands live in submodules: evals, scripts, docs, agents, cli, opencode.
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 set dotenv-load := true
@@ -7,13 +8,17 @@ set dotenv-override := true
 set export := true
 
 mod? agent_utils
+mod evals
+mod scripts
+mod docs
+mod agents
+mod cli
+mod opencode
 
 UV := "uv"
-BUN := "bun"
 PYTEST := "${UV} run pytest"
 RUFF := "${UV} run ruff"
 MYPY := "${UV} run mypy"
-EVAL := "${UV} run python evals/runner.py"
 CHECK_PATHS := "."
 
 # Run the unit test suite.
@@ -32,85 +37,6 @@ typecheck:
 ci:
     @bash scripts/ci.sh
 
-# Run the Python autofix workflow using the hooks defined in autofix.toml.
-fix *ARGS:
-    {{ UV }} run python -m cli autoresearch fix {{ ARGS }}
-
-# Run the eval runner with the default model.
-# Arguments after the baseline ID are forwarded directly to the underlying
-
-# Python script (for example: `--set smoke`, `--set extended`, `--baseline-id`, `--model`).
-eval baseline_id="edge_agent_default" *ARGS:
-    {{ EVAL }} --baseline-id {{ baseline_id }} {{ ARGS }}
-
-# For local development: run only the fast 'smoke' dataset.
-
-# Example: `just eval-local` -> `python evals/runner.py --baseline-id local_openrouter --set smoke --model edge_agent_local_openrouter`
-eval-local:
-    {{ EVAL }} --baseline-id local_openrouter --set smoke --model edge_agent_local_openrouter
-
-# For CI: run all available datasets to detect regressions across sets.
-
-# We explicitly pass the known sets to ensure CI stability.
-eval-ci:
-    {{ EVAL }} --baseline-id auto_research
-
-# Tail opencode logs
-oc-log:
-    tail -f ~/.local/share/opencode/log/opencode.log 
-
-# Output candidate vs baseline status for the requested baseline ID.
-baseline-status baseline_id:
-    @bash scripts/baseline_status.sh "{{ baseline_id }}"
-
-# Script-backed experiment runner entrypoint: promote a candidate baseline when its score is higher than the current baseline.
-promote-baseline baseline_id:
-    {{ UV }} run python scripts/experiment.py promote-baseline --baseline-id "{{ baseline_id }}"
-
-# Pull the model before running the experiment.
-pull-ollama-model:
-    bash scripts/pull_ollama_model.sh
-
-# Run opencode
-oc *ARGS:
-    opencode {{ ARGS }}
-
-# Run DeepSeek Harness (dsh). use `web --no-open` to serve web UI only.
-dsh *ARGS:
-    dsh {{ ARGS }}
-
-# Script-backed experiment runner entrypoint: run experiment execution locally with a prompt.
-# This is separate from the `autoresearch experiment` local experiment registry CRUD surface.
-# The prompt is required; additional flags are forwarded to experiment.py.
-#
-# Local behaviour vs CI:
-#   - No git push (the workflow owns all git operations).
-#   - No GitHub issue labels or comments (workflow-only side effects).
-#   - State is written to experiments/manual.state.json.
-
-# - Pass --local to signal local-only mode (no-op today, available for hooks).
-run-experiment prompt *ARGS:
-    {{ UV }} run python scripts/experiment.py run \
-      --prompt '{{ prompt }}' \
-      --local \
-      {{ ARGS }}
-
-# Script-backed experiment runner entrypoint: run the local foreground experiment loop.
-# Arguments are forwarded directly to the local-loop command in experiment.py.
-
-alias experiment-loop := run-experiment-loop
-
-run-experiment-loop *ARGS:
-    {{ UV }} run python scripts/experiment.py local-loop {{ ARGS }}
-
-# AI Approval gate
-approve prompt:
-    echo "Approved to perform {{ prompt }}"
-
-# Transform vscode mcp config to copilot cli mcp config.
-dev-sync-mcp:
-    scripts/transform_mcp_json.sh
-
 # Fix formatting and lint issues where supported.
 format:
     {{ RUFF }} format {{ CHECK_PATHS }}
@@ -120,59 +46,58 @@ format:
 format-check:
     {{ RUFF }} format --check {{ CHECK_PATHS }}
 
-# Click-backed public CLI surface: `init`, `validate`, `design`, `fix`, and `experiment`.
-# `validate` accepts `--config PATH`; otherwise it auto-discovers the first `*.config.toml` file.
-# `experiment` is the local experiment registry CRUD surface only; execution stays on the script-backed recipes above.
-
-# Usage: just autoresearch <subcommand> [args]
-[positional-arguments]
-autoresearch +ARGS:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    {{ UV }} run python -m cli autoresearch "$@"
-
-# Generate an interactive graph of the Serena memory store as a single
-# self-contained HTML file (vis-network, no build step, no server).
-
-# Usage: just memory-viz [--memories-dir PATH] [--output PATH] [--open]
-[positional-arguments]
-memory-viz +ARGS:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    {{ UV }} run python -m cli memory-viz "$@"
-
-# Run the edge agent with timing, tools used, output, and local OTLP trace metadata.
-edge-agent prompt:
-    #!/usr/bin/env bash
-    set -euxo pipefail
-    echo "Executing edge agent with local OpenRouter model and OTLP tracing."
-    PROMPT="{{ prompt }}" EDGENT_MODEL_ALIAS=edge_agent_local_openrouter {{ UV }} run python agents/edge.py
-
-# Print the current Ollama status.
-ollama-status:
-    #!/usr/bin/env bash
-    set -euxo pipefail
-    {{ UV }} run python scripts/ollama_status.py
-
 # Clean local caches created by tools.
 clean:
     rm -rf .mypy_cache .ruff_cache
 
-git_todos:
-    sh scripts/git_todos.sh
+# Tail opencode logs
+oc-log:
+    tail -f ~/.local/share/opencode/log/opencode.log
 
-# Lint Markdown files with markdownlint-cli2 (Node >= 22).
-md-lint:
-    npm exec --yes --package=markdownlint-cli2@0.23.2 -- markdownlint-cli2
+# Run opencode
+oc *ARGS:
+    opencode {{ ARGS }}
 
-# Auto-fix fixable Markdown lint issues.
-md-fix:
-    npm exec --yes --package=markdownlint-cli2@0.23.2 -- markdownlint-cli2 --fix
-
-# Install docs (reveal.js) dependencies.
-docs-deps:
-    cd docs && {{ BUN }} install
-
-# Serve the docs reveal.js presentation.
-docs-serve:
-    cd docs && {{ BUN }} run start
+# Verify AGENTS.md 8 grep gates stay in sync with repo topology (AGENTS.md:190-220) + justfile boundary
+verify-agents:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "── verify-agents: 8 grep gates from AGENTS.md VALIDATION ──"
+    echo "#1 System A (harness-free runtime)"
+    grep -R "pydantic-ai" pyproject.toml && ls agents/edge.py config.py
+    echo "#2 System B (harness-native DSH)"
+    ls .dsh/cordis.patch.yml .dsh/child-runtime/cordis.yml
+    echo "#3 OpenCode RUG"
+    ls .opencode/agents/rug.md .opencode/plugins/helpers
+    echo "#4 Copilot agents"
+    ls .github/agents/*.agent.md
+    echo "#5 Conductor"
+    ls scripts/conductor/
+    echo "#6 MCP catalog"
+    ls mcp/catalog.yaml && grep -c "  type:" mcp/catalog.yaml && echo "mcp catalog OK"
+    echo "#7 Skill marketplace"
+    count=$(ls .agents/skills/ | wc -l); echo "skills: $count"; test "$count" -ge 1
+    echo "#8 Justfile boundary (root is 10 globals + mods only)"
+    allowed="test lint typecheck ci format format-check clean verify-agents oc oc-log"
+    allowed_count=$(echo "$allowed" | wc -w)
+    # count recipes in root justfile (lines starting with recipe name + colon)
+    actual_recipes=$(grep -E "^[a-z][a-z0-9_-]*.*:" justfile | grep -v ":=" | sed -E 's/^([a-z][a-z0-9_-]*).*/\1/' | sort)
+    actual_count=$(echo "$actual_recipes" | wc -w)
+    echo "  allowed ($allowed_count): $allowed"
+    echo "  actual  ($actual_count): $(echo $actual_recipes | tr '\n' ' ')"
+    test "$actual_count" -eq "$allowed_count" || { echo "FAIL: root justfile has $actual_count recipes, expected $allowed_count"; echo "$actual_recipes"; exit 1; }
+    for r in $allowed; do echo "$actual_recipes" | grep -qw "$r" || { echo "FAIL: missing allowed recipe $r in root justfile"; exit 1; }; done
+    # no scoped recipes in root (skip names that are also global gates: lint, ci)
+    for bad in eval local ci baseline-status promote-baseline pull-ollama-model run-experiment run-experiment-loop approve watch-worker inspect-session iterate-experiment lint fix deps serve edge-agent ollama-status autoresearch memory-viz git_todos notify list-skills; do
+      if echo "$allowed" | grep -qw "$bad"; then continue; fi
+      if echo "$actual_recipes" | grep -qw "$bad"; then echo "FAIL: scoped recipe '$bad' must not be in root justfile"; exit 1; fi
+    done
+    # verify mod imports
+    mod_count=$(grep -cE "^mod\?? " justfile)
+    echo "  mod imports: $mod_count (expected 7)"
+    test "$mod_count" -eq 7 || { echo "FAIL: expected 7 mod imports in root justfile, got $mod_count"; exit 1; }
+    grep -qE "^mod\? agent_utils" justfile || { echo "FAIL: missing mod? agent_utils"; exit 1; }
+    grep -qE "^mod evals" justfile || { echo "FAIL: missing mod evals"; exit 1; }
+    grep -qE "^mod scripts" justfile || { echo "FAIL: missing mod scripts"; exit 1; }
+    echo "  justfile boundary OK"
+    echo "── verify-agents: PASS ──"

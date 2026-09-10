@@ -87,7 +87,8 @@
       "allowed_elements": [
         "analysis", "analysis-metadata", "analysis-questions", "domain",
         "issue", "output", "profile", "short", "skill", "subdomain",
-        "topic", "Action", "Recipe", "tool", "js", "unique"
+        "topic", "Action", "Recipe", "tool", "js", "unique",
+        "id", "owner", "version", "semver"
       ]
     }
   }
