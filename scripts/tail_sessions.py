@@ -19,9 +19,10 @@ import sys
 import time
 from typing import Any
 
-zstd: Any = None
 try:
-    import zstandard as zstd
+    import zstandard as _zstd
+
+    zstd: Any = _zstd
 except ImportError:
     zstd = None  # fallback to raw read for tests
 

@@ -50,6 +50,10 @@ strict = true
 explicit_package_bases = true
 exclude = ["tests/"]
 
+[[tool.mypy.overrides]]
+module = "zstandard"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

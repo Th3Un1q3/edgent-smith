@@ -34,7 +34,7 @@ typecheck:
     {{ MYPY }} {{ CHECK_PATHS }}
 
 # Run the CI check sequence with aggregated failure reporting.
-# 12 gates sequential, ~110s total incl ~92s mutation — tool timeout 180s recommended (default 120s marginal).
+# 12 gates sequential, ~110s total incl ~92s mutation — tool timeout 300s (MUTATION_TIMEOUT env, default 300s).
 # Fast path: SKIP_MUTATION=1 just ci or CI_FAST=1 just ci (~20s for local iteration).
 # Parity: remote PR CI runs `just ci` verbatim, keep scripts/ci.sh + .github/workflows/ci.yml in sync.
 ci:
@@ -75,7 +75,7 @@ verify-agents:
     echo "#4 Copilot agents"
     ls .github/agents/*.agent.md
     echo "#5 Conductor"
-    ls scripts/conductor/
+    mkdir -p scripts/conductor && ls -la scripts/conductor/
     echo "#6 MCP catalog"
     ls mcp/catalog.yaml && grep -c "  type:" mcp/catalog.yaml && echo "mcp catalog OK"
     echo "#7 Skill marketplace"
