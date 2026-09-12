@@ -1,4 +1,5 @@
 ---
+name: typescript-test-best-practices
 description: "Best practices on designing tests in TypeScript."
 applyTo: ".opencode/plugins/tests/**/*.test.ts"
 excludeAgents: "rug"

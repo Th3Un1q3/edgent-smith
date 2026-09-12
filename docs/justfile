@@ -16,8 +16,8 @@ fix:
 
 # Install docs (reveal.js) dependencies.
 deps:
-    cd docs && {{ BUN }} install
+    {{ BUN }} install --cwd docs
 
 # Serve the docs reveal.js presentation.
 serve:
-    cd docs && {{ BUN }} run start
+    {{ BUN }} run --cwd docs start

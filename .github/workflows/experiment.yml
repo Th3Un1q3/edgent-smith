@@ -108,7 +108,7 @@ jobs:
       - name: Run Copilot agent, tests, and evaluations
         id: experiment
         continue-on-error: true
-        uses: devcontainers/ci@v0.3
+        uses: devcontainers/ci@v0.3.1900000450
         with:
           cacheFrom: ghcr.io/th3un1q3/edgent-smith
           env: |
@@ -167,7 +167,7 @@ jobs:
         id: promotion
         if: steps.experiment.outputs.status == 'candidate_ready'
         continue-on-error: true
-        uses: devcontainers/ci@v0.3
+        uses: devcontainers/ci@v0.3.1900000450
         with:
           cacheFrom: ghcr.io/th3un1q3/edgent-smith
           env: |
@@ -228,7 +228,7 @@ jobs:
       - name: Replenish auto-research queue
         id: replenish_queue
         if: always() && steps.queue_depth.outputs.queue_empty == 'true'
-        uses: devcontainers/ci@v0.3
+        uses: devcontainers/ci@v0.3.1900000450
         with:
           cacheFrom: ghcr.io/th3un1q3/edgent-smith
           env: |

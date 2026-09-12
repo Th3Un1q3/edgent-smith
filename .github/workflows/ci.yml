@@ -9,15 +9,19 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch: {}
+# Double trigger note: same-repo PRs fire both push (branch update) and pull_request;
+# concurrency group dedups overlapping runs on the same ref.
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   prebuild-devcontainer:
     name: Prebuild DevContainer Image
-    timeout-minutes: 8
+    # Skip fork PRs: GITHUB_TOKEN is read-only on forks and prebuild requires packages:write + push.
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    timeout-minutes: 12
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -36,6 +40,7 @@ jobs:
           fi
 
       - name: Login to GitHub Container Registry
+        if: github.event_name == 'push'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -47,13 +52,17 @@ jobs:
         with:
           imageName: ghcr.io/th3un1q3/edgent-smith
           cacheFrom: ghcr.io/th3un1q3/edgent-smith
-          push: always
+          push: ${{ github.event_name == 'push' && 'always' || 'never' }}
 
   ci:
     name: Format · Lint · Type-check · Tests · Workflow Security
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     needs: prebuild-devcontainer
+    if: always() && (needs.prebuild-devcontainer.result == 'success' || needs.prebuild-devcontainer.result == 'skipped')
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - uses: actions/checkout@v6
@@ -69,7 +78,9 @@ jobs:
 
       - name: Disable Compose infra profile for CI
         run: |
-          echo -n > .devcontainer/.env
+          # Truncate compose env (not root .env): disables infra profile services
+          # (mcp_gateway, jaeger, serena) for CI, mirrors local --fast.
+          : > .devcontainer/.env
 
       # Run everything inside the existing DevContainer – no separate Python setup.
       - uses: devcontainers/ci@v0.3.1900000450

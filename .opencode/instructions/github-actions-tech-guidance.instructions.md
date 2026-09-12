@@ -1,4 +1,5 @@
 ---
+name: github-actions-tech-guidance
 description: GitHub Actions guidance for DevContainers and action output variables.
 applyTo: ".github/workflows/**/*.yml"
 excludeAgents: "rug"

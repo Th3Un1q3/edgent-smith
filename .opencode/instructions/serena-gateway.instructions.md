@@ -1,7 +1,7 @@
 ---
 name: serena-gateway
 description: "Use when invoking Serena gateway chain (gateway_mcp-find, gateway_code-mode, gateway_mcp-exec), listing or reading memories via list_memories/read_memory, or falling back to filesystem .serena/memories."
-applyTo: ".agents/skills/serena-memory/**/*.md,.agents/skills/context-gathering/**/*.md,.serena/memories/**/*.md"
+applyTo: "{.agents/skills/serena-memory/**/*.md,.agents/skills/context-gathering/**/*.md,.serena/memories/**/*.md}"
 ---
 
 # Serena Gateway Health-Check

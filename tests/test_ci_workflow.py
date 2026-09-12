@@ -86,16 +86,21 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
         ),
     )
 
-    result = subprocess.run(
-        ["bash", str(REPO_ROOT / "scripts" / "ci.sh")],
-        cwd=tmp_path,
-        env={
-            **os.environ,
+    env = os.environ.copy()
+    env.pop("SKIP_MUTATION", None)
+    env.pop("CI_FAST", None)
+    env.update(
+        {
             "PATH": f"{fake_bin}:{os.environ['PATH']}",
             "CI_TEST_LOG": str(command_log),
             "CI_TEST_LINT_OUTPUT": lint_output,
             "CI_TEST_WORKFLOW_OUTPUT": workflow_output,
-        },
+        }
+    )
+    result = subprocess.run(
+        ["bash", str(REPO_ROOT / "scripts" / "ci.sh")],
+        cwd=tmp_path,
+        env=env,
         capture_output=True,
         text=True,
         check=False,

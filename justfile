@@ -34,6 +34,9 @@ typecheck:
     {{ MYPY }} {{ CHECK_PATHS }}
 
 # Run the CI check sequence with aggregated failure reporting.
+# 12 gates sequential, ~110s total incl ~92s mutation — tool timeout 180s recommended (default 120s marginal).
+# Fast path: SKIP_MUTATION=1 just ci or CI_FAST=1 just ci (~20s for local iteration).
+# Parity: remote PR CI runs `just ci` verbatim, keep scripts/ci.sh + .github/workflows/ci.yml in sync.
 ci:
     @bash scripts/ci.sh
 
@@ -100,4 +103,9 @@ verify-agents:
     grep -qE "^mod evals" justfile || { echo "FAIL: missing mod evals"; exit 1; }
     grep -qE "^mod scripts" justfile || { echo "FAIL: missing mod scripts"; exit 1; }
     echo "  justfile boundary OK"
+    echo "#9 Working-directory explicit (scoped justfiles)"
+    for jf in evals/justfile agent_utils/justfile cli/justfile docs/justfile agents/justfile scripts/justfile opencode/justfile; do grep -q 'set working-directory' "$jf" || { echo "FAIL: $jf missing set working-directory"; exit 1; }; done
+    echo "  working-directory OK (7 scoped justfiles)"
+    ! grep -Rq "[c]d .*&&" --include="justfile" . 2>/dev/null || { echo "FAIL: found workdir violation (c[d] &&) in justfile, use workdir param instead"; exit 1; }
+    echo "  no workdir violations in justfiles OK"
     echo "── verify-agents: PASS ──"

@@ -1,4 +1,5 @@
 ---
+name: test-run-commands
 description: Instructs on how to run quality checks.
 applyTo: ".opencode/**/*.{ts,js,json}"
 excludeAgents: "rug"

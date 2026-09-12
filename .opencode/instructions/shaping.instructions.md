@@ -1,7 +1,7 @@
 ---
 name: shaping
 description: "Enforce modular-skill shaping budgets and audits. Use when editing any SKILL.md, workflow, or reference file."
-applyTo: ".agents/skills/**/SKILL.md,.agents/skills/**/workflows/**/*.md,.agents/skills/**/references/**/*.md,.agents/skills/**/recipes/**/*.md"
+applyTo: "{.agents/skills/**/SKILL.md,.agents/skills/**/workflows/**/*.md,.agents/skills/**/references/**/*.md,.agents/skills/**/recipes/**/*.md}"
 ---
 
 # Shaping Gate

@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+# scripts/ci.sh — local CI gate runner (12 gates, sequential).
+# Gates (order matters):
+#  1) verify-agents  2) format-check  3) lint  4) markdownlint  5) typecheck  6) test
+#  7) workflow-security  8) opencode-deps  9) opencode-test  10) opencode-lint
+# 11) opencode-typecheck  12) opencode-mutation (~92s dominant, ~110s total)
+# Parity: remote PR CI runs `just ci` verbatim; keep this script, the `ci` justfile
+# recipe, and .github/workflows/ci.yml in sync. The 12 gates must stay aligned with
+# the harness.config.ts 7-gate subset (superset here).
+# Fast path: SKIP_MUTATION=1 (or CI_FAST=1 alias) skips gate 12 — prints
+# "→ SKIP opencode-mutation (SKIP_MUTATION=1)", counts as pass in Gate Summary,
+# ~20s local iteration.
+# Timeout: opencode-mutation is wrapped with `timeout 180` when GNU timeout is
+# available; workflow-level timeouts are 12/20 min.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -59,7 +72,16 @@ run_check opencode-deps just .opencode/deps
 run_check opencode-test just .opencode/test --coverage
 run_check opencode-lint just .opencode/lint
 run_check opencode-typecheck just .opencode/typecheck
-run_check opencode-mutation just .opencode/mutation
+if [[ "${SKIP_MUTATION:-0}" == "1" || "${CI_FAST:-0}" == "1" ]]; then
+  echo "→ SKIP opencode-mutation (SKIP_MUTATION=1)"
+  printf pass >"$results_dir/opencode-mutation"
+else
+  _ci_mutation_cmd=(just .opencode/mutation)
+  if command -v timeout >/dev/null 2>&1; then
+    _ci_mutation_cmd=(timeout 180 just .opencode/mutation)
+  fi
+  run_check opencode-mutation "${_ci_mutation_cmd[@]}"
+fi
 
 echo ""
 echo "─── Gate Summary ───"
