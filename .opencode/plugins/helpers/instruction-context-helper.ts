@@ -2,7 +2,9 @@ import { InstructionMeta, ResolvedInstruction } from '../types/instructions'
 
 // Re-export for convenience (tests import these from this module)
 
-/** Options passed to the helper constructor. */
+/**
+Options passed to the helper constructor.
+*/
 export interface InstructionContextHelperOptions {
   indexerFactory: () => Promise<{
     forFiles(filePaths: string[]): Promise<InstructionMeta[]>
@@ -10,7 +12,9 @@ export interface InstructionContextHelperOptions {
   }>
 }
 
-/** Count non-wildcard literal segments in a glob pattern. */
+/**
+Count non-wildcard literal segments in a glob pattern.
+*/
 function calcSpecificity(applyTo: string): number {
   const segments = applyTo.split('/')
   return segments.reduce((score, seg) => {
@@ -29,7 +33,9 @@ export class InstructionContextHelper {
     this.indexerFactory = options.indexerFactory
   }
 
-  /** Resolve ALL matching instructions with full bodies loaded for every one of them. */
+  /**
+  Resolve ALL matching instructions with full bodies loaded for every one of them.
+  */
   async resolveInstructions(filePaths: string[]): Promise<ResolvedInstruction[]> {
     if (filePaths.length === 0) return []
 

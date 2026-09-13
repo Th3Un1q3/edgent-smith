@@ -101,7 +101,7 @@ async function loadSkillFiles(
     await log(client, 'debug', 'skills array is empty — nothing to load')
   }
 
-  if (!Array.isArray(skills) || skills.length === 0 || !directory) {
+  if (!directory || !Array.isArray(skills) || skills.length === 0) {
     return { resolved, unresolved }
   }
 

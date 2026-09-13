@@ -46,7 +46,9 @@ const chatMessageHook = (p: Awaited<ReturnType<typeof skillsLoaderPlugin>>) => p
 const envelopeTag = (key: string): string =>
   `<envelope id="${key}" description="${ENVELOPE_DESCRIPTION}"/>`
 
-/** Constant description used by the plugin's envelope tag. */
+/**
+Constant description used by the plugin's envelope tag.
+*/
 const ENVELOPE_DESCRIPTION = 'Subtask will see complete description of skills where this placeholder is.'
 
 /**
@@ -58,10 +60,14 @@ const makeLsShellMock = (exitCode: number, stdout: string): ReturnType<typeof vi
     cwd: () => ({ nothrow: () => ({ quiet: vi.fn().mockResolvedValue({ exitCode, stdout: Buffer.from(stdout), stderr: Buffer.from('') }) }) }),
   })
 
-/** Extracts the envelope key from the injected envelope tag; '' when absent. */
+/**
+Extracts the envelope key from the injected envelope tag; '' when absent.
+*/
 const envelopeKeyFromPrompt = (prompt: string): string => prompt.match(/<envelope\s+id="([^"]+)"/)?.[1] ?? ''
 
-/** Resolves the envelope whose tag is embedded in prompt. */
+/**
+Resolves the envelope whose tag is embedded in prompt.
+*/
 const resolvePayloadFromPrompt = async (prompt: string): Promise<string | undefined> => resolveEnvelope(envelopeKeyFromPrompt(prompt))
 
 /**

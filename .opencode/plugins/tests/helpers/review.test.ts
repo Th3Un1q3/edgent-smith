@@ -308,7 +308,7 @@ describe('renderProblemsMarkdown', () => {
     // each heading is immediately followed by its id comment line
     const idValues = ids.map(id => id.replaceAll(/^<!-- problem-id: | -->$/g, ''))
     for (const [index, heading] of headings.entries()) {
-      const [source, thresholdName] = heading.replace(/^## /, '').split(': ')
+      const [source, thresholdName] = heading.replace(/^## /, '').split(': ', 2)
       expect(idValues[index]).toBe(`${source}:${thresholdName}`)
     }
   })

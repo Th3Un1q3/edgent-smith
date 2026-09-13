@@ -48,10 +48,14 @@ import { harnessConfig } from './config/harness.config'
 
 // ── Module-level constants ───────────────────────────────────────────────────
 
-/** Session storage namespace key per Rule 1 of opencode-plugin-interfaces.instructions.md */
+/**
+Session storage namespace key per Rule 1 of opencode-plugin-interfaces.instructions.md
+*/
 const NAMESPACE = 'skillUsageTracker'
 
-/** Fallback thresholds when config section is absent from harness.config.ts */
+/**
+Fallback thresholds when config section is absent from harness.config.ts
+*/
 const DEFAULT_THRESHOLDS: Record<string, number> = {}
 
 // ── State model ──────────────────────────────────────────────────────────────

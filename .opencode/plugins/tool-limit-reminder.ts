@@ -26,10 +26,14 @@ interface ToolExecuteBeforeInput {
 
 // ── Config loading (real plumbing — reads harness.config.ts section) ─────────
 
-/** Fallback constants when the 'tool-limit-reminder' section is absent from harness.config.ts */
+/**
+Fallback constants when the 'tool-limit-reminder' section is absent from harness.config.ts
+*/
 const DEFAULT_BUDGET_FACTOR = 0.8
 
-/** 2 extra calls beyond the threshold to account for the current call still being in-flight */
+/**
+2 extra calls beyond the threshold to account for the current call still being in-flight
+*/
 const DEFAULT_PADDING_TILL_ERROR = 2
 
 /**

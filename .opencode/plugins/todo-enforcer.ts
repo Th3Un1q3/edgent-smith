@@ -7,7 +7,9 @@ import { harnessConfig } from './config/harness.config'
 
 const PLUGIN_ID = 'todo-enforcer'
 
-/** Consecutive technical errors tolerated before the todo follow-up loop is broken for a session. */
+/**
+Consecutive technical errors tolerated before the todo follow-up loop is broken for a session.
+*/
 const DEFAULT_MAX_FOLLOWUP_ERRORS = 3
 
 /**
@@ -40,7 +42,9 @@ const TODO_STATUS_SYMBOLS: Record<Todo['status'], string> = {
 
 const todoLineToPrettyString = (todo: Todo) => `${TODO_STATUS_SYMBOLS[todo.status]} ${todo.content}`
 
-/** Build the todo continuation message for pending/in-progress todos. */
+/**
+Build the todo continuation message for pending/in-progress todos.
+*/
 function buildTodoContinuationMessage(todos: Array<Todo>): string {
   return `<steering priority="high" reason="incomplete todos remain" type="todo">
 There are incomplete todos:
@@ -58,21 +62,29 @@ Proceed with the following steps:
 `
 }
 
-/** The event object received by the plugin 'event' hook, as typed by the SDK. */
+/**
+The event object received by the plugin 'event' hook, as typed by the SDK.
+*/
 type PluginEvent = Parameters<NonNullable<Awaited<ReturnType<Plugin>>['event']>>[0]['event']
 
-/** True when the call targets the task tool for a session that enforces todos. */
+/**
+True when the call targets the task tool for a session that enforces todos.
+*/
 const isEnforcedTaskToolCall = (input: { sessionID?: string, tool: string }): input is { sessionID: string, tool: 'task' } => {
   if (!input.sessionID) return false
   if (input.tool === TODO_TOOL_NAME) return false
   return input.tool === 'task'
 }
 
-/** True when the task call is agent/command-driven, which bypasses the todo requirement. */
+/**
+True when the task call is agent/command-driven, which bypasses the todo requirement.
+*/
 const hasCommandArgument = (output: { args?: Record<string, unknown> } | undefined): boolean =>
   Boolean(output?.args?.command)
 
-/** True only for session.idle events that carry a sessionID. */
+/**
+True only for session.idle events that carry a sessionID.
+*/
 const isSessionIdleEvent = (event: PluginEvent): event is Extract<PluginEvent, { type: 'session.idle' }> =>
   event.type === 'session.idle' && Boolean(event.properties.sessionID)
 
@@ -109,7 +121,9 @@ export const todoEnforcer: Plugin = async ({ client }) => {
     }))
   }
 
-  /** True when the agent already called todowrite after its last message (recent enough todo usage). */
+  /**
+  True when the agent already called todowrite after its last message (recent enough todo usage).
+  */
   const hasUsedTodoToolRecently = (sessionId: string): boolean =>
     sessionStorage.readState(sessionId, (state) => {
       if (!Object.hasOwn(state, SESSION_FIELDS.toolCalls)) return false
@@ -153,7 +167,9 @@ export const todoEnforcer: Plugin = async ({ client }) => {
     incrementFollowUpErrorCount(properties.sessionID)
   }
 
-  /** Schedule the follow-up send for an idle session that still has pending todos. */
+  /**
+  Schedule the follow-up send for an idle session that still has pending todos.
+  */
   const handleSessionIdle = async (event: Extract<PluginEvent, { type: 'session.idle' }>): Promise<void> => {
     const todos = await extractTodos(event.properties.sessionID)
     const remainingTodos = todos.filter(todo => ['pending', 'in_progress'].includes(todo.status))

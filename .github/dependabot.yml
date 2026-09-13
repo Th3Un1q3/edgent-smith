@@ -43,6 +43,22 @@ updates:
     ignore:
       - dependency-name: "typescript"
         versions: [">=7.0.0"]
+      # Compatibility hold: Stryker 10 vitest-runner joins suite names with ' '
+      # (collectTestName/test-helpers.js) while Vitest 5 matches testNamePattern
+      # against ' > '-joined full names (https://vitest.dev/guide/migration) —
+      # multi-segment describe names never match, so scoped trial on
+      # plugins/session-tracker.ts scored covered 0.00 with 0/55 killed.
+      # Stryker runner docs note coverageAnalysis is always perTest
+      # (https://stryker-mutator.io/docs/stryker-js/configuration/#coverage-analysis).
+      # TODO: remove once upstream ships Vitest 5 support in @stryker-mutator/vitest-runner.
+      - dependency-name: "@stryker-mutator/core"
+        versions: [">=10"]
+      - dependency-name: "@stryker-mutator/vitest-runner"
+        versions: [">=10"]
+      - dependency-name: "vitest"
+        versions: [">=5"]
+      - dependency-name: "@vitest/coverage-istanbul"
+        versions: [">=5"]
 
   - package-ecosystem: "npm"
     directory: "/docs"

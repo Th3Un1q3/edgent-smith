@@ -2,7 +2,9 @@ import type { State } from '@plugins/helpers/kv-store'
 
 type InMemoryState = Record<string, State>
 
-/** Shared mutable state container for mock. Properties are reassigned, not the container itself. */
+/**
+Shared mutable state container for mock. Properties are reassigned, not the container itself.
+*/
 export const mockState: {
   inMemory: InMemoryState
   readState: ReturnType<typeof vi.fn> | undefined
@@ -30,13 +32,17 @@ export function resetMockState(initialState: InMemoryState = {}): void {
   })
 }
 
-/** Instance members of each `MockSessionStorage` instance. */
+/**
+Instance members of each `MockSessionStorage` instance.
+*/
 interface MockSessionStorageInstance {
   readState: ReturnType<typeof vi.fn>
   updateState: ReturnType<typeof vi.fn>
 }
 
-/** Factory for kv-store vi.mock — creates fresh mocks inline, returns both the module object and direct mock references. */
+/**
+Factory for kv-store vi.mock — creates fresh mocks inline, returns both the module object and direct mock references.
+*/
 export function makeKvStoreMockFactory(): {
   SessionStorage: { new(): MockSessionStorageInstance, prototype: MockSessionStorageInstance }
   FileSystemSessionStorageAdapter: { new(_basePath?: string): object }

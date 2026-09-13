@@ -21,7 +21,9 @@ type AfkEnforcerOptions = { flagPath?: string } & PluginOptions
  */
 type PermissionAskedProperties = { id: string, sessionID: string }
 
-/** Returns the request/session ids when `event` is a well-formed `permission.asked`. */
+/**
+Returns the request/session ids when `event` is a well-formed `permission.asked`.
+*/
 const readPermissionAsked = (event: Event): PermissionAskedProperties | undefined => {
   const candidate = event as unknown as { type?: string, properties?: Partial<PermissionAskedProperties> }
   if (candidate.type !== 'permission.asked') return undefined
@@ -36,7 +38,7 @@ export const afkEnforcer: Plugin = async ({ client, directory }, options?) => {
 
   await log(client, 'info', 'initialized', PLUGIN_ID)
 
-  const checkAfk = async (): Promise<boolean> => {
+  const isAfkActive = async (): Promise<boolean> => {
     try {
       await access(resolvedFlagPath)
       return true
@@ -51,7 +53,7 @@ export const afkEnforcer: Plugin = async ({ client, directory }, options?) => {
       const asked = readPermissionAsked(event)
       if (!asked) return
 
-      const isAfk = await checkAfk()
+      const isAfk = await isAfkActive()
       if (!isAfk) return
 
       const { id: requestID, sessionID } = asked

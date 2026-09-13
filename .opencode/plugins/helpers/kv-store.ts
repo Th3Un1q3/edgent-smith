@@ -1,6 +1,8 @@
 import * as fs from 'node:fs'
 
-/** Session state persisted at .opencode/plugins/sessions/{sessionId}.json */
+/**
+Session state persisted at .opencode/plugins/sessions/{sessionId}.json
+*/
 export type State = Record<string, unknown>
 
 export enum SESSION_FIELDS {

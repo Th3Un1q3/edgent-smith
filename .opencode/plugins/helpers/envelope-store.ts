@@ -28,10 +28,14 @@ export interface Envelope {
   metadata: EnvelopeMetadata
 }
 
-/** Envelopes older than this are pruned on create to bound store growth. */
+/**
+Envelopes older than this are pruned on create to bound store growth.
+*/
 export const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000
 
-/** Module-scope store shared across sessions in the same opencode server process. */
+/**
+Module-scope store shared across sessions in the same opencode server process.
+*/
 const envelopes = new Map<string, Envelope>()
 
 /**
@@ -85,12 +89,16 @@ export async function pruneStaleEnvelopes(maxAgeMs: number = DEFAULT_TTL_MS): Pr
   return removed
 }
 
-/** Test-only: clears the module-scope store so tests run in isolation. */
+/**
+Test-only: clears the module-scope store so tests run in isolation.
+*/
 export function __resetStoreForTests(): void {
   envelopes.clear()
 }
 
-/** Test-only: returns a stored envelope so tests can inspect stored metadata. */
+/**
+Test-only: returns a stored envelope so tests can inspect stored metadata.
+*/
 export function __peekEnvelopeForTests(key: string): Envelope | undefined {
   return envelopes.get(key)
 }

@@ -66,7 +66,9 @@ interface PluginFixture {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-/** Builds a plugin; the file's only casts live here so test bodies stay cast-free. */
+/**
+Builds a plugin; the file's only casts live here so test bodies stay cast-free.
+*/
 const makePlugin = async (options: {
   agent?: string
   agents?: Array<{ name: string, steps?: number }>
@@ -88,7 +90,9 @@ const makeChatOutput = (parts: ChatPart[]): ChatMessageOutput => ({
 const getState = (sessionID: string): Record<string, unknown> =>
   new SessionStorage().readState(sessionID, s => s as Record<string, unknown>) ?? {}
 
-/** Builds a $ shell mock whose export command resolves with the given exit code. */
+/**
+Builds a $ shell mock whose export command resolves with the given exit code.
+*/
 const makeExportShellMock = (exitCode: number) =>
   vi.fn().mockReturnValue({
     nothrow: () => ({ quiet: vi.fn().mockResolvedValue({ exitCode }) }),
