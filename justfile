@@ -34,11 +34,16 @@ typecheck:
     {{ MYPY }} {{ CHECK_PATHS }}
 
 # Run the CI check sequence with aggregated failure reporting.
-# 12 gates sequential, ~110s total incl ~92s mutation — tool timeout 300s (MUTATION_TIMEOUT env, default 300s).
+# 13 gates sequential (Gate #0 verify-thresholds + 12), ~110s total incl ~92s mutation — tool timeout 300s (MUTATION_TIMEOUT env, default 300s).
 # Fast path: SKIP_MUTATION=1 just ci or CI_FAST=1 just ci (~20s for local iteration).
 # Parity: remote PR CI runs `just ci` verbatim, keep scripts/ci.sh + .github/workflows/ci.yml in sync.
 ci:
     @bash scripts/ci.sh
+
+# Fast CI without mutation (~20s) — for docs/yml/justfile-only changes; full `just ci` (~110s) only for .opencode/**/*.ts.
+# Opt-in full mutation: MUTATION=1 just ci or manually run `just .opencode/mutation`.
+ci-fast:
+    @SKIP_MUTATION=1 bash scripts/ci.sh
 
 # Fix formatting and lint issues where supported.
 format:
@@ -65,6 +70,8 @@ oc *ARGS:
 verify-agents:
     #!/usr/bin/env bash
     set -euo pipefail
+    echo "── Gate #0 verify-thresholds (fail-closed pin) ──"
+    bash scripts/verify_thresholds.sh
     echo "── verify-agents: 8 grep gates from AGENTS.md VALIDATION ──"
     echo "#1 System A (harness-free runtime)"
     grep -R "pydantic-ai" pyproject.toml && ls agents/edge.py config.py
@@ -80,8 +87,8 @@ verify-agents:
     ls mcp/catalog.yaml && grep -c "  type:" mcp/catalog.yaml && echo "mcp catalog OK"
     echo "#7 Skill marketplace"
     count=$(ls .agents/skills/ | wc -l); echo "skills: $count"; test "$count" -ge 1
-    echo "#8 Justfile boundary (root is 10 globals + mods only)"
-    allowed="test lint typecheck ci format format-check clean verify-agents oc oc-log"
+    echo "#8 Justfile boundary (root is 11 globals + mods only)"
+    allowed="test lint typecheck ci ci-fast format format-check clean verify-agents oc oc-log"
     allowed_count=$(echo "$allowed" | wc -w)
     # count recipes in root justfile (lines starting with recipe name + colon)
     actual_recipes=$(grep -E "^[a-z][a-z0-9_-]*.*:" justfile | grep -v ":=" | sed -E 's/^([a-z][a-z0-9_-]*).*/\1/' | sort)

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+echo "pre-push: verify-agents + ci-fast"
+just verify-agents
+just ci-fast

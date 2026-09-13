@@ -108,7 +108,9 @@ The system is architected around high-centrality components in the following mod
 
 - **Python 3.13**: Uses modern type annotations (`from __future__ import annotations`) and standard library features.
 - **Click Architecture**: Strict separation between command routing (`cli/main.py`), logic (`commands/*.py`), and services (`services/*.py`).
-- **Task Runner**: Root `justfile` is global quality gates only (`test`, `lint`, `typecheck`, `format`, `format-check`, `ci`, `clean`, `verify-agents`) + `mod` imports; scoped recipes live in `evals/`, `scripts/`, `docs/`, `agents/`, `cli/`, `agent_utils/`, `opencode/` and run as `just <module>::<recipe>` (e.g., `just evals::eval`). Do not add domain recipes to root — see `.opencode/instructions/justfiles.instructions.md:0`.
+- **Task Runner**: Root `justfile` is global quality gates only (`test`, `lint`, `typecheck`, `format`, `format-check`, `ci`, `ci-fast`, `clean`, `verify-agents`) + `mod` imports; scoped recipes live in `evals/`, `scripts/`, `docs/`, `agents/`, `cli/`, `agent_utils/`, `opencode/` and run as `just <module>::<recipe>` (e.g., `just evals::eval`). Do not add domain recipes to root — see `.opencode/instructions/justfiles.instructions.md:0`.
+- **CI Fast Path**: `just ci` runs 12 gates (~110s incl ~92s mutation, timeout 300s). For `*.md`/`*.yml`/`justfile` docs-only changes use `just ci-fast` or `SKIP_MUTATION=1 just ci` (~20s); mutation only matters for `.opencode/**/*.ts`. Remote PR CI runs `just ci` verbatim — keep `scripts/ci.sh` and `.github/workflows/ci.yml` in sync. Env `MUTATION_TIMEOUT=300` wraps `timeout` gate 12; `MUTATION=1` opts into full run.
+- **Pre-check Gate**: Before any `justfile` or `*/justfile` edit run `just verify-agents` (<2s) — enforces root 11 globals + 7 mods, `set working-directory := ".."` + `--cwd` instead of `cd &&` (`grep "[c]d .*&&"`), and `mkdir -p scripts/conductor` with `scripts/conductor/.gitkeep` tracked.
 - **Environment Management**: Heavy reliance on DevContainers for consistent execution across local and CI environments.
 - **Serena Gateway:** Snapshot 2 KB before every `gateway_mcp-exec`; on empty `content:[]` fall back immediately to `bash cat .serena/memories/<id>.md` with 0 retries; every `list_memories` must be followed by `read_memory` before responding — see `.opencode/instructions/serena-gateway.instructions.md`.
 
@@ -135,7 +137,8 @@ just lint                 # Static analysis and formatting checks
 just format               # Code auto-formatting (Ruff)
 just typecheck            # Python type checking (Mypy/Pyright)
 just ci                  # CI sequence (includes verify-agents boundary check)
-just verify-agents       # Verify AGENTS.md gates + justfile boundary (root only 10 globals + 7 mods)
+just ci-fast             # Fast CI without mutation (~20s) — SKIP_MUTATION=1
+just verify-agents       # Verify AGENTS.md gates + justfile boundary (root only 11 globals + 7 mods)
 
 # Scoped modules — invoke via just <module>::<recipe>
 just evals::eval                    # eval workflows (smoke/CI/baselines)
@@ -208,6 +211,8 @@ just --list                # List root globals; scoped modules appear as `evals 
 Verify AGENTS.md topology stays in sync with the repo. Run these grep gates from `/workspace`:
 
 ```bash
+# 0. Thresholds (fail-closed pin) — Stryker break 72, vitest 90, harness 85, strict, no SKIP_MUTATION/break:null/try:true
+bash scripts/verify_thresholds.sh
 # 1. System A exists (harness-free runtime)
 grep -R "pydantic-ai" pyproject.toml && ls agents/edge.py config.py
 # 2. System B exists (harness-native DSH)
@@ -222,6 +227,6 @@ ls scripts/conductor/
 ls mcp/catalog.yaml && grep -c "  type:" mcp/catalog.yaml
 # 7. Skill marketplace count
 ls .agents/skills/ | wc -l
-# 8. Justfile boundary (root is 10 globals + 7 mods only)
+# 8. Justfile boundary (root is 11 globals + 7 mods only)
 just verify-agents
 ```

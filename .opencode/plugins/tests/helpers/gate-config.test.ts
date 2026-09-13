@@ -48,8 +48,51 @@ describe('loadQualityGates()', () => {
       configOverride.value = { plugins: {} }
     })
 
-    it('returns no gates', () => {
-      expect(loadQualityGates().gates).toEqual([])
+    it('throws fail-closed when section is missing', () => {
+      expect(() => loadQualityGates()).toThrow(/expected >=7 gates, got 0/)
+    })
+
+    it('throws with Fix source, not config hint', () => {
+      expect(() => loadQualityGates()).toThrow(/Fix source, not config/)
+    })
+  })
+
+  describe('when the harness config has an empty gates array', () => {
+    beforeEach(() => {
+      configOverride.value = { plugins: { 'quality-gate-enforcer': { gates: [] } } }
+    })
+
+    it('throws fail-closed on empty gates', () => {
+      expect(() => loadQualityGates()).toThrow(/expected >=7 gates, got 0/)
+    })
+  })
+
+  describe('when the harness config has fewer than 7 gates', () => {
+    beforeEach(() => {
+      configOverride.value = {
+        plugins: {
+          'quality-gate-enforcer': {
+            gates: Array.from({ length: 6 }, (_, index) => ({
+              name: `gate-${index}`,
+              patterns: ['**/*.ts'],
+              commands: ['echo hi'],
+            })),
+          },
+        },
+      }
+    })
+
+    it('throws fail-closed on 6 gates', () => {
+      expect(() => loadQualityGates()).toThrow(/expected >=7 gates, got 6/)
+    })
+  })
+
+  describe('when gates are valid but debounceMs is missing', () => {
+    beforeEach(() => {
+      const liveGates = harnessConfig.plugins['quality-gate-enforcer'].gates
+      configOverride.value = {
+        plugins: { 'quality-gate-enforcer': { gates: liveGates } },
+      }
     })
 
     it('falls back to the default 300ms debounce', () => {

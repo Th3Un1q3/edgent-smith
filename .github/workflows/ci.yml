@@ -82,6 +82,9 @@ jobs:
           # (mcp_gateway, jaeger, serena) for CI, mirrors local --fast.
           : > .devcontainer/.env
 
+      - name: Guard — no gate sweeps (parity with verify_thresholds.sh)
+        run: bash scripts/verify_thresholds.sh
+
       # Run everything inside the existing DevContainer – no separate Python setup.
       - uses: devcontainers/ci@v0.3.1900000450
         with:

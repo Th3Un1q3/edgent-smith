@@ -48,11 +48,8 @@ max-complexity = 10
 python_version = "3.13"
 strict = true
 explicit_package_bases = true
+mypy_path = "stubs"
 exclude = ["tests/"]
-
-[[tool.mypy.overrides]]
-module = "zstandard"
-ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

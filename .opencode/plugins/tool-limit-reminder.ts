@@ -1,6 +1,7 @@
 import { log } from './helpers/logger'
 import { sendMessage } from './helpers/session-helpers'
 import type { Plugin } from '@opencode-ai/plugin'
+import type { ExportResult } from './helpers/types'
 
 import { SessionStorage, SESSION_FIELDS } from './helpers/kv-store'
 import { fetchAgentList, getSessionAgent, getAgentSteps, AgentInfo } from './helpers/agent-steps'
@@ -92,24 +93,26 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
   const sessionStorage = new SessionStorage()
 
   /**
-    * Triggers an export of the session using the shell helper.
-    * Runs `just agent_utils/export-opencode-session <sessionId>` from workspace root.
-    * Returns true when the export command exits 0, false otherwise (failures are logged).
-    */
-  const triggerExport = async (sessionId: string): Promise<boolean> => {
+     * Triggers an export of the session using the shell helper.
+     * Runs `just agent_utils/export-opencode-session <sessionId>` from workspace root.
+     * Returns ExportResult with isSuccessful/isComplete and exitCode (failures are logged).
+     */
+  const exportSession = async (sessionId: string): Promise<ExportResult> => {
     try {
       const result = await ($`just agent_utils/export-opencode-session ${sessionId}`).nothrow().quiet()
-      if (result.exitCode !== 0) {
-        void log(client, 'error', `failed to trigger export for session ${sessionId}: exit code ${result.exitCode}`, 'tool-limit-reminder')
-        return false
+      const isSuccessful = result.exitCode === 0
+      if (isSuccessful) {
+        void log(client, 'info', `export completed for session ${sessionId} (exit code ${result.exitCode})`, 'tool-limit-reminder')
       }
-      void log(client, 'info', `export completed for session ${sessionId} (exit code ${result.exitCode})`, 'tool-limit-reminder')
-      return true
+      else {
+        void log(client, 'error', `failed to trigger export for session ${sessionId}: exit code ${result.exitCode}`, 'tool-limit-reminder')
+      }
+      return { isSuccessful, isComplete: true, exitCode: result.exitCode }
     }
     catch (error: unknown) {
       const errorString = (error as Error)?.message ?? String(error)
       void log(client, 'error', `failed to trigger export for session ${sessionId}: ${errorString}`, 'tool-limit-reminder')
-      return false
+      return { isSuccessful: false, isComplete: false, exitCode: -1 }
     }
   }
 
@@ -133,15 +136,15 @@ export const toolLimitReminder: Plugin = async ({ client, $ }) => {
         state => state[SESSION_FIELDS.needsReview] === true,
       )
 
-      if (problems.length === 0 && !hasReviewFlag) {
+      if (!hasReviewFlag && problems.length === 0) {
         return // Nothing to review; no export needed
       }
 
       await log(client, 'info', `session ${idleSessionId} idle with review state — triggering export`, 'tool-limit-reminder')
 
-      const exported = await triggerExport(idleSessionId)
+      const result = await exportSession(idleSessionId)
 
-      if (!exported) {
+      if (!result.isSuccessful) {
         // Keep the review state so the next session.idle retries the export.
         await log(client, 'error', `export failed for session ${idleSessionId} — review state retained for retry`, 'tool-limit-reminder')
         return

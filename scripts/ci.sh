@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# scripts/ci.sh — local CI gate runner (12 gates, sequential).
+# scripts/ci.sh — local CI gate runner (13 gates, sequential).
 # Gates (order matters):
-#  1) verify-agents  2) format-check  3) lint  4) markdownlint  5) typecheck  6) test
+#  0) verify-thresholds  1) verify-agents  2) format-check  3) lint  4) markdownlint  5) typecheck  6) test
 #  7) workflow-security  8) opencode-deps  9) opencode-test  10) opencode-lint
 # 11) opencode-typecheck  12) opencode-mutation (~92s dominant, ~110s total)
 # Parity: remote PR CI runs `just ci` verbatim; keep this script, the `ci` justfile
-# recipe, and .github/workflows/ci.yml in sync. The 12 gates must stay aligned with
+# recipe, and .github/workflows/ci.yml in sync. The 13 gates must stay aligned with
 # the harness.config.ts 7-gate subset (superset here).
 # Fast path: SKIP_MUTATION=1 (or CI_FAST=1 alias) skips gate 12 — prints
 # "→ SKIP opencode-mutation (SKIP_MUTATION=1)", counts as pass in Gate Summary,
@@ -61,6 +61,7 @@ run_check() {
   rm -f "$output_file"
 }
 
+run_check verify-thresholds bash scripts/verify_thresholds.sh
 run_check verify-agents just verify-agents
 run_check format-check just format-check
 run_check lint just lint
@@ -72,7 +73,14 @@ run_check opencode-deps just .opencode/deps
 run_check opencode-test just .opencode/test --coverage
 run_check opencode-lint just .opencode/lint
 run_check opencode-typecheck just .opencode/typecheck
-if [[ "${SKIP_MUTATION:-0}" == "1" || "${CI_FAST:-0}" == "1" ]]; then
+if [[ "${MUTATION:-0}" == "1" ]]; then
+  _ci_mutation_timeout="${MUTATION_TIMEOUT:-300}"
+  _ci_mutation_cmd=(just .opencode/mutation)
+  if command -v timeout >/dev/null 2>&1; then
+    _ci_mutation_cmd=(timeout "${_ci_mutation_timeout}" just .opencode/mutation)
+  fi
+  run_check opencode-mutation "${_ci_mutation_cmd[@]}"
+elif [[ "${SKIP_MUTATION:-0}" == "1" || "${CI_FAST:-0}" == "1" ]]; then
   echo "→ SKIP opencode-mutation (SKIP_MUTATION=1)"
   printf pass >"$results_dir/opencode-mutation"
 else

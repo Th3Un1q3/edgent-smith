@@ -11,9 +11,9 @@ Use `justfile` as the canonical source for project commands, not as a place for 
 
 ## 0. Module boundary — root is global gates only (enforced)
 
-Root `justfile` owns exactly 8 global quality gates plus `mod` imports. No scoped recipe belongs in root. Every domain recipe lives in its module directory and runs as `just <module>::<recipe>`.
+Root `justfile` owns exactly 11 global quality gates plus `mod` imports. No scoped recipe belongs in root. Every domain recipe lives in its module directory and runs as `just <module>::<recipe>`.
 
-- **Root allows only:** `test`, `lint`, `typecheck`, `format`, `format-check`, `ci`, `clean`, `verify-agents` + `mod` imports. No other recipe in root.
+- **Root allows only:** `test`, `lint`, `typecheck`, `ci`, `ci-fast`, `format`, `format-check`, `clean`, `verify-agents`, `oc`, `oc-log` (11 globals) + `mod` imports. No other recipe in root.
 - **Mods imported by root:** `mod? agent_utils`, `mod evals`, `mod scripts`, `mod docs`, `mod agents`, `mod cli`, `mod opencode` (`opencode/justfile` → `.opencode/justfile` symlink; fallback `just --justfile .opencode/justfile <recipe>`).
 - **Scoped ownership (invoke as `just <module>::<recipe>`):**
 
@@ -30,6 +30,23 @@ Root `justfile` owns exactly 8 global quality gates plus `mod` imports. No scope
 - **Rule — do not add to root:** Do not add a new recipe to root `justfile` unless it is a global quality gate with zero domain dependencies (`test`, `lint`, `typecheck`, `format`, `format-check`, `ci`, `clean`, `verify-agents`). For any domain-specific work, create or update the scoped `justfile` in that module directory, add the recipe there, and ensure root imports it via `mod <module>` or `mod? <module>`. If the module has no `justfile` yet, create one with `set shell := ["bash", "-euo", "pipefail", "-c"]`, `set dotenv-load := true`, `set export := true`, `set working-directory := ".."` (when recipes reference repo root).
 - **Enforcement — CI gate:** `just verify-agents` verifies the boundary (in addition to its 7 topology gates). It checks that root `justfile` contains only the 8 globals plus `mod` lines and that no scoped recipe (e.g., `eval`, `run-experiment`, `lint`, `edge-agent`, `autoresearch`) appears in root. CI (`just ci` → `scripts/ci.sh`) runs this gate. Fix a violation by moving the recipe to its scoped file and re-running `just verify-agents`.
 - **Invocation:** From repo root, run `just <module>::<recipe>` (e.g., `just evals::local`, `just scripts::watch-worker`). Run `just --list` to see globals; scoped modules appear as `agent_utils ...`, `agents ...`, etc. — expand with `just --unstable --list` or read the module `justfile` directly.
+
+## 0.1 Pre-check — run `just verify-agents` before editing justfiles (P0)
+
+Before any `justfile` or `*/justfile` or `.github/workflows/*.yml` edit that touches `just` invocation:
+
+1. Run `just verify-agents` (<2s). Require `── verify-agents: PASS ──` before committing. It checks 9 gates including justfile boundary and working-directory.
+2. Enforce root boundary: exactly 11 globals (`test lint typecheck ci ci-fast format format-check clean verify-agents oc oc-log`) + 7 `mod` imports (`agent_utils evals scripts docs agents cli opencode`). Do not add domain recipes to root — move them to scoped `justfile` and invoke as `just <module>::<recipe>`. Gate fails if count drifts — fix by moving recipe.
+3. Scoped justfiles must declare scope: add at top `set working-directory := ".."` (gate 9 requires 7 scoped files) and invoke with `--cwd` instead of `cd &&`. Example diff for `docs/justfile`:
+   ```diff
+   +set working-directory := ".."
+     lint:
+   -  cd docs && bun run lint
+   +  bun run lint --cwd docs
+   ```
+4. Never use `cd <dir> &&` in a `justfile` recipe — use `working-directory` + `--cwd` or `workdir` param. Detect with self-match `grep "[c]d .*&&" --include="justfile"` (bracket avoids self-match on the grep line when copied into a gate).
+5. Ensure `scripts/conductor/` exists: gate 5 runs `mkdir -p scripts/conductor && ls -la scripts/conductor/`. Keep `scripts/conductor/.gitkeep` tracked (`git ls-files scripts/conductor/.gitkeep`) so clean clones pass.
+6. Pre-commit checklist — run `just verify-agents && just docs::lint && just typecheck` (<10s combined) before any `justfile`, `*.justfile`, `*.yml`, or `*.md` edit; block commit on fail. `just docs::lint` covers 383 markdown files (0 issues expected); `just typecheck` covers `mypy --strict` with `mypy_path = "stubs"`.
 
 ## 1. Configure execution explicitly
 - Set a well-defined shell:

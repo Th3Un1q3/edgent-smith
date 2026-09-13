@@ -8,22 +8,32 @@ export type PluginEnvironmentBuilderParameters = {
   worktree?: string
 }
 
-const pluginContextBuilder = (parameters?: PluginEnvironmentBuilderParameters) => {
+export type PluginContextBuilderReturn = {
+  client: ReturnType<NonNullable<PluginEnvironmentBuilderParameters['clientFactory']>>
+  project: ReturnType<typeof vi.fn> | { id: string, worktree: string, time: { created: number, initialized?: number } }
+  directory: string
+  worktree: string
+  experimental_workspace: { register: ReturnType<typeof vi.fn> }
+  serverUrl: URL
+  $: ReturnType<typeof vi.fn>
+}
+
+const pluginContextBuilder = (parameters?: PluginEnvironmentBuilderParameters): PluginContextBuilderReturn => {
   const {
     clientFactory = defaultCreateClient,
-    projectFactory = () => vi.fn(),
+    projectFactory = ((): ReturnType<typeof vi.fn> => vi.fn() as ReturnType<typeof vi.fn>) as unknown as NonNullable<PluginEnvironmentBuilderParameters['projectFactory']>,
     directory = '/workspace',
     worktree = '/workspace/.git',
-  } = parameters || {}
+  }: PluginEnvironmentBuilderParameters = parameters ?? {}
 
   return {
     client: clientFactory() as never,
-    project: projectFactory(),
+    project: (projectFactory as unknown as () => ReturnType<typeof vi.fn>)() as ReturnType<typeof vi.fn>,
     directory,
     worktree,
-    experimental_workspace: { register: vi.fn() },
+    experimental_workspace: { register: vi.fn() as ReturnType<typeof vi.fn> },
     serverUrl: new URL('http://localhost'),
-    $: vi.fn(),
+    $: vi.fn() as ReturnType<typeof vi.fn>,
   }
 }
 
