@@ -131,7 +131,7 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
       gatesState[gate.name] = {
         lastStatus: newStatus,
         lastExecutedAt: new Date(),
-        lastStdOut: result.stdout,
+        lastStdOut: (result.stdout ?? '').slice(0, 2000),
         affectedSessions: [sessionID],
       }
       if (newStatus === 'pass') {
@@ -157,7 +157,7 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
     gatesState[gate.name] = {
       lastStatus: newStatus,
       lastExecutedAt: new Date(),
-      lastStdOut: result.stdout,
+      lastStdOut: (result.stdout ?? '').slice(0, 2000),
       affectedSessions: sessionID
         ? [...(gatesState[gate.name]?.affectedSessions ?? []), sessionID].filter(
             (s, index, array) => array.indexOf(s) === index,
@@ -255,6 +255,15 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
       }
 
       await runTargetedToolAfter(input)
+    },
+    'dispose': async () => {
+      if (!debounceTimers || !pendingRuns) return
+      for (const timer of debounceTimers.values()) clearTimeout(timer)
+      debounceTimers.clear()
+      pendingRuns.clear()
+      beforeTransitionSent.clear()
+      for (const key of Object.keys(gatesState)) delete gatesState[key]
+      await log(client, 'info', 'disposed', 'quality-gate-enforcer')
     },
   }
 }

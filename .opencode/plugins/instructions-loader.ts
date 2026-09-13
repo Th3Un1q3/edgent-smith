@@ -135,5 +135,10 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
         }
       })
     },
+    'dispose': async () => {
+      if (!_helperCache) return
+      for (const key of Object.keys(_helperCache)) delete _helperCache[key]
+      await log(client, 'info', 'disposed', PLUGIN_ID)
+    },
   }
 }

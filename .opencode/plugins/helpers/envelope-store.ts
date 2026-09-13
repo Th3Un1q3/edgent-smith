@@ -30,8 +30,11 @@ export interface Envelope {
 
 /**
 Envelopes older than this are pruned on create to bound store growth.
+Kept at 1h: envelopes live only for the brief window between the
+tool.execute.before hook (parent) and the chat.message hook (recipient),
+so 1h bounds leaks while never expiring live envelopes.
 */
-export const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000
+export const DEFAULT_TTL_MS = 60 * 60 * 1000
 
 /**
 Module-scope store shared across sessions in the same opencode server process.

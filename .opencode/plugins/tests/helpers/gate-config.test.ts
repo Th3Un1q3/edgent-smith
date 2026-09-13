@@ -49,7 +49,7 @@ describe('loadQualityGates()', () => {
     })
 
     it('throws fail-closed when section is missing', () => {
-      expect(() => loadQualityGates()).toThrow(/expected >=7 gates, got 0/)
+      expect(() => loadQualityGates()).toThrow(/expected >=5 gates, got 0/)
     })
 
     it('throws with Fix source, not config hint', () => {
@@ -63,16 +63,16 @@ describe('loadQualityGates()', () => {
     })
 
     it('throws fail-closed on empty gates', () => {
-      expect(() => loadQualityGates()).toThrow(/expected >=7 gates, got 0/)
+      expect(() => loadQualityGates()).toThrow(/expected >=5 gates, got 0/)
     })
   })
 
-  describe('when the harness config has fewer than 7 gates', () => {
+  describe('when the harness config has fewer than 5 gates', () => {
     beforeEach(() => {
       configOverride.value = {
         plugins: {
           'quality-gate-enforcer': {
-            gates: Array.from({ length: 6 }, (_, index) => ({
+            gates: Array.from({ length: 4 }, (_, index) => ({
               name: `gate-${index}`,
               patterns: ['**/*.ts'],
               commands: ['echo hi'],
@@ -82,8 +82,8 @@ describe('loadQualityGates()', () => {
       }
     })
 
-    it('throws fail-closed on 6 gates', () => {
-      expect(() => loadQualityGates()).toThrow(/expected >=7 gates, got 6/)
+    it('throws fail-closed on 4 gates', () => {
+      expect(() => loadQualityGates()).toThrow(/expected >=5 gates, got 4/)
     })
   })
 

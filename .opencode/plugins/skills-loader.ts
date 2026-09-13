@@ -281,5 +281,8 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory, $ }) => {
         part.text = result + part.text.slice(lastIndex)
       }
     },
+    'dispose': async () => {
+      await log(client, 'info', 'disposed', 'skills-loader')
+    },
   }
 }

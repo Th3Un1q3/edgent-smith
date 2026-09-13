@@ -88,7 +88,7 @@ describe('qualityGateEnforcer', () => {
     it('exports qualityGateEnforcer with tool.execute.after hook only', () => {
       expect(typeof plugin['tool.execute.after']).toBe('function')
       expect(plugin.setup).toBeUndefined()
-      expect(plugin.dispose).toBeUndefined()
+      expect(typeof plugin.dispose).toBe('function')
     })
 
     it('returns a non-empty plugin with expected hook', () => {

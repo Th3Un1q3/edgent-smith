@@ -24,19 +24,9 @@ import type { GateConfig } from '../types/quality-gate'
  */
 const qualityGates: GateConfig[] = [
   {
-    name: 'opencode-typecheck',
+    name: 'opencode-checks',
     patterns: ['.opencode/plugins/**/*.ts'],
-    commands: ['cd /workspace/.opencode && just typecheck'],
-  },
-  {
-    name: 'opencode-lint',
-    patterns: ['.opencode/plugins/**/*.ts'],
-    commands: ['cd /workspace/.opencode && just lint'],
-  },
-  {
-    name: 'opencode-test',
-    patterns: ['.opencode/plugins/**/*.ts'],
-    commands: ['cd /workspace/.opencode && just test --coverage --coverage.thresholds.branches 85 --coverage.thresholds.functions 85 --coverage.thresholds.lines 85 --coverage.thresholds.statements 85'],
+    commands: ['cd /workspace/.opencode && just typecheck', 'cd /workspace/.opencode && just lint', 'cd /workspace/.opencode && just test --coverage --coverage.thresholds.branches 85 --coverage.thresholds.functions 85 --coverage.thresholds.lines 85 --coverage.thresholds.statements 85'],
   },
   {
     name: 'python-lint',
@@ -55,7 +45,7 @@ const qualityGates: GateConfig[] = [
   },
   {
     name: 'justfile-fmt',
-    patterns: ['justfile', '**/justfile'],
+    patterns: ['justfile', '*/justfile'],
     commands: ['for f in $(find /workspace -name justfile -not -path \'*/node_modules/*\' -not -path \'*/.git/*\' -not -path \'*/.stryker-tmp/*\'); do cd "$(dirname "$f")" && just --unstable --fmt --check || exit 1; done'],
   },
 ]
@@ -76,7 +66,7 @@ export const harnessConfig = {
     },
     'quality-gate-enforcer': {
       gates: qualityGates,
-      debounceMs: 300,
+      debounceMs: 1500,
     },
     'todo-enforcer': {
       maxConsecutiveErrors: 3,

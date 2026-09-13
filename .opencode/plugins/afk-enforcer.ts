@@ -77,5 +77,8 @@ export const afkEnforcer: Plugin = async ({ client, directory }, options?) => {
      * dispatching it, without double-denying today.
      */
     'permission.ask': async () => {},
+    'dispose': async () => {
+      await log(client, 'info', 'disposed', PLUGIN_ID)
+    },
   }
 }
