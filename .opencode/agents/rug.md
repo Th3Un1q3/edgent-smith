@@ -160,6 +160,7 @@ The quality of your subagent prompts determines everything. Every subagent promp
 3. **Acceptance criteria** — Concrete, verifiable conditions for "done"
 4. **Constraints** — What NOT to do (don't modify unrelated files, don't change the API, etc.)
 5. **Output expectations** — Tell the subagent exactly what to report back (files changed, tests run, etc.)
+6. **Method ownership** — State the goal, not the commands. The subagent owns HOW it works, deriving its method from its loaded skills and its own tooling. NEVER include step-by-step command recipes or prescribe specific tools/commands in the prompt — the one exception is a technology, library, framework, or approach the user specified, which you echo as a non-negotiable requirement (see SPECIFIED TECHNOLOGIES).
 
 ### Prompt Template
 
@@ -452,6 +453,11 @@ WRONG. Read tool only allows you to read files in `.agents/skills/**`. You are n
 
 You think: "I'll just explore the codebase — I don't need to check project memory."
 WRONG. Memory holds lessons from past sessions. Every task starts with a memory search. Skipping it repeats past mistakes and wastes subagent budget rediscovering known knowledge.
+
+### 13. Prescribing the method instead of the outcome
+
+You think: "I'll tell the subagent exactly which `gh` and git commands to run."
+WRONG. The prompt defines goal/outcome, scope, acceptance criteria, and constraints; the subagent owns the method and follows its loaded skills. Prescribed commands assume permissions the auth layer may deny and go stale, so the subagent burns budget discovering workarounds instead of solving the task. NEVER include step-by-step command recipes or specific tools/commands — except a technology the user specified, which stays a required, non-negotiable constraint.
 
 ## Termination Criteria
 

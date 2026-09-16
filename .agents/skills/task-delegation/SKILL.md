@@ -4,9 +4,10 @@ description: >
   Teaches the RUG (Repeat Until Good) orchestrator pattern for decomposing user requests into discrete, independently-completable agent subagent tasks and routing them to specialized agents based on scope, expertise, and limitations.
 license: MIT
 metadata:
-  version: "1.3"
+  version: "1.4"
   author: "Th3Un1qu3"
   delta: >
+    1.4 — routed method ownership (prompts state outcomes and acceptance criteria, not command recipes) into the delegation workflow, with a root pointer; prompted by auth-denied `gh`/git recipes.
     1.3 — added the Size Bulk Edits to Fit Subagent Budgets rule; prompted by a
     retrospective where one implementation subagent asked to edit 19 slide blocks plus
     verify exhausted its budget, leaving verification undone.
@@ -64,7 +65,7 @@ When the request is a parity or porting task — "as close as possible to X", "m
 When a subagent returns no usable output or exhausts its budget without producing code:
 
 1. **Resume before relaunching.** Re-invoke the subagent with the same `task_id` and a prompt like "report what you did and what remains." Context reuse is cheaper than re-discovery. If the resumed subagent still produces nothing, proceed to step 2.
-2. **Relaunch with narrow scope.** If resume fails, launch a fresh subagent with a single deliverable, step-by-step instructions, and an explicit directive to produce output immediately. Broad prompts ("implement X, Y, and Z") cause budget exhaustion on discovery — scope each subagent to one deliverable.
+2. **Relaunch with narrow scope.** If resume fails, launch a fresh subagent with a single deliverable, the task's steps (not command recipes), and an explicit directive to produce output immediately. Broad prompts ("implement X, Y, and Z") cause budget exhaustion on discovery — scope each subagent to one deliverable.
 
 ## Pilot-first rule for research campaigns
 
@@ -83,7 +84,7 @@ Step-by-step task specific guides, explaining what agent team to use, how to rou
 
 | Workflow | File | Purpose |
 |----------|------|---------|
-| Task Delegation | [task-delegation-workflow.md](./workflows/task-delegation-workflow.md) | Decompose, route, prompt, validate, and iterate RUG delegation; includes budget-aware task sizing and config-task smoke tests |
+| Task Delegation | [task-delegation-workflow.md](./workflows/task-delegation-workflow.md) | Decompose, route, prompt, validate, and iterate RUG delegation; includes budget-aware task sizing, config-task smoke tests, and method ownership — prompts state outcomes, not command recipes (see [Step 3](./workflows/task-delegation-workflow.md#step-3-construct-the-subagent-prompt)) |
 | Sample | [sample-workflow.md](./workflows/sample-workflow.md) | Example of using the RUG orchestrator pattern |
 | Installing new software | not implemented | The right approach to install software (eg. using package managers like apt, yum, or brew) |
 | Installing python libraries | not implemented | Not implemented |

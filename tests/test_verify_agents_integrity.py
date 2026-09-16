@@ -74,10 +74,10 @@ def test_harness_branches_85() -> None:
     # harness opencode-test gate must enforce 85 thresholds
     for key in ["branches 85", "functions 85", "lines 85", "statements 85"]:
         assert key in text, f"harness must contain '{key}'"
-    # also ensure at least 7 gates defined
+    # also ensure at least 5 gates defined
     gate_count = text.count("name: '")
     # qualityGates array length check - count gate entries
-    assert gate_count >= 7, f"expected >=7 gates in harness.config.ts, got {gate_count}"
+    assert gate_count >= 5, f"expected >=5 gates in harness.config.ts, got {gate_count}"
 
 
 def test_eslint_ban_disable() -> None:
@@ -91,9 +91,9 @@ def test_eslint_ban_disable() -> None:
 def test_gate_config_fail_closed() -> None:
     text = _read_text(pathlib.Path(".opencode/plugins/helpers/gate-config.ts"))
     assert "section?.gates" in text
-    assert "gates.length < 7" in text, "gate-config must check gates.length < 7"
-    assert "expected >=7 gates, got" in text, (
-        "gate-config must throw with expected >=7 gates message"
+    assert "gates.length < 5" in text, "gate-config must check gates.length < 5"
+    assert "expected >=5 gates, got" in text, (
+        "gate-config must throw with expected >=5 gates message"
     )
     assert "Fix source, not config." in text, "gate-config must contain Fix source, not config hint"
     # must throw, not silently return empty

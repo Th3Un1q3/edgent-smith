@@ -5,9 +5,12 @@ description: >
 license: MIT
 compatibility: github-copilot
 metadata:
-  version: "1.2"
+  version: "1.3"
   author: "edgent-smith team"
   delta: >
+    1.3 — taught method ownership in Step 3 (Construct the Subagent Prompt): every prompt
+    states the outcome, not command recipes, and the prompt template asks for the outcome
+    to achieve; the subagent owns the method via its loaded skills.
     1.2 — hardened task sizing into a MANDATORY split gate in Step 1 (Decompose the
     Request) and scoped resume (task_id) to finishing near-complete tasks only; prompted
     by 4+ recurrences of task rightsizing failures (subagent budget burned on
@@ -103,7 +106,7 @@ Choose the agent based on the task's scope and required expertise. Use this deci
 
 ## Step 3: Construct the Subagent Prompt
 
-Every subagent prompt must include five elements:
+Every subagent prompt must include six elements:
 
 ### Required Prompt Structure
 
@@ -114,13 +117,20 @@ Every subagent prompt must include five elements:
 | **Acceptance Criteria** | Concrete conditions for "done" — verifiable by a separate agent | "[ ] File exists at specified path. [ ] Contains required frontmatter fields." |
 | **Constraints** | What NOT to do — anti-patterns specific to this task | "Do not modify files outside /workspace/.agents/skills/." |
 | **Output Expectations** | How the subagent should report results back | "Report: list all created/modified files, confirm each acceptance criterion." |
+| **Method Ownership** | The prompt states the outcome; the subagent decides the method | "Achieve X; derive the approach from the `test-design` skill." |
+
+### Method Ownership
+
+Every prompt states WHAT the subagent must achieve; the subagent owns HOW, deriving its method from the skills passed via `skills` and from its own tooling. Never include step-by-step command recipes or prescribe specific tools or commands — an exact `gh` invocation, a git subcommand, or a REST endpoint goes stale, assumes permissions the auth layer may deny, and burns the subagent's budget reinventing a workaround instead of doing the task.
+
+When the user explicitly specifies a technology, library, framework, or approach, echo it as a non-negotiable requirement — a specified technology is a constraint on the outcome, not a command recipe.
 
 ### Prompt Template
 
 ```markdown
 CONTEXT: [Original user request quoted verbatim. Why this task exists in the larger flow.]
 
-YOUR TASK: [Specific decomposed action — what exactly to do]
+YOUR TASK: [Specific decomposed action — the outcome to achieve, never the commands to run]
 
 SCOPE:
 - Files to create: [list with full paths]

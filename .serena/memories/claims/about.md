@@ -12,6 +12,8 @@ L0_table:
     L0: "cache entries stay verbatim; syntheses link via mem:"
   - id: claims/linkedin/growth-chart-selector-claim
     L0: "LinkedIn growth chart needs aria-label regex"
+  - id: claims/ci-34761145832-verification
+    L0: "CI 34761145832 verification: lint 0 errors, mutation 85.57, ci 13 gates"
 ---
 # Claims
 
