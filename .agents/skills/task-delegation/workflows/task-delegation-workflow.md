@@ -248,7 +248,7 @@ The RUG workflow is simple but strict: **decompose → route → prompt → vali
 
 1. Decompose into discrete, independently completable tasks with verifiable acceptance criteria
 2. Route each task to the agent whose specialization matches the task type
-3. Construct prompts with context, scope, acceptance criteria, constraints, and output expectations
+3. Construct prompts with context, scope, acceptance criteria, constraints, output expectations, and method ownership
 4. Validate every result with a separate subagent — never trust self-assessment
 5. Iterate failures by relaunching focused tasks with fresh instructions
 
