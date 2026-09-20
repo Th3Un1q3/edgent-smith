@@ -40,8 +40,11 @@ const config = {
   // Coverage analysis strategy (perTest is the default and best performance)
   coverageAnalysis: 'perTest',
 
-  // Concurrency: use n-1 workers for parallel mutation testing
-  concurrency: '50%',
+  // Concurrency: saturate all logical CPUs with test runners. ~51% of mutants are
+  // static (no per-test coverage shortcut), so the run is dominated by test-execution
+  // wall time; raising from '50%' to '100%' cuts that without touching mutant scope.
+  // Stryker 9 removed `maxConcurrentTestRunners` — `concurrency` controls test runners.
+  concurrency: '100%',
 
   // Ignore non-relevant directories from the sandbox copy
   ignorePatterns: [

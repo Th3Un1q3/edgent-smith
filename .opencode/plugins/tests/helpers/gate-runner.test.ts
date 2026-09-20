@@ -186,6 +186,49 @@ describe('runGate', () => {
     // Mutant #1: Buffer.isBuffer always true → toString() → returns string instead of object
     expect(result.stderr).toBe(customStderr)
   })
+
+  // ─── timeouts ──────────────────────────────────────────────
+
+  it('wraps a command with a hard timeout when gate.timeoutMs is set', async () => {
+    const gate: GateConfig = { name: 'test', patterns: ['**/*.ts'], commands: ['sleep 10'], timeoutMs: 300_000 }
+
+    const shell = createShellMock([{ exitCode: 0, stdout: 'ok\n', stderr: '' }])
+
+    const result = await runGate(gate, shell)
+
+    expect(result).toEqual({ exitCode: 0, stdout: 'ok\n', stderr: '' })
+    expect(shell).toHaveBeenCalledWith(makeTemplateArray('timeout -k 5s 300s bash -c \'sleep 10\''))
+  })
+
+  it('terminates a command that exceeds timeoutMs and reports a timedOut failure', async () => {
+    const gate: GateConfig = { name: 'test', patterns: ['**/*.ts'], commands: ['hang'], timeoutMs: 20 }
+
+    const shell = vi.fn().mockImplementation(() => {
+      const promise = new Promise(() => {}) as unknown as ReturnType<Shell>
+
+      promise.nothrow = () => promise
+      promise.quiet = () => promise
+      return promise
+    }) as unknown as Shell
+
+    const result = await runGate(gate, shell)
+
+    expect(result.exitCode).toBe(124)
+    expect(result.timedOut).toBe(true)
+    expect(result.stderr).toContain('timed out')
+  })
+
+  it('marks CLI timeout exit code 124 as timedOut with a clear message', async () => {
+    const gate: GateConfig = { name: 'test', patterns: ['**/*.ts'], commands: ['slow'], timeoutMs: 300_000 }
+
+    const shell = createShellMock([{ exitCode: 124, stdout: 'partial\n', stderr: '' }])
+
+    const result = await runGate(gate, shell)
+
+    expect(result.exitCode).toBe(124)
+    expect(result.timedOut).toBe(true)
+    expect(result.stderr).toContain('timed out')
+  })
 })
 
 // ─── DirtyGateBatcher ────────────────────────────────────────

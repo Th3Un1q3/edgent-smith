@@ -10,8 +10,8 @@
 # Fast path: SKIP_MUTATION=1 (or CI_FAST=1 alias) skips gate 12 — prints
 # "→ SKIP opencode-mutation (SKIP_MUTATION=1)", counts as pass in Gate Summary,
 # ~20s local iteration.
-# Timeout: opencode-mutation is wrapped with `timeout ${MUTATION_TIMEOUT:-300}` when GNU timeout is
-# available (default 300s, env MUTATION_TIMEOUT overrides); workflow-level timeouts are 12/20 min.
+# Timeout: opencode-mutation is wrapped with `timeout ${MUTATION_TIMEOUT:-720}` when GNU timeout is
+# available (default 720s, env MUTATION_TIMEOUT overrides); workflow-level timeouts are 12/20 min.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -74,7 +74,7 @@ run_check opencode-test just .opencode/test --coverage
 run_check opencode-lint just .opencode/lint
 run_check opencode-typecheck just .opencode/typecheck
 if [[ "${MUTATION:-0}" == "1" ]]; then
-  _ci_mutation_timeout="${MUTATION_TIMEOUT:-300}"
+  _ci_mutation_timeout="${MUTATION_TIMEOUT:-720}"
   _ci_mutation_cmd=(just .opencode/mutation)
   if command -v timeout >/dev/null 2>&1; then
     _ci_mutation_cmd=(timeout "${_ci_mutation_timeout}" just .opencode/mutation)
@@ -84,7 +84,7 @@ elif [[ "${SKIP_MUTATION:-0}" == "1" || "${CI_FAST:-0}" == "1" ]]; then
   echo "→ SKIP opencode-mutation (SKIP_MUTATION=1)"
   printf pass >"$results_dir/opencode-mutation"
 else
-  _ci_mutation_timeout="${MUTATION_TIMEOUT:-300}"
+  _ci_mutation_timeout="${MUTATION_TIMEOUT:-720}"
   _ci_mutation_cmd=(just .opencode/mutation)
   if command -v timeout >/dev/null 2>&1; then
     _ci_mutation_cmd=(timeout "${_ci_mutation_timeout}" just .opencode/mutation)

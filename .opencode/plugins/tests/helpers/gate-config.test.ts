@@ -35,12 +35,14 @@ describe('loadQualityGates()', () => {
 
     // Generic over the live list: passes for ANY gates configured in
     // harness.config.ts, so editing the gate list does not break this test.
-    expect(gates.length).toBeGreaterThan(0)
-    expect(gates).toEqual(liveGates.map(() => ({
-      name: expect.any(String),
-      patterns: expect.arrayContaining([expect.any(String)]),
-      commands: expect.arrayContaining([expect.any(String)]),
-    })))
+    expect(gates).toHaveLength(liveGates.length)
+    for (const gate of gates) {
+      expect(gate).toMatchObject({
+        name: expect.any(String),
+        patterns: expect.arrayContaining([expect.any(String)]),
+        commands: expect.arrayContaining([expect.any(String)]),
+      })
+    }
   })
 
   describe('when the harness config has no quality-gate-enforcer section', () => {

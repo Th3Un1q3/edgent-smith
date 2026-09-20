@@ -26,6 +26,9 @@ const qualityGates: GateConfig[] = [
   {
     name: 'opencode-checks',
     patterns: ['.opencode/plugins/**/*.ts'],
+    // 5-minute hard cap per command (typecheck, lint, coverage test) so a
+    // hung/infinite-looping test can never freeze later `.opencode` edits.
+    timeoutMs: 300_000,
     commands: ['cd /workspace/.opencode && just typecheck', 'cd /workspace/.opencode && just lint', 'cd /workspace/.opencode && just test --coverage --coverage.thresholds.branches 85 --coverage.thresholds.functions 85 --coverage.thresholds.lines 85 --coverage.thresholds.statements 85'],
   },
   {

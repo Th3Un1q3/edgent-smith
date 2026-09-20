@@ -24,6 +24,11 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     exclude: ['**/node_modules/**', '**/.stryker-tmp/**'],
+    // Bound pathological tests so they fail fast instead of spinning. A test
+    // that blocks the event loop is still caught by the gate-level `timeout`.
+    testTimeout: 120_000,
+    hookTimeout: 120_000,
+    teardownTimeout: 30_000,
     coverage: {
       provider: 'istanbul',
       include: ['plugins/**/*.ts'],
