@@ -34,7 +34,7 @@ typecheck:
     {{ MYPY }} {{ CHECK_PATHS }}
 
 # Run the CI check sequence with aggregated failure reporting.
-# 13 gates sequential (Gate #0 verify-thresholds + 12), ~110s total incl ~92s mutation — tool timeout 300s (MUTATION_TIMEOUT env, default 300s).
+# 13 gates sequential (Gate #0 verify-thresholds + 12) — tool timeout 1260s (MUTATION_TIMEOUT env, default 1260s); local mutation measured 425–490s.
 # Fast path: SKIP_MUTATION=1 just ci or CI_FAST=1 just ci (~20s for local iteration).
 # Parity: remote PR CI runs `just ci` verbatim, keep scripts/ci.sh + .github/workflows/ci.yml in sync.
 ci:
