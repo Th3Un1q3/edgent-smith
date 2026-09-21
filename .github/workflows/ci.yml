@@ -57,7 +57,9 @@ jobs:
   ci:
     name: Format · Lint · Type-check · Tests · Workflow Security
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Raised 20 -> 30 min so the mutation wrapper (MUTATION_TIMEOUT=1260s) can use its headroom;
+    # 1260s mutation + setup + the other 12 gates fits inside 1800s.
+    timeout-minutes: 30
     needs: prebuild-devcontainer
     if: always() && (needs.prebuild-devcontainer.result == 'success' || needs.prebuild-devcontainer.result == 'skipped')
     permissions:
