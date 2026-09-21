@@ -31,7 +31,7 @@ Pin once and count: `grep -R "devcontainers/ci@" --include="*.yml" .github/` mus
 
 Apply to every `.github/workflows/*.yml` that uses `devcontainers/ci`:
 
-1. **Pin + timeouts:** `devcontainers/ci@v0.3.1900000450` + `timeout-minutes: 12` (prebuild) / `20` (ci) / `30` (experiment). Prevents `143`/`124` kills and drift.
+1. **Pin + timeouts:** `devcontainers/ci@v0.3.1900000450` + `timeout-minutes: 12` (prebuild) / `30` (ci, raised from 20 for mutation headroom) / `30` (experiment). Prevents `143`/`124` kills and drift.
 2. **Env forwarding:** `devcontainers/ci` does NOT forward `env:` — use `with.env` block:
    ```yaml
    - uses: devcontainers/ci@v0.3.1900000450
