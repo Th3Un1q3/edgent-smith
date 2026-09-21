@@ -7,7 +7,6 @@ import { formatElapsed } from './helpers/workflow-subtask'
 import {
   DEFAULT_MAX_CONCURRENT,
   DEFAULT_MAX_SUBTASKS,
-  MAX_MAX_SUBTASKS_CAP,
 } from './helpers/workflow-types'
 
 const WORKFLOW_TOOL_DESCRIPTION = [
@@ -57,15 +56,14 @@ const WORKFLOW_TOOL_DESCRIPTION = [
   'global, Bun, Deno, fetch( and similar; forbidden tokens return forbidden_script, syntax errors invalid_script.',
   'Scripts are trusted agent code, not sandboxed.',
   '',
-  'Tool result: {title, output, metadata}. output is the JSON envelope string, metadata is',
-  '{status, stats, subtasks}, and title is a summary such as "workflow: ok · 3/5 subtasks · 12.4s" (total elapsed).',
-  'metadata.subtasks is the bounded per-subtask table of {description, status, durationMs}. Progress toasts and',
-  'child-session titles carry a run id (wf#<6 hex>), so concurrent runs stay distinguishable.',
+  'Tool result: {title, output}. output is the JSON envelope string and title is a summary such as',
+  '"workflow: ok · 3/5 subtasks · 12.4s" (total elapsed). Per-subtask details live in steps[].',
+  'Progress toasts and child-session titles carry a run id (wf#<6 hex>), so concurrent runs stay distinguishable.',
   '',
   'Envelope: {status, result, error?, steps, stats, logs} with status one of',
   'ok | error | timeout | aborted | budget_exceeded | invalid_script | forbidden_script;',
   'result serialized to fit an 8 KB envelope (logs dropped, then steps).',
-  'Steps: {label, description, task_id, status, durationMs, error?, truncated};',
+  'Steps: {description, task_id, status, durationMs, error?, truncated};',
   'description in a step is the subtask description truncated to 80 chars.',
   'stats: {subtasks, ok, error, empty, timeout, aborted, totalMs, truncated}.',
   '',
@@ -76,46 +74,21 @@ const WORKFLOW_TOOL_DESCRIPTION = [
   'return { summary: summary.outputText, sources: rs.length }',
 ].join('\n')
 
-interface WorkflowStepSummary {
-  description: string
-  status: string
-  durationMs: number
-}
-
 interface WorkflowToolResult {
   title: string
   output: string
-  metadata: { status: string, stats: unknown, subtasks: WorkflowStepSummary[] }
 }
 
 export const readNumber = (value: unknown): number => (Number.isFinite(value) ? (value as number) : 0)
 
-// Compact per-subtask table for the tool result. Defensive at this boundary:
-// non-array steps degrade to an empty table, each field falls back to a stable
-// value, and the table is bounded to the recorded step cap.
-const toStepSummaries = (steps: unknown): WorkflowStepSummary[] => {
-  if (!Array.isArray(steps)) {
-    return []
-  }
-  return steps.slice(0, MAX_MAX_SUBTASKS_CAP).map((step) => {
-    const record = (step ?? {}) as { description?: unknown, status?: unknown, durationMs?: unknown }
-    return {
-      description: typeof record.description === 'string' ? record.description : '',
-      status: typeof record.status === 'string' ? record.status : 'unknown',
-      durationMs: readNumber(record.durationMs),
-    }
-  })
-}
-
 // `runWorkflow` stays a string-producing function; the tool boundary wraps its
-// serialized envelope in a ToolResult so the harness can render a status line
-// and structured metadata. A malformed envelope degrades to a safe title.
+// serialized envelope in a ToolResult so the harness can render a status line.
+// A malformed envelope degrades to a safe title.
 export const toToolResult = (output: string): WorkflowToolResult => {
   try {
     const envelope = JSON.parse(output) as {
       status?: unknown
       stats?: { ok?: unknown, subtasks?: unknown, totalMs?: unknown }
-      steps?: unknown
     }
     const status = typeof envelope.status === 'string' ? envelope.status : 'unknown'
     const stats = envelope.stats ?? {}
@@ -125,14 +98,12 @@ export const toToolResult = (output: string): WorkflowToolResult => {
     return {
       title: `workflow: ${status} · ${ok}/${subtasks} subtasks · ${elapsed}`,
       output,
-      metadata: { status, stats, subtasks: toStepSummaries(envelope.steps) },
     }
   }
   catch {
     return {
       title: 'workflow: unparseable envelope',
       output,
-      metadata: { status: 'error', stats: {}, subtasks: [] },
     }
   }
 }

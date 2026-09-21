@@ -4,7 +4,7 @@ import { tool } from '@opencode-ai/plugin'
 
 import type { PluginInput, ToolContext } from '@opencode-ai/plugin'
 
-import type { SubtaskStatus, WorkflowEnvelope, WorkflowSdkClient, WorkflowStats } from '@plugins/helpers/workflow-types'
+import type { WorkflowEnvelope, WorkflowSdkClient } from '@plugins/helpers/workflow-types'
 
 import { readNumber, toToolResult, workflowPlugin } from '@plugins/workflow'
 
@@ -17,15 +17,10 @@ type FakeClient = {
 }
 
 // The locked tool boundary returns a ToolResult object rather than a bare
-// envelope string: { title, output, metadata: { status, stats, subtasks } }.
+// envelope string: { title, output }.
 interface WorkflowToolResult {
   title: string
   output: string
-  metadata: {
-    status: WorkflowEnvelope['status']
-    stats: WorkflowStats
-    subtasks: Array<{ description: string, status: SubtaskStatus, durationMs: number }>
-  }
 }
 
 const createFakeClient = (
@@ -109,25 +104,23 @@ describe('workflow plugin', () => {
 
       expect(envelope.status).toBe('ok')
       expect(envelope.result).toEqual({ n: 1 })
-      expect(result.metadata).toMatchObject({ status: 'ok', stats: envelope.stats })
+      expect(Object.keys(result).sort((a, b) => a.localeCompare(b))).toEqual(['output', 'title'])
     })
 
-    it('reports the executed steps in result.metadata.subtasks', async () => {
+    it('reports the executed steps in the serialized envelope', async () => {
       const { result } = await runTool({
         script: 'await subtask({ prompt: "a", description: "first" }); '
           + 'await subtask({ prompt: "b", description: "second" }); return "done"',
       })
 
-      const toolResult = result as WorkflowToolResult
+      const envelope = envelopeFrom(result as WorkflowToolResult)
 
-      expect(toolResult.metadata).toMatchObject({
-        status: 'ok',
-        subtasks: [
-          { description: 'first', status: 'ok' },
-          { description: 'second', status: 'ok' },
-        ],
-      })
-      for (const entry of toolResult.metadata.subtasks) {
+      expect(envelope.status).toBe('ok')
+      expect(envelope.steps.map(step => ({ description: step.description, status: step.status }))).toEqual([
+        { description: 'first', status: 'ok' },
+        { description: 'second', status: 'ok' },
+      ])
+      for (const entry of envelope.steps) {
         expect(typeof entry.durationMs).toBe('number')
       }
     })
@@ -408,7 +401,7 @@ describe('workflow plugin', () => {
     it('documents description on each step record', async () => {
       const workflowTool = await loadWorkflowTool(createFakeClient())
 
-      expect(workflowTool.description).toMatch(/Steps: \{label, description/)
+      expect(workflowTool.description).toMatch(/Steps: \{description/)
     })
   })
 
@@ -485,7 +478,7 @@ describe('workflow plugin', () => {
 
       expect(envelope.status).toBe('aborted')
       expect(envelope.error?.toLowerCase()).toContain('abort')
-      expect((result as WorkflowToolResult).metadata.status).toBe('aborted')
+      expect(Object.keys(result as WorkflowToolResult).sort((a, b) => a.localeCompare(b))).toEqual(['output', 'title'])
     })
   })
 })

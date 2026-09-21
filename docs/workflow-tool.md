@@ -7,7 +7,7 @@ The `workflow` tool runs a short JavaScript script that orchestrates subagents. 
 - You write one script. The runtime compiles it as the body of an async function with two helpers in scope: `subtask` and `log`.
 - `subtask` creates a child OpenCode session, sends one prompt, and returns a plain object. Child failures come back as values, so one bad child does not throw. The one exception is a budget overrun, covered under Failure handling.
 - The runtime caps concurrency and counts every call against a subtask budget. Fan-out with `Promise.all` is safe because the runtime queues the extra calls.
-- The tool returns a structured result `{ title, output, metadata }`. `output` is one JSON envelope that describes the whole run: overall status, the script's return value, a step list, counters, and logs. `metadata` carries `status`, `stats`, and a bounded `subtasks` table, and `title` is a summary of the run.
+- The tool returns `{ title, output }`. `output` is one JSON envelope that describes the whole run: overall status, the script's return value, a step list, counters, and logs. Per-subtask detail lives in the envelope's `steps[]`, which the `output` string carries; `title` is a summary of the run.
 - The script is the unit of design. Call `workflow` once per phase and do that phase's orchestration inside the script. A goal may span one or more phases, and each call runs one phase. Several phases per goal are legitimate when a human question, an envelope branch, sizing, or budget forces it.
 
 ## Quickstart
@@ -20,13 +20,13 @@ Call the `workflow` tool with a `script` string. The script can use top-level `a
 }
 ```
 
-The tool returns `{ title, output, metadata }`. Parse `output` as JSON and read the envelope's top-level fields.
+The tool returns `{ title, output }`. Parse `output` as JSON and read the envelope's top-level fields.
 
 ```json
 {
   "status": "ok",
   "result": { "status": "ok", "files": "..." },
-  "steps": [{ "label": "List three files that define the CLI entry point", "description": "List three files that define the CLI entry point", "task_id": "ses_...", "status": "ok", "durationMs": 4210, "truncated": false }],
+  "steps": [{ "description": "List three files that define the CLI entry point", "task_id": "ses_...", "status": "ok", "durationMs": 4210, "truncated": false }],
   "stats": { "subtasks": 1, "ok": 1, "error": 0, "empty": 0, "timeout": 0, "aborted": 0, "totalMs": 4300, "truncated": false },
   "logs": []
 }
@@ -57,7 +57,7 @@ Object fields:
 | Field | Required | Default | Purpose |
 |---|---|---|---|
 | `prompt` | Yes | none | Text sent to the child session. Must be non-empty. |
-| `description` | Yes | none | One-line indication of what the subtask does. Used as the step label and the step record, where it is truncated to 80 characters. Every subtask uses it as the child session title, including a forked subtask, which gets the same description-derived title rather than the source session's; fork provenance appears in the result's `forked_from`. The string shorthand derives it from the first 80 characters of the prompt, and the object form requires it, so there is no prompt-based fallback. |
+| `description` | Yes | none | One-line indication of what the subtask does. Recorded as the step description and truncated to 80 characters. Every subtask uses it as the child session title, including a forked subtask, which gets the same description-derived title rather than the source session's; fork provenance appears in the result's `forked_from`. The string shorthand derives it from the first 80 characters of the prompt, and the object form requires it, so there is no prompt-based fallback. |
 | `agent` | No | `rug-swe` | Agent that handles the child prompt. Child tool access follows that agent's permission scopes. |
 | `skills` | No | none | Skill names to load from `.agents/skills/<name>/SKILL.md` into the child prompt. Unknown names are skipped and logged. |
 | `task_id` | No | none | Resume an existing child session instead of creating or forking one. Mutually exclusive with `fork_from`. |
@@ -373,7 +373,7 @@ Envelope statuses, seen at the top level:
 
 ## Result envelope
 
-The tool returns `{ title, output, metadata }`. `output` is a JSON string with these fields, and `metadata` is `{ status, stats, subtasks }`:
+The tool returns `{ title, output }`. `output` is a JSON string with these fields:
 
 | Field | Type | Notes |
 |---|---|---|
@@ -388,7 +388,6 @@ Step record:
 
 | Field | Type |
 |---|---|
-| `label` | string |
 | `description` | string, truncated to 80 characters |
 | `task_id` | string |
 | `status` | subtask status |
@@ -396,19 +395,11 @@ Step record:
 | `truncated` | boolean |
 | `error` | string, optional |
 
-`label` always equals `description`: the runtime requires `description` on the object form and derives it from the prompt for the string form, so there is no separate label and no prompt-based fallback.
+`description` is required on the object form; the string form derives it from the prompt. It is truncated to 80 characters.
 
 Stats counters: `subtasks`, `ok`, `error`, `empty`, `timeout`, `aborted`, `totalMs`, `truncated`. `subtasks` counts every budgeted call and equals the number of `steps` records. `truncated` is true when any step output was trimmed or the envelope was trimmed in any way (dropped logs, truncated result, or dropped steps). Exception: a `budget_exceeded` envelope can show `subtasks` greater than the number of `steps` records when a concurrent subtask is still in flight as the budget is overrun and its step is dropped.
 
-Metadata:
-
-| Field | Type | Notes |
-|---|---|---|
-| `status` | string | The envelope `status`. |
-| `stats` | object | The envelope `stats` object. |
-| `subtasks` | array | One `{ description, status, durationMs }` entry per serialized envelope step, capped at 64. Missing fields fall back to `""`, `"unknown"`, and `0`. |
-
-`metadata` is the compact form the harness renders. `metadata.subtasks` mirrors the serialized `steps[]` without the `label`, `task_id`, `error`, and `truncated` fields, so it fits the tool result. Read `output` when you need those fields. Because it mirrors the serialized envelope, it can hold fewer entries than the subtasks actually executed when the 8 KB envelope trim drops steps; `stats.truncated` is true in that case.
+Per-subtask details live in the serialized `steps[]`, one `{ description, task_id, status, durationMs, error?, truncated }` record per executed call, capped at 64 entries. Read `output` for those fields. The 8 KB envelope trim can drop steps, so `steps[]` may hold fewer entries than the subtasks actually executed; `stats.truncated` is true in that case.
 
 Example envelope:
 
@@ -417,8 +408,8 @@ Example envelope:
   "status": "error",
   "error": "child session failed",
   "steps": [
-    { "label": "scan readme", "description": "scan readme", "task_id": "ses_a", "status": "ok", "durationMs": 2100, "truncated": false },
-    { "label": "scan justfile", "description": "scan justfile", "task_id": "ses_b", "status": "error", "durationMs": 300, "truncated": false, "error": "model unavailable" }
+    { "description": "scan readme", "task_id": "ses_a", "status": "ok", "durationMs": 2100, "truncated": false },
+    { "description": "scan justfile", "task_id": "ses_b", "status": "error", "durationMs": 300, "truncated": false, "error": "model unavailable" }
   ],
   "stats": { "subtasks": 2, "ok": 1, "error": 1, "empty": 0, "timeout": 0, "aborted": 0, "totalMs": 2500, "truncated": false },
   "logs": []

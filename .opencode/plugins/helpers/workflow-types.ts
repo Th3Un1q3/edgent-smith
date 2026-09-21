@@ -90,7 +90,6 @@ export interface SubtaskResult {
 }
 
 export interface StepRecord {
-  label: string
   description: string
   task_id: string
   status: SubtaskStatus
@@ -131,9 +130,9 @@ export interface WorkflowContext {
   steps: StepRecord[]
   logs: string[]
   active: Set<AbortController>
-  // Child controller → step label for the subtasks currently in flight. Kept
-  // optional so callers may build a context literal; `createContext` always
-  // initializes it and `createSubtask` backfills it for direct construction.
+  // Child controller → in-flight step description for the subtasks currently
+  // running. Kept optional so callers may build a context literal; `createContext`
+  // always initializes it and `createSubtask` backfills it for direct construction.
   running?: Map<AbortController, string>
   // Run start timestamp, backfilled by `createSubtask`. Optional so callers can
   // build a context literal.

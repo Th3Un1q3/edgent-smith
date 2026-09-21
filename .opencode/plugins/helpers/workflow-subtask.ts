@@ -437,8 +437,7 @@ const makeResult = (
   return options.data === undefined ? result : { ...result, data: options.data }
 }
 
-const toStep = (label: string, description: string, result: SubtaskResult): StepRecord => ({
-  label,
+const toStep = (description: string, result: SubtaskResult): StepRecord => ({
   description: description.slice(0, MAX_DESCRIPTION_CHARS),
   task_id: result.task_id,
   status: result.status,
@@ -883,7 +882,7 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
 
     if (context.signal.aborted) {
       const result = makeResult('aborted', '', 0, { error: 'workflow already aborted' })
-      recordStep(context, toStep('aborted', 'aborted', result))
+      recordStep(context, toStep('aborted', result))
       return result
     }
 
@@ -893,7 +892,7 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
     }
     catch (error) {
       const result = makeResult('error', '', 0, { error: toErrorMessage(error) })
-      recordStep(context, toStep('invalid subtask input', 'invalid subtask input', result))
+      recordStep(context, toStep('invalid subtask input', result))
       return result
     }
 
@@ -919,7 +918,7 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
           const result = makeResult('error', '', Date.now() - startedAt, {
             error: 'failed to create subtask session',
           })
-          recordStep(context, toStep(label, label, result))
+          recordStep(context, toStep(label, result))
           return result
         }
         const forkedFrom = resolved.forkedFrom
@@ -971,7 +970,7 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
         })
         // Provenance only for a session actually forked on this attempt.
         const result = forkedFrom === undefined ? classified : { ...classified, forked_from: forkedFrom }
-        recordStep(context, toStep(label, label, result))
+        recordStep(context, toStep(label, result))
         await updateChildSessionTitle(
           context,
           sessionID,
@@ -994,7 +993,7 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
           forkedFrom: resolved?.forkedFrom,
           startedAt,
         })
-        recordStep(context, toStep(label, label, result))
+        recordStep(context, toStep(label, result))
         await updateChildSessionTitle(
           context,
           sessionID,

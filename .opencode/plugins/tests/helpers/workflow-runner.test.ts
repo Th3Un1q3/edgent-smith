@@ -70,9 +70,8 @@ const options = (script: string, overrides: Partial<RunWorkflowOptions> = {}): R
 
 const parse = (json: string): WorkflowEnvelope => JSON.parse(json) as WorkflowEnvelope
 
-const step = (index: number, label = `step ${index}`): StepRecord => ({
-  label,
-  description: label,
+const step = (index: number, description = `step ${index}`): StepRecord => ({
+  description,
   task_id: `ses_${index}`,
   status: 'ok',
   durationMs: 1,
@@ -161,7 +160,7 @@ describe('runWorkflow', () => {
     const envelope = parse(await runWorkflow(options(script)))
     const step = envelope.steps[0]
 
-    expect(step).toMatchObject({ label: 'run work', description: 'run work' })
+    expect(step).toMatchObject({ description: 'run work' })
   })
 
   it('uses the default subtask agent unless the subtask overrides it', async () => {

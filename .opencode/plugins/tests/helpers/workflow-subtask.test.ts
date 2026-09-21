@@ -271,7 +271,7 @@ describe('createSubtask', () => {
 
     expect(result.status).toBe('error')
     expect(result.error).toBe('boom')
-    expect(context.steps[0]).toMatchObject({ status: 'error', label: 'do work' })
+    expect(context.steps[0]).toMatchObject({ status: 'error', description: 'do work' })
   })
 
   it('returns an empty result when the turn has only whitespace text', async () => {
@@ -446,7 +446,7 @@ describe('createSubtask', () => {
     )
     expect(context.steps).toHaveLength(MAX_MAX_SUBTASKS_CAP)
     expect(context.steps[0]).toMatchObject({
-      label: 'task 0',
+      description: 'task 0',
       status: 'ok',
       truncated: false,
     })
@@ -705,11 +705,11 @@ describe('createSubtask error normalization and options', () => {
     expect(result.task_id).toBe('ses_child')
   })
 
-  it('uses the description as the step label and records it on the step', async () => {
+  it('uses the description as the step description and records it on the step', async () => {
     const context = makeContext(createClient())
     await createSubtask(context)({ prompt: 'do work', description: 'short label' })
 
-    expect(context.steps[0]).toMatchObject({ label: 'short label', description: 'short label' })
+    expect(context.steps[0]).toMatchObject({ description: 'short label' })
   })
 
   it('rejects an object subtask without a description and records an error step', async () => {

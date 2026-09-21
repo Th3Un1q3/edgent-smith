@@ -60,10 +60,10 @@ On validation failure, run the fix and its re-validation in a new `workflow` cal
 
 Before you write a line of script, name every `subtask()` and its one-line purpose.
 
-- `description` is required on the object form. It becomes the step label and child session title and is truncated to 80 characters. The string shorthand derives it from the first 80 characters of the prompt; prefer the object form.
+- `description` is required on the object form. It becomes the step description and child session title and is truncated to 80 characters. The string shorthand derives it from the first 80 characters of the prompt; prefer the object form.
 - `agent` defaults to `rug-swe`. Omit it unless a subtask needs a different agent.
 - Chains use `task_id` to continue the same child conversation; the child sees the new prompt in its existing context, so do not re-send prior context.
-- Structured work uses `schema`; the script reads `data` instead of parsing prose.
+- Default to prose and read `outputText`; use `schema` only for values the script reads by field (see Structured-Output Discipline).
 - Fan out with `Promise.all`. The runtime bounds concurrency, so hand it more work than `max_concurrent`.
 - Always `await` every `subtask()`; each call costs one budget unit.
 - Always `return` a small reducer of counts, statuses, and key `data`. Keep it JSON-serializable; never return full child transcripts.
@@ -86,7 +86,7 @@ Budgets:
 
 Visible progress is server-side and needs no script work. Every run gets a run id (`wf#<6 hex>`) shown in every toast and child-session title. Toasts cover the start (`started · wf#<id>`), a milestone per completed subtask for runs of up to five subtasks and every fifth completion after that (`<status> <ok>/<total> · wf#<id> · <description>`, where `<status>` is `ok` on success and the failing status otherwise), and a terminal summary (`workflow ok · <ok>/<n> subtasks · wf#<id> · <n>.<d>s` on success, `workflow timed out after <n>.<d>s · wf#<id>` on timeout, `workflow aborted · wf#<id>` on abort, or `workflow <status> · wf#<id> · <reason>` for every other failure); each child title moves from `wf#<id> · [running] <description>` to `wf#<id> · [ok]`/`[error]`/`[aborted] <description>`. Child sessions are real, parented sessions, so the session list and switcher expose them; they are not nested inline under the `workflow` call.
 
-The tool result is `{ title, output, metadata }`. Read `output` for the envelope; `metadata` carries `status`, `stats`, and a bounded `subtasks` table of `{ description, status, durationMs }`.
+The tool result is `{ title, output }`. Read `output` for the envelope; per-subtask details live in the envelope's `steps[]`.
 
 ## Orchestration Patterns: Choosing the Right Loop
 
@@ -291,7 +291,7 @@ Reasoning procedure, in order:
 The script moves data between children; each prompt spends tokens, so pass the smallest thing the consumer needs.
 
 - Pass a path when the consumer can read the file: a few tokens against thousands, and content truncates in transit.
-- Pass a compact structured summary, not a transcript: `schema`/`data` gives typed fields (id, status, count) instead of prose.
+- Pass the smallest thing the consumer needs: a path, or a one-line prose summary. Use `schema`/`data` only when the consumer reads named fields (id, status, count).
 - Never pass a full transcript. `outputText` caps near 4000 characters per step and the envelope caps at 8192 bytes.
 - Persist large artifacts to a file and pass the path; the filesystem is shared state. A child writes it, returns its path and a one-line summary, and the next child reads it.
 
@@ -384,7 +384,14 @@ Matching discipline:
 
 ## Structured-Output Discipline
 
-Use `schema` with `data` for hand-offs, reductions, and decisions. The script reads typed fields instead of parsing prose.
+Default to prose. Ask the child for a short written answer and read `outputText`. Use `schema` with `data` only when the script must consume a value mechanically, in one of four cases:
+
+- Parallel reduce: N parallel subtasks whose outputs the script merges by field (see Map-Reduce).
+- Control-flow branch: the script branches on a typed value, not a fuzzy string.
+- Typed chaining: a downstream call consumes named fields, as the skill selector feeds `skills: [...]`.
+- Truncation-safe hand-off: the value must survive transport compactly.
+
+A single verdict or one-field answer does not qualify. Have the child put `PASS` or `FAIL` on the first line and match it with a regex.
 
 - `schema` is a JSON Schema object. The child returns its full answer, optionally with prose or code, plus one JSON block between `<result_json>` and `</result_json>`.
 - Validation is a prompt contract plus parse plus a required-keys check, not a full JSON-Schema validator; nested constraints, types, enums, and formats go unchecked. Inspect `data` before trusting it.
@@ -396,12 +403,12 @@ Use `schema` with `data` for hand-offs, reductions, and decisions. The script re
 
 ## Reading the Result Envelope
 
-`workflow` returns `{ title, output, metadata }`; `output` is one JSON string envelope. Parse it and read the fields in order.
+`workflow` returns `{ title, output }`; `output` is one JSON string envelope. Parse it and read the fields in order.
 
 1. `status`, one of `ok`, `error`, `timeout`, `aborted`, `budget_exceeded`, `invalid_script`, `forbidden_script`. Read `result` only when `status` is `ok`.
 2. `result`, the script's return value. JSON omits it when the script returned `undefined`.
 3. `stats`: `subtasks`, `ok`, `error`, `empty`, `timeout`, `aborted`, `totalMs`, `truncated`.
-4. `steps[]`, one record per executed `subtask()` call: `label`, `description`, `task_id`, `status`, `durationMs`, `error?`, `truncated`.
+4. `steps[]`, one record per executed `subtask()` call: `description`, `task_id`, `status`, `durationMs`, `error?`, `truncated`.
 5. `logs[]`, values you passed to `log`, plus runtime warnings.
 
 Step status is the real signal. Step statuses are `ok`, `error`, `empty`, `timeout`, `aborted`. An `ok` envelope with an `empty` or `aborted` step, or any `truncated` step, is a partial run, not a success. Check every step before marking a phase complete.
@@ -542,7 +549,7 @@ Before checking any criterion, the validator must judge whether the criterion it
 
 Give the validator the task's intent, target medium, and consumer. Require independent fitness evaluation. Never hand the validator the expected verdict.
 
-Prefer structured output from the validator:
+Use structured output from the validator only when the script reads its fields, such as `criteria` or `findings`. When you need only a verdict, a first-line `PASS`/`FAIL` in `outputText` is sufficient. The schema below covers the criteria case:
 
 ```js
 const verdict = await subtask({
@@ -653,8 +660,8 @@ Access memory ONLY through the `serena` MCP server via the gateway tools, never 
 13. **Prescribing the method instead of the outcome.** The prompt defines goal, scope, acceptance criteria, and constraints; the child owns the method and follows its loaded skills. Prescribed commands assume permissions the auth layer may deny and go stale. Never include step-by-step command recipes, except a user-specified technology, which stays a required constraint.
 14. **Treating envelope `ok` as success without checking `steps[]`.** Read every `steps[]` record and `stats`; an `empty`/`aborted` step or any `truncated` flag marks a partial run (see Reading the Result Envelope). A phase is complete only when every step is `ok` and `stats.truncated` is false.
 15. **Exceeding `max_subtasks`.** Count designed calls, including retries, against `max_subtasks` before you call the tool; raise the limit or move work to a later phase (see Script-Design Discipline). A `budget_exceeded` envelope wastes the whole run.
-16. **Omitting `description`.** `description` is required for the object form and becomes the step label and child session title (see Script-Design Discipline). Without it you cannot map an envelope step back to its work.
-17. **Parsing prose instead of using `schema` and `data`.** Pass `schema`, read `data`, and guard it (see Structured-Output Discipline). Never hand-parse prose in the script.
+16. **Omitting `description`.** `description` is required for the object form and becomes the step description and child session title (see Script-Design Discipline). Without it you cannot map an envelope step back to its work.
+17. **Parsing prose for a value a fielded consumer needs.** When a downstream call or merge reads named fields, pass `schema`, read `data`, and guard it (see Structured-Output Discipline). When the script needs only a decision or a summary, prose is correct.
 18. **Splitting one phase across multiple `workflow` calls.** Call `workflow` once per phase and orchestrate fan-out, chains, and retries inside the script; splitting multiplies envelope-reading overhead and loses shared state. Several phases for one goal are legitimate when a human question, an envelope branch, sizing, or budget forces it.
 
 ## Termination Criteria
