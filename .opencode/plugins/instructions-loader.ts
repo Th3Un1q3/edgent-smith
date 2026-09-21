@@ -49,8 +49,7 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
 
       // Read session state for existing tokens (now with :full/:ref suffixes)
       const idempotencyTokens = sessionStorage.readState<StateWithIdempotencyTokens, Record<string, string>>(input.sessionID, (state) => {
-        if (!state.idempotencyTokens || Object.keys(state.idempotencyTokens).length === 0) return {}
-        return state.idempotencyTokens
+        return !state.idempotencyTokens || Object.keys(state.idempotencyTokens).length === 0 ? {} : state.idempotencyTokens
       }) ?? {}
 
       // Count remaining full-content slots — only :full suffix consumes budget
@@ -68,8 +67,7 @@ export const instructionsLoaderPlugin: Plugin = async ({ client, directory }) =>
       // path is always set by resolveInstructions() but typed as optional in ResolvedInstruction
       const nonSentInstructions = instructions.filter((instruction) => {
         const safePath = instruction.path ?? instruction.description
-        if (!safePath) return true // skip if neither path nor description exists
-        return !isAlreadyInjected(safePath)
+        return safePath ? !isAlreadyInjected(safePath) : true // skip if neither path nor description exists
       })
 
       if (nonSentInstructions.length === 0) {

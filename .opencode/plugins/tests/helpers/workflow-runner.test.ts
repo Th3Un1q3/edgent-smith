@@ -325,20 +325,19 @@ describe('runWorkflow', () => {
     let call = 0
     const prompt = vi.fn((input: { signal?: AbortSignal } = {}) => {
       call += 1
-      if (call === 1) {
-        return Promise.resolve({ data: { parts: [{ type: 'text', text: 'first' }] } })
-      }
-      return new Promise((_resolve, reject) => {
-        const onAbort = (): void => {
-          reject({ name: 'AbortError', message: 'aborted' })
-        }
-        if (input.signal?.aborted === true) {
-          onAbort()
-        }
-        else {
-          input.signal?.addEventListener('abort', onAbort, { once: true })
-        }
-      })
+      return call === 1
+        ? Promise.resolve({ data: { parts: [{ type: 'text', text: 'first' }] } })
+        : new Promise((_resolve, reject) => {
+            const onAbort = (): void => {
+              reject({ name: 'AbortError', message: 'aborted' })
+            }
+            if (input.signal?.aborted === true) {
+              onAbort()
+            }
+            else {
+              input.signal?.addEventListener('abort', onAbort, { once: true })
+            }
+          })
     })
     const client = makeClient({ prompt })
     const envelope = parse(await runWorkflow(options('const a = await subtask("a"); return await subtask("b")', { client, timeoutMs: 30 })))
@@ -366,20 +365,19 @@ describe('runWorkflow', () => {
       if (call === 1) {
         return Promise.resolve({ data: { info: { error: 'boom' } } })
       }
-      if (call === 2) {
-        return Promise.resolve({ data: { info: {}, parts: [] } })
-      }
-      return new Promise((_resolve, reject) => {
-        const onAbort = (): void => {
-          reject({ name: 'AbortError', message: 'aborted' })
-        }
-        if (input.signal?.aborted === true) {
-          onAbort()
-        }
-        else {
-          input.signal?.addEventListener('abort', onAbort, { once: true })
-        }
-      })
+      return call === 2
+        ? Promise.resolve({ data: { info: {}, parts: [] } })
+        : new Promise((_resolve, reject) => {
+            const onAbort = (): void => {
+              reject({ name: 'AbortError', message: 'aborted' })
+            }
+            if (input.signal?.aborted === true) {
+              onAbort()
+            }
+            else {
+              input.signal?.addEventListener('abort', onAbort, { once: true })
+            }
+          })
     })
     const client = makeClient({ prompt })
     const script = [

@@ -68,16 +68,14 @@ const buildInstruction = async <T extends CustomInstructionFrontMatter>(
       return undefined
     }
 
-    if (isAgentExcluded(parsedFrontmatter.excludeAgents, agent)) {
-      return undefined
-    }
-
-    return {
-      description: parsedFrontmatter.description || `Instruction applies to files matching the pattern "${applyTo}, instruction file: ${filePath}"`,
-      path: filePath,
-      applyTo,
-      excludePaths: parsedFrontmatter.excludePaths,
-    }
+    return isAgentExcluded(parsedFrontmatter.excludeAgents, agent)
+      ? undefined
+      : {
+          description: parsedFrontmatter.description || `Instruction applies to files matching the pattern "${applyTo}, instruction file: ${filePath}"`,
+          path: filePath,
+          applyTo,
+          excludePaths: parsedFrontmatter.excludePaths,
+        }
   }
   catch {
     return undefined
@@ -133,10 +131,7 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
 
     const filteredInstructions = matchingInstructions.filter((instruction) => {
       const excludePaths = instruction.excludePaths
-      if (!excludePaths) {
-        return true
-      }
-      return filePathsRelative.some(filePath => !isGlobMatch(excludePaths, filePath))
+      return excludePaths ? filePathsRelative.some(filePath => !isGlobMatch(excludePaths, filePath)) : true
     })
 
     await logger(`Filtered instructions for files [${filePaths.join(', ')}]: ${filteredInstructions.map(index_ => index_.path).join(', ')}`)

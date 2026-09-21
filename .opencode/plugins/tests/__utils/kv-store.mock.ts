@@ -23,8 +23,7 @@ export function resetMockState(initialState: InMemoryState = {}): void {
   mockState.inMemory = initialState
 
   mockState.readState?.mockImplementation((sessionId: string, function_?: (s: Partial<State>) => State) => {
-    if (function_) return function_(mockState.inMemory[sessionId] || {})
-    return
+    return function_ ? function_(mockState.inMemory[sessionId] || {}) : undefined
   })
   mockState.updateState?.mockImplementation((sessionId: string, function_?: (s: Partial<State>) => State) => {
     mockState.inMemory[sessionId] = function_ ? function_(mockState.inMemory[sessionId] || {}) : mockState.inMemory[sessionId] || {}

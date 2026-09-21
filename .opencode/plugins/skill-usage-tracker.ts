@@ -147,14 +147,16 @@ function countStep(s: SkillUsageTrackerState): SkillUsageTrackerState {
 }
 
 function recordSkillLoad(s: SkillUsageTrackerState, name: string, source: 'tool' | 'prompt'): SkillUsageTrackerState {
-  if (Object.hasOwn(s.loadedSkills, name)) return s // first load wins — preserve loadedAtStep
-  return {
-    ...s,
-    loadedSkills: {
-      ...s.loadedSkills,
-      [name]: { source, loadedAtStep: s.stepCount },
-    },
-  }
+  // first load wins — preserve loadedAtStep
+  return Object.hasOwn(s.loadedSkills, name)
+    ? s
+    : {
+        ...s,
+        loadedSkills: {
+          ...s.loadedSkills,
+          [name]: { source, loadedAtStep: s.stepCount },
+        },
+      }
 }
 
 function getMaxSteps(config: Record<string, number>, skillName: string): number | undefined {

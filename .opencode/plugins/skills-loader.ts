@@ -198,11 +198,8 @@ export const skillsLoaderPlugin: Plugin = async ({ client, directory, $ }) => {
     },
 
     'tool.execute.before': async (input, output) => {
-      // GUARD 1: Only act when tool is "task"
-      if (input.tool !== 'task') return
-
-      // GUARD 2: Need args to modify
-      if (!output.args) return
+      // GUARD 1 + 2: only act on the "task" tool, and only when args exist to modify
+      if (input.tool !== 'task' || !output.args) return
 
       const skills = output.args.skills
       const existingPrompt = (output.args.prompt || '') as string

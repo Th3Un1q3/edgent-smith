@@ -147,10 +147,7 @@ const hasRequiredKeys = (value: unknown, required: unknown): boolean => {
   if (!Array.isArray(required) || required.some(key => typeof key !== 'string') || required.length === 0) {
     return true
   }
-  if (!isPlainObject(value)) {
-    return false
-  }
-  return required.every(key => Object.prototype.hasOwnProperty.call(value, key))
+  return isPlainObject(value) ? required.every(key => Object.prototype.hasOwnProperty.call(value, key)) : false
 }
 
 const RESULT_OPEN_TAG = '<result_json>'
@@ -234,10 +231,7 @@ export const injectSkills = async (
     blocks.push(`<skill name="${name}">\n${content}\n</skill>`)
   }
 
-  if (blocks.length === 0) {
-    return prompt
-  }
-  return `<task_skills>\n${blocks.join('\n')}\n</task_skills>\n\n${prompt}`
+  return blocks.length === 0 ? prompt : `<task_skills>\n${blocks.join('\n')}\n</task_skills>\n\n${prompt}`
 }
 
 // Shared with the runner so both log paths JSON-stringify with a String fallback
@@ -361,10 +355,7 @@ const makeResult = (
     durationMs,
     truncated: options.truncated ?? false,
   }
-  if (options.data !== undefined) {
-    result.data = options.data
-  }
-  return result
+  return options.data === undefined ? result : { ...result, data: options.data }
 }
 
 const toStep = (label: string, description: string, result: SubtaskResult): StepRecord => ({
@@ -433,10 +424,7 @@ const buildPromptBody = (
     agent: parameters.agent ?? defaultAgent,
     parts: [{ type: 'text', text }],
   }
-  if (model !== undefined) {
-    body.model = model
-  }
-  return body
+  return model === undefined ? body : { ...body, model }
 }
 
 interface PromptResponse {

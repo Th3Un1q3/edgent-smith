@@ -84,10 +84,7 @@ function toStringOutput(value: string | Buffer | undefined): string {
   if (value === undefined) {
     return ''
   }
-  if (Buffer.isBuffer(value)) {
-    return value.toString()
-  }
-  return value
+  return Buffer.isBuffer(value) ? value.toString() : value
 }
 
 function makeTemplateArray(command: string): TemplateStringsArray {
@@ -150,11 +147,7 @@ async function runSingleCommand(gate: GateConfig, command: string, shell: Shell)
     return { kind: 'ok', stdout, stderr }
   }
 
-  if (output.exitCode === TIMEOUT_EXIT_CODE && gate.timeoutMs !== undefined) {
-    return timedOutResult(gate, command, stdout, stderr)
-  }
-
-  return { kind: 'failed', result: { exitCode: output.exitCode, stdout, stderr } }
+  return output.exitCode === TIMEOUT_EXIT_CODE && gate.timeoutMs !== undefined ? timedOutResult(gate, command, stdout, stderr) : { kind: 'failed', result: { exitCode: output.exitCode, stdout, stderr } }
 }
 
 export async function runGate(gate: GateConfig, shell: Shell): Promise<CommandResult> {
@@ -200,8 +193,7 @@ export function createDirtyGateBatcher(parameters: {
     }
     const avg = total / (editTimestamps.length - 1)
     const adaptive = 2 * avg
-    if (adaptive <= 0) return maxQuietMs
-    return Math.min(adaptive, maxQuietMs)
+    return adaptive <= 0 ? maxQuietMs : Math.min(adaptive, maxQuietMs)
   }
 
   function cancelTimer(): void {

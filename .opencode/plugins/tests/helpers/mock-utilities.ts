@@ -35,8 +35,7 @@ interface ResolvedClientOptions {
 Normalizes the options parameter: string shorthand becomes { agent }, otherwise the object itself (or {}).
 */
 function resolveClientOptions(options?: string | { agent?: string, data?: Record<string, unknown> }): ResolvedClientOptions {
-  if (typeof options === 'string') return { agent: options }
-  return options ?? {}
+  return typeof options === 'string' ? { agent: options } : options ?? {}
 }
 
 /**

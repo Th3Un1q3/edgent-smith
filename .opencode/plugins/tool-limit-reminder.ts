@@ -221,9 +221,10 @@ Your work will be exported for review when the session goes idle.
         })
       }
 
-      if (currentCount === agentReminderThreshold) {
-        // REMINDER: at the exact threshold — warn the agent with full instructions
-        const message = `<steering priority="warning" reason="tool call limit reached" type="instructions">
+      if (currentCount !== agentReminderThreshold) return // below threshold: do nothing special
+
+      // REMINDER: at the exact threshold — warn the agent with full instructions
+      const message = `<steering priority="warning" reason="tool call limit reached" type="instructions">
 STOP!
 DO NOT CALL ANY OTHER TOOLS, DON'T change, read, write files, execute commands in this session. You have reached the tool call limit for this agent.
 
@@ -239,15 +240,12 @@ Output the summary:
 - What you could've done if you got more time
 </steering>`
 
-        await sendMessage({
-          client,
-          sessionId: sessionID,
-          message,
-          noReply: true,
-        })
-      }
-
-      // Below threshold: do nothing special
+      await sendMessage({
+        client,
+        sessionId: sessionID,
+        message,
+        noReply: true,
+      })
     },
     'chat.message': async (
       input: { sessionID: string, agent?: string, messageID?: string },

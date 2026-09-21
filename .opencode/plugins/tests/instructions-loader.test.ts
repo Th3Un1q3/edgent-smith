@@ -134,8 +134,9 @@ describe('instructionsLoaderPlugin', () => {
     it('creates separate index when agent differs', async () => {
       const differentAgentClient = defaultCreateClient()
 
-      vi.spyOn(differentAgentClient.session, 'get').mockImplementation(async (path: unknown) =>
-        (path as { path?: { id?: string } })?.path?.id === 's-copilot' ? { data: { agent: 'copilot' } } : { data: {} })
+      vi.spyOn(differentAgentClient.session, 'get').mockImplementation(async (path: unknown) => ({
+        data: (path as { path?: { id?: string } })?.path?.id === 's-copilot' ? { agent: 'copilot' } : {},
+      }))
 
       const plugin = await instructionsLoaderPlugin({ client: differentAgentClient, directory: '/workspace' } as unknown as PluginInput)
 
