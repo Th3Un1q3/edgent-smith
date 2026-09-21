@@ -20,3 +20,6 @@ Process learnings for modifying dev containers and shared dev environments insid
 
 - mem:subagent-workflows/about — dispatching and verifying subagents that make devcontainer changes.
 - mem:research-process/about — researching devcontainer behavior before modifying it.
+
+## Guidelines
+- mem:devcontainer-workflows/ci-local-parity — run every gate in the same devcontainer image via `just ci`; host does env prep + cache plumbing only.

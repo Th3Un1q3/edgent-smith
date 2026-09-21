@@ -8,6 +8,8 @@ L0: "cases: reusable extraction cases distilled"
 L0_table:
   - id: cases/browser-automation/linkedin-growth-chart
     L0: "LinkedIn growth chart: aria-label regex extraction"
+  - id: cases/ci-stryker-incremental-cache-v2
+    L0: "Stryker CI cache v2: split dep/source hashes; test -f save gate; chmod a+rwX; tracked lockfile"
   - id: cases/opencode/lint_fix_rewrites_tests
     L0: "Lint --fix rewrites test files; re-run tests after lint"
   - id: cases/opencode/workflow_budget_exceeded_stats_mismatch
