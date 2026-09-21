@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+import subprocess
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -142,3 +143,109 @@ def test_python_strict_and_complexity() -> None:
     assert re.search(r"strict\s*=\s*true", text), "mypy strict=true must be pinned"
     assert re.search(r"max-complexity\s*=\s*10", text), "ruff max-complexity 10 must be pinned"
     assert "ignore_missing_imports" not in text, "ignore_missing_imports must not be present"
+
+
+def test_stryker_cache_key_segmented() -> None:
+    text = _read_text(pathlib.Path(".github/workflows/ci.yml"))
+    dep = (
+        "hashFiles('.opencode/bun.lock', '.opencode/package.json', "
+        "'.devcontainer/devcontainer.json', '.devcontainer/docker-compose.yml', "
+        "'.devcontainer/setup-dev.sh')"
+    )
+    src = (
+        "hashFiles('.opencode/plugins/**/*.ts', "
+        "'.opencode/plugins/tests/**/*.test.ts', "
+        "'.opencode/stryker.config.mjs', '.opencode/vitest.config.ts', "
+        "'.opencode/tsconfig.json')"
+    )
+    # Primary key: dependency/toolchain hash then source/test hash.
+    assert f"key: ${{{{ runner.os }}}}-stryker-v2-${{{{ {dep} }}}}-${{{{ {src} }}}}" in text
+    # restore-keys repeats the identical dependency/toolchain expression, so
+    # source-only changes warm-fall-back while dependency drift cannot cross-reuse.
+    assert text.count(dep) == 2, "dep/toolchain hash must be identical in key and restore-keys"
+    assert f"${{{{ runner.os }}}}-stryker-v2-${{{{ {dep} }}}}-" in text
+    assert "-stryker-v1-" not in text, "v1 cache epoch must be retired"
+
+
+def _hashfiles_literal_inputs(workflow_text: str) -> list[str]:
+    """Return the literal (non-glob) path arguments of every hashFiles(...) call.
+
+    Globs are skipped because their expansion cannot be asserted path-by-path; the
+    literal files are what git must track for hashFiles to see them at key time.
+    """
+    inputs: list[str] = []
+    for call in re.findall(r"hashFiles\((.*?)\)", workflow_text, re.DOTALL):
+        for raw in re.findall(r"'([^']+)'", call):
+            if "*" not in raw and raw not in inputs:
+                inputs.append(raw)
+    return inputs
+
+
+def test_stryker_cache_hash_paths_are_present_not_gitignored_and_tracked() -> None:
+    # hashFiles silently skips absent, ignored, or untracked paths, dropping them from
+    # the key. Derive the inputs from the workflow itself so a newly added input is
+    # checked too, then require each to exist, be not-ignored, and be tracked in git.
+    workflow = _read_text(pathlib.Path(".github/workflows/ci.yml"))
+    inputs = _hashfiles_literal_inputs(workflow)
+    # Guard the parser: the dependency/toolchain and source-config inputs must all be
+    # discovered, otherwise the loop below would vacuously pass on an empty list.
+    expected = {
+        ".opencode/bun.lock",
+        ".opencode/package.json",
+        ".devcontainer/devcontainer.json",
+        ".devcontainer/docker-compose.yml",
+        ".devcontainer/setup-dev.sh",
+        ".opencode/stryker.config.mjs",
+        ".opencode/vitest.config.ts",
+        ".opencode/tsconfig.json",
+    }
+    assert expected <= set(inputs), f"hashFiles inputs not discovered: {expected - set(inputs)}"
+
+    for rel in inputs:
+        assert (REPO_ROOT / rel).exists(), f"hashed cache input missing: {rel}"
+        ignored = subprocess.run(
+            ["git", "check-ignore", "--quiet", rel],
+            cwd=REPO_ROOT,
+            check=False,
+        )
+        # git check-ignore exits 1 when the path is not ignored.
+        assert ignored.returncode == 1, f"hashed cache input is gitignored: {rel}"
+        # `git check-ignore` exits nonzero for ignored *and* for merely-untracked
+        # paths, so it cannot tell them apart. A file absent from the checkout is
+        # invisible to hashFiles, so require it to be in the index as well.
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "--", rel],
+            cwd=REPO_ROOT,
+            check=False,
+        )
+        assert tracked.returncode == 0, (
+            f"hashed cache input is not tracked in git: {rel} "
+            "(hashFiles drops untracked paths, silently shrinking the cache key)"
+        )
+
+
+def test_stryker_cache_save_is_marker_gated() -> None:
+    text = _read_text(pathlib.Path(".github/workflows/ci.yml"))
+    # The save step must depend on the restore step's key and a deterministic host
+    # marker check, not hashFiles (which cannot see the gitignored reports dir).
+    assert "steps.stryker-cache.outputs.cache-primary-key != ''" in text
+    assert "id: stryker-cache-marker" in text
+    assert "if [ -f .opencode/reports/.stryker-cache-ok ]" in text
+    assert "steps.stryker-cache-marker.outputs.present == 'true'" in text
+    assert "hashFiles('.opencode/reports/.stryker-cache-ok')" not in text
+    # Marker is cleared first, then written only after the non-empty + valid-JSON check.
+    marker_reset = text.index('rm -f "$marker"')
+    json_check = text.index("json.load")
+    marker_write = text.index('echo ok > "$marker"')
+    assert marker_reset < json_check < marker_write
+    # No host Python setup: gates run in the DevContainer, not on the runner.
+    assert "actions/setup-python" not in text
+
+
+def test_bun_toolchain_pinned_not_latest() -> None:
+    text = _read_text(pathlib.Path(".devcontainer/devcontainer.json"))
+    match = re.search(r'features/bun:1":\s*\{\s*"version":\s*"([^"]+)"', text)
+    assert match is not None, "bun feature version option not found"
+    version = match.group(1)
+    assert version != "latest", "bun toolchain must not float on latest"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", version), f"bun version not exact: {version}"

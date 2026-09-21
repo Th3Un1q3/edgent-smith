@@ -4,9 +4,9 @@ set dotenv-override := true
 set export := true
 set working-directory := "."
 
-# Install dependencies for CI
+# Install dependencies for CI. The committed bun.lock pins resolved versions.
 deps:
-    bun install
+    bun install --frozen-lockfile
 
 # Run tests for opencode plugins using Bun and Vitest. This command is intended to be run from the root of the opencode repository.
 

@@ -3,7 +3,7 @@
 **Generated:** 2026-06-20
 **Commit:** a7ce51d
 **Branch:** main
-**Last verified:** 2026-09-05
+**Last verified:** 2026-09-21
 
 ## World Model
 
@@ -109,7 +109,8 @@ The system is architected around high-centrality components in the following mod
 - **Python 3.13**: Uses modern type annotations (`from __future__ import annotations`) and standard library features.
 - **Click Architecture**: Strict separation between command routing (`cli/main.py`), logic (`commands/*.py`), and services (`services/*.py`).
 - **Task Runner**: Root `justfile` is global quality gates only (`test`, `lint`, `typecheck`, `format`, `format-check`, `ci`, `ci-fast`, `clean`, `verify-agents`) + `mod` imports; scoped recipes live in `evals/`, `scripts/`, `docs/`, `agents/`, `cli/`, `agent_utils/`, `opencode/` and run as `just <module>::<recipe>` (e.g., `just evals::eval`). Do not add domain recipes to root — see `.opencode/instructions/justfiles.instructions.md:0`.
-- **CI Fast Path**: `just ci` runs 12 gates (mutation measured 193s with ignoreStatic, down from 451s; timeout 1260s). For `*.md`/`*.yml`/`justfile` docs-only changes use `just ci-fast` or `SKIP_MUTATION=1 just ci` (~20s); mutation only matters for `.opencode/**/*.ts`. Remote PR CI runs `just ci` verbatim — keep `scripts/ci.sh` and `.github/workflows/ci.yml` in sync. Env `MUTATION_TIMEOUT=1260` wraps `timeout` gate 12; `MUTATION=1` opts into full run.
+- **CI Fast Path**: `just ci` runs 13 gates (mutation measured 193s with ignoreStatic, down from 451s). For `*.md`/`*.yml`/`justfile` docs-only changes use `just ci-fast` or `SKIP_MUTATION=1 just ci` (~20s); mutation only matters for `.opencode/**/*.ts`. Remote PR CI has no paths filter and runs `just ci` verbatim — keep `scripts/ci.sh` and `.github/workflows/ci.yml` in sync. Env `MUTATION_TIMEOUT=1260` wraps `timeout` gate 12; `MUTATION=1` opts into full run.
+- **CI Workflow**: `.github/workflows/ci.yml` has two jobs — `prebuild-devcontainer` (`timeout-minutes: 12`, skips fork PRs) and `ci` (`timeout-minutes: 30`, `needs` prebuild, runs `just ci` inside the DevContainer). The `ci` job restores `.opencode/reports/stryker-incremental.json` under a `${runner.os}-stryker-v2-<dep/toolchain-hash>-<source-hash>` key, normalizes its ownership for the container uid, validates it in-container, and saves it only when the `.stryker-cache-ok` marker exists.
 - **Pre-check Gate**: Before any `justfile` or `*/justfile` edit run `just verify-agents` (<2s) — enforces root 11 globals + 7 mods, `set working-directory := ".."` + `--cwd` instead of `cd &&` (`grep "[c]d .*&&"`), and `mkdir -p scripts/conductor` with `scripts/conductor/.gitkeep` tracked.
 - **Environment Management**: Heavy reliance on DevContainers for consistent execution across local and CI environments.
 - **Serena Gateway:** Snapshot 2 KB before every `gateway_mcp-exec`; on empty `content:[]` fall back immediately to `bash cat .serena/memories/<id>.md` with 0 retries; every `list_memories` must be followed by `read_memory` before responding — see `.opencode/instructions/serena-gateway.instructions.md`.

@@ -49,8 +49,27 @@ Apply to every `.github/workflows/*.yml` that uses `devcontainers/ci`:
      if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
    ```
    Downstream `ci` must allow skip: `if: always() && (needs.prebuild-devcontainer.result == 'success' || needs.prebuild-devcontainer.result == 'skipped')`.
-4. **Parity:** remote runs `just ci` verbatim (`runCmd: just ci`). Keep `scripts/ci.sh` (12 gates, sequential) and `.github/workflows/ci.yml` in sync.
-5. **Gate it:** add `grep -R "devcontainers/ci@"` count = 5 to `just verify-agents` gate 10.
+4. **Parity:** remote runs `just ci` inside the DevContainer (`runCmd` invokes `just ci` and preserves its exit code). Keep `scripts/ci.sh` (13 gates, sequential) and `.github/workflows/ci.yml` in sync.
+5. **Gate it:** `scripts/verify_thresholds.sh` check #8 asserts `grep -R "devcontainers/ci@"` count = 5; it runs as Gate #0 inside `just verify-agents`.
+
+## Stryker incremental cache
+
+All quality gates run inside the DevContainer (`runCmd` invokes `just ci`). The host runs only checkout, `.env` bootstrap, and the cache plumbing around the container entry point: restore, permission normalization, and save for Stryker's incremental file `.opencode/reports/stryker-incremental.json`.
+
+The cache key has two hash segments, and `restore-keys` repeats only the first:
+
+```yaml
+key: ${{ runner.os }}-stryker-v2-${{ hashFiles('.opencode/bun.lock', '.opencode/package.json', '.devcontainer/devcontainer.json', '.devcontainer/docker-compose.yml', '.devcontainer/setup-dev.sh') }}-${{ hashFiles('.opencode/plugins/**/*.ts', '.opencode/plugins/tests/**/*.test.ts', '.opencode/stryker.config.mjs', '.opencode/vitest.config.ts', '.opencode/tsconfig.json') }}
+restore-keys: |
+  ${{ runner.os }}-stryker-v2-${{ hashFiles('.opencode/bun.lock', '.opencode/package.json', '.devcontainer/devcontainer.json', '.devcontainer/docker-compose.yml', '.devcontainer/setup-dev.sh') }}-
+```
+
+- **Dependency/toolchain hash (first segment):** `.opencode/bun.lock` — commit it so it is present in the checkout — plus `.opencode/package.json` and the DevContainer toolchain inputs (`.devcontainer/devcontainer.json`, `docker-compose.yml`, `setup-dev.sh`), which can change mutant semantics. `just .opencode/deps` installs with `bun install --frozen-lockfile`, so the hashed lockfile matches the resolved dependency versions.
+- **Source hash (second segment):** the mutatable plugins, tests, and configs. A source-only change misses the primary key and warm-falls-back through `restore-keys` to a cache produced by the same dependency/toolchain environment.
+- **What invalidates what:** a source/test/config change makes the primary key miss but still restores the same-environment cache; a dependency or toolchain change alters the prefix too, so no older-environment cache can cross-reuse stale verdicts. Bump the `-v2-` epoch to invalidate wholesale (for example, a Stryker major schema change).
+- **Save guard and marker:** validation runs in-container inside `runCmd`, after `just ci` and with its exit code preserved. It skips the save when `.opencode/bun.lock` is missing, and otherwise writes the marker `.opencode/reports/.stryker-cache-ok` only when the incremental file is non-empty (`-s`) and valid JSON (`python3 -c 'import json,sys; json.load(open(sys.argv[1]))'`). The host `Check Stryker cache marker` step (`if: always()`) then probes the marker and emits `present=true|false`; the save step runs only when `steps.stryker-cache.outputs.cache-primary-key != ''` and `steps.stryker-cache-marker.outputs.present == 'true'`. Never save an empty, partial, or corrupt file: a killed or timed-out run can leave truncated JSON.
+- **Permission normalization is required:** restored files are owned by the runner uid (1001) while the container runs as `vscode` (1000). `mkdir -p .opencode/reports && chmod -R a+rwX .opencode/reports` (portable, no sudo) makes the restored directory and file writable by the container. Dropping this step leaves a 1001-owned cache file the container cannot overwrite.
+- **Pin bun:** `.devcontainer/devcontainer.json` pins the bun feature to `"version": "1.4.2"`. A floating bun binary changes Vitest/Stryker runtime semantics; pinning keeps the hashed devcontainer inputs meaningful.
 
 ## Why this matters
 
@@ -143,3 +162,13 @@ The CI container should already set this marker via the `.devcontainer/docker-co
 - Keep workflows small and delegate complex logic to `just` recipes or repo scripts.
 - Do not install tools twice; rely on the DevContainer image and features instead.
 - If a workflow step needs secrets, forward them explicitly via `with.env`.
+
+## Lessons / pitfalls
+
+- **`postCreateCommand` failures are infra, not code.** `devcontainers/ci` runs `bash .devcontainer/setup-dev.sh`; its hardlink handling has exited 1 while `prebuild-devcontainer` reported success. Treat a failing postCreate as environment setup, make `setup-dev.sh` idempotent, and confirm the log carries no hardlink warning.
+- **A green prebuild does not imply a green gate job.** The two jobs run in different containers on different runners; prebuild only proves the image builds. Setup and gate failures surface in the `ci` job.
+- **PR caches are ref-scoped.** A cache saved on a PR merge ref is not readable by `main`; `main`'s caches are readable by PRs. A PR can warm-fall-back to `main`'s cache, but `main` only benefits from caches it saved itself.
+- **Never let `restore-keys` cross a dependency or toolchain change.** The prefix repeats only the dependency/toolchain hash, so a lockfile or DevContainer toolchain change cannot restore stale mutation verdicts from an older environment.
+- **`hashFiles` cannot see an untracked or gitignored lockfile.** A lockfile that is not committed drops out of the cache key silently, so resolved-dependency drift reuses older mutant verdicts. Keep `.opencode/bun.lock` committed and tracked (it is no longer in `.opencode/.gitignore`) and install it with `bun install --frozen-lockfile`; otherwise the dependency hash is dead at key time.
+- **Pin toolchains.** The bun feature is pinned (`"version": "1.4.2"`); `latest` drifts and changes Vitest/Stryker mutant semantics without invalidating the cache key.
+- **Normalize cached-file ownership across the uid boundary.** The host runner uid (1001) owns restored files; the container runs as `vscode` (1000). `chmod -R a+rwX .opencode/reports` before entering the container keeps the increment file writable.

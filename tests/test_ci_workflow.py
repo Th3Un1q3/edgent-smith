@@ -174,11 +174,21 @@ def test_ci_workflow_uses_script_backed_just_wrapper() -> None:
     assert ci_job_match is not None
 
     ci_job = ci_job_match.group(0)
-    ensure_env = ci_job.index("- name: Ensure .env exists")
+    env_prep = ci_job.index("- name: Prepare CI environment")
     devcontainer_step = ci_job.index("- uses: devcontainers/ci@v0.3")
 
-    assert ensure_env < devcontainer_step
-    assert "cp .env.example .env" in ci_job
-    assert "runCmd: |\n            just ci" in ci_job
+    # Environment bootstrap (creating .env) runs on the host before the container
+    # starts; the logic lives in a repo script so local and CI share one source.
+    assert env_prep < devcontainer_step
+    assert "bash scripts/ci_ensure_env.sh --no-infra" in ci_job
+    ensure_env_script = (REPO_ROOT / "scripts" / "ci_ensure_env.sh").read_text()
+    assert "cp .env.example .env" in ensure_env_script
+
+    # All gates still run through the script-backed `just ci` inside the container.
+    # The runCmd is a wrapper only so it can preserve the gate exit code and validate
+    # the Stryker cache; it must not re-implement the gate sequence in the workflow.
+    assert "runCmd: |" in ci_job
+    assert "just ci" in ci_job
+    assert 'exit "$gate_status"' in ci_job
     assert "escape_workflow_command()" not in workflow
     assert "run_check format-check just format-check" not in workflow
