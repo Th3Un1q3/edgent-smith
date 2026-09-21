@@ -3,7 +3,8 @@
 # Gates (order matters):
 #  0) verify-thresholds  1) verify-agents  2) format-check  3) lint  4) markdownlint  5) typecheck  6) test
 #  7) workflow-security  8) opencode-deps  9) opencode-test  10) opencode-lint
-# 11) opencode-typecheck  12) opencode-mutation (dominant; measured 425-490s locally)
+# 11) opencode-typecheck  12) opencode-mutation (dominant; measured ~193s locally with
+# ignoreStatic, 451s before; warm incremental re-run ~17s)
 # Parity: remote PR CI runs `just ci` verbatim; keep this script, the `ci` justfile
 # recipe, and .github/workflows/ci.yml in sync. The 13 gates must stay aligned with
 # the harness.config.ts 5-gate subset (superset here).

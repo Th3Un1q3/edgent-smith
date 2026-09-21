@@ -87,7 +87,35 @@ jobs:
       - name: Guard — no gate sweeps (parity with verify_thresholds.sh)
         run: bash scripts/verify_thresholds.sh
 
+      # Warm the Stryker incremental cache. devcontainers/ci bind-mounts the workspace
+      # (repo root -> /workspace), so Stryker's cwd-relative incrementalFile
+      # (reports/... under /workspace/.opencode) and this host path are the same file.
+      # Key invalidates when any mutatable source/test, the Stryker or Vitest config, or
+      # the dependency lock changes; bump -v1- to invalidate wholesale (e.g. a Stryker
+      # major upgrade changes the file schema). The restore-key prefix lets a branch/PR
+      # fall back to the default-branch cache stored under the same prefix.
+      - name: Restore Stryker incremental cache
+        id: stryker-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .opencode/reports/stryker-incremental.json
+          key: ${{ runner.os }}-stryker-v1-${{ hashFiles('.opencode/plugins/**/*.ts', '.opencode/plugins/tests/**/*.test.ts', '.opencode/stryker.config.mjs', '.opencode/vitest.config.ts', '.opencode/package.json', '.opencode/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-stryker-v1-
+
+      # The runner user (uid 1001) owns restored files while the container runs as
+      # `vscode` (uid 1000). chmod (portable, no sudo) makes the restored dir/file
+      # writable by the container; mkdir also covers a cache miss.
+      - name: Normalize Stryker cache permissions
+        run: |
+          d=.opencode/reports
+          mkdir -p "$d"
+          chmod -R a+rwX "$d"
+
       # Run everything inside the existing DevContainer – no separate Python setup.
+      # Build-layer caching uses the prebuilt ghcr.io image (cacheFrom below): this
+      # action version takes image references for cacheFrom/cacheTo, not buildx
+      # `type=gha` specs, and the prebuild job already pushes the warm layer cache.
       - uses: devcontainers/ci@v0.3.1900000450
         with:
           cacheFrom: ghcr.io/th3un1q3/edgent-smith
@@ -96,3 +124,26 @@ jobs:
             DEVCONTAINER=true
           runCmd: |
             just ci
+
+      # Never cache an empty, partial, or corrupt incremental file: a killed/timed-out
+      # run may leave a truncated file. Saving on failure is allowed only when the file
+      # parses, so a warmed previous-valid file is preserved and a partial one is dropped.
+      - name: Validate Stryker incremental cache
+        id: stryker-guard
+        if: always()
+        run: |
+          f=.opencode/reports/stryker-incremental.json
+          if [ -s "$f" ] && python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$f"; then
+            chmod a+r "$f" 2>/dev/null || true
+            echo "save=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "save=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Stryker incremental file missing or not valid JSON; skipping cache save"
+          fi
+
+      - name: Save Stryker incremental cache
+        if: always() && steps.stryker-guard.outputs.save == 'true' && steps.stryker-cache.outputs.cache-primary-key != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .opencode/reports/stryker-incremental.json
+          key: ${{ steps.stryker-cache.outputs.cache-primary-key }}

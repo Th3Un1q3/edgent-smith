@@ -27,8 +27,20 @@ const config = {
   // auto-discover them via import analysis (which fails with @plugins absolute aliases).
   testFiles: ['plugins/tests/**/*.test.ts'],
 
-  // Run all mutants regardless of incremental state on each invocation
-  force: true,
+  // Reuse prior mutant results from the incremental file on warm runs. force must
+  // stay false: force:true discards that cache on every invocation.
+  force: false,
+
+  // Skip static mutants (no per-test coverage shortcut, so each needs a full run).
+  // Measured on identical code (Stryker 9.6.1): 274 of 3125 mutants (~9%) are static
+  // yet consume ~57% of wall time; ignoring them cut a run from 451s to 193s while
+  // 2851 mutants are still tested. Static mutants are excluded from the score by design.
+  ignoreStatic: true,
+
+  // Persist incremental results under reports/ (gitignored) so CI can cache the file.
+  // Measured warm re-run: 17s with 3125/3125 results reused, identical score.
+  incremental: true,
+  incrementalFile: 'reports/stryker-incremental.json',
 
   // Thresholds for mutation score reporting
   thresholds: {
@@ -40,9 +52,9 @@ const config = {
   // Coverage analysis strategy (perTest is the default and best performance)
   coverageAnalysis: 'perTest',
 
-  // Concurrency: saturate all logical CPUs with test runners. ~51% of mutants are
-  // static (no per-test coverage shortcut), so the run is dominated by test-execution
-  // wall time; raising from '50%' to '100%' cuts that without touching mutant scope.
+  // Concurrency: saturate all logical CPUs with test runners. With static mutants
+  // excluded (ignoreStatic) the run is dominated by test-execution wall time; raising
+  // from '50%' to '100%' cuts that without touching mutant scope.
   // Stryker 9 removed `maxConcurrentTestRunners` — `concurrency` controls test runners.
   concurrency: '100%',
 
