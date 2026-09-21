@@ -26,7 +26,7 @@ describe('normalizeParameters', () => {
       agent: 'a',
       skills: ['s'],
       task_id: 't',
-      timeout_ms: 5,
+      timeout_seconds: 0.005,
     })
 
     expect(result).toEqual({
@@ -35,7 +35,7 @@ describe('normalizeParameters', () => {
       agent: 'a',
       skills: ['s'],
       task_id: 't',
-      timeout_ms: 5,
+      timeout_seconds: 0.005,
     })
   })
 
@@ -57,5 +57,94 @@ describe('normalizeParameters', () => {
 
   it.each([null, [], 42, { prompt: '' }, { prompt: 7 }])('throws TypeError for invalid input %#', (input) => {
     expect(() => normalizeParameters(input as unknown as SubtaskInput)).toThrow(TypeError)
+  })
+})
+
+// ── normalizeParameters task_id ──────────────────────────────────
+
+describe('normalizeParameters task_id', () => {
+  it('trims surrounding whitespace from a task_id', () => {
+    expect(normalizeParameters({ prompt: 'p', description: 'd', task_id: '  ses_x  ' }).task_id).toBe('ses_x')
+  })
+
+  it.each([
+    ['empty', ''],
+    ['whitespace', ' '.repeat(3)],
+  ])('treats a %s task_id as absent', (_label, taskId) => {
+    expect(normalizeParameters({ prompt: 'p', description: 'd', task_id: taskId }).task_id).toBeUndefined()
+  })
+
+  it('does not treat a whitespace-only task_id combined with fork_from as a conflict', () => {
+    const result = normalizeParameters({
+      prompt: 'p',
+      description: 'd',
+      task_id: ' '.repeat(3),
+      fork_from: 'ses_source',
+    })
+
+    expect(result.task_id).toBeUndefined()
+    expect(result.fork_from).toBe('ses_source')
+  })
+
+  it('still rejects a real task_id combined with fork_from', () => {
+    expect(() =>
+      normalizeParameters({ prompt: 'p', description: 'd', task_id: 'ses_x', fork_from: 'ses_y' }),
+    ).toThrow(/mutually exclusive/)
+  })
+
+  it.each([123, true, null, {}])('throws a TypeError naming task_id for a non-string %#', (taskId) => {
+    const input = { prompt: 'p', description: 'd', task_id: taskId } as unknown as SubtaskInput
+
+    expect(() => normalizeParameters(input)).toThrow(TypeError)
+    expect(() => normalizeParameters(input)).toThrow(/task_id/)
+  })
+})
+
+// ── normalizeParameters prompt/description trimming ──────────────
+
+describe('normalizeParameters prompt and description text', () => {
+  it('rejects a whitespace-only prompt for shorthand and object input', () => {
+    expect(() => normalizeParameters(' '.repeat(3))).toThrow(TypeError)
+    expect(() => normalizeParameters({ prompt: ' '.repeat(3), description: 'd' })).toThrow(/prompt/)
+  })
+
+  it('trims surrounding whitespace from the description', () => {
+    expect(normalizeParameters({ prompt: 'p', description: '  d  ' }).description).toBe('d')
+  })
+})
+
+// ── normalizeParameters option validation ────────────────────────
+
+describe('normalizeParameters option validation', () => {
+  it.each([0, -1, NaN, Infinity, '5', null])(
+    'throws a TypeError naming timeout_seconds for invalid %#',
+    (timeout_seconds) => {
+      const input = { prompt: 'p', description: 'd', timeout_seconds } as unknown as SubtaskInput
+
+      expect(() => normalizeParameters(input)).toThrow(TypeError)
+      expect(() => normalizeParameters(input)).toThrow(/timeout_seconds/)
+    },
+  )
+
+  it('passes a valid timeout_seconds through', () => {
+    expect(normalizeParameters({ prompt: 'p', description: 'd', timeout_seconds: 1 }).timeout_seconds).toBe(1)
+  })
+
+  it.each([['a'], [1], [null], [['a', 1]]])('throws a TypeError naming skills for invalid %#', (skills) => {
+    const input = { prompt: 'p', description: 'd', skills } as unknown as SubtaskInput
+
+    expect(() => normalizeParameters(input)).toThrow(TypeError)
+    expect(() => normalizeParameters(input)).toThrow(/skills/)
+  })
+
+  it('passes an empty skills array through', () => {
+    expect(normalizeParameters({ prompt: 'p', description: 'd', skills: [] }).skills).toEqual([])
+  })
+
+  it.each(['', ' '.repeat(2), 5, null])('throws a TypeError naming agent for invalid %#', (agent) => {
+    const input = { prompt: 'p', description: 'd', agent } as unknown as SubtaskInput
+
+    expect(() => normalizeParameters(input)).toThrow(TypeError)
+    expect(() => normalizeParameters(input)).toThrow(/agent/)
   })
 })

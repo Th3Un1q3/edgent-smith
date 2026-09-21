@@ -3,27 +3,33 @@ import type { Plugin } from '@opencode-ai/plugin'
 
 import { DEFAULT_TIMEOUT_SECONDS, runWorkflow } from './helpers/workflow-runner'
 import type { WorkflowSdkClient } from './helpers/workflow-runner'
+import { formatElapsed } from './helpers/workflow-subtask'
 import {
   DEFAULT_MAX_CONCURRENT,
   DEFAULT_MAX_SUBTASKS,
+  MAX_MAX_SUBTASKS_CAP,
 } from './helpers/workflow-types'
 
 const WORKFLOW_TOOL_DESCRIPTION = [
   'Execute a JavaScript workflow script that orchestrates subagents.',
-  'The script runs with three helpers: subtask, log, and progress.',
+  'The script runs with two helpers: subtask and log.',
   '',
   'subtask(input) -> Promise<result>',
-  '- input: a string prompt, or {prompt, description, agent?, skills?, task_id?, timeout_ms?, schema?}',
+  '- input: a string prompt, or {prompt, description, agent?, skills?, task_id?, fork_from?, timeout_seconds?, schema?}',
   '- description: required for the object form; a one-line indication of what the subtask does. The string',
   '  shorthand derives it from the first 80 chars of the prompt. Truncated to 80 chars in the step record.',
-  '- result: {outputText, task_id, status, error?, durationMs, truncated, data?}',
+  '- result: {outputText, task_id, status, error?, durationMs, truncated, data?, forked_from?}',
   '- status: \'ok\' | \'error\' | \'empty\' | \'timeout\' | \'aborted\'',
   '- Failed children never throw; inspect status. Concurrency is bounded automatically (default 4),',
   '  so Promise.all fan-out is safe. Subtasks are default-capped at 32 (1-64); exceeding the budget',
   '  throws BudgetExceededError inside the script, surfacing as budget_exceeded unless the script catches it.',
   '- Children default to the rug-swe agent; pass agent per subtask to override. Child tool access',
   '  follows the child agent\'s own permission scopes.',
-  '- task_id continues/resumes an existing child session.',
+  '- task_id continues/resumes an existing child session; task_id and fork_from are mutually exclusive, so pass',
+  '  at most one and either alone selects resume vs fork. Supplying both returns an error result, not a throw.',
+  '- fork_from forks that session, copying its history up to the latest message, then sends this prompt as the',
+  '  followup on the fork. The result task_id is the fork id and forked_from repeats the source. Omit fork_from',
+  '  for the existing fresh-child behavior.',
   '- skills: string[] loads .agents/skills/<name>/SKILL.md into the child prompt.',
   '- schema: a JSON Schema object. The child returns its full answer, optionally with prose or code, plus one',
   '  JSON block between <result_json> and </result_json>. The parser reads that block (tolerating an inner',
@@ -37,12 +43,9 @@ const WORKFLOW_TOOL_DESCRIPTION = [
   '',
   'log(message) -> appends a marker to the envelope logs.',
   '',
-  'progress({title, metadata}) -> updates the running tool call\'s live title and metadata while the',
-  'script runs. Fire-and-forget; it does not create a subtask. Use it for phase-level status, e.g.',
-  'progress({title: \'phase: reduce\'}). Each subtask start and finish also updates the live title.',
-  '',
   'Patterns:',
   '- Fan-out: const rs = await Promise.all(items.map(i => subtask(i)))',
+  '- Fork fanout: const base = await subtask(readDoc); const rs = await Promise.all(qs.map(q => subtask({prompt: q, description: q, fork_from: base.task_id})))',
   '- Chain: const a = await subtask("step 1"); const b = await subtask({prompt: "step 2 " + a.outputText, description: "refine step 1", task_id: a.task_id})',
   String.raw`- Map-reduce: const parts = await Promise.all(items.map(i => subtask(i))); const merged = await subtask({prompt: parts.map(p => p.outputText).join("\n"), description: "merge results"})`,
   '- Structured: const r = await subtask({prompt: "Classify x", description: "classify x", schema: {type: "object", required: ["label"]}}); if (r.data?.label === "urgent") ...',
@@ -55,7 +58,9 @@ const WORKFLOW_TOOL_DESCRIPTION = [
   'Scripts are trusted agent code, not sandboxed.',
   '',
   'Tool result: {title, output, metadata}. output is the JSON envelope string, metadata is',
-  '{status, stats}, and title is a summary such as "workflow: ok, 3/5 subtasks".',
+  '{status, stats, subtasks}, and title is a summary such as "workflow: ok · 3/5 subtasks · 12.4s" (total elapsed).',
+  'metadata.subtasks is the bounded per-subtask table of {description, status, durationMs}. Progress toasts and',
+  'child-session titles carry a run id (wf#<6 hex>), so concurrent runs stay distinguishable.',
   '',
   'Envelope: {status, result, error?, steps, stats, logs} with status one of',
   'ok | error | timeout | aborted | budget_exceeded | invalid_script | forbidden_script;',
@@ -71,35 +76,63 @@ const WORKFLOW_TOOL_DESCRIPTION = [
   'return { summary: summary.outputText, sources: rs.length }',
 ].join('\n')
 
+interface WorkflowStepSummary {
+  description: string
+  status: string
+  durationMs: number
+}
+
 interface WorkflowToolResult {
   title: string
   output: string
-  metadata: { status: string, stats: unknown }
+  metadata: { status: string, stats: unknown, subtasks: WorkflowStepSummary[] }
 }
 
-const readNumber = (value: unknown): number => (typeof value === 'number' ? value : 0)
+export const readNumber = (value: unknown): number => (Number.isFinite(value) ? (value as number) : 0)
+
+// Compact per-subtask table for the tool result. Defensive at this boundary:
+// non-array steps degrade to an empty table, each field falls back to a stable
+// value, and the table is bounded to the recorded step cap.
+const toStepSummaries = (steps: unknown): WorkflowStepSummary[] => {
+  if (!Array.isArray(steps)) {
+    return []
+  }
+  return steps.slice(0, MAX_MAX_SUBTASKS_CAP).map((step) => {
+    const record = (step ?? {}) as { description?: unknown, status?: unknown, durationMs?: unknown }
+    return {
+      description: typeof record.description === 'string' ? record.description : '',
+      status: typeof record.status === 'string' ? record.status : 'unknown',
+      durationMs: readNumber(record.durationMs),
+    }
+  })
+}
 
 // `runWorkflow` stays a string-producing function; the tool boundary wraps its
 // serialized envelope in a ToolResult so the harness can render a status line
 // and structured metadata. A malformed envelope degrades to a safe title.
-const toToolResult = (output: string): WorkflowToolResult => {
+export const toToolResult = (output: string): WorkflowToolResult => {
   try {
-    const envelope = JSON.parse(output) as { status?: unknown, stats?: { ok?: unknown, subtasks?: unknown } }
+    const envelope = JSON.parse(output) as {
+      status?: unknown
+      stats?: { ok?: unknown, subtasks?: unknown, totalMs?: unknown }
+      steps?: unknown
+    }
     const status = typeof envelope.status === 'string' ? envelope.status : 'unknown'
     const stats = envelope.stats ?? {}
     const ok = readNumber(stats.ok)
     const subtasks = readNumber(stats.subtasks)
+    const elapsed = formatElapsed(Math.max(0, readNumber(stats.totalMs)))
     return {
-      title: `workflow: ${status} · ${ok}/${subtasks} subtasks`,
+      title: `workflow: ${status} · ${ok}/${subtasks} subtasks · ${elapsed}`,
       output,
-      metadata: { status, stats },
+      metadata: { status, stats, subtasks: toStepSummaries(envelope.steps) },
     }
   }
   catch {
     return {
       title: 'workflow: unparseable envelope',
       output,
-      metadata: { status: 'error', stats: {} },
+      metadata: { status: 'error', stats: {}, subtasks: [] },
     }
   }
 }
@@ -112,7 +145,7 @@ export const workflowPlugin: Plugin = async ({ client, directory }) => ({
         script: tool.schema
           .string()
           .min(1)
-          .describe('JS workflow script; runs with three helpers: subtask, log, and progress, no import/require.'),
+          .describe('JS workflow script; runs with two helpers: subtask and log, no import/require.'),
         timeout_seconds: tool.schema
           .number()
           .min(1)
@@ -144,7 +177,6 @@ export const workflowPlugin: Plugin = async ({ client, directory }) => ({
           timeoutMs: (arguments_.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS) * 1000,
           maxConcurrent: arguments_.max_concurrent,
           maxSubtasks: arguments_.max_subtasks,
-          onProgress: progress => context.metadata({ title: progress.title, metadata: progress.metadata }),
           abort: context.abort,
         })
         return toToolResult(output)

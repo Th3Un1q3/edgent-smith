@@ -16,7 +16,7 @@ Project memory is stored in the serena store: organized by domain with about-fir
 
 ### Context
 
-The project persists knowledge in the serena memory store (`.serena/memories/`), accessed ONLY via the serena MCP server through the gateway — never direct file reads. The structure is domain-based and about-first: each domain has an `about` index describing its scope and boundaries; memory names are hierarchical and self-describing (`domain/subdomain/topic`); public vs private namespaces split committable knowledge from never-commit content (`private/`). A BLOCKING GATE (7 checks) runs before every write; research is cache-first. Domains today include `refactoring/`, `testing/`, `troubleshooting/`, `researches/`, `skills/`, `subagent-workflows/`, and `architecture/` (new). The `architecture/` domain records decisions as ADRs (`mem:architecture/adr-template`, `mem:architecture/adr-rules`).
+The project persists knowledge in the serena memory store (`.serena/memories/`), accessed ONLY via the serena MCP server through the gateway — never direct file reads. The structure is domain-based and about-first: each domain has an `about` index describing its scope and boundaries; memory names are hierarchical and self-describing (`domain/subdomain/topic`); public vs private namespaces split committable knowledge from never-commit content (`private/`). A BLOCKING GATE (9 checks; expanded from 7) runs before every write; research is cache-first. Domains today include `refactoring/`, `testing/`, `troubleshooting/`, `researches/`, `skills/`, `subagent-workflows/`, and `architecture/` (new). The `architecture/` domain records decisions as ADRs (`mem:architecture/adr-template`, `mem:architecture/adr-rules`).
 
 ### Options considered
 

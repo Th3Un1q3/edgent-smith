@@ -8,6 +8,16 @@ L0: "cases: reusable extraction cases distilled"
 L0_table:
   - id: cases/browser-automation/linkedin-growth-chart
     L0: "LinkedIn growth chart: aria-label regex extraction"
+  - id: cases/opencode/lint_fix_rewrites_tests
+    L0: "Lint --fix rewrites test files; re-run tests after lint"
+  - id: cases/opencode/workflow_budget_exceeded_stats_mismatch
+    L0: "budget_exceeded stats.subtasks can exceed steps.length"
+  - id: cases/opencode/skill_catalog_name_mismatch
+    L0: "Verify skill catalog names against .agents/skills/"
+  - id: cases/opencode/workflow_fork_from_envelope_truncation
+    L0: "Workflow reducer can exceed the ~8 KB envelope cap"
+  - id: cases/opencode/workflow_producer_unverified_tree
+    L0: "Producer can leave the tree unverified after budget exhaustion"
 ---
 # Cases
 

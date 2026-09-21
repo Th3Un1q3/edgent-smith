@@ -4,10 +4,10 @@ The `workflow` tool runs a short JavaScript script that orchestrates subagents. 
 
 ## Overview and mental model
 
-- You write one script. The runtime compiles it as the body of an async function with three helpers in scope: `subtask`, `log`, and `progress`.
+- You write one script. The runtime compiles it as the body of an async function with two helpers in scope: `subtask` and `log`.
 - `subtask` creates a child OpenCode session, sends one prompt, and returns a plain object. Child failures come back as values, so one bad child does not throw. The one exception is a budget overrun, covered under Failure handling.
 - The runtime caps concurrency and counts every call against a subtask budget. Fan-out with `Promise.all` is safe because the runtime queues the extra calls.
-- The tool returns a structured result `{ title, output, metadata }`. `output` is one JSON envelope that describes the whole run: overall status, the script's return value, a step list, counters, and logs. `metadata` carries `status` and `stats`, and `title` is a summary of the run.
+- The tool returns a structured result `{ title, output, metadata }`. `output` is one JSON envelope that describes the whole run: overall status, the script's return value, a step list, counters, and logs. `metadata` carries `status`, `stats`, and a bounded `subtasks` table, and `title` is a summary of the run.
 - The script is the unit of design. Call `workflow` once per phase and do that phase's orchestration inside the script. A goal may span one or more phases, and each call runs one phase. Several phases per goal are legitimate when a human question, an envelope branch, sizing, or budget forces it.
 
 ## Quickstart
@@ -26,7 +26,7 @@ The tool returns `{ title, output, metadata }`. Parse `output` as JSON and read 
 {
   "status": "ok",
   "result": { "status": "ok", "files": "..." },
-  "steps": [{ "label": "List three files that define the CLI entry point", "description": "list CLI entry files", "task_id": "ses_...", "status": "ok", "durationMs": 4210, "truncated": false }],
+  "steps": [{ "label": "List three files that define the CLI entry point", "description": "List three files that define the CLI entry point", "task_id": "ses_...", "status": "ok", "durationMs": 4210, "truncated": false }],
   "stats": { "subtasks": 1, "ok": 1, "error": 0, "empty": 0, "timeout": 0, "aborted": 0, "totalMs": 4300, "truncated": false },
   "logs": []
 }
@@ -48,7 +48,7 @@ const full = await subtask({
   description: 'readme summary',
   agent: 'rug-swe',
   skills: ['context-gathering'],
-  timeout_ms: 120000,
+  timeout_seconds: 120,
 })
 ```
 
@@ -57,21 +57,27 @@ Object fields:
 | Field | Required | Default | Purpose |
 |---|---|---|---|
 | `prompt` | Yes | none | Text sent to the child session. Must be non-empty. |
-| `description` | Yes | none | One-line indication of what the subtask does. Used as the step label, the child session title, and the step record, where it is truncated to 80 characters. The string shorthand derives it from the first 80 characters of the prompt. |
+| `description` | Yes | none | One-line indication of what the subtask does. Used as the step label and the step record, where it is truncated to 80 characters. Every subtask uses it as the child session title, including a forked subtask, which gets the same description-derived title rather than the source session's; fork provenance appears in the result's `forked_from`. The string shorthand derives it from the first 80 characters of the prompt, and the object form requires it, so there is no prompt-based fallback. |
 | `agent` | No | `rug-swe` | Agent that handles the child prompt. Child tool access follows that agent's permission scopes. |
 | `skills` | No | none | Skill names to load from `.agents/skills/<name>/SKILL.md` into the child prompt. Unknown names are skipped and logged. |
-| `task_id` | No | none | Resume an existing child session instead of creating one. |
-| `timeout_ms` | No | `300000` | Per-subtask timeout in milliseconds. On expiry the subtask returns `status: 'timeout'` and an `error` naming the limit in ms. |
+| `task_id` | No | none | Resume an existing child session instead of creating or forking one. Mutually exclusive with `fork_from`. |
+| `fork_from` | No | none | Fork this session id, copy its conversation history up to the latest message, and deliver this subtask's prompt as the followup on the fork. The result's `task_id` is the new fork id. Surrounding whitespace is trimmed and a whitespace-only value is treated as absent. Mutually exclusive with `task_id`. |
+| `timeout_seconds` | No | `300` | Per-subtask timeout in seconds. On expiry the subtask returns `status: 'timeout'` and an `error` naming the limit in seconds. |
 | `schema` | No | none | JSON Schema object requesting structured output. See Structured output. |
 
 `task_id` resumes a child session. You still pass a `prompt`; the child sees the new prompt in its existing context.
+
+`task_id` and `fork_from` are mutually exclusive. Pass at most one, because either alone selects the mode: `task_id` resumes, `fork_from` forks. Supplying both returns a subtask with `status: 'error'` and an `error` naming the conflict; the runtime rejects the ambiguity before it touches either session.
+
+`fork_from` branches instead of appending. The runtime forks the named session, copying its history up to the latest message, then sends this subtask's prompt as the followup on the fork. The result's `task_id` is the fork id, and `forked_from` repeats the source id. The runtime trims surrounding whitespace from `fork_from` and treats a whitespace-only value as absent. The fork is independent of the source, so later turns on the fork leave the source session alone. Omit `fork_from` and the subtask creates a fresh child exactly as before. Pass a returned `task_id` to a later `subtask({ task_id })` turn to continue that fork or fresh child.
 
 Result object:
 
 | Field | Type | Meaning |
 |---|---|---|
 | `outputText` | string | Text parts joined with newlines, truncated to the per-step cap. |
-| `task_id` | string | Child session id. Pass it back to continue the conversation. |
+| `task_id` | string | Child session id. Pass it back to continue the conversation. On a forked subtask this is the fork id. |
+| `forked_from` | string, absent unless forked | Source session id when `fork_from` was set. |
 | `status` | string | One of `ok`, `error`, `empty`, `timeout`, `aborted`. |
 | `error` | string, absent on success | Failure message. |
 | `durationMs` | number | Wall time for the call. |
@@ -129,21 +135,11 @@ If the inherited model is unavailable, the child prompt call fails and the subta
 
 ### log(message)
 
-`log` appends a value to the envelope's `logs` array. The runtime JSON-stringifies the value, keeps at most 100 entries, and cuts each entry to 500 characters. Use it for decisions the model should see in the envelope.
+`log` appends a value to the envelope's `logs` array. The runtime JSON-stringifies the value, keeps at most 100 entries, and cuts entries longer than 500 characters, appending a truncation marker. Use it for decisions the model should see in the envelope.
 
 ```js
 log({ phase: 'fan-out', topics: 3 })
 ```
-
-### progress(input)
-
-`progress` updates the running tool call's live title and metadata while the script runs. The runtime already updates the title at each `subtask` start and finish; call `progress` to add phase-level status on top of that. It is fire-and-forget: it does not create a subtask and its return value is not useful.
-
-```js
-progress({ title: 'phase: reduce', metadata: { phase: 'reduce' } })
-```
-
-Progress entries never reach the envelope. They only change what the tool call shows live.
 
 ## Patterns
 
@@ -167,6 +163,58 @@ return {
   summaries: results.map((r, i) => ({ topic: topics[i], status: r.status, text: r.outputText })),
 }
 ```
+
+### Fork fanout
+
+One subtask reads the source document and returns its `task_id`. `fork_from` then copies that session's history into a new session per question, so every fork starts from the same document. Distinct questions keep the answers separable, and a final subtask synthesizes them.
+
+```js
+const document = await subtask({
+  prompt: 'Read docs/workflow-tool.md and summarize how subtask options work.',
+  description: 'summarize workflow doc',
+})
+
+const audits = [
+  { id: 'cost', question: 'Audit the summary for token cost and budget risks. Ignore other concerns.' },
+  { id: 'safety', question: 'Audit the summary for missing permission checks. Ignore other concerns.' },
+  { id: 'clarity', question: 'Audit the summary for unclear instructions. Ignore other concerns.' },
+]
+
+const findings = await Promise.all(
+  audits.map(audit =>
+    subtask({
+      prompt: audit.question,
+      description: `audit ${audit.id}`,
+      fork_from: document.task_id,
+      schema: {
+        type: 'object',
+        properties: { finding: { type: 'string' }, severity: { type: 'string' } },
+        required: ['finding', 'severity'],
+      },
+    }),
+  ),
+)
+
+const failed = findings.filter(result => result.status !== 'ok')
+if (failed.length > 0) return { status: 'error', errors: failed.map(result => result.error) }
+
+const synthesis = await subtask({
+  prompt: 'Synthesize these audit findings into one prioritized list:\n' + JSON.stringify(findings.map(result => result.data)),
+  description: 'synthesize audits',
+})
+
+return {
+  forks: findings.map((result, index) => ({
+    audit: audits[index].id,
+    fork_id: result.task_id,
+    forked_from: result.forked_from,
+    finding: result.data,
+  })),
+  synthesis: synthesis.outputText,
+}
+```
+
+Each fork copies the source history, so N forks multiply the tokens the source document costs. Every fork is a normal subtask: it counts against `max_subtasks` and waits behind `max_concurrent`. Reuse one fork id with `subtask({ task_id })` when follow-up turns should keep that fork's context.
 
 ### Chain
 
@@ -288,14 +336,14 @@ Runtime caps:
 
 | Limit | Value |
 |---|---|
-| Per-subtask timeout | 300000 ms |
+| Per-subtask timeout | 300 seconds |
 | Per-step output | 4000 characters (`outputText` only; `data` is not truncated) |
 | Final result | No fixed length; the serializer trims it to fit the envelope byte budget. |
 | Envelope | 8192 bytes |
 | Logs | 100 entries, 500 characters each |
 | Step records | 64 (one per budgeted subtask call, since `max_subtasks` caps at 64) |
 
-When the envelope would exceed its byte cap, the runtime drops logs first, then truncates the result, then drops steps. `stats.truncated` reports that it happened.
+When the envelope would exceed its byte cap, the runtime drops logs first, then truncates the result, then drops steps. `stats.truncated` reports any of these trims, including dropped logs.
 
 ## Failure handling
 
@@ -308,7 +356,7 @@ Subtask statuses, seen per step and in `stats`:
 | `ok` | Child returned text. | Use `outputText`. |
 | `error` | Child reported an error, the call failed, or a schema reply stayed unusable after the follow-up. | Read `error`, decide whether to retry or fall back. |
 | `empty` | Child returned no text. | Retry with a clearer prompt or treat as a miss. |
-| `timeout` | Child exceeded `timeout_ms`; `error` names the limit in ms. | Retry with more time or a smaller prompt. |
+| `timeout` | Child exceeded `timeout_seconds`; `error` names the limit in seconds. | Retry with more time or a smaller prompt. |
 | `aborted` | The run was cancelled. | Stop; the envelope is already winding down. |
 
 Envelope statuses, seen at the top level:
@@ -325,12 +373,12 @@ Envelope statuses, seen at the top level:
 
 ## Result envelope
 
-The tool returns `{ title, output, metadata }`. `output` is a JSON string with these fields, and `metadata` is `{ status, stats }`:
+The tool returns `{ title, output, metadata }`. `output` is a JSON string with these fields, and `metadata` is `{ status, stats, subtasks }`:
 
 | Field | Type | Notes |
 |---|---|---|
 | `status` | string | One of `ok`, `error`, `timeout`, `aborted`, `budget_exceeded`, `invalid_script`, `forbidden_script`. |
-| `result` | any | The script's return value. JSON omits the key when the script returns `undefined`. It is `null` only in the oversized fallback, when the result cannot fit even after truncation. |
+| `result` | any | The script's return value. JSON omits the key when the script returns `undefined`, and the oversized fallback omits it too when the envelope still exceeds the cap after dropping logs, truncating the result, and dropping steps. A `null` value appears only when the script returned `null`. |
 | `error` | string | Present on failure. |
 | `steps` | array | One record per executed subtask call. |
 | `stats` | object | Aggregate counters. |
@@ -348,7 +396,19 @@ Step record:
 | `truncated` | boolean |
 | `error` | string, optional |
 
-Stats counters: `subtasks`, `ok`, `error`, `empty`, `timeout`, `aborted`, `totalMs`, `truncated`. `subtasks` counts every budgeted call and equals the number of `steps` records. `truncated` is true when any step output or the envelope was trimmed.
+`label` always equals `description`: the runtime requires `description` on the object form and derives it from the prompt for the string form, so there is no separate label and no prompt-based fallback.
+
+Stats counters: `subtasks`, `ok`, `error`, `empty`, `timeout`, `aborted`, `totalMs`, `truncated`. `subtasks` counts every budgeted call and equals the number of `steps` records. `truncated` is true when any step output was trimmed or the envelope was trimmed in any way (dropped logs, truncated result, or dropped steps). Exception: a `budget_exceeded` envelope can show `subtasks` greater than the number of `steps` records when a concurrent subtask is still in flight as the budget is overrun and its step is dropped.
+
+Metadata:
+
+| Field | Type | Notes |
+|---|---|---|
+| `status` | string | The envelope `status`. |
+| `stats` | object | The envelope `stats` object. |
+| `subtasks` | array | One `{ description, status, durationMs }` entry per serialized envelope step, capped at 64. Missing fields fall back to `""`, `"unknown"`, and `0`. |
+
+`metadata` is the compact form the harness renders. `metadata.subtasks` mirrors the serialized `steps[]` without the `label`, `task_id`, `error`, and `truncated` fields, so it fits the tool result. Read `output` when you need those fields. Because it mirrors the serialized envelope, it can hold fewer entries than the subtasks actually executed when the 8 KB envelope trim drops steps; `stats.truncated` is true in that case.
 
 Example envelope:
 
@@ -367,7 +427,21 @@ Example envelope:
 
 ## Live progress
 
-While a workflow runs, its tool call shows the current step. The runtime emits a start event when each `subtask` begins and a finish event when it ends, each carrying the step as the title and the status, `task_id`, and `durationMs` on finish. A start event precedes execution of that subtask; when a subtask fails validation or the run is already aborted, the runtime emits only a finish event. To add phase-level status, call `progress({ title, metadata })`; for example `progress({ title: 'phase: reduce' })`. Progress affects only the live tool call, not the envelope. Child sessions stay visible in the session list and can be inspected as usual.
+The running tool call does not update its title, and no heartbeat fires. Progress shows up as TUI toasts and child session titles instead, and a script needs no changes to get it.
+
+Every run gets a run id of the form `wf#<6 hex>`, generated once per run at the run boundary, before script validation. Every toast and every child-session title carries it, including the terminal toast for a script that fails validation and never starts, so concurrent runs stay distinguishable and each completion maps back to its run.
+
+Toasts go through `client.tui.showToast`:
+
+- `started · wf#<id>` when the script begins, info variant.
+- `<status> <ok>/<total> · wf#<id> · <description>` after each completed subtask for runs of up to five subtasks, then once every fifth completion for larger runs, info variant, where `<status>` is `ok` when the subtask succeeded and its failing status (`error`, `empty`, `timeout`, `aborted`) otherwise, `<ok>/<total>` counts completed steps, and `<description>` names the subtask that settled.
+- A terminal toast when the run ends, in one of three formats. Success: `workflow ok · <ok>/<n> subtasks · wf#<id> · <n>.<d>s` (success variant). Timeout: `workflow timed out after <n>.<d>s · wf#<id>` (warning). Abort: `workflow aborted · wf#<id>` (warning). Every other failure: `workflow <status> · wf#<id> · <reason>` (error). Timeout and abort put the run id last and carry no trailing reason.
+
+Child session titles go through `client.session.update`. A child starts at `wf#<id> · [running] <description>` and settles to `wf#<id> · [ok] <description>`, `wf#<id> · [error] <description>`, or `wf#<id> · [aborted] <description>`. The `error` marker also covers the `empty` and `timeout` statuses. The session list shows these transitions while the workflow runs.
+
+Child sessions are real sessions, so the session list and switcher show them and you can open one directly. A normal subtask sets `parentID` to the calling session when it creates the child; a forked subtask is created via `session.fork` instead, and its parent linkage is established server-side rather than by the plugin. They are not nested inline under the `workflow` tool call: that nested subagent view is hard-gated to the built-in `task` tool in this opencode version and a plugin tool cannot render it. Open a child from the session list, or resume it with `opencode run --session <id>`.
+
+The completion tool title is the final summary, for example `workflow: ok · 3/5 subtasks · 12.4s`. It carries the status, the ok/total count, and the total elapsed time, but not the run id. The success terminal toast repeats the elapsed time.
 
 ## Debugging
 
@@ -417,7 +491,7 @@ opencode db
 
 ## Inspecting subsessions
 
-Every `subtask` creates a real child session parented to the session that called `workflow`, with the `description` as its title. The string shorthand derives the description from the first 80 characters of the prompt. The envelope carries the handle you need: each `SubtaskResult` has `task_id`, and the envelope repeats it in the matching `steps[].task_id`.
+Every subtask derives its child-session title from the `description` (truncated to 80 characters) and prefixes it with the run id and a lifecycle marker the runtime updates in place: `wf#<id> · [running] <description>` while the subtask is in flight, becoming `wf#<id> · [ok] <description>`, `wf#<id> · [error] <description>`, or `wf#<id> · [aborted] <description>` when it settles. This holds for a forked subtask too: it gets the description-derived lifecycle title, not the source session's title. A normal subtask creates a child session parented to the session that called `workflow`; one with `fork_from` forks the named session instead, and its `forked_from` field records the source id. These parented child sessions are real sessions, so the session list and switcher expose them; opening one is the supported way to inspect a child, since the inline nested view under the `workflow` call is not available to plugin tools. The string shorthand derives the description from the first 80 characters of the prompt. The envelope carries the handle you need: each `SubtaskResult` has `task_id`, and the envelope repeats it in the matching `steps[].task_id`.
 
 `opencode session list --format json -n 20` lists sessions, but reports only `id`, `title`, `updated`, `created`, `projectId`, and `directory`. It does not expose the parent link, so query the store for relationships.
 
@@ -456,4 +530,4 @@ opencode export "$CHILD_SESSION_ID" --sanitize > child.json   # redact sensitive
 
 ## Safety
 
-The script guard is a deny-list scanner. It strips strings and comments, then rejects a bare `Function(` call and `new Function`, `import`/`require`, `eval(`, `constructor`, `process`, `globalThis`, `global`, `fetch(`, `child_process`, `node:`, `Bun`, `Deno`, `XMLHttpRequest`, `WebSocket`, and `import.meta`. A banned token returns `forbidden_script`; a syntax error returns `invalid_script`. The compiled function reads `subtask`, `log`, and `progress` from its closure. This is a guard, not a sandbox: scripts are trusted agent code that runs in the plugin's process, so treat a workflow script like any other code you would review.
+The script guard is a deny-list scanner. It strips strings and comments, then rejects a bare `Function(` call and `new Function`, `import`/`require`, `eval(`, `constructor`, `process`, `globalThis`, `global`, `fetch(`, `child_process`, `node:`, `Bun`, `Deno`, `XMLHttpRequest`, `WebSocket`, and `import.meta`. A banned token returns `forbidden_script`; a syntax error returns `invalid_script`. The compiled function reads `subtask` and `log` from its closure. This is a guard, not a sandbox: scripts are trusted agent code that runs in the plugin's process, so treat a workflow script like any other code you would review.

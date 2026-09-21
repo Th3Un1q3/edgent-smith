@@ -2,7 +2,8 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import {
-  DEFAULT_PER_SUBTASK_TIMEOUT_MS,
+  createRunId,
+  DEFAULT_PER_SUBTASK_TIMEOUT_SECONDS,
   MAX_DESCRIPTION_CHARS,
   MAX_LOGS,
   MAX_LOG_CHARS,
@@ -82,36 +83,114 @@ const validateSchema = (schema: unknown): void => {
   }
 }
 
-export const normalizeParameters = (input: SubtaskInput): SubtaskParameters => {
+// A missing id is absent; an empty or whitespace-only string is absent too, so a
+// blank value never triggers a bogus resume/fork. Any other present value must
+// be a string — a number or object is a caller bug, not "absent" — and a present
+// id is trimmed so surrounding whitespace never reaches the SDK.
+const normalizeSessionId = (
+  value: unknown,
+  option: 'task_id' | 'fork_from',
+): string | undefined => {
+  if (value === undefined) {
+    return
+  }
+  if (typeof value !== 'string') {
+    throw new TypeError(`subtask ${option} must be a string`)
+  }
+  const trimmed = value.trim()
+  return trimmed === '' ? undefined : trimmed
+}
+
+// Both fields name the source session for the turn; resuming one session while
+// forking another is contradictory, so reject the pair instead of silently
+// preferring task_id. The comparison runs on normalized ids, so whitespace-only
+// values count as absent for both fields.
+const assertSourceUnambiguous = (forkFrom: string | undefined, taskId: string | undefined): void => {
+  if (forkFrom !== undefined && taskId !== undefined) {
+    throw new TypeError('subtask task_id and fork_from are mutually exclusive; pass only one')
+  }
+}
+
+const requirePrompt = (value: unknown): string => {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new TypeError('subtask prompt must be a non-empty string')
+  }
+  return value
+}
+
+const requireDescription = (value: unknown): string => {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new TypeError('subtask description must be a non-empty string')
+  }
+  return value.trim().slice(0, MAX_DESCRIPTION_CHARS)
+}
+
+const normalizeTimeoutSeconds = (value: unknown): number | undefined => {
+  if (value === undefined) {
+    return
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw new TypeError('subtask timeout_seconds must be a finite number greater than 0')
+  }
+  return value
+}
+
+const normalizeSkills = (value: unknown): string[] | undefined => {
+  if (value === undefined) {
+    return
+  }
+  if (!Array.isArray(value) || value.some(skill => typeof skill !== 'string')) {
+    throw new TypeError('subtask skills must be an array of strings')
+  }
+  return value
+}
+
+const normalizeAgent = (value: unknown): string | undefined => {
+  if (value === undefined) {
+    return
+  }
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new TypeError('subtask agent must be a non-empty string')
+  }
+  return value
+}
+
+// Internal normalized shape. `description` is required here even though the
+// shared `SubtaskParameters` marks it optional for callers: normalization always
+// fills it, so downstream code can drop unreachable fallbacks without widening
+// the shared interface.
+export interface NormalizedSubtaskParameters extends SubtaskParameters {
+  description: string
+}
+
+const normalizeObjectInput = (input: Record<string, unknown>): NormalizedSubtaskParameters => {
+  const prompt = requirePrompt(input.prompt)
+  const description = requireDescription(input.description)
+  validateSchema(input.schema)
+  const forkFrom = normalizeSessionId(input.fork_from, 'fork_from')
+  const taskId = normalizeSessionId(input.task_id, 'task_id')
+  assertSourceUnambiguous(forkFrom, taskId)
+  return {
+    prompt,
+    description,
+    agent: normalizeAgent(input.agent),
+    skills: normalizeSkills(input.skills),
+    task_id: taskId,
+    fork_from: forkFrom,
+    timeout_seconds: normalizeTimeoutSeconds(input.timeout_seconds),
+    schema: input.schema as Record<string, unknown> | undefined,
+  }
+}
+
+export const normalizeParameters = (input: SubtaskInput): NormalizedSubtaskParameters => {
   if (typeof input === 'string') {
-    if (input.length === 0) {
-      throw new TypeError('subtask prompt must be a non-empty string')
-    }
-    return { prompt: input, description: input.slice(0, MAX_DESCRIPTION_CHARS) }
+    const prompt = requirePrompt(input)
+    return { prompt, description: requireDescription(prompt) }
   }
   if (!isPlainObject(input)) {
     throw new TypeError('subtask input must be a string or a parameters object')
   }
-  const prompt = input.prompt
-  if (typeof prompt !== 'string' || prompt.length === 0) {
-    throw new TypeError('subtask prompt must be a non-empty string')
-  }
-  const description = input.description
-  if (typeof description !== 'string' || description.trim().length === 0) {
-    throw new TypeError('subtask description must be a non-empty string')
-  }
-  const { schema } = input
-  validateSchema(schema)
-  const parameters = input as SubtaskParameters
-  return {
-    prompt,
-    description: description.slice(0, MAX_DESCRIPTION_CHARS),
-    agent: parameters.agent,
-    skills: parameters.skills,
-    task_id: parameters.task_id,
-    timeout_ms: parameters.timeout_ms,
-    schema,
-  }
+  return normalizeObjectInput(input)
 }
 
 export const extractOutputText = (
@@ -377,42 +456,127 @@ const toStep = (label: string, description: string, result: SubtaskResult): Step
   truncated: result.truncated,
 })
 
-// A throwing progress callback must never fail a run or skip cleanup, so every
-// emission goes through this guard. The thrown value is logged and swallowed.
-export const emitProgress = (
-  context: WorkflowContext,
-  progress: { title: string, metadata?: Record<string, unknown> },
-): void => {
+export const formatElapsed = (ms: number): string => `${(Math.max(0, ms) / 1000).toFixed(1)}s`
+
+// Live child-session titles. The marker encodes the subtask's lifecycle so the
+// title itself is the status signal (the `context.metadata` transport is a
+// proven dead end). `[error]` is the catch-all for a settled non-ok, non-aborted
+// turn (error/empty/timeout).
+const STATUS_MARKERS: Record<SubtaskStatus, string> = {
+  ok: '[ok]',
+  error: '[error]',
+  empty: '[error]',
+  timeout: '[error]',
+  aborted: '[aborted]',
+}
+
+const childSessionTitle = (runId: string, marker: string, description: string): string =>
+  `${runId} · ${marker} ${description.slice(0, MAX_DESCRIPTION_CHARS)}`
+
+// Upper bound on a child-title write. `session.update` is best-effort: a slow or
+// hung call must never stall the subtask past this bound — in particular it must
+// never leave the subtask unguarded by its per-subtask timer and parent-abort
+// link, nor orphan the child session behind a never-settling promise.
+const TITLE_UPDATE_TIMEOUT_MS = 2000
+
+// Resolve when either `promise` settles or `ms` elapses, whichever comes first.
+// The timer is always cleared; a hung `promise` is abandoned, never awaited.
+const settleWithin = async (promise: Promise<unknown>, ms: number): Promise<void> => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const bound = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms)
+  })
   try {
-    context.onProgress?.(progress)
+    await Promise.race([promise, bound])
+  }
+  finally {
+    if (timer !== undefined) {
+      clearTimeout(timer)
+    }
+  }
+}
+
+// Best-effort title write through the v1 SDK (`path.id`). A missing method, a
+// synchronous throw, a rejected promise, or a never-settling call must never
+// fail or stall the subtask, so every failure is logged and swallowed and the
+// write is bounded.
+const updateChildSessionTitle = async (
+  context: WorkflowContext,
+  sessionID: string,
+  title: string,
+): Promise<void> => {
+  if (sessionID === '') {
+    return
+  }
+  const session = context.client.session
+  if (session.update === undefined) {
+    return
+  }
+  try {
+    await settleWithin(
+      session.update.call(session, { path: { id: sessionID }, body: { title } }),
+      TITLE_UPDATE_TIMEOUT_MS,
+    )
   }
   catch (error) {
-    pushLog(context.logs, `progress callback threw: ${toErrorMessage(error)}`)
+    pushLog(context.logs, `failed to update child session title: ${toErrorMessage(error)}`)
+  }
+}
+
+// Milestone batching: small runs report per-subtask so quick runs stay legible,
+// while a large fan-out only reports every `MILESTONE_INTERVAL`-th completion so
+// it cannot spam one toast per subtask. The terminal toast is always emitted by
+// the runner regardless.
+const MILESTONE_INTERVAL = 5
+const MILESTONE_SMALL_RUN = 5
+
+const shouldEmitMilestone = (total: number): boolean =>
+  total <= MILESTONE_SMALL_RUN || total % MILESTONE_INTERVAL === 0
+
+// One info milestone per (batched) completed subtask: `<status> <ok>/<N> ·
+// <runId> · <description>`, where <status> is `ok` when the step that just
+// settled succeeded and its failing status (`error`, `empty`, `timeout`,
+// `aborted`) otherwise, N counts the steps recorded so far, and the description
+// names that step. A missing or throwing sink is swallowed.
+const emitMilestone = (context: WorkflowContext, step: StepRecord): void => {
+  const notify = context.notify
+  if (notify === undefined) {
+    return
+  }
+  const total = context.steps.length
+  if (!shouldEmitMilestone(total)) {
+    return
+  }
+  const ok = context.steps.filter(entry => entry.status === 'ok').length
+  const status = step.status === 'ok' ? 'ok' : step.status
+  try {
+    notify({
+      title: 'workflow',
+      message: `${status} ${ok}/${total} · ${context.runId ?? ''} · ${step.description}`,
+      variant: 'info',
+    })
+  }
+  catch (error) {
+    pushLog(context.logs, `milestone notify failed: ${toErrorMessage(error)}`)
   }
 }
 
 const recordStep = (context: WorkflowContext, step: StepRecord): void => {
-  // Emit the finish event for every settle path from the single point that sees
-  // the final StepRecord, so no caller can forget to report completion.
-  emitProgress(context, {
-    title: step.label,
-    metadata: {
-      event: 'finish',
-      status: step.status,
-      task_id: step.task_id,
-      durationMs: step.durationMs,
-    },
-  })
+  // Milestone reporting lives at the single point that sees the final
+  // StepRecord, so no settle path can forget it.
   if (context.steps.length < MAX_MAX_SUBTASKS_CAP) {
     context.steps.push(step)
   }
+  emitMilestone(context, step)
 }
 
+// The single seconds→ms boundary: caller-facing `timeout_seconds` becomes the
+// Node timer's millisecond value here; everything upstream stays in seconds.
 const attemptConfig = (
-  parameters: SubtaskParameters,
-): { timeout: number, label: string } => ({
-  timeout: parameters.timeout_ms ?? DEFAULT_PER_SUBTASK_TIMEOUT_MS,
-  label: parameters.description ?? parameters.prompt.slice(0, MAX_DESCRIPTION_CHARS),
+  parameters: NormalizedSubtaskParameters,
+): { timeoutMs: number, label: string } => ({
+  timeoutMs: (parameters.timeout_seconds ?? DEFAULT_PER_SUBTASK_TIMEOUT_SECONDS) * 1000,
+  label: parameters.description,
 })
 
 const buildPromptBody = (
@@ -513,18 +677,65 @@ const runTurn = async (
   return { response: retry, parsed: parseStructured(extractOutputText(retry.data), schema) }
 }
 
+interface ResolvedSession {
+  sessionID: string
+  forkedFrom?: string
+}
+
+// `client.session.fork` must be invoked on its receiver: the generated SDK
+// method relies on `this`, so extracting it into a bare const detaches the
+// receiver and throws. The unsupported check narrows the optional method.
+//
+// The call argument is exactly `{ path: { id: sourceID } }`. The SDK's
+// `SessionForkData.body.messageID` is optional; with no message id the server
+// forks at the session's latest message, which is the "continue this
+// conversation" semantics a subtask wants, and the caller only ever has a
+// session id. This exact argument object is pinned by the fork test.
+const callFork = async (
+  client: WorkflowSdkClient,
+  sourceID: string,
+): Promise<{ data?: { id?: string } }> => {
+  if (client.session.fork === undefined) {
+    throw new Error(`failed to fork subtask session ${sourceID}: session.fork is unsupported`)
+  }
+  try {
+    return await client.session.fork({ path: { id: sourceID } })
+  }
+  catch (error) {
+    throw new Error(`failed to fork subtask session ${sourceID}: ${toErrorMessage(error)}`)
+  }
+}
+
+const forkSession = async (client: WorkflowSdkClient, sourceID: string): Promise<string> => {
+  const forked = await callFork(client, sourceID)
+  const forkedID = forked.data?.id
+  if (typeof forkedID !== 'string' || forkedID === '') {
+    throw new Error(`failed to fork subtask session ${sourceID}: no session id returned`)
+  }
+  return forkedID
+}
+
+// The only deliberate title path is `updateChildSessionTitle`: the child moves to
+// `[running] <description>` before the first prompt and to its terminal marker
+// afterwards. `session.create` must still pass a title (the SDK requires one),
+// but it is only the initial seed for a brand-new session. A forked session gets
+// no seed at all and is moved to `[running]` immediately, so it never surfaces
+// the source session's title.
 const resolveSessionID = async (
   client: WorkflowSdkClient,
-  parameters: SubtaskParameters,
+  parameters: NormalizedSubtaskParameters,
   parentSessionID: string,
-): Promise<string> => {
-  if (parameters.task_id !== undefined && parameters.task_id !== '') {
-    return parameters.task_id
+): Promise<ResolvedSession> => {
+  if (parameters.task_id !== undefined) {
+    return { sessionID: parameters.task_id }
+  }
+  if (parameters.fork_from !== undefined) {
+    return { sessionID: await forkSession(client, parameters.fork_from), forkedFrom: parameters.fork_from }
   }
   const created = await client.session.create({
-    body: { title: parameters.description ?? parameters.prompt.slice(0, MAX_DESCRIPTION_CHARS), parentID: parentSessionID },
+    body: { title: parameters.description, parentID: parentSessionID },
   })
-  return created.data?.id ?? ''
+  return { sessionID: created.data?.id ?? '' }
 }
 
 interface ClassificationContext {
@@ -548,7 +759,7 @@ const classifyResponse = (
   // takes precedence over abort and any info.error carried by the response.
   if (context.timedOut) {
     return makeResult('timeout', sessionID, durationMs, {
-      error: `subtask timed out after ${context.timeoutMs}ms`,
+      error: `subtask timed out after ${formatElapsed(context.timeoutMs)}`,
     })
   }
   if (context.parentAborted) {
@@ -585,19 +796,26 @@ interface ErrorContext {
   timeoutMs: number
   timedOut: boolean
   sessionID: string
+  forkedFrom?: string
   startedAt: number
 }
 
 const classifyError = (error: unknown, context: ErrorContext): SubtaskResult => {
   const durationMs = Date.now() - context.startedAt
+  let result: SubtaskResult
   if (isAbortError(error) || context.child.signal.aborted || context.parentAborted) {
     const status: SubtaskStatus = context.timedOut ? 'timeout' : 'aborted'
     const message = context.timedOut
-      ? `subtask timed out after ${context.timeoutMs}ms`
+      ? `subtask timed out after ${formatElapsed(context.timeoutMs)}`
       : 'subtask aborted'
-    return makeResult(status, context.sessionID, durationMs, { error: message })
+    result = makeResult(status, context.sessionID, durationMs, { error: message })
   }
-  return makeResult('error', context.sessionID, durationMs, { error: toErrorMessage(error) })
+  else {
+    result = makeResult('error', context.sessionID, durationMs, { error: toErrorMessage(error) })
+  }
+  // A fork that succeeded before a later phase failed still created a session,
+  // so its provenance survives the error classification.
+  return context.forkedFrom === undefined ? result : { ...result, forked_from: context.forkedFrom }
 }
 
 // Best-effort server-side abort: a rejecting abort promise must never surface
@@ -632,6 +850,7 @@ const finalizeAttempt = (
   child: AbortController,
   onParentAbort: (() => void) | undefined,
   timer: ReturnType<typeof setTimeout> | undefined,
+  running: Map<AbortController, string>,
 ): void => {
   if (timer !== undefined) {
     clearTimeout(timer)
@@ -640,19 +859,25 @@ const finalizeAttempt = (
     context.signal.removeEventListener('abort', onParentAbort)
   }
   context.active.delete(child)
+  // Retire the in-flight registration; the live signal now rides the child
+  // session title, not the (dead) `context.metadata` running event.
+  running.delete(child)
 }
 
 const hasSkills = (skills: string[] | undefined): boolean =>
   skills !== undefined && skills.length > 0
 
-// A step's human-readable label falls back to the subtask label when the input
-// carries no explicit description. Extracted so the fallback lives in one place
-// and does not inflate the subtask attempt's cyclomatic complexity.
-const stepLabel = (label: string, parameters: SubtaskParameters): string =>
-  parameters.description ?? label
-
 export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
   const semaphore = createSemaphore(Math.max(1, context.maxConcurrent))
+  // Backfill the in-flight registry so a directly constructed context still
+  // reports running membership; `createContext` normally initializes it.
+  // Captured as a local so the closure holds a non-optional map.
+  const running = (context.running ??= new Map<AbortController, string>())
+  context.startedAt ??= Date.now()
+  // Backfill the run id so a directly constructed context still produces
+  // run-tagged titles and milestones; the runner normally generates it once per
+  // run and threads it through. Captured as a local for the non-optional type.
+  const runId = (context.runId ??= createRunId())
 
   // Memoized so a workflow run probes the parent history at most once, even
   // when many subtasks resolve their model concurrently.
@@ -674,7 +899,7 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
       return result
     }
 
-    let parameters: SubtaskParameters
+    let parameters: NormalizedSubtaskParameters
     try {
       parameters = normalizeParameters(input)
     }
@@ -686,30 +911,38 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
 
     return semaphore.run(async (): Promise<SubtaskResult> => {
       const startedAt = Date.now()
-      const { timeout, label } = attemptConfig(parameters)
+      const { timeoutMs, label } = attemptConfig(parameters)
       const child = new AbortController()
       // Register before session creation so the runner's timeout grace sees an
       // in-flight subtask even while `session.create` is still pending; otherwise
       // the grace is skipped and the step is dropped. Always removed in `finally`.
       context.active.add(child)
-      emitProgress(context, {
-        title: stepLabel(label, parameters),
-        metadata: { event: 'start' },
-      })
+      running.set(child, label)
       let sessionID = ''
+      let resolved: ResolvedSession | undefined
       let isTimedOut = false
       let timer: ReturnType<typeof setTimeout> | undefined
       let onParentAbort: (() => void) | undefined
 
       try {
-        sessionID = await resolveSessionID(context.client, parameters, context.parentSessionID)
+        resolved = await resolveSessionID(context.client, parameters, context.parentSessionID)
+        sessionID = resolved.sessionID
         if (sessionID === '') {
           const result = makeResult('error', '', Date.now() - startedAt, {
             error: 'failed to create subtask session',
           })
-          recordStep(context, toStep(label, stepLabel(label, parameters), result))
+          recordStep(context, toStep(label, label, result))
           return result
         }
+        const forkedFrom = resolved.forkedFrom
+
+        // Mark the child running before the prompt so the live title moves even
+        // while the turn is in flight.
+        await updateChildSessionTitle(
+          context,
+          sessionID,
+          childSessionTitle(runId, '[running]', label),
+        )
 
         const finalPrompt = hasSkills(parameters.skills)
           ? await injectSkills(parameters.prompt, parameters.skills, context.directory, createLogger(context.logs))
@@ -730,7 +963,7 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
           isTimedOut = true
           child.abort()
           abortChildSession()
-        }, timeout)
+        }, timeoutMs)
 
         const model = await resolveModelOnce()
         const turn = await runTurn(context, sessionID, child, parameters, finalPrompt, model, () => isTimedOut)
@@ -742,13 +975,20 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
           timer = undefined
         }
 
-        const result = classifyResponse(turn.response, sessionID, startedAt, {
+        const classified = classifyResponse(turn.response, sessionID, startedAt, {
           timedOut: isTimedOut,
           parentAborted: context.signal.aborted,
-          timeoutMs: timeout,
+          timeoutMs,
           parsed: turn.parsed,
         })
-        recordStep(context, toStep(label, stepLabel(label, parameters), result))
+        // Provenance only for a session actually forked on this attempt.
+        const result = forkedFrom === undefined ? classified : { ...classified, forked_from: forkedFrom }
+        recordStep(context, toStep(label, label, result))
+        await updateChildSessionTitle(
+          context,
+          sessionID,
+          childSessionTitle(runId, STATUS_MARKERS[result.status], label),
+        )
         return result
       }
       catch (error) {
@@ -758,16 +998,24 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
         const result = classifyError(error, {
           child,
           parentAborted: context.signal.aborted,
-          timeoutMs: timeout,
+          timeoutMs,
           timedOut: isTimedOut,
           sessionID,
+          // Only a fork that already returned an id reaches the catch with
+          // `forkedFrom` set; a failed fork leaves it undefined.
+          forkedFrom: resolved?.forkedFrom,
           startedAt,
         })
-        recordStep(context, toStep(label, stepLabel(label, parameters), result))
+        recordStep(context, toStep(label, label, result))
+        await updateChildSessionTitle(
+          context,
+          sessionID,
+          childSessionTitle(runId, STATUS_MARKERS[result.status], label),
+        )
         return result
       }
       finally {
-        finalizeAttempt(context, child, onParentAbort, timer)
+        finalizeAttempt(context, child, onParentAbort, timer, running)
       }
     })
   }

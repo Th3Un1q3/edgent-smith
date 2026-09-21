@@ -255,9 +255,9 @@ describe('createSubtask structured output', () => {
 
   it('times out without a retry when the turn resolves unusable after the abort fires', async () => {
     const hanging = resolveOnAbortPrompt(text('bad'))
-    const result = await structured(hanging, { schema: { type: 'object' }, timeout_ms: 20 })
+    const result = await structured(hanging, { schema: { type: 'object' }, timeout_seconds: 0.02 })
 
-    expect(result).toMatchObject({ status: 'timeout', error: 'subtask timed out after 20ms' })
+    expect(result).toMatchObject({ status: 'timeout', error: 'subtask timed out after 0.0s' })
     expect(hanging).toHaveBeenCalledTimes(1)
   })
 
@@ -279,9 +279,9 @@ describe('createSubtask structured output', () => {
 
   it('times out a hanging structured turn without a retry', async () => {
     const hanging = abortablePrompt()
-    const result = await structured(hanging, { schema: { type: 'object' }, timeout_ms: 20 })
+    const result = await structured(hanging, { schema: { type: 'object' }, timeout_seconds: 0.02 })
 
-    expect(result).toMatchObject({ status: 'timeout', error: 'subtask timed out after 20ms' })
+    expect(result).toMatchObject({ status: 'timeout', error: 'subtask timed out after 0.0s' })
     expect(hanging).toHaveBeenCalledTimes(1)
   })
 

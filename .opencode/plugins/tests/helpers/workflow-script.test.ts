@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import {
   buildWorkflowFunction,
@@ -22,7 +22,6 @@ const inputToPrompt = (input: SubtaskInput): string =>
 const createHelpers = (): WorkflowHelpers => ({
   subtask: async input => makeResult(inputToPrompt(input)),
   log: () => {},
-  progress: () => {},
 })
 
 describe('scanForbiddenToken', () => {
@@ -290,9 +289,9 @@ describe('checkScript', () => {
 })
 
 describe('buildWorkflowFunction', () => {
-  it('injects subtask, log and progress into the compiled script', async () => {
+  it('injects subtask and log into the compiled script', async () => {
     const workflow = buildWorkflowFunction(
-      'return [typeof subtask, typeof log, typeof progress, typeof parallel]',
+      'return [typeof subtask, typeof log, typeof parallel]',
     )
     // A stray `parallel` in helpers must not reach the compiled script.
     const helpersWithExtras = {
@@ -302,7 +301,7 @@ describe('buildWorkflowFunction', () => {
 
     const result = await workflow(helpersWithExtras)
 
-    expect(result).toEqual(['function', 'function', 'function', 'undefined'])
+    expect(result).toEqual(['function', 'function', 'undefined'])
   })
 
   it('lets a script await subtask and fan out with Promise.all', async () => {
@@ -328,18 +327,6 @@ describe('buildWorkflowFunction', () => {
 
     expect(result).toBe('done')
     expect(logs).toEqual(['started', { count: 2 }])
-  })
-
-  it('exposes progress so a script can report live status', async () => {
-    const progress = vi.fn()
-    const workflow = buildWorkflowFunction(
-      'progress({ title: "x", metadata: { a: 1 } }); return "done"',
-    )
-
-    const result = await workflow({ ...createHelpers(), progress })
-
-    expect(result).toBe('done')
-    expect(progress).toHaveBeenCalledWith({ title: 'x', metadata: { a: 1 } })
   })
 
   it('rejects when the script throws', async () => {

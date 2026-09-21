@@ -73,7 +73,6 @@ const makeContext = (client: any, partial: Partial<WorkflowContext> = {}): Workf
   steps: [],
   logs: [],
   active: new Set(),
-  onProgress: vi.fn(),
   ...partial,
 })
 
@@ -286,10 +285,10 @@ describe('createSubtask', () => {
   it('times out when the turn exceeds the per-call timeout', async () => {
     const abort = vi.fn(async () => true)
     const client = createClient({ prompt: abortablePrompt(), abort })
-    const result = await createSubtask(makeContext(client))({ prompt: 'slow', description: 'slow work', timeout_ms: 20 })
+    const result = await createSubtask(makeContext(client))({ prompt: 'slow', description: 'slow work', timeout_seconds: 0.02 })
 
     expect(result.status).toBe('timeout')
-    expect(result.error).toContain('20ms')
+    expect(result.error).toContain('0.0s')
     expect(abort).toHaveBeenCalledWith({ path: { id: 'ses_child' } })
   })
 
@@ -623,11 +622,11 @@ describe('createSubtask resolved-turn classification', () => {
     const client = createClient({ prompt: resolveOnAbortPrompt() })
     const context = makeContext(client)
 
-    const result = await createSubtask(context)({ prompt: 'slow', description: 'slow work', timeout_ms: 20 })
+    const result = await createSubtask(context)({ prompt: 'slow', description: 'slow work', timeout_seconds: 0.02 })
 
     expect(result.status).toBe('timeout')
-    expect(result.error).toBe('subtask timed out after 20ms')
-    expect(context.steps[0]).toMatchObject({ status: 'timeout', error: 'subtask timed out after 20ms' })
+    expect(result.error).toBe('subtask timed out after 0.0s')
+    expect(context.steps[0]).toMatchObject({ status: 'timeout', error: 'subtask timed out after 0.0s' })
   })
 
   it('classifies a timeout ahead of an info error when both are present', async () => {
@@ -636,10 +635,10 @@ describe('createSubtask resolved-turn classification', () => {
     })
     const context = makeContext(client)
 
-    const result = await createSubtask(context)({ prompt: 'slow', description: 'slow work', timeout_ms: 20 })
+    const result = await createSubtask(context)({ prompt: 'slow', description: 'slow work', timeout_seconds: 0.02 })
 
     expect(result.status).toBe('timeout')
-    expect(result.error).toBe('subtask timed out after 20ms')
+    expect(result.error).toBe('subtask timed out after 0.0s')
     expect(context.steps[0]).toMatchObject({ status: 'timeout' })
   })
 
@@ -647,7 +646,7 @@ describe('createSubtask resolved-turn classification', () => {
     const controller = new AbortController()
     const client = createClient({ prompt: resolveOnAbortPrompt() })
     const context = makeContext(client, { signal: controller.signal })
-    const pending = createSubtask(context)({ prompt: 'work', description: 'run work', timeout_ms: 60_000 })
+    const pending = createSubtask(context)({ prompt: 'work', description: 'run work', timeout_seconds: 60 })
 
     controller.abort()
     const result = await pending

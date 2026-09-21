@@ -191,7 +191,7 @@ type WorkflowFunction = (helpers: WorkflowHelpers) => Promise<unknown>
 
 export const buildWorkflowFunction = (script: string): WorkflowFunction => {
   const AsyncFunction: FunctionConstructor = Object.getPrototypeOf(async function () {}).constructor
-  const compiled = new AsyncFunction('subtask', 'log', 'progress', '"use strict";\n' + script)
+  const compiled = new AsyncFunction('subtask', 'log', '"use strict";\n' + script)
   return (helpers: WorkflowHelpers): Promise<unknown> =>
-    compiled(helpers.subtask, helpers.log, helpers.progress)
+    compiled(helpers.subtask, helpers.log)
 }

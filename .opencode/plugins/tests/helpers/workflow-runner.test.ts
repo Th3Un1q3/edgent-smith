@@ -65,7 +65,6 @@ const options = (script: string, overrides: Partial<RunWorkflowOptions> = {}): R
   client: makeClient(),
   parentSessionID: 'ses_parent',
   timeoutMs: 1000,
-  onProgress: undefined,
   ...overrides,
 })
 
@@ -94,8 +93,7 @@ const callArgument = <T>(mock: { mock: { calls: unknown[][] } }, index = 0): T =
 
 const circular = (): Record<string, unknown> => {
   const value: Record<string, unknown> = {}
-  value.self = value
-  return value
+  return Object.assign(value, { self: value })
 }
 
 // Builds a script that launches `count` subtasks in parallel.
@@ -315,7 +313,7 @@ describe('runWorkflow', () => {
     const envelope = parse(await runWorkflow(options(script, { client, timeoutMs: 30 })))
 
     expect(envelope.status).toBe('timeout')
-    expect(envelope.error).toBe('workflow timed out after 30ms')
+    expect(envelope.error).toBe('workflow timed out after 0.0s')
     expect(envelope.steps).toHaveLength(1)
     expect(envelope.steps[0].status).toBe('aborted')
     expect(envelope.stats).toMatchObject({ subtasks: 1, aborted: 1, timeout: 0 })
@@ -348,10 +346,10 @@ describe('runWorkflow', () => {
     expect(envelope.stats).toMatchObject({ subtasks: 2, ok: 1, aborted: 1 })
   })
 
-  it('honors a per-subtask timeout_ms for a hanging subtask', async () => {
+  it('honors a per-subtask timeout_seconds for a hanging subtask', async () => {
     const client = makeClient({ prompt: abortablePrompt() })
     const envelope = parse(await runWorkflow(
-      options('return await subtask({ prompt: "x", description: "x", timeout_ms: 20 })', { client, timeoutMs: 1000 }),
+      options('return await subtask({ prompt: "x", description: "x", timeout_seconds: 0.02 })', { client, timeoutMs: 1000 }),
     ))
 
     expect(envelope.status).toBe('ok')
@@ -385,7 +383,7 @@ describe('runWorkflow', () => {
     const script = [
       'const a = await subtask("a")',
       'const b = await subtask("b")',
-      'const c = await subtask({ prompt: "c", description: "c", timeout_ms: 20 })',
+      'const c = await subtask({ prompt: "c", description: "c", timeout_seconds: 0.02 })',
       'return [a.status, b.status, c.status]',
     ].join('\n')
     const envelope = parse(await runWorkflow(options(script, { client, timeoutMs: 1000 })))
@@ -495,7 +493,7 @@ describe('runWorkflow timeout grace', () => {
       await vi.advanceTimersByTimeAsync(5)
       const envelope = parse(await pending)
       expect(envelope.status).toBe('timeout')
-      expect(envelope.error).toBe('workflow timed out after 10ms')
+      expect(envelope.error).toBe('workflow timed out after 0.0s')
     }
     finally {
       vi.useRealTimers()
@@ -551,12 +549,28 @@ describe('runWorkflow failure classification', () => {
 
     expect(envelope.status).toBe('error')
     expect(envelope.error).toBe('kaboom')
+    expect(envelope.stats.truncated).toBe(false)
   })
 
   it('reports a thrown string verbatim', async () => {
     const envelope = parse(await runWorkflow(options('throw "plain"')))
     expect(envelope.error).toBe('plain')
     expect(envelope.status).toBe('error')
+  })
+
+  it('bounds the serialized envelope for a thrown error larger than the cap', async () => {
+    const raw = await runWorkflow(options('throw \'x\'.repeat(9000)'))
+
+    expect(Buffer.byteLength(raw, 'utf8')).toBeLessThanOrEqual(MAX_ENVELOPE_BYTES)
+    const envelope = parse(raw)
+    expect(envelope.status).toBe('error')
+    expect(typeof envelope.error).toBe('string')
+  })
+
+  it('bounds a thrown error message larger than 8192 bytes under the real cap', async () => {
+    const raw = await runWorkflow(options('throw new Error("E".repeat(9000))'))
+    expect(Buffer.byteLength(raw, 'utf8')).toBeLessThanOrEqual(8192)
+    expect(parse(raw).status).toBe('error')
   })
 
   it('JSON-encodes a thrown plain object', async () => {
@@ -650,7 +664,7 @@ describe('serializeEnvelope', () => {
     expect(parsed.steps).toEqual(envelope.steps)
   })
 
-  it('returns the log-free envelope exactly at its boundary', () => {
+  it('marks stats.truncated when logs are dropped at the log-free boundary', () => {
     const envelope = makeLargeEnvelope({
       result: { value: 'kept' },
       steps: [],
@@ -660,8 +674,9 @@ describe('serializeEnvelope', () => {
     const cap = Buffer.byteLength(JSON.stringify(withoutLogs), 'utf8')
     const parsed = JSON.parse(serializeEnvelope(envelope, cap)) as WorkflowEnvelope
 
+    expect(parsed.logs).toEqual([])
     expect(parsed.result).toEqual(envelope.result)
-    expect(parsed.stats.truncated).toBe(false)
+    expect(parsed.stats.truncated).toBe(true)
   })
 
   it('truncates the result before dropping steps', () => {
@@ -689,6 +704,23 @@ describe('serializeEnvelope', () => {
     expect(parsed.stats.truncated).toBe(true)
   })
 
+  it('truncates a multi-byte result by UTF-8 bytes without dropping steps', () => {
+    // Each '漢' is one UTF-16 code unit but three UTF-8 bytes, so a truncation
+    // that budgets in code units overshoots the byte cap by ~3x.
+    const envelope = makeLargeEnvelope({
+      result: '漢'.repeat(10_000),
+      steps: [step(0)],
+    })
+    const json = serializeEnvelope(envelope)
+    const parsed = JSON.parse(json) as WorkflowEnvelope
+
+    expect(Buffer.byteLength(json, 'utf8')).toBeLessThanOrEqual(MAX_ENVELOPE_BYTES)
+    expect(parsed.steps).toHaveLength(1)
+    expect(typeof parsed.result).toBe('string')
+    expect((parsed.result as string).endsWith(MARKER)).toBe(true)
+    expect(parsed.stats.truncated).toBe(true)
+  })
+
   it('drops steps when the result is not truncatable', () => {
     const envelope: WorkflowEnvelope = {
       status: 'ok',
@@ -711,6 +743,16 @@ describe('serializeEnvelope', () => {
 
     expect(parsed.result).toBeNull()
     expect(parsed.steps.length).toBeLessThan(5)
+  })
+
+  it('bounds an oversized error to keep the envelope within the cap', () => {
+    const envelope = makeLargeEnvelope({ status: 'error', error: 'x'.repeat(9000) })
+    const json = serializeEnvelope(envelope)
+    const parsed = JSON.parse(json) as WorkflowEnvelope
+
+    expect(Buffer.byteLength(json, 'utf8')).toBeLessThanOrEqual(MAX_ENVELOPE_BYTES)
+    expect(parsed.status).toBe('error')
+    expect((parsed.error as string).endsWith(MARKER)).toBe(true)
   })
 
   it('falls back to a minimal envelope when nothing else fits', () => {

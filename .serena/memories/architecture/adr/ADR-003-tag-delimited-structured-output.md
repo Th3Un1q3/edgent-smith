@@ -125,7 +125,7 @@ Follow-ups: (1) optional per-call nonce tag escalation if echo collisions appear
 Source: OpenCode v1.18.18 server / SDK 1.18.14; server source packages/opencode/src/session/prompt.ts:1243-1248 and :1285; DeepWiki ask_question on sst/opencode; decompiled binary /usr/local/bin/opencode v1.18.18 (all verified 2026-09-20, none in-repo).
 Lost OpenCode session ses_f46c72252ffedPscWZruQUjhlt (agent rug) and lost probe session ses_f41f0618effeJE2GxvT1jaH3Ta (Probe native structured output).
 Implementation: .opencode/plugins/helpers/workflow-subtask.ts (SCHEMA_INSTRUCTION L388-389, SCHEMA_RETRY_INSTRUCTION L390-391, schemaBlock L393-394, stripCodeFence L136-139, hasRequiredKeys L141-149, parseStructured L153-161, shouldRetryStructured L410-420, runTurn L424-445, classifyResponse L470-511); docs/workflow-tool.md:101-114; workflow.ts:26-32.
-mem:architecture/adr/ADR-001-envelope-tag-detection; mem:architecture/adr/ADR-002-memory-system-and-structure.
+mem:architecture/adr/ADR-001-envelope-tag-detection; mem:architecture/adr/ADR-002-memory-system-and-structure; mem:entities/opencode-plugin/rug_workflow_agent.
 mem:claims/opencode/sdk_structured_output; mem:claims/opencode/sdk_structured_fallback.
 
 ## Addendum: required `description` and step visibility (2026-09-20)
@@ -136,4 +136,7 @@ The subtask input contract now makes `description` mandatory. The OBJECT form of
 
 Execution visibility: `StepRecord` gained `description: string`, populated by `toStep` and truncated to `MAX_DESCRIPTION_CHARS`, so the envelope `steps[]` name what each executed step corresponds to. This extends the tag-delimited structured-output decision above; it does not replace it.
 
-Implementation: `.opencode/plugins/helpers/workflow-subtask.ts`, `.opencode/plugins/helpers/workflow-types.ts`, `.opencode/plugins/workflow.ts`; docs `docs/workflow-tool.md`; agent `.opencode/agents/rug-debug.md`.
+Implementation: `.opencode/plugins/helpers/workflow-subtask.ts`, `.opencode/plugins/helpers/workflow-types.ts`, `.opencode/plugins/workflow.ts`; docs `docs/workflow-tool.md`; agent `.opencode/agents/rug-workflow.md`.
+
+
+Note (2026-09-21): `.opencode/agents/rug-debug.md` was superseded by `.opencode/agents/rug-workflow.md`; its no-op script-facing `progress()` helper (if documented there) was removed.

@@ -1,3 +1,11 @@
+import { randomBytes } from 'node:crypto'
+
+// Per-run correlation id. Generated once at the run boundary and threaded
+// through the context so concurrent runs stay distinguishable in toasts and
+// child-session titles. Six lowercase hex chars keep it short but collision-safe
+// for the handful of runs a session sees.
+export const createRunId = (): string => `wf#${randomBytes(3).toString('hex')}`
+
 export interface WorkflowSessionMessageInfo {
   role?: string
   providerID?: string
@@ -12,6 +20,10 @@ export interface WorkflowSessionMessage {
 export interface WorkflowSdkClient {
   session: {
     create(input: { body: { title: string, parentID?: string } }): Promise<{ data?: { id: string } }>
+    fork?(input: {
+      path: { id: string }
+      body?: { messageID?: string }
+    }): Promise<{ data?: { id?: string } }>
     prompt(input: {
       path: { id: string }
       signal?: AbortSignal
@@ -25,8 +37,31 @@ export interface WorkflowSdkClient {
       path: { id: string }
     }): Promise<{ data?: WorkflowSessionMessage[] }>
     abort?(input: { path: { id: string } }): Promise<unknown>
+    // v1 SDK shape: the session id travels as `path.id`. Optional so callers and
+    // minimal test doubles can omit it; every call site guards before use.
+    update?(input: {
+      path: { id: string }
+      body: { title: string }
+    }): Promise<unknown>
+  }
+  // Transient TUI toast channel (v1 SDK). Optional: a client without a TUI must
+  // not prevent a run from completing.
+  tui?: {
+    showToast?(input: { body: ToastInput }): Promise<unknown>
   }
 }
+
+export type ToastVariant = 'info' | 'success' | 'warning' | 'error'
+
+export interface ToastInput {
+  title?: string
+  message: string
+  variant: ToastVariant
+  duration?: number
+}
+
+// Fire-and-forget toast sink; implementations must swallow their own failures.
+export type NotifyFunction = (toast: ToastInput) => void
 
 export type SubtaskStatus = 'ok' | 'error' | 'empty' | 'timeout' | 'aborted'
 
@@ -36,7 +71,8 @@ export interface SubtaskParameters {
   agent?: string
   skills?: string[]
   task_id?: string
-  timeout_ms?: number
+  fork_from?: string
+  timeout_seconds?: number
   schema?: Record<string, unknown>
 }
 
@@ -45,6 +81,7 @@ export type SubtaskInput = string | SubtaskParameters
 export interface SubtaskResult {
   outputText: string
   task_id: string
+  forked_from?: string
   status: SubtaskStatus
   error?: string
   durationMs: number
@@ -73,13 +110,6 @@ export interface WorkflowStats {
   truncated: boolean
 }
 
-// Progress payload surfaced to the harness: `title` drives the status line and
-// `metadata.event` distinguishes the start/finish lifecycle of a subtask.
-export type ProgressFunction = (progress: {
-  title: string
-  metadata?: Record<string, unknown>
-}) => void
-
 export interface WorkflowEnvelope {
   status: 'ok' | 'error' | 'timeout' | 'aborted' | 'budget_exceeded' | 'invalid_script' | 'forbidden_script'
   result?: unknown
@@ -101,7 +131,20 @@ export interface WorkflowContext {
   steps: StepRecord[]
   logs: string[]
   active: Set<AbortController>
-  onProgress?: ProgressFunction
+  // Child controller → step label for the subtasks currently in flight. Kept
+  // optional so callers may build a context literal; `createContext` always
+  // initializes it and `createSubtask` backfills it for direct construction.
+  running?: Map<AbortController, string>
+  // Run start timestamp, backfilled by `createSubtask`. Optional so callers can
+  // build a context literal.
+  startedAt?: number
+  // Per-run correlation id (see `createRunId`). The runner generates it once and
+  // threads it here; `createSubtask` backfills it for directly constructed
+  // contexts. Optional so callers can build a context literal.
+  runId?: string
+  // Toast sink threaded from the runner's captured `client`. Optional so a
+  // directly constructed context needs no notifications channel.
+  notify?: NotifyFunction
 }
 
 export type LogFunction = (message: unknown) => void
@@ -111,11 +154,10 @@ export type SubtaskFunction = (input: SubtaskInput) => Promise<SubtaskResult>
 export interface WorkflowHelpers {
   subtask: SubtaskFunction
   log: LogFunction
-  progress: ProgressFunction
 }
 
 export const DEFAULT_TIMEOUT_SECONDS = 600
-export const DEFAULT_PER_SUBTASK_TIMEOUT_MS = 300_000
+export const DEFAULT_PER_SUBTASK_TIMEOUT_SECONDS = 300
 export const DEFAULT_SUBTASK_AGENT = 'rug-swe'
 export const DEFAULT_MAX_CONCURRENT = 4
 export const MAX_MAX_CONCURRENT_CAP = 8

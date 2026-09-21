@@ -8,6 +8,10 @@ L0: "entities: typed external org/person profiles"
 L0_table:
   - id: entities/companies/german-it-sector
     L0: "German IT sector: 50 companies, fintech leads 59%"
+  - id: entities/opencode-plugin/workflow_fork_from_fanout
+    L0: "Workflow subtask fork_from fanout: fork an existing session; forked_from provenance"
+  - id: entities/opencode-plugin/sdk_session_fork_v1
+    L0: "v1 SDK session.fork returns the fork id at data.id; call receiver-bound"
 ---
 # Entities
 

@@ -65,7 +65,7 @@ When a task cannot be decomposed further, the prompt must include a **resume pla
 
 ### Output and Timeout Budgets
 
-- Set an explicit `timeout_ms` of 900000 to 1800000 on any subtask that may exceed about 4 minutes (file or directory enumeration, gate or CI runs, full test suites); raise the workflow `timeout_seconds` to match. The runtime default of 300000ms is too low for CI-scale work and produces silent 300s timeouts with no output.
+- Set an explicit `timeout_seconds` of 900 to 1800 on any subtask that may exceed about 4 minutes (file or directory enumeration, gate or CI runs, full test suites); raise the workflow `timeout_seconds` to match. The runtime default of 300s is too low for CI-scale work and produces silent 300s timeouts with no output.
 - Keep the reducer under about 2KB. Return only counts, statuses and key data. Never return full transcripts, long evidence strings, or whole file contents; oversized reducers are truncated at about 8KB (logs dropped first, then result, then steps), which loses data and forces re-runs.
 - Capture `steps[].task_id` and, on a truncated or empty result, resume that session for a compact status instead of re-running the work.
 
