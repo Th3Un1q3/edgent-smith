@@ -30,8 +30,7 @@ export async function fetchAgentList(client: { app: { agents: () => unknown } })
 export async function getAgentSteps(client: { app: { agents: () => unknown } }, agentName: string): Promise<number | undefined> {
   const agents = await fetchAgentList(client)
   const agent = agents.find(a => a.name === agentName)
-  if (!agent || typeof agent.steps !== 'number') return undefined
-  return agent.steps
+  return !agent || typeof agent.steps !== 'number' ? undefined : agent.steps
 }
 
 /**

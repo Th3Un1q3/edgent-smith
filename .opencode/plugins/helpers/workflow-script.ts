@@ -114,10 +114,7 @@ const consumeSpecial = (script: string, index: number, result: string[]): number
     result.push(toSpaces(script.slice(index, end)))
     return end
   }
-  if (character === '`') {
-    return stripTemplateInto(script, index, result)
-  }
-  return CONSUMED_NONE
+  return character === '`' ? stripTemplateInto(script, index, result) : CONSUMED_NONE
 }
 
 // Scans the code inside `${...}`, stopping at the matching closing brace. Strings,

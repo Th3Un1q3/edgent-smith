@@ -169,8 +169,7 @@ export const qualityGateEnforcer: Plugin = async ({ client, directory, $ }) => {
       gatesState[gate.name].affectedSessions = []
     }
 
-    if (oldStatus === newStatus) return undefined
-    return { gate, previousStatus: oldStatus, newStatus, result }
+    return oldStatus === newStatus ? undefined : { gate, previousStatus: oldStatus, newStatus, result }
   }
 
   // Append a summary of a child session's failing gates to the task output.

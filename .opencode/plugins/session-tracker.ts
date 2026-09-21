@@ -15,8 +15,7 @@ export const sessionTracker: Plugin = async ({ client }) => {
 
   async function markSessionAsStarted(sessionId: string): Promise<void> {
     await sessionStorage.updateState(sessionId, (state: Record<string, unknown>) => {
-      if (Object.hasOwn(state, SESSION_FIELDS.startedAt)) return state
-      return { ...state, [SESSION_FIELDS.startedAt]: new Date().toISOString() }
+      return Object.hasOwn(state, SESSION_FIELDS.startedAt) ? state : { ...state, [SESSION_FIELDS.startedAt]: new Date().toISOString() }
     })
   }
 

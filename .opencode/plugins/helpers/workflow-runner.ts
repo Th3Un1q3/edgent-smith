@@ -71,10 +71,7 @@ const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max)
 
 const isBudgetExceeded = (error: unknown): boolean => {
-  if (error instanceof BudgetExceededError) {
-    return true
-  }
-  return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'BudgetExceededError'
+  return error instanceof BudgetExceededError ? true : typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'BudgetExceededError'
 }
 
 const timeoutMessage = (timeoutMs: number): string => `workflow timed out after ${formatElapsed(timeoutMs)}`
@@ -643,8 +640,5 @@ export const runWorkflow = async (options: RunWorkflowOptions): Promise<string> 
   // executes (invalid/forbidden) emits a correlatable terminal signal.
   const runId = createRunId()
   const invalid = invalidScriptEnvelope(options, runId)
-  if (invalid !== undefined) {
-    return invalid
-  }
-  return executeWorkflow(options, runId)
+  return invalid === undefined ? executeWorkflow(options, runId) : invalid
 }

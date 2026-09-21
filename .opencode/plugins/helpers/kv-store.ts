@@ -53,8 +53,7 @@ class SessionStorage {
 
   readState<T extends State, R = unknown>(sessionId: string, reader: (state: T) => R): R | undefined {
     const state = this.storageAdapter.read(sessionId) as T | undefined
-    if (!state) return undefined
-    return reader(state)
+    return state ? reader(state) : undefined
   }
 
   updateState<T extends State, R = unknown>(sessionId: string, updater: (state: T) => R): R {

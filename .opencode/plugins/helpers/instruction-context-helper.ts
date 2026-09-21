@@ -18,8 +18,7 @@ Count non-wildcard literal segments in a glob pattern.
 function calcSpecificity(applyTo: string): number {
   const segments = applyTo.split('/')
   return segments.reduce((score, seg) => {
-    if (seg === '' || /\*/.test(seg)) return score
-    return score + 1
+    return seg === '' || /\*/.test(seg) ? score : score + 1
   }, 0)
 }
 
@@ -47,8 +46,9 @@ export class InstructionContextHelper {
     const sorted = [...metas].sort((a: InstructionMeta, b: InstructionMeta) => {
       const sa = calcSpecificity(a.applyTo)
       const sb = calcSpecificity(b.applyTo)
-      if (sb !== sa) return sb - sa // descending specificity
-      return a.description.localeCompare(b.description) // ascending alphabetical
+      return sb === sa
+        ? a.description.localeCompare(b.description) // ascending alphabetical
+        : sb - sa // descending specificity
     })
 
     const result: ResolvedInstruction[] = []

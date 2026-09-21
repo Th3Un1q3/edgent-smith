@@ -71,9 +71,7 @@ type PluginEvent = Parameters<NonNullable<Awaited<ReturnType<Plugin>>['event']>>
 True when the call targets the task tool for a session that enforces todos.
 */
 const isEnforcedTaskToolCall = (input: { sessionID?: string, tool: string }): input is { sessionID: string, tool: 'task' } => {
-  if (!input.sessionID) return false
-  if (input.tool === TODO_TOOL_NAME) return false
-  return input.tool === 'task'
+  return !input.sessionID || (input.tool === TODO_TOOL_NAME) ? false : input.tool === 'task'
 }
 
 /**
@@ -149,8 +147,7 @@ export const todoEnforcer: Plugin = async ({ client }) => {
     const brokenAt = state[SESSION_FIELDS.todoFollowupBrokenAt] as string | undefined
     if (!brokenAt) return
     const brokenAtMs = new Date(brokenAt).getTime()
-    if (Number.isNaN(brokenAtMs)) return
-    if (messageAt <= brokenAtMs) return
+    if (Number.isNaN(brokenAtMs) || (messageAt <= brokenAtMs)) return
     sessionStorage.updateState(sessionId, (s: Record<string, unknown>) => {
       const { [SESSION_FIELDS.todoFollowupBrokenAt]: _removed, ...rest } = s
       return { ...rest, [SESSION_FIELDS.todoFollowupErrorCount]: 0 }
@@ -162,8 +159,7 @@ export const todoEnforcer: Plugin = async ({ client }) => {
   // A missing/unnamed error still counts — conservative: an unclassifiable error must not loop forever.
   const handleSessionError = (event: Extract<PluginEvent, { type: 'session.error' }>): void => {
     const properties = event.properties
-    if (!properties?.sessionID) return
-    if (properties.error?.name === 'MessageAbortedError') return
+    if (!properties?.sessionID || (properties.error?.name === 'MessageAbortedError')) return
     incrementFollowUpErrorCount(properties.sessionID)
   }
 
@@ -254,9 +250,7 @@ export const todoEnforcer: Plugin = async ({ client }) => {
 
       const currentAgent = await getSessionAgent(client, input.sessionID)
 
-      if (!AGENTS_REQUIRED_TO_START_WITH_TODOS.has(currentAgent)) return
-
-      if (hasUsedTodoToolRecently(input.sessionID)) return
+      if (!AGENTS_REQUIRED_TO_START_WITH_TODOS.has(currentAgent) || hasUsedTodoToolRecently(input.sessionID)) return
 
       const sampleTodo = [{
         content: `#plan express the plan in todos; assignee: @${currentAgent}`,
