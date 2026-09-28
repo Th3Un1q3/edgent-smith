@@ -31,8 +31,10 @@ Thresholds guard quality. Never lower a threshold to make CI pass. Fix the sourc
 - Keep escapes absent: no `break: null`, no `SKIP_MUTATION=` in `.env.example`, no `try: true` in `eslint.config.js`, no `ignore_missing_imports`.
 - Verification is `bash scripts/verify_thresholds.sh` → `PASS` and `just verify-agents` → `PASS` and CI gate 0 `verify-thresholds` → `PASS`.
 
-## Branch Protection and Hooks
+## Mutation Budget
 
-- Branch protection requires CI `ci` job success. Direct push with `--no-verify` still hits CI gate 0 (`verify-thresholds`, inside the DevContainer).
-- Install hooks once per clone: `bash scripts/install-hooks.sh`. Re-run after `git clone` or when `.githooks/pre-push` changes.
-- Fork-PR prebuild guard stays: `prebuild-devcontainer` skips on forks, `ci` runs with `always() && (success || skipped)`.
+Gate 12 (`opencode-mutation`) dominates CI wall time: ~193s with `ignoreStatic: true` in `.opencode/stryker.config.mjs`, down from 451s without it. `MUTATION_TIMEOUT=1260` (default, `.env.example`) wraps the gate in `timeout`; `MUTATION=1 just ci` opts into the full run.
+
+## Hooks
+
+- Install hooks once per clone: `bash scripts/install-hooks.sh`. Re-run after `git clone` or when `.githooks/pre-push` changes. CI enforcement and the fork-PR guard live in `.opencode/instructions/github-actions-tech-guidance.instructions.md`.

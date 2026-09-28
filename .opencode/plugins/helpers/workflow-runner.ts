@@ -31,7 +31,7 @@ import {
 
 export { buildWorkflowFunction, checkScript } from './workflow-script'
 export { BudgetExceededError, createSubtask } from './workflow-subtask'
-export { DEFAULT_TIMEOUT_SECONDS } from './workflow-types'
+export { DEFAULT_TIMEOUT_MINUTES } from './workflow-types'
 export type {
   StepRecord,
   WorkflowEnvelope,

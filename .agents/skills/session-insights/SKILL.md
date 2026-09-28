@@ -6,10 +6,12 @@ description: >
   skills loaded, which instructions were displayed, whether they were followed) or audit tool-call errors — both are covered
   by the `workflows/session-audit.md` workflow.
 license: MIT
-compatibility: Universal
+compatibility: Requires OpenCode
 metadata:
-  version: "1.3.0"
-  delta: "Restructured session_parts.py CLI to Click (conversation/parts/info/summary flows); migrated extending_scripts.md, SKILL.md routing, session-analysis command, session-audit workflow, and agent_utils justfile."
+  version: "1.3.1"
+  delta: |
+    1.3.1 — compatibility label: Requires OpenCode.
+    1.3.0 — Restructured session_parts.py CLI to Click (conversation/parts/info/summary flows); migrated extending_scripts.md, SKILL.md routing, session-analysis command, session-audit workflow, and agent_utils justfile.
   author: edgent-smith team
 ---
 
@@ -37,7 +39,11 @@ Analyse exported OpenCode session JSON files: the skills loaded, instructions sh
 | I want to... | File |
 |---|---|
 | Perform session audit | [workflows/session-audit.md](./workflows/session-audit.md) |
-| Use session schema to lookup session fields (such as messages, reasoning, tool calls) | [references/schema.md](./references/schema.md) |
+| Look up session metadata and top-level info fields | [references/schema.md](./references/schema.md) |
+| Look up message info fields and variants | [references/schema-message-info.md](./references/schema-message-info.md) |
+| Look up part types (text, reasoning, patch, etc.) | [references/schema-parts.md](./references/schema-parts.md) |
+| Look up tool-part state and instructional content | [references/schema-tool-and-content.md](./references/schema-tool-and-content.md) |
+| Run jq queries and read schema design notes | [references/schema-queries.md](./references/schema-queries.md) |
 | Render a session conversation or extract parts via the CLI | [references/extending_scripts.md](./references/extending_scripts.md) — script: `scripts/session_parts.py` |
 | Figure out types of improvements that can be made | Load the `harness-management` skill by name (your `skill` tool); its `references/improvement-patterns.md` lists P1–P4 |
 | Create a session review document | [templates/review-document.md](./templates/review-document.md) |

@@ -21,4 +21,4 @@ Home for architecture decisions: records Architecture Decision Records (ADRs) wi
 
 - `mem:architecture/adr-template` — the ADR skeleton (frontmatter; `## Decision` first; `## Considerations` with Context, Options considered, Scoring, Consequences at the bottom).
 - `mem:architecture/adr-rules` — ADR conventions (ids, status lifecycle, scoring discipline).
-- ADRs: `mem:architecture/adr/ADR-001-envelope-tag-detection` (accepted) and `mem:architecture/adr/ADR-002-memory-system-and-structure` (accepted) and `mem:architecture/adr/ADR-003-tag-delimited-structured-output` (accepted).
+- ADRs: `mem:architecture/adr/ADR-001-envelope-tag-detection` (accepted), `mem:architecture/adr/ADR-002-memory-system-and-structure` (accepted), `mem:architecture/adr/ADR-003-tag-delimited-structured-output` (accepted), `mem:architecture/adr/ADR-004-workflow-timeout-units-minutes` (accepted), and `mem:architecture/adr/ADR-005-multi-agent-orchestration-strategy` (accepted).

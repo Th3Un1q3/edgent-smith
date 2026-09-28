@@ -3,7 +3,7 @@ import path from 'node:path'
 
 import {
   createRunId,
-  DEFAULT_PER_SUBTASK_TIMEOUT_SECONDS,
+  DEFAULT_PER_SUBTASK_TIMEOUT_MINUTES,
   MAX_DESCRIPTION_CHARS,
   MAX_LOGS,
   MAX_LOG_CHARS,
@@ -125,12 +125,12 @@ const requireDescription = (value: unknown): string => {
   return value.trim().slice(0, MAX_DESCRIPTION_CHARS)
 }
 
-const normalizeTimeoutSeconds = (value: unknown): number | undefined => {
+const normalizeTimeoutMinutes = (value: unknown): number | undefined => {
   if (value === undefined) {
     return
   }
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    throw new TypeError('subtask timeout_seconds must be a finite number greater than 0')
+    throw new TypeError('subtask timeout_minutes must be a finite number greater than 0')
   }
   return value
 }
@@ -177,7 +177,7 @@ const normalizeObjectInput = (input: Record<string, unknown>): NormalizedSubtask
     skills: normalizeSkills(input.skills),
     task_id: taskId,
     fork_from: forkFrom,
-    timeout_seconds: normalizeTimeoutSeconds(input.timeout_seconds),
+    timeout_minutes: normalizeTimeoutMinutes(input.timeout_minutes),
     schema: input.schema as Record<string, unknown> | undefined,
   }
 }
@@ -448,6 +448,12 @@ const toStep = (description: string, result: SubtaskResult): StepRecord => ({
 
 export const formatElapsed = (ms: number): string => `${(Math.max(0, ms) / 1000).toFixed(1)}s`
 
+// The subtask timeout error names the configured limit, not the elapsed wall
+// time, so it reads in the unit the caller sets: minutes. A fractional minute
+// value passes through verbatim, so the reported limit always matches the input.
+export const formatTimeoutMinutes = (minutes: number): string =>
+  `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
+
 // Live child-session titles. The marker encodes the subtask's lifecycle so the
 // title itself is the status signal (the `context.metadata` transport is a
 // proven dead end). `[error]` is the catch-all for a settled non-ok, non-aborted
@@ -560,14 +566,15 @@ const recordStep = (context: WorkflowContext, step: StepRecord): void => {
   emitMilestone(context, step)
 }
 
-// The single seconds→ms boundary: caller-facing `timeout_seconds` becomes the
-// Node timer's millisecond value here; everything upstream stays in seconds.
+// The single minutes→ms boundary for subtasks: caller-facing `timeout_minutes`
+// becomes the Node timer's millisecond value here; everything upstream stays in
+// minutes, and the runner keeps millisecond semantics internally.
 const attemptConfig = (
   parameters: NormalizedSubtaskParameters,
-): { timeoutMs: number, label: string } => ({
-  timeoutMs: (parameters.timeout_seconds ?? DEFAULT_PER_SUBTASK_TIMEOUT_SECONDS) * 1000,
-  label: parameters.description,
-})
+): { timeoutMs: number, timeoutMinutes: number, label: string } => {
+  const timeoutMinutes = parameters.timeout_minutes ?? DEFAULT_PER_SUBTASK_TIMEOUT_MINUTES
+  return { timeoutMs: timeoutMinutes * 60_000, timeoutMinutes, label: parameters.description }
+}
 
 const buildPromptBody = (
   parameters: SubtaskParameters,
@@ -728,7 +735,7 @@ const resolveSessionID = async (
 interface ClassificationContext {
   timedOut: boolean
   parentAborted: boolean
-  timeoutMs: number
+  timeoutMinutes: number
   parsed: ParsedStructured | undefined
 }
 
@@ -746,7 +753,7 @@ const classifyResponse = (
   // takes precedence over abort and any info.error carried by the response.
   if (context.timedOut) {
     return makeResult('timeout', sessionID, durationMs, {
-      error: `subtask timed out after ${formatElapsed(context.timeoutMs)}`,
+      error: `subtask timed out after ${formatTimeoutMinutes(context.timeoutMinutes)}`,
     })
   }
   if (context.parentAborted) {
@@ -780,7 +787,7 @@ const classifyResponse = (
 interface ErrorContext {
   child: AbortController
   parentAborted: boolean
-  timeoutMs: number
+  timeoutMinutes: number
   timedOut: boolean
   sessionID: string
   forkedFrom?: string
@@ -793,7 +800,7 @@ const classifyError = (error: unknown, context: ErrorContext): SubtaskResult => 
   if (isAbortError(error) || context.child.signal.aborted || context.parentAborted) {
     const status: SubtaskStatus = context.timedOut ? 'timeout' : 'aborted'
     const message = context.timedOut
-      ? `subtask timed out after ${formatElapsed(context.timeoutMs)}`
+      ? `subtask timed out after ${formatTimeoutMinutes(context.timeoutMinutes)}`
       : 'subtask aborted'
     result = makeResult(status, context.sessionID, durationMs, { error: message })
   }
@@ -898,7 +905,7 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
 
     return semaphore.run(async (): Promise<SubtaskResult> => {
       const startedAt = Date.now()
-      const { timeoutMs, label } = attemptConfig(parameters)
+      const { timeoutMs, timeoutMinutes, label } = attemptConfig(parameters)
       const child = new AbortController()
       // Register before session creation so the runner's timeout grace sees an
       // in-flight subtask even while `session.create` is still pending; otherwise
@@ -965,7 +972,7 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
         const classified = classifyResponse(turn.response, sessionID, startedAt, {
           timedOut: isTimedOut,
           parentAborted: context.signal.aborted,
-          timeoutMs,
+          timeoutMinutes,
           parsed: turn.parsed,
         })
         // Provenance only for a session actually forked on this attempt.
@@ -985,7 +992,7 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
         const result = classifyError(error, {
           child,
           parentAborted: context.signal.aborted,
-          timeoutMs,
+          timeoutMinutes,
           timedOut: isTimedOut,
           sessionID,
           // Only a fork that already returned an id reaches the catch with

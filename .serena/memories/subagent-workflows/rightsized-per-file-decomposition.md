@@ -8,7 +8,7 @@ Two attempts ran a 5-file cleanup as ONE subagent. Both read all 5 files (~556 l
 
 ## Fix: rightsized decomposition + immediate editing
 
-- One subagent per file group (1-2 files each): 3 subagents replaced 1 monolithic one (guidance.md; shaping-checklist.md; SKILL.md + authoring-workflow.md + templates.md).
+- One subagent per file group (1-2 files each): 3 subagents replaced 1 monolithic one (guidance.md, later restructured by topic into guidance-structure.md / guidance-content.md / guidance-process.md; shaping-checklist.md; SKILL.md + authoring-workflow.md + templates.md).
 - Prompt each subagent to read its files once then begin editing immediately - elaborate planning killed the budget pre-edit.
 - Completed the same cleanup with no silent failures.
 

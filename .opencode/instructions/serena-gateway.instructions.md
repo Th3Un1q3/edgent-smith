@@ -8,11 +8,15 @@ applyTo: "{.agents/skills/serena-memory/**/*.md,.agents/skills/context-gathering
 
 Snapshot before every gateway call, detect empty returns, fall back to filesystem with zero retries.
 
+## Scope
+
+The procedure binds every Serena gateway call, not only markdown edits. This instruction auto-loads on edits under the paths in `applyTo`; for gateway calls made elsewhere, the repo-wide reference is the Serena Gateway entry in `/workspace/AGENTS.md` `CONVENTIONS`, and the invoking skill (`serena-memory`, `context-gathering`) inlines this procedure at execution time.
+
 ## Guidelines
 
 - Snapshot 2 KB before every `gateway_mcp-exec`: store `snapshot = raw.slice(0, 2048)` or `content.slice(0,2048)+"\n[...truncated]"` for reuse when gateway returns empty.
 - Detect empty gateway return immediately: `if (!raw || raw.trim()==="" || /Access denied/.test(raw) || parsed.memories?.length===0 && raw.includes("content:[]"))` treat as infra flake.
-- Fall back to `bash cat .serena/memories/<id>.md` with 0 gateway retries; do not re-invoke `gateway_code-mode` or `gateway_mcp-exec` for the same id.
+- Fall back to `bash cat .serena/memories/<id>.md` with 0 gateway retries; do not re-invoke `gateway_code-mode` or `gateway_mcp-exec` for the same id. This fallback covers infra flakiness only; permission policy: `.opencode/instructions/no-permission-workarounds.instructions.md`.
 - Enforce return ritual: every `list_memories` must be followed by `read_memory({memory_name: ids[0]})` before you answer; fail the step if you respond from `list_memories` names alone.
 - Log the flake once: note `gateway empty → bash fallback for <id>` so the next probe reuses snapshot.
 

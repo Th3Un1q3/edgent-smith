@@ -20,17 +20,17 @@ Use this change type when:
 
 1. Find candidates with the `find-skills` skill; check whether one already covers the process.
 2. If modifying: load `building-modular-skills` and follow its [workflows/authoring-workflow.md](../../building-modular-skills/workflows/authoring-workflow.md).
-3. If creating: use the `building-modular-skills` authoring workflow — a multi-file layout with a lean root `SKILL.md` (≤ ~90 lines) plus `workflows/` and `references/` — or use `skill-creator` to create, modify, and benchmark skills.
+3. If creating: use the `building-modular-skills` authoring workflow — a multi-file layout with a lean root `SKILL.md` (≤ ~90 lines) plus `workflows/` and `references/`. Use `skill-creator` only for skill evals, benchmarking, and description/trigger optimization.
 4. Before declaring done, run the completion gate [workflows/shaping-checklist.md](../../building-modular-skills/workflows/shaping-checklist.md) and fix every failing check.
 
 ## Format and Conventions
 
 - Point to `building-modular-skills` for the full layout and rule set; do not duplicate them here.
-- Frontmatter fields: `name`, `description` (trigger-rich, folded), `license: MIT`, `compatibility: Universal`, and `metadata`.
+- Frontmatter fields: `name`, `description` (trigger-rich, folded), `license: MIT`, `compatibility` (scope: `Universal` only when no file contains harness-specific content, otherwise `Requires ...` naming the harness), and `metadata`.
 
 ## Verify
 
-- Run `python3 .agents/skills/building-modular-skills/scripts/validate_md_links.py` on the skill tree and fix any broken relative link it reports.
+- Run `just agent_utils::validate-skill <name>` on the skill: it checks the shaping line budgets and runs the shared `agent_utils/scripts/validate_md_links.py` and `agent_utils/scripts/audit_fences.py` validators. Fix every failure it reports.
 - Run the shaping checklist from `building-modular-skills` and fix every failing check.
 
 ## Apply and Restart

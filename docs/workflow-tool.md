@@ -16,7 +16,7 @@ Call the `workflow` tool with a `script` string. The script can use top-level `a
 
 ```json
 {
-  "script": "const r = await subtask('List three files that define the CLI entry point');\nreturn { status: r.status, files: r.outputText };"
+  "script": "const r = await subtask('List three files that define the CLI entry point');\nreturn { files: r.outputText };"
 }
 ```
 
@@ -25,7 +25,7 @@ The tool returns `{ title, output }`. Parse `output` as JSON and read the envelo
 ```json
 {
   "status": "ok",
-  "result": { "status": "ok", "files": "..." },
+  "result": { "files": "..." },
   "steps": [{ "description": "List three files that define the CLI entry point", "task_id": "ses_...", "status": "ok", "durationMs": 4210, "truncated": false }],
   "stats": { "subtasks": 1, "ok": 1, "error": 0, "empty": 0, "timeout": 0, "aborted": 0, "totalMs": 4300, "truncated": false },
   "logs": []
@@ -48,7 +48,7 @@ const full = await subtask({
   description: 'readme summary',
   agent: 'rug-swe',
   skills: ['context-gathering'],
-  timeout_seconds: 120,
+  timeout_minutes: 2,
 })
 ```
 
@@ -62,7 +62,7 @@ Object fields:
 | `skills` | No | none | Skill names to load from `.agents/skills/<name>/SKILL.md` into the child prompt. Unknown names are skipped and logged. |
 | `task_id` | No | none | Resume an existing child session instead of creating or forking one. Mutually exclusive with `fork_from`. |
 | `fork_from` | No | none | Fork this session id, copy its conversation history up to the latest message, and deliver this subtask's prompt as the followup on the fork. The result's `task_id` is the new fork id. Surrounding whitespace is trimmed and a whitespace-only value is treated as absent. Mutually exclusive with `task_id`. |
-| `timeout_seconds` | No | `300` | Per-subtask timeout in seconds. On expiry the subtask returns `status: 'timeout'` and an `error` naming the limit in seconds. |
+| `timeout_minutes` | No | `15` | Per-subtask timeout in minutes. On expiry the subtask returns `status: 'timeout'` and an `error` naming the limit in minutes. |
 | `schema` | No | none | JSON Schema object requesting structured output. See Structured output. |
 
 `task_id` resumes a child session. You still pass a `prompt`; the child sees the new prompt in its existing context.
@@ -84,7 +84,7 @@ Result object:
 | `truncated` | boolean | True when `outputText` hit the per-step cap. |
 | `data` | unknown, absent unless requested | Parsed value for a schema subtask. Absent when no `schema` was passed or parsing failed; never truncated or stringified. |
 
-Treat `status !== 'ok'` as a failure and decide what to do: retry, fall back, or surface it.
+Treat `status !== 'ok'` as a failure and decide what to do: retry, fall back, or surface it. Read `outputText` by default; read `data` only when the script needs a machine value, such as a branch, loop, or merge.
 
 ### Structured output
 
@@ -97,13 +97,33 @@ const r = await subtask({
   schema: {
     type: 'object',
     properties: { label: { type: 'string' }, severity: { type: 'number' } },
-    required: ['label'],
+    required: ['label', 'severity'],
   },
 })
-if (r.status === 'ok') {
-  return { label: r.data.label, severity: r.data.severity }
-}
+if (r.status !== 'ok' || !r.data) return { status: 'classify-failed' }
+// The script branches on severity, which is what justifies the schema.
+const next = r.data.severity >= 4 ? 'escalate' : 'triage'
+return { label: r.data.label, next }
 ```
+
+Structured output is not the default. Ask for plain prose unless the script mechanically consumes a value. Use `schema` only in one of three cases:
+
+- Branch or loop condition: the script reads a named field to choose a path or end a loop. A lone completion verdict is not this case; match a first-line `PASS`/`FAIL` with a regex.
+- Fan-out or loop driver: an array the script iterates or fans out over.
+- Typed hand-off or merge: a later step consumes named fields, or a map-reduce merges by field.
+
+Decision test: does the script branch, loop, merge, or template on this value? Yes: use `schema`. No: use prose.
+
+These shapes pay the schema cost for nothing:
+
+- A reducer that echoes child `data` fields or reshapes prose into nested fielded objects nothing consumes, such as `code: { verdict: v.data.verdict, findings: v.data.findings.slice(0, 3) }`. Returning one child's `outputText` under a single result key, such as `{ summary: merged.outputText }`, is ordinary delivery and stays legal; several child-derived strings collapse into one prose line, not a multi-key object.
+- `*Status:` mirror keys and producer bookkeeping such as `produced: { source: p1.data.filesChanged }`.
+- A report schema wrapping prose the child already returned.
+- A single verdict that a first-line `PASS`/`FAIL` check covers.
+
+Return-value redundancy. The envelope already carries `status`, `stats`, every `steps[]` record, and `logs[]`, so a reducer carries only what those fields cannot infer: one final decision or outcome line, an artifact path, or a decision-bearing domain count such as "3 of 5 gates failed". Never restate a per-child `status` or `*Status:` key, a status map, step counts (`ok`, `failed`, `total`), `attempts`/`rounds`, a `task_id`, a duration, a truncation flag, or anything already passed to `log()`. Child-derived content the envelope does not carry belongs in a prose one-liner, not a nested fielded object. The flagged shape mirrors each child's status and echoes its `data` (`code: { verdict: v.data.verdict, findings: v.data.findings.slice(0, 3) }`); return a prose outcome line instead.
+
+Script-defined values. Return only outcomes the run produced, never a value the script itself defines. The orchestrator wrote every hardcoded path, id, label, and config constant in the script, so echoing one back adds nothing: `reports: { changeReport: "/tmp/x/change-report.md" }` repeats a constant rather than reporting a result. A return also restates nothing the envelope already shows: never list step statuses, step counts, task ids, durations, or log lines. Return a short outcome line, decisions reached, artifact paths a child produced, and decision-bearing counts; when nothing beyond the envelope needs saying, return a one-line overall outcome.
 
 `subtask` runs in one of two modes.
 
@@ -159,9 +179,7 @@ const results = await Promise.all(
   ),
 )
 
-return {
-  summaries: results.map((r, i) => ({ topic: topics[i], status: r.status, text: r.outputText })),
-}
+return { summaries: results.map((r, i) => `${topics[i]}: ${r.outputText}`).join('\n') }
 ```
 
 ### Fork fanout
@@ -186,11 +204,7 @@ const findings = await Promise.all(
       prompt: audit.question,
       description: `audit ${audit.id}`,
       fork_from: document.task_id,
-      schema: {
-        type: 'object',
-        properties: { finding: { type: 'string' }, severity: { type: 'string' } },
-        required: ['finding', 'severity'],
-      },
+      schema: { type: 'object', properties: { finding: { type: 'string' } }, required: ['finding'] },
     }),
   ),
 )
@@ -203,16 +217,10 @@ const synthesis = await subtask({
   description: 'synthesize audits',
 })
 
-return {
-  forks: findings.map((result, index) => ({
-    audit: audits[index].id,
-    fork_id: result.task_id,
-    forked_from: result.forked_from,
-    finding: result.data,
-  })),
-  synthesis: synthesis.outputText,
-}
+return { synthesis: synthesis.outputText }
 ```
+
+The synthesis consumes each fork's `finding`, which is what justifies the schema; echoing `result.data` into `forks[]` would add nothing. When the merge only needs each child's prose, pass `outputText` and drop the schema.
 
 Each fork copies the source history, so N forks multiply the tokens the source document costs. Every fork is a normal subtask: it counts against `max_subtasks` and waits behind `max_concurrent`. Reuse one fork id with `subtask({ task_id })` when follow-up turns should keep that fork's context.
 
@@ -229,7 +237,7 @@ const reviewed = await subtask({
   task_id: draft.task_id,
 })
 
-return { draft: draft.outputText, reviewed: reviewed.outputText }
+return reviewed.outputText
 ```
 
 ### Map-reduce
@@ -253,13 +261,13 @@ return { summary: merged.outputText }
 
 ### Structured classification and reduce
 
-Ask each child for the same shape, then reduce over `data` instead of re-parsing text.
+Ask each child for the same shape, then reduce over `data` by field. This merge is one of the three justified schema uses: the reduce reads named fields instead of re-parsing text. When the merge only needs each child's prose, skip the schema and read `outputText`.
 
 ```js
 const schema = {
   type: 'object',
-  properties: { label: { type: 'string' }, confidence: { type: 'number' } },
-  required: ['label', 'confidence'],
+  properties: { label: { type: 'string' } },
+  required: ['label'],
 }
 
 const issues = ['login fails', 'slow search', 'stale cache']
@@ -282,7 +290,7 @@ The fan-out lives in the child prompts; the reduce reads typed fields, so a chil
 
 ### Branch on structured data
 
-`data` drives decisions in the script, so escalation never needs a text parser.
+`data` drives decisions in the script, so escalation never needs a text parser. This is the branch case: the schema is justified because the script reads `urgency` to choose a path. When nothing branches on the value, prose would do.
 
 ```js
 const triage = await subtask({
@@ -316,7 +324,7 @@ for (let i = 0; i < 3; i++) {
   if (attempt.status === 'ok') break
 }
 
-return { status: attempt.status, output: attempt.outputText, error: attempt.error }
+return attempt.status === 'ok' ? attempt.outputText : 'retry failed: ' + attempt.error
 ```
 
 Retries cost subtasks. Each call counts against `max_subtasks`, including retries and calls that end `aborted`.
@@ -328,7 +336,7 @@ Tool arguments:
 | Argument | Range | Default | Purpose |
 |---|---|---|---|
 | `script` | non-empty string | none | JavaScript body to run. |
-| `timeout_seconds` | 1 to 36000 | 600 | Whole-script timeout. |
+| `timeout_minutes` | 1 to 600 | 90 | Whole-script timeout in minutes. |
 | `max_concurrent` | 1 to 8 | 4 | Maximum child sessions in flight. |
 | `max_subtasks` | 1 to 64 | 32 | Budget of `subtask` calls for the run. |
 
@@ -336,7 +344,7 @@ Runtime caps:
 
 | Limit | Value |
 |---|---|
-| Per-subtask timeout | 300 seconds |
+| Per-subtask timeout | 15 minutes |
 | Per-step output | 4000 characters (`outputText` only; `data` is not truncated) |
 | Final result | No fixed length; the serializer trims it to fit the envelope byte budget. |
 | Envelope | 8192 bytes |
@@ -356,7 +364,7 @@ Subtask statuses, seen per step and in `stats`:
 | `ok` | Child returned text. | Use `outputText`. |
 | `error` | Child reported an error, the call failed, or a schema reply stayed unusable after the follow-up. | Read `error`, decide whether to retry or fall back. |
 | `empty` | Child returned no text. | Retry with a clearer prompt or treat as a miss. |
-| `timeout` | Child exceeded `timeout_seconds`; `error` names the limit in seconds. | Retry with more time or a smaller prompt. |
+| `timeout` | Child exceeded `timeout_minutes`; `error` names the limit in minutes. | Retry with more time or a smaller prompt. |
 | `aborted` | The run was cancelled. | Stop; the envelope is already winding down. |
 
 Envelope statuses, seen at the top level:
@@ -365,7 +373,7 @@ Envelope statuses, seen at the top level:
 |---|---|---|
 | `ok` | Script returned a value. | Read `result`. |
 | `error` | Script threw a non-budget error. | Read `error`, fix the script. |
-| `timeout` | Script exceeded `timeout_seconds`. | Shorten the script or raise the timeout. |
+| `timeout` | Script exceeded `timeout_minutes`. | Shorten the script or raise the timeout. |
 | `aborted` | The user cancelled the tool call while the script ran. | Stop; the run was stopped deliberately. |
 | `budget_exceeded` | An uncaught budget overrun past `max_subtasks`. | Reduce calls or raise the limit; catch the error if a partial result is useful. |
 | `invalid_script` | Script has a syntax error. | Rewrite the failing line. |
@@ -514,7 +522,7 @@ opencode export "$CHILD_SESSION_ID" --sanitize > child.json   # redact sensitive
 | `invalid_script` | Syntax error in the script body. | Check unbalanced braces or backticks. Rerun with the syntax fixed. |
 | `forbidden_script` | Banned token such as `import`, `require`, `process`, `globalThis`, `global`, or `fetch`. | Remove the token. Do all IO through `subtask`. |
 | `budget_exceeded` | An uncaught budget overrun past `max_subtasks`. | Cut calls or raise `max_subtasks`; catch `BudgetExceededError` if a partial result is useful. |
-| `timeout` | Script exceeded `timeout_seconds`. | Raise `timeout_seconds` or split the work. |
+| `timeout` | Script exceeded `timeout_minutes`. | Raise `timeout_minutes` or split the work. |
 | `empty` steps | Child returned no text. | Make the prompt more specific or use a different agent. |
 | Result is empty | Script did not `return` a value. | Add a `return` for a small reducer object. |
 | Huge outputs | Child returned more than the per-step cap. | Ask children for short answers; check `truncated`. |

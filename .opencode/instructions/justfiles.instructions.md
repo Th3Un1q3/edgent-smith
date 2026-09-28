@@ -28,7 +28,7 @@ Root `justfile` owns exactly 11 global quality gates plus `mod` imports. No scop
 | `opencode` | `opencode/justfile` → `.opencode/justfile` | plugin SDK | `just opencode::test` (fallback: `just --justfile .opencode/justfile test`) |
 
 - **Rule — do not add to root:** Do not add a new recipe to root `justfile` unless it is a global quality gate with zero domain dependencies (`test`, `lint`, `typecheck`, `format`, `format-check`, `ci`, `clean`, `verify-agents`). For any domain-specific work, create or update the scoped `justfile` in that module directory, add the recipe there, and ensure root imports it via `mod <module>` or `mod? <module>`. If the module has no `justfile` yet, create one with `set shell := ["bash", "-euo", "pipefail", "-c"]`, `set dotenv-load := true`, `set export := true`, `set working-directory := ".."` (when recipes reference repo root).
-- **Enforcement — CI gate:** `just verify-agents` verifies the boundary (in addition to its 7 topology gates). It checks that root `justfile` contains only the 8 globals plus `mod` lines and that no scoped recipe (e.g., `eval`, `run-experiment`, `lint`, `edge-agent`, `autoresearch`) appears in root. CI (`just ci` → `scripts/ci.sh`) runs this gate. Fix a violation by moving the recipe to its scoped file and re-running `just verify-agents`.
+- **Enforcement — CI gate:** `just verify-agents` verifies the boundary (in addition to its 7 topology gates). It checks that root `justfile` contains only the 11 globals plus `mod` lines and that no scoped recipe (e.g., `eval`, `run-experiment`, `lint`, `edge-agent`, `autoresearch`) appears in root. CI (`just ci` → `scripts/ci.sh`) runs this gate. Fix a violation by moving the recipe to its scoped file and re-running `just verify-agents`.
 - **Invocation:** From repo root, run `just <module>::<recipe>` (e.g., `just evals::local`, `just scripts::watch-worker`). Run `just --list` to see globals; scoped modules appear as `agent_utils ...`, `agents ...`, etc. — expand with `just --unstable --list` or read the module `justfile` directly.
 
 ## 0.1 Pre-check — run `just verify-agents` before editing justfiles (P0)
@@ -46,7 +46,7 @@ Before any `justfile` or `*/justfile` or `.github/workflows/*.yml` edit that tou
    ```
 4. Never use `cd <dir> &&` in a `justfile` recipe — use `working-directory` + `--cwd` or `workdir` param. Detect with self-match `grep "[c]d .*&&" --include="justfile"` (bracket avoids self-match on the grep line when copied into a gate).
 5. Ensure `scripts/conductor/` exists: gate 5 runs `mkdir -p scripts/conductor && ls -la scripts/conductor/`. Keep `scripts/conductor/.gitkeep` tracked (`git ls-files scripts/conductor/.gitkeep`) so clean clones pass.
-6. Pre-commit checklist — run `just verify-agents && just docs::lint && just typecheck` (<10s combined) before any `justfile`, `*.justfile`, `*.yml`, or `*.md` edit; block commit on fail. `just docs::lint` covers 383 markdown files (0 issues expected); `just typecheck` covers `mypy --strict` with `mypy_path = "stubs"`.
+6. Pre-commit checklist — run `just verify-agents && just docs::lint && just typecheck` (<10s combined) before any `justfile`, `*.justfile`, `*.yml`, or `*.md` edit; block commit on fail. `just docs::lint` lints every markdown file matched by `.markdownlint-cli2.jsonc` globs (the run prints `Linting: <N> files`; 0 issues expected); `just typecheck` covers `mypy --strict` with `mypy_path = "stubs"`.
 
 ## 1. Configure execution explicitly
 - Set a well-defined shell:
@@ -570,88 +570,8 @@ change-working-dir:
 
 ## Command Support Recipes
 
-When writing justfile recipes that support OpenCode commands (called via `` `!`just ...` ``):
+Recipes that support OpenCode commands follow `command-design.instructions.md` Principles 3–4 (reusable logic lives in justfile recipes; state is handled explicitly). Justfile-specific mechanics:
 
-### Working Directory
-
-Recipes run from the justfile's own directory, NOT the workspace root. You must choose one of:
-
-- `cd /workspace` at the top of the recipe before using workspace-relative paths (e.g., `.tmp/`, `.agents/`)
-- Absolute paths starting with `/workspace/` for every file reference
-
-```just
-my-recipe arg="":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cd /workspace  # REQUIRED for relative paths
-    # ... use ".tmp/", ".agents/", etc. safely now
-```
-
-### Placeholder Matching
-
-When using `sed` to fill template placeholders, the pattern must match the template exactly. Copy-paste placeholder strings from the actual template file. Test the recipe against the real template.
-
-Correct:
-
-```just
-# Template has: <!-- FILL: .info.agent -->
-sed -i "s|<!-- FILL: .info.agent -->|$AGENT|" "$REVIEW_MD"
-```
-
-Wrong:
-
-```just
-# Template has: <!-- FILL: .info.agent --> but recipe uses different string
-sed -i "s|<!-- FILL: agent -->|$AGENT|" "$REVIEW_MD"  # SILENTLY FAILS — no match
-```
-
-### Schema Verification
-
-`jq` field names must match the actual JSON schema, not assumed names. Verify against the schema reference file before writing `jq` queries. Common mistake: using `.provider` when schema has `.providerID`.
-
-Correct (verified against schema.md):
-
-```just
-PROVIDER=$(jq -r '.info.model.providerID // "unknown"' "$SESSION_DIR/session.json")
-```
-
-Wrong (assumed field name):
-
-```just
-PROVIDER=$(jq -r '.info.model.provider // "unknown"' "$SESSION_DIR/session.json")  # schema uses providerID
-```
-
-### Keep It Simple
-
-Prefer bash over Python for command support scripts. A 30-line bash recipe in the justfile is better than a 250-line Python script. Bash handles the trifecta well: file checks, `sed`/`cp`, and `jq` extraction. Do not create standalone Python scripts for tasks that bash and `jq` can handle.
-
-### Machine-Parseable Output
-
-Recipes called from commands must output KEY=VALUE lines for easy parsing. Include:
-
-- `STATUS` — values like `new`, `resumed`, `error`, `no_sessions`
-- `MESSAGE` — human-readable context
-- Paths like `SESSION_JSON`, `REVIEW_MD` for the command to consume
-
-```just
-echo "STATUS=new"
-echo "MESSAGE=New review started"
-echo "SESSION_ID=$REVIEW_DIR"
-echo "SESSION_JSON=$SESSION_DIR/session.json"
-echo "REVIEW_MD=$REVIEW_MD"
-```
-
-### State Management
-
-Recipes must check for existing state before acting (e.g., does `review.md` already exist?). Handle resume vs. new-start explicitly. Never assume a clean slate — the recipe may be called multiple times.
-
-## Common Mistakes
-
-| Mistake | Symptom | Fix |
-|---|---|---|
-| Missing `cd /workspace` | `find`, `cp`, `jq` fail silently | Add `cd /workspace` after `set -euo pipefail` |
-| Mismatched sed placeholders | sed runs but nothing changes in output file | Copy-paste placeholders from template; verify with grep |
-| Wrong jq field names | jq outputs `null` or empty strings | Check schema reference; test with a real data file |
-| Over-engineering with Python | 250-line Python script for what bash does in 30 lines | Use bash shebang recipes in justfile |
-| No status output | Command can't determine what happened | Always emit `STATUS=...` and relevant paths |
-| Not testing with real data | Works in theory, fails in practice | Run recipe against actual files from `.tmp/` or test fixtures |
+- **Working directory**: a recipe runs from the justfile's own directory, not the workspace root. Add `cd /workspace` (after `set -euo pipefail`) or use absolute `/workspace/...` paths before using workspace-relative paths such as `.tmp/` or `.agents/`.
+- **Placeholder matching**: a `sed` pattern must match the template string exactly; copy the placeholder from the template and test the recipe against the real template, or the substitution fails silently.
+- **Schema verification**: `jq` field names must match the real JSON schema (e.g., `.info.model.providerID`, not `.provider`); verify against the schema reference before writing the query.

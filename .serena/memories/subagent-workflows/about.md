@@ -10,6 +10,8 @@ Process learnings for dispatching and verifying sub-agents in orchestrator-drive
 - Verification and retries - launching validation, handling silent/early returns, retry policies.
 - Memory-first orchestration - collecting relevant Serena memories before decomposing a task or drafting prompts.
 - Retrospective lessons from completed RUG sessions - design-churn avoidance, up-front constraint clarification, live verification requirements for plugin hooks, parallel multi-agent edit coordination (central cross-file reference declarations, full-tree validation sweeps).
+- Staged/worktree drift and commit handling - re-stage after agent edits, path-limited git commit when user WIP shares the index - see mem:subagent-workflows/staged-worktree-drift-commit-handling.
+- Adversarial validation practice - fresh validators across consecutive rounds, scoped validator commands, staging before git-tracked-state tests - see mem:subagent-workflows/adversarial-validation-practice.
 
 ## Boundaries (out of scope)
 

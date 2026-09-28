@@ -88,7 +88,7 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 | Evaluation / Providers | `evals/runner.py` | Benchmarks, baselines, smoke tests |
 | Serena / MCP Gateway | `mcp/catalog.yaml`, `.serena/memories/` | 9 MCP servers; gateway-mediated memories |
 | Plugin SDK (TS Harness) | `.opencode/plugins/helpers/`, `*.ts` | Harness internals; not runtime code |
-| Skill Marketplace | `.agents/skills/` | 40 skills; use `find-skills` before creating |
+| Skill Marketplace | `.agents/skills/` | 40 skills; modular capabilities |
 
 ## CODE MAP (Core)
 
@@ -108,50 +108,29 @@ The system is architected around high-centrality components in the following mod
 
 - **Python 3.13**: Uses modern type annotations (`from __future__ import annotations`) and standard library features.
 - **Click Architecture**: Strict separation between command routing (`cli/main.py`), logic (`commands/*.py`), and services (`services/*.py`).
-- **Task Runner**: Root `justfile` is global quality gates only (`test`, `lint`, `typecheck`, `format`, `format-check`, `ci`, `ci-fast`, `clean`, `verify-agents`) + `mod` imports; scoped recipes live in `evals/`, `scripts/`, `docs/`, `agents/`, `cli/`, `agent_utils/`, `opencode/` and run as `just <module>::<recipe>` (e.g., `just evals::eval`). Do not add domain recipes to root — see `.opencode/instructions/justfiles.instructions.md:0`.
-- **CI Fast Path**: `just ci` runs 13 gates (mutation measured 193s with ignoreStatic, down from 451s). For `*.md`/`*.yml`/`justfile` docs-only changes use `just ci-fast` or `SKIP_MUTATION=1 just ci` (~20s); mutation only matters for `.opencode/**/*.ts`. Remote PR CI has no paths filter and runs `just ci` verbatim — keep `scripts/ci.sh` and `.github/workflows/ci.yml` in sync. Env `MUTATION_TIMEOUT=1260` wraps `timeout` gate 12; `MUTATION=1` opts into full run.
-- **CI Workflow**: `.github/workflows/ci.yml` has two jobs — `prebuild-devcontainer` (`timeout-minutes: 12`, skips fork PRs) and `ci` (`timeout-minutes: 30`, `needs` prebuild, runs `just ci` inside the DevContainer). The `ci` job restores `.opencode/reports/stryker-incremental.json` under a `${runner.os}-stryker-v2-<dep/toolchain-hash>-<source-hash>` key, normalizes its ownership for the container uid, validates it in-container, and saves it only when the `.stryker-cache-ok` marker exists.
-- **Pre-check Gate**: Before any `justfile` or `*/justfile` edit run `just verify-agents` (<2s) — enforces root 11 globals + 7 mods, `set working-directory := ".."` + `--cwd` instead of `cd &&` (`grep "[c]d .*&&"`), and `mkdir -p scripts/conductor` with `scripts/conductor/.gitkeep` tracked.
+- **Task Runner**: See `.opencode/instructions/justfiles.instructions.md`.
+- **CI Fast Path**: `just ci` runs the 13-gate sequence; for docs-only changes use `just ci-fast` (~20s). Pins and escapes: `.opencode/instructions/threshold-policy.instructions.md`; CI job internals: `.opencode/instructions/github-actions-tech-guidance.instructions.md`.
+- **CI Workflow**: `.github/workflows/ci.yml` runs `prebuild-devcontainer` then `ci` inside the DevContainer. See `.opencode/instructions/github-actions-tech-guidance.instructions.md`.
+- **Pre-check Gate**: See `.opencode/instructions/justfiles.instructions.md`.
 - **Environment Management**: Heavy reliance on DevContainers for consistent execution across local and CI environments.
-- **Serena Gateway:** Snapshot 2 KB before every `gateway_mcp-exec`; on empty `content:[]` fall back immediately to `bash cat .serena/memories/<id>.md` with 0 retries; every `list_memories` must be followed by `read_memory` before responding — see `.opencode/instructions/serena-gateway.instructions.md`.
+- **Serena Gateway:** See `.opencode/instructions/serena-gateway.instructions.md` for the 2 KB snapshot, zero-retry fallback, and `list_memories` → `read_memory` return ritual.
+- **Permission Denials**: A denial is final for the denied action; never reproduce a denied effect through another mechanism, and never perform a gated write (`git add`/`commit`/`push` or any other write) without explicit user authorization in the current session. Canonical forms and detailed procedure: `.opencode/instructions/no-permission-workarounds.instructions.md`.
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
 - **No `src/` layout**: Packages like `agents`, `cli`, and `evals` reside at the project root to simplify import resolution in certain runtimes.
-- **Avoid manual venv activation**: Prefer `uv run <command>` or `just <recipe>` for all Python execution.
+- **Avoid manual venv activation**: See `.opencode/instructions/test-run-commands.instructions.md`.
 - **Do not duplicate command logic**: Shared setup must be moved to `cli/services/`.
 - **No generic instructions**: Avoid adding standard documentation (e.g., "how to install python") in project files; use established standards if needed.
 
 ## UNIQUE STYLES
 
-- **Instruction Files as Code**: Detailed development guidelines are codified in `.github/instructions/*.md` for strict compliance check by agents and contributors.
+- **Instruction Files as Code**: Detailed development guidelines are codified in `.opencode/instructions/*.md` for strict compliance check by agents and contributors.
 - **Dual Experiment Registry**: Distinct handling of CLI-managed experiments (`experiments/index.json`) versus script-run state files (`experiments/<issue>.state.json`).
 
 ## COMMANDS
 
-just is the primary task runner for the project. There are multiple justfiles in the project scoped to different directories. Search for `find justfile **/justfile .*/justfile -maxdepth 3` to find them all and use `just --list` to see available recipes. The following are the most commonly used commands(for the root justfile):
-
-```bash
-# Global gates (root justfile)
-just test                # Run the full unit test suite
-just lint                 # Static analysis and formatting checks
-just format               # Code auto-formatting (Ruff)
-just typecheck            # Python type checking (Mypy/Pyright)
-just ci                  # CI sequence (includes verify-agents boundary check)
-just ci-fast             # Fast CI without mutation (~20s) — SKIP_MUTATION=1
-just verify-agents       # Verify AGENTS.md gates + justfile boundary (root only 11 globals + 7 mods)
-
-# Scoped modules — invoke via just <module>::<recipe>
-just evals::eval                    # eval workflows (smoke/CI/baselines)
-just evals::local                   # local eval (smoke)
-just scripts::run-experiment "prompt"     # experiment & DSH workflows
-just docs::lint                        # docs toolchain (lint/fix/deps/serve via bun)
-just agents::edge-agent "prompt"          # edge agent runtime
-just cli::autoresearch fix                # CLI workflows (autoresearch/memory-viz/git)
-just agent_utils::validate-memories       # agent utilities (notify/skills/sessions)
-
-just --list                # List root globals; scoped modules appear as `evals ...` etc.
-```
+`just` is the primary task runner; recipes appear under `just --list`. Recipe inventory and the root/module boundary: `.opencode/instructions/justfiles.instructions.md`.
 
 ## AGENT & WORKFLOW TAXONOMY
 
@@ -171,7 +150,7 @@ just --list                # List root globals; scoped modules appear as `evals 
 - **Conductor Multi-Agent Workflows**: `scripts/conductor/`; scaffold — Python workers (YAML planned); human-in-the-loop gates.
 - **Serena / MCP Gateway Ecosystem**: `mcp/catalog.yaml` (9 servers), `.serena/memories/`; symbol search, gateway-mediated memory.
 - **OpenCode Plugin SDK**: `.opencode/plugins/helpers/`, `*.ts`; TypeScript harness internals; quality-gate enforcers, loaders.
-- **Skill Marketplace**: `.agents/skills/` (40 skills); modular capabilities; discover via `find-skills` before creating.
+- **Skill Marketplace**: `.agents/skills/` (40 skills); modular capabilities; see SYSTEM BOUNDARIES & OWNERSHIP below.
 
 ## SYSTEM BOUNDARIES & OWNERSHIP
 
@@ -186,7 +165,7 @@ just --list                # List root globals; scoped modules appear as `evals 
 | 7 | Evaluation / Provider | No | `evals/` | `evals/runner.py` | Do not mix with `agents/` runtime |
 | 8 | Serena / MCP Gateway | Yes — Gateway | `mcp/catalog.yaml`, `.serena/` | `gateway_mcp-*` tools | Never `read`/`ls` `.serena/memories/*` directly |
 | 9 | OpenCode Plugin SDK | Yes — OpenCode | `.opencode/plugins/helpers/` | TypeScript plugin API | Do not import into Python runtime |
-| 10 | Skill Marketplace | No (shared) | `.agents/skills/` | `skill` loader | Do not create skill without `find-skills` |
+| 10 | Skill Marketplace | No (shared) | `.agents/skills/` | `skill` loader | Do not create skill without `find-skills`; owner: `harness-management` |
 
 ## TERMINOLOGY
 
@@ -206,13 +185,21 @@ just --list                # List root globals; scoped modules appear as `evals 
 - Always qualify **RUG** — say `OpenCode RUG` vs `DSH RUG (Cordis)`; never bare "RUG".
 - Always qualify **System** — say `System A (harness-free)` vs `System B (harness-native)`; never bare "system".
 - Always qualify **Agent** — say `runtime agent` vs `harness agent` vs `Copilot agent`; never bare "agent" when ownership matters.
+- Never invent environment capabilities. State what a harness can do only when a repo file shows it; otherwise state the outcome plus a generic fallback. This document shows only OpenCode and DSH loading skills - never claim skill support for GitHub Copilot, Conductor, or System A.
+- Use canonical harness names: OpenCode, DSH (DeepSeek Harness), GitHub Copilot, Conductor. 'RUG' qualifies an orchestration pattern (OpenCode RUG, DSH RUG (Cordis)), not a harness. No composite or invented variants ('Copilot Agents', 'DSH/Cordis RUG'). System A is a harness-free runtime, never a harness.
+
+## WORKING MEMORY
+
+When you need to store a temporary state for a task that has not explicitly declared the storage place here is priority order for working memory:
+- via memory - follow serena-memory skill to find the correct namespace.
+- in .tmp/ (local ephemeral storage) directory - absolute path is /workspace/.tmp/; do not use /tmp/ or /var/tmp/ as they are not guaranteed to be writable in all harnesses.
 
 ## VALIDATION
 
 Verify AGENTS.md topology stays in sync with the repo. Run these grep gates from `/workspace`:
 
 ```bash
-# 0. Thresholds (fail-closed pin) — Stryker break 72, vitest 90, harness 85, strict, no SKIP_MUTATION/break:null/try:true
+# 0. Thresholds (fail-closed pin) — pins defined in .opencode/instructions/threshold-policy.instructions.md
 bash scripts/verify_thresholds.sh
 # 1. System A exists (harness-free runtime)
 grep -R "pydantic-ai" pyproject.toml && ls agents/edge.py config.py
@@ -228,6 +215,6 @@ ls scripts/conductor/
 ls mcp/catalog.yaml && grep -c "  type:" mcp/catalog.yaml
 # 7. Skill marketplace count
 ls .agents/skills/ | wc -l
-# 8. Justfile boundary (root is 11 globals + 7 mods only)
+# 8. Justfile boundary (see CONVENTIONS — Pre-check Gate)
 just verify-agents
 ```

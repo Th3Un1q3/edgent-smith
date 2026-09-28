@@ -3,11 +3,26 @@ name: task-delegation-workflow
 description: >
   Step-by-step guide for decomposing user requests into discrete subagent tasks and routing them to the correct agent type based on scope, expertise, and limitations. Triggers when you need to plan multi-agent workflows, break down complex requests across multiple files or concerns, or determine which specialized agent handles a given task decomposition step.
 license: MIT
-compatibility: github-copilot
+compatibility: Requires OpenCode
 metadata:
-  version: "1.3"
+  version: "1.8"
   author: "edgent-smith team"
   delta: >
+    1.8 — made the Permission Gate in Step 3 and the prompt template self-contained:
+    prompts must not instruct bypassing gates or reproducing denied effects, gated
+    writes require explicit authorization, and a denial is final — the subagent
+    reports it and continues with permitted work.
+    1.7 — migrated the timeout unit to `timeout_minutes` (per ADR-004) and added the
+    asymmetric-validation rule to Step 4 so the skill owns the full delegation
+    methodology; 1.6 replaced the Permission Gate policy restatement in Step 3 and the
+    prompt template with a compact standing rule; trimmed the
+    1.4 changelog note to a neutral pointer.
+    1.5 — stated a generic fallback in Step 4 (Validate the Work): where the environment
+    cannot spawn a separate reviewer, a human performs the pass; no per-environment
+    capability list.
+    1.4 — added the Permission Gate rule to Step 3, pointing at the permission policy
+    instruction; corrected the subagent-budget number to its real mechanism
+    (per-agent `floor(steps * 0.8)`).
     1.3 — taught method ownership in Step 3 (Construct the Subagent Prompt): every prompt
     states the outcome, not command recipes, and the prompt template asks for the outcome
     to achieve; the subagent owns the method via its loaded skills.
@@ -38,7 +53,7 @@ Break the user's request into discrete tasks. Each task should satisfy all of th
 - **Independently completable** — no task depends on another producing intermediate results that it then reads; if they do, the dependent task must receive its input as explicit parameters in the subagent prompt
 - **Bounded scope** — can be completed by a single agent invocation without requiring follow-up clarification about what to work on next
 - **Verifiable outcome** — has clear acceptance criteria that a validation subagent can check
-- **Fits the subagent budget** — completable within ~20 tool calls; the per-subagent session budget is 24
+- **Fits the subagent budget** — completable within the target agent's tool-call threshold `floor(steps * 0.8)` (`.opencode/plugins/tool-limit-reminder.ts:59,79`); keep each task well under it (about 20 calls against `rug-swe`'s 24-call threshold)
 
 ### Decomposition Checklist
 
@@ -50,11 +65,11 @@ Before launching any subagent, verify each task:
 | Bounded scope? | Can an agent complete this without needing to ask clarifying questions about what to work on next? |
 | Verifiable outcome? | Is there a concrete acceptance criterion I can check when the subagent reports back? |
 | Independent? | Does this task require reading output from another task before it starts? If yes, pass that information as explicit context in the prompt. |
-| Fits budget? | Can an agent complete this within ~20 tool calls (24-call session budget)? |
+| Fits budget? | Can an agent complete this within the target agent's threshold `floor(steps * 0.8)` (about 20 calls against `rug-swe`'s 24)? |
 
 ### Budget-Aware Task Sizing
 
-Every delegated task must be completable within ~20 tool calls; the per-subagent session budget is 24, leaving headroom for discovery and verification. Decompose further when a task has:
+Every delegated task must fit the target agent's tool-call threshold `floor(steps * 0.8)` (`.opencode/plugins/tool-limit-reminder.ts:59,79`), leaving headroom for discovery and verification. Decompose further when a task has:
 
 - **More than 3 requirement areas** — split by area into separate tasks
 - **More than 2 phases** — investigate, write, and verify must be separate tasks
@@ -65,7 +80,7 @@ When a task cannot be decomposed further, the prompt must include a **resume pla
 
 ### Output and Timeout Budgets
 
-- Set an explicit `timeout_seconds` of 900 to 1800 on any subtask that may exceed about 4 minutes (file or directory enumeration, gate or CI runs, full test suites); raise the workflow `timeout_seconds` to match. The runtime default of 300s is too low for CI-scale work and produces silent 300s timeouts with no output.
+- Set an explicit `timeout_minutes` of 15 to 30 on any subtask that may exceed the 15-minute default (file or directory enumeration, gate or CI runs, full test suites); raise the workflow `timeout_minutes` above its 90-minute default to match. The retired `timeout_seconds` key is rejected: divide a legacy seconds value by 60 and rename it to `timeout_minutes`.
 - Keep the reducer under about 2KB. Return only counts, statuses and key data. Never return full transcripts, long evidence strings, or whole file contents; oversized reducers are truncated at about 8KB (logs dropped first, then result, then steps), which loses data and forces re-runs.
 - Capture `steps[].task_id` and, on a truncated or empty result, resume that session for a compact status instead of re-running the work.
 
@@ -127,9 +142,13 @@ Every subagent prompt must include six elements:
 
 ### Method Ownership
 
-Every prompt states WHAT the subagent must achieve; the subagent owns HOW, deriving its method from the skills passed via `skills` and from its own tooling. Never include step-by-step command recipes or prescribe specific tools or commands — an exact `gh` invocation, a git subcommand, or a REST endpoint goes stale, assumes permissions the auth layer may deny, and burns the subagent's budget reinventing a workaround instead of doing the task.
+Every prompt states WHAT the subagent must achieve; the subagent owns HOW, deriving its method from the skills passed via `skills` and from its own tooling. Never include step-by-step command recipes or prescribe specific tools or commands — an exact `gh` invocation, a git subcommand, or a REST endpoint goes stale, assumes permissions the auth layer may deny, and burns the subagent's budget reinventing an unsanctioned workaround instead of doing the task.
 
 When the user explicitly specifies a technology, library, framework, or approach, echo it as a non-negotiable requirement — a specified technology is a constraint on the outcome, not a command recipe.
+
+### Permission Gate (Never Offer an Unsanctioned Fallback)
+
+A delegation prompt must not ask a subagent to bypass a permission gate or to reproduce a denied effect through any other mechanism. Gated writes (`git add`, `git commit`, `git push`) require explicit user authorization in the current session — an inferred goal is not authorization. When a delegated action is denied, the subagent reports the exact command, the denial, and the intended outcome, then continues with permitted work; the denial is final for that action. Delete any prompt wording that suggests an alternate way to run a gated command.
 
 ### Prompt Template
 
@@ -151,6 +170,7 @@ ACCEPTANCE CRITERIA:
 CONSTRAINTS:
 - Do NOT [constraint 1]
 - Do NOT [constraint 2]
+- Do NOT bypass or route around a permission gate, and do NOT reproduce a denied effect by another mechanism. Gated writes (`git add`, `git commit`, `git push`) require explicit user authorization in the current session. If an action is denied, report the exact command, the denial, and the intended outcome, then continue with permitted work — the denial is final for that action.
 
 WHEN DONE: Report back with:
 1. List of all files created/modified with paths
@@ -160,7 +180,9 @@ WHEN DONE: Report back with:
 
 ## Step 4: Validate the Work
 
-After a subagent reports completion, launch a **separate validation subagent** to verify against the original acceptance criteria. Never trust self-assessment.
+After a subagent reports completion, launch a **separate validation subagent** to verify against the original acceptance criteria. Never trust self-assessment. Where the environment cannot spawn a separate reviewer, a human performs the pass.
+
+Validation must be asymmetric: the validator challenges the work AND the criteria, not merely certifying that instructions were followed. Give it the task's intent and the target medium/consumer, and never hand it the expected verdict. An element that served only the source medium's consumers, with no equivalent consumer in the target medium, fails validation regardless of fidelity.
 
 ### Validation Checklist
 

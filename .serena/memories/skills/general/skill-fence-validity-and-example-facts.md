@@ -11,4 +11,4 @@ Fix: building-modular-skills v3.2.0 added Rule/Check 15 and Rule/Check 16; the a
 
 Next time: run the fence-parsing audit on every `.md` file after edits; when validating a skill, cross-check each worked example's labels and option keys against the references the skill ships, and run the skill's own validation commands on its examples.
 
-Source: operator session 2026-08-12 (building-modular-skills v3.2.0 hardening); verified against guidance.md Rules 15-16, shaping-checklist.md checks 15-16. Related: mem:skills/general/skill-review-generality-actionability; mem:skills/general/skill-reader-benefit-no-meta-commentary.
+Source: operator session 2026-08-12 (building-modular-skills v3.2.0 hardening); verified against guidance-content.md Rules 15-16 (guidance.md later restructured by topic), shaping-checklist.md checks 15-16. Related: mem:skills/general/skill-review-generality-actionability; mem:skills/general/skill-reader-benefit-no-meta-commentary.

@@ -1,7 +1,7 @@
 import { tool } from '@opencode-ai/plugin'
 import type { Plugin } from '@opencode-ai/plugin'
 
-import { DEFAULT_TIMEOUT_SECONDS, runWorkflow } from './helpers/workflow-runner'
+import { DEFAULT_TIMEOUT_MINUTES, runWorkflow } from './helpers/workflow-runner'
 import type { WorkflowSdkClient } from './helpers/workflow-runner'
 import { formatElapsed } from './helpers/workflow-subtask'
 import {
@@ -14,9 +14,11 @@ const WORKFLOW_TOOL_DESCRIPTION = [
   'The script runs with two helpers: subtask and log.',
   '',
   'subtask(input) -> Promise<result>',
-  '- input: a string prompt, or {prompt, description, agent?, skills?, task_id?, fork_from?, timeout_seconds?, schema?}',
+  '- input: a string prompt, or {prompt, description, agent?, skills?, task_id?, fork_from?, timeout_minutes?, schema?}',
   '- description: required for the object form; a one-line indication of what the subtask does. The string',
   '  shorthand derives it from the first 80 chars of the prompt. Truncated to 80 chars in the step record.',
+  '- timeout_minutes: per-subtask timeout in minutes (default 15). Set it only when the child genuinely',
+  '  needs more or less than the default; omit it otherwise. The whole workflow timeout is separate.',
   '- result: {outputText, task_id, status, error?, durationMs, truncated, data?, forked_from?}',
   '- status: \'ok\' | \'error\' | \'empty\' | \'timeout\' | \'aborted\'',
   '- Failed children never throw; inspect status. Concurrency is bounded automatically (default 4),',
@@ -117,13 +119,13 @@ export const workflowPlugin: Plugin = async ({ client, directory }) => ({
           .string()
           .min(1)
           .describe('JS workflow script; runs with two helpers: subtask and log, no import/require.'),
-        timeout_seconds: tool.schema
+        timeout_minutes: tool.schema
           .number()
           .min(1)
-          .max(36_000)
+          .max(600)
           .optional()
-          .default(DEFAULT_TIMEOUT_SECONDS)
-          .describe('Overall workflow timeout in seconds.'),
+          .default(DEFAULT_TIMEOUT_MINUTES)
+          .describe('Overall workflow timeout in minutes (1-600). Omit unless the run genuinely exceeds the 90-minute default; raise it only then.'),
         max_concurrent: tool.schema
           .number()
           .min(1)
@@ -145,7 +147,7 @@ export const workflowPlugin: Plugin = async ({ client, directory }) => ({
           client: client as unknown as WorkflowSdkClient,
           parentSessionID: context.sessionID,
           directory: context.directory ?? directory,
-          timeoutMs: (arguments_.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS) * 1000,
+          timeoutMs: (arguments_.timeout_minutes ?? DEFAULT_TIMEOUT_MINUTES) * 60_000,
           maxConcurrent: arguments_.max_concurrent,
           maxSubtasks: arguments_.max_subtasks,
           abort: context.abort,

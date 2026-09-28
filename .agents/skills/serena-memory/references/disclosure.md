@@ -58,12 +58,9 @@ function readL2(name, isTopK){
 readL2("entities/person/alice", true)
 ```
 
-Budget helper (2 KB tool return cap):
+## Gateway Guard
 
-```javascript
-function budgetSlice(text, limit){ limit=limit||2048; return text.length>limit? text.slice(0,limit)+"...[truncated]" : text; }
-budgetSlice(read_memory({ memory_name: "claims/alice-role" }), 2048) // Implements: ≤2KB snapshot
-```
+Apply the 2 KB `snapshot`, the empty-return predicate, and the zero-retry fallback in [gateway-protocol.md](./gateway-protocol.md); do not restate them here.
 
 ## Acceptance Criteria
 

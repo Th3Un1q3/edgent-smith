@@ -1,6 +1,6 @@
 ---
 name: tdd-enforcement
-description: "Follow it when: implementing any code change, feature, or bugfix. This instruction enforces strict Test-Driven Development (TDD) with no exceptions."
+description: "Strict RED→GREEN→REFACTOR TDD for every implementation change, feature, or bugfix, with debug-artifact cleanup before the final gates."
 applyTo: "**/*.{ts,js,py}"
 excludePaths: "**/*.test.ts,tests/*.py"
 excludeAgents: "rug"
@@ -8,20 +8,14 @@ excludeAgents: "rug"
 
 # TDD Enforcement: The Iron Law
 
-You must follow Test-Driven Development (TDD) for **every** code change; do not bypass it for "simple" fixes or "obvious" logic.
-
-## The Workflow
-
-1. **RED**: Write the simplest test case that demonstrates the bug or defines the feature clearly, focusing on a single behavior or condition.
-2. **VERIFY**: Run the test and confirm it **fails** for the expected reason (this verifies the test reproduces the issue).
-3. **GREEN**: Implement only the code necessary to make the test pass; avoid adding unrelated functionality.
-4. **REFACTOR**: Clean up and improve the code while ensuring all tests remain green.
+You must follow Test-Driven Development (TDD) for **every** code change; do not bypass it for "simple" fixes or "obvious" logic. The workflow, Iron Law, verification checklist, and rationalizations are in the `test-driven-development` skill — load it when carrying out a change.
 
 ## Mandatory TDD Constraints
 
 These rules support the core TDD workflow above. Follow them in order, with the first rule as the highest priority.
 
 ### Priority 1: Strict Sequence
+
 If you modify implementation code before writing a failing test:
 1. **STOP** immediately.
 2. **ROLLBACK** or discard the implementation changes and return to the last known good state.
@@ -31,18 +25,13 @@ If you modify implementation code before writing a failing test:
 Example: If you find a bug, do not change the implementation before creating a focused test that reproduces the failure.
 
 ### Constraint 2: Reliable Verification
-- Use the project's test runner (e.g., `just test`, `pytest`, `npm test`) and run tests through it.
+
+- Use the project's `just` targets, never raw runners such as `pytest`, `npm test`, `vitest`, `bun`, or `tsc` — see `.opencode/instructions/test-run-commands.instructions.md`.
 - If a change spans multiple files or modules, ensure tests cover the behavior across those boundaries.
 - Never assume a test will fail; run it and observe the failure directly.
+- Do not create or modify implementation files before a failing test, write tests only after implementation, or change implementation to make a test pass without a failing test — any of these requires the Priority 1 rollback.
 
-### Constraint 3: Avoid Antipatterns
-Avoid the following practices, as they violate TDD principles:
-- Creating or modifying implementation files before writing a failing test.
-- Writing tests only after the implementation is complete.
-- Changing implementation code to make a test pass without first writing a failing test.
-- Skipping tests for "trivial" changes.
-
-## Constraint 4: Debug Artifact Cleanup
+## Constraint 3: Debug Artifact Cleanup
 
 After completing a RED → GREEN → REFACTOR cycle, you MUST remove all debug artifacts before considering the work done. Debug artifacts are temporary code added during development that serve no purpose in the final implementation.
 

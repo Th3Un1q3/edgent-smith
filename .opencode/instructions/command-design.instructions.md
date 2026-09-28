@@ -68,8 +68,13 @@ P1: Skill was loaded but objective not achieved...
 Shell logic the command needs lives as justfile recipes — not standalone Python scripts.
 
 - **Put state-management bash recipes in the project's justfile** (e.g., `agent_utils/justfile`) as shebang recipes.
-- **Prefer bash over Python** for command support scripts — simpler, fewer dependencies, faster startup.
-- **A recipe does ONE thing** and outputs machine-parseable results (`KEY=VALUE` format).
+- **Prefer bash over Python** for command support scripts — simpler, fewer dependencies, faster startup. Bash handles the common trifecta — file checks, `sed`/`cp`, and `jq` extraction. A 30-line bash recipe in the justfile is better than a 250-line Python script.
+- **A recipe does ONE thing** and emits the recipe→command output contract as `KEY=VALUE` lines: `STATUS` (`new`, `resumed`, `error`, `no_sessions`), `MESSAGE` (human-readable context), and path keys the command consumes (e.g., `SESSION_JSON`, `REVIEW_MD`).
+  ```just
+  echo "STATUS=new"
+  echo "MESSAGE=created review document"
+  echo "REVIEW_MD=$REVIEW_MD"
+  ```
 - **Use `!`just recipe-name args``** to call recipes from the command.
 - **Never create standalone Python scripts** for tasks a bash one-liner or jq pipeline handles.
 
@@ -101,7 +106,7 @@ Example (wrong):
 Commands that modify files or track progress manage their own state. Do not rely on the agent to remember.
 
 - **The command (via its just recipes) creates and manages review documents**, not the agent.
-- **Check for existing state** before taking action: does `review.md` already exist? Is the session already reviewed?
+- **Check for existing state** before taking action: does `review.md` already exist? Is the session already reviewed? Never assume a clean slate — a recipe may be called multiple times, so handle resume vs. new-start explicitly.
 - **Output clear status indicators** (`STATUS=new`, `STATUS=resumed`, `STATUS=error`) so the command branches deterministically.
 - **Pre-fill template fields** via `sed` or `jq` before handing off to the agent — the agent never does placeholder replacement.
 - **Mark completed work in the frontmatter** (e.g., `status: "completed"`) so resumed sessions pick up where they left off.

@@ -8,7 +8,9 @@ overfitting.
 
 import argparse
 import json
+import os
 import random
+import re
 import sys
 import tempfile
 import time
@@ -16,9 +18,73 @@ import webbrowser
 from pathlib import Path
 
 from scripts.generate_report import generate_html
-from scripts.improve_description import improve_description
+from scripts.improve_description import _call_claude, improve_description
 from scripts.run_eval import find_project_root, run_eval
 from scripts.utils import parse_skill_md
+
+SKILL_PROVIDER = os.environ.get("SKILL_PROVIDER", "default")
+_SUPPORTED_PROVIDERS = ("claude", "default")
+if SKILL_PROVIDER not in _SUPPORTED_PROVIDERS:
+    raise ValueError(
+        f"Unknown SKILL_PROVIDER {SKILL_PROVIDER!r}; expected one of {_SUPPORTED_PROVIDERS}"
+    )
+
+
+def _config_project_root() -> Path:
+    """Put the repo root that holds ``config.py`` on ``sys.path``.
+
+    ``run_eval.find_project_root`` locates the project root but never
+    mutates ``sys.path``; the default provider imports the repo-root
+    ``config.py``, so walk up from the located root and from this file until
+    that module is found.  Returns the resolved root, or the located project
+    root when no ``config.py`` exists above either start directory.
+    """
+    for start in (find_project_root(), Path(__file__).resolve().parent):
+        for parent in [start, *start.parents]:
+            if (parent / "config.py").is_file():
+                if str(parent) not in sys.path:
+                    sys.path.insert(0, str(parent))
+                return parent
+    return find_project_root()
+
+
+def _call_model(prompt: str, model: str | None, timeout: int = 300) -> str:
+    """Route a model call to the provider named by *SKILL_PROVIDER*.
+
+    Two providers are supported:
+
+    - ``"claude"`` delegates to the ``claude -p`` CLI realization via
+      :func:`scripts.improve_description._call_claude`.
+    - ``"default"`` imports the repo-root ``config.py`` and runs the
+      ``edge_agent_local_openrouter`` alias.  That alias is backed by
+      :func:`config.build_openrouter_model`, which calls the remote OpenRouter
+      API — no model runs locally.
+
+    Any other value raises ``ValueError`` at import time.  When the default
+    alias is unresolvable the call falls back to the ``claude`` provider and
+    warns on stderr.
+    """
+    if SKILL_PROVIDER == "claude":
+        return _call_claude(prompt, model, timeout)
+
+    # Default provider: run the ``edge_agent_local_openrouter`` alias from the
+    # repo-root config.py and fall back to the claude CLI when it is unavailable.
+    _config_project_root()
+    try:
+        from config import MODEL_SETTINGS, resolve_model_config
+        from pydantic_ai import Agent
+
+        if "edge_agent_local_openrouter" not in MODEL_SETTINGS:
+            raise KeyError("edge_agent_local_openrouter")
+        resolved = resolve_model_config("edge_agent_local_openrouter")
+        agent = Agent(resolved.model, model_settings=resolved.model_settings)
+        return agent.run_sync(prompt).output
+    except Exception as exc:  # noqa: BLE002
+        print(
+            f"[default] edge_agent_local_openrouter failed ({exc}); falling back to claude",
+            file=sys.stderr,
+        )
+        return _call_claude(prompt, model, timeout)
 
 
 def split_eval_set(
@@ -44,6 +110,137 @@ def split_eval_set(
     train_set = trigger[n_trigger_test:] + no_trigger[n_no_trigger_test:]
 
     return train_set, test_set
+
+
+CANDIDATE_BLOCK_RE = re.compile(r"<candidate>(.*?)</candidate>", re.DOTALL)
+HYPOTHESIS_RE = re.compile(r"<hypothesis>(.*?)</hypothesis>", re.DOTALL)
+DESCRIPTION_TAG_RE = re.compile(r"<new_description>(.*?)</new_description>", re.DOTALL)
+
+
+def _candidate_prompt(
+    skill_name: str,
+    skill_content: str,
+    current_description: str,
+    eval_results: dict,
+    history: list[dict],
+    num_candidates: int,
+) -> str:
+    """Prompt for several structurally different rewrites, each with a hypothesis.
+
+    A single rewrite request makes the first answer the only answer: every later
+    edit anchors on it. Asking for a fixed number of rewrites, each carrying a
+    written guess about which query fails and why, forces the candidates apart
+    before any of them is scored.
+    """
+    failed_triggers = [r for r in eval_results["results"] if r["should_trigger"] and not r["pass"]]
+    false_triggers = [
+        r for r in eval_results["results"] if not r["should_trigger"] and not r["pass"]
+    ]
+    summary = eval_results["summary"]
+
+    lines = [
+        f'You are improving the description of a skill named "{skill_name}".',
+        "The description decides whether the skill triggers, so it must match user intent",
+        "without overfitting to single queries.",
+        "",
+        "Current description:",
+        f'"{current_description}"',
+        "",
+        f"Train score: {summary['passed']}/{summary['total']}.",
+    ]
+    if failed_triggers:
+        lines.append("Queries that should have triggered and did not:")
+        lines += [
+            f'  - "{r["query"]}" (triggered {r["triggers"]}/{r["runs"]})' for r in failed_triggers
+        ]
+    if false_triggers:
+        lines.append("Queries that triggered and should not have:")
+        lines += [
+            f'  - "{r["query"]}" (triggered {r["triggers"]}/{r["runs"]})' for r in false_triggers
+        ]
+    if history:
+        lines += ["", "Already tried (write something structurally different):"]
+        lines += [f'  - "{h["description"]}"' for h in history]
+
+    lines += [
+        "",
+        f"Write {num_candidates} candidate rewrites. Each candidate must be structurally",
+        "different from the others (different framing, structure, or emphasis), not a copy",
+        "with one word changed. For each candidate, state in one sentence the hypothesis",
+        "about which query fails and why this rewrite fixes it, then give the rewrite.",
+        "Keep each description under 1024 characters.",
+        "",
+        "Respond with one block per candidate, nothing else:",
+        "<candidate>",
+        "<hypothesis>which query fails and why</hypothesis>",
+        "<new_description>the rewrite</new_description>",
+        "</candidate>",
+        "",
+        skill_content,
+    ]
+    return "\n".join(lines)
+
+
+def _parse_candidates(text: str) -> list[dict]:
+    """Parse tagged candidate blocks into hypothesis/description records."""
+    candidates = []
+    for block in CANDIDATE_BLOCK_RE.findall(text):
+        hypothesis = HYPOTHESIS_RE.search(block)
+        description = DESCRIPTION_TAG_RE.search(block)
+        if description:
+            candidates.append(
+                {
+                    "hypothesis": hypothesis.group(1).strip() if hypothesis else "",
+                    "description": description.group(1).strip().strip('"'),
+                }
+            )
+    return candidates
+
+
+def generate_candidates(
+    skill_name: str,
+    skill_content: str,
+    current_description: str,
+    eval_results: dict,
+    history: list[dict],
+    model: str,
+    num_candidates: int = 2,
+    log_dir: Path | None = None,
+    iteration: int | None = None,
+) -> list[dict]:
+    """Return at least ``num_candidates`` divergent rewrites with their hypotheses."""
+    text = _call_model(
+        _candidate_prompt(
+            skill_name,
+            skill_content,
+            current_description,
+            eval_results,
+            history,
+            num_candidates,
+        ),
+        model,
+    )
+    candidates = _parse_candidates(text)
+    # The model sometimes drops the block format. Fall back to the single-rewrite
+    # improver so a divergence request never degrades into zero candidates.
+    while len(candidates) < num_candidates:
+        candidates.append(
+            {
+                "hypothesis": "fallback rewrite from improve_description",
+                "description": improve_description(
+                    skill_name=skill_name,
+                    skill_content=skill_content,
+                    current_description=current_description,
+                    eval_results=eval_results,
+                    history=history,
+                    model=model,
+                    log_dir=log_dir,
+                    iteration=iteration,
+                    call_model=_call_model,
+                ),
+            }
+        )
+    return candidates[:num_candidates]
 
 
 def run_loop(
@@ -215,31 +412,66 @@ def run_loop(
                 print(f"\nMax iterations reached ({max_iterations}).", file=sys.stderr)
             break
 
-        # Improve the description based on train results
+        # Generate divergent candidates based on train results
         if verbose:
-            print("\nImproving description...", file=sys.stderr)
+            print("\nGenerating divergent candidates...", file=sys.stderr)
 
-        t0 = time.time()
         # Strip test scores from history so improvement model can't see them
         blinded_history = [
             {k: v for k, v in h.items() if not k.startswith("test_")} for h in history
         ]
-        new_description = improve_description(
+        t0 = time.time()
+        candidate_pool = generate_candidates(
             skill_name=name,
             skill_content=content,
             current_description=current_description,
             eval_results=train_results,
             history=blinded_history,
             model=model,
+            num_candidates=2,
             log_dir=log_dir,
             iteration=iteration,
         )
+
+        # Score every candidate on train only. The winner carries into the next
+        # iteration, where the held-out test set scores it too, so selection at
+        # the end still happens by test score.
+        candidate_records = []
+        for cand in candidate_pool:
+            cand_eval = run_eval(
+                eval_set=train_set,
+                skill_name=name,
+                description=cand["description"],
+                num_workers=num_workers,
+                timeout=timeout,
+                project_root=project_root,
+                runs_per_query=runs_per_query,
+                trigger_threshold=trigger_threshold,
+                model=model,
+            )
+            candidate_records.append(
+                {
+                    "hypothesis": cand["hypothesis"],
+                    "description": cand["description"],
+                    "train_passed": sum(1 for r in cand_eval["results"] if r["pass"]),
+                    "train_total": len(cand_eval["results"]),
+                    "train_results": cand_eval["results"],
+                }
+            )
+        history[-1]["candidates"] = candidate_records
+        best_candidate = max(candidate_records, key=lambda c: c["train_passed"])
         improve_elapsed = time.time() - t0
 
         if verbose:
-            print(f"Proposed ({improve_elapsed:.1f}s): {new_description}", file=sys.stderr)
+            for record in candidate_records:
+                print(
+                    f"Candidate ({record['train_passed']}/{record['train_total']} train): "
+                    f"{record['hypothesis']}",
+                    file=sys.stderr,
+                )
+            print(f"Chose train-best candidate ({improve_elapsed:.1f}s)", file=sys.stderr)
 
-        current_description = new_description
+        current_description = best_candidate["description"]
 
     # Find the best iteration by TEST score (or train if no test set)
     if test_set:
@@ -323,12 +555,18 @@ def main():
             )
         else:
             live_report_path = Path(args.report)
-        # Open the report immediately so the user can watch
+        # Open the report immediately so the user can watch. Where the
+        # environment cannot open a browser, report the path instead.
         live_report_path.write_text(
             "<html><body><h1>Starting optimization loop...</h1>"
             "<meta http-equiv='refresh' content='5'></body></html>"
         )
-        webbrowser.open(str(live_report_path))
+        try:
+            opened = webbrowser.open(str(live_report_path))
+        except webbrowser.Error:
+            opened = False
+        if not opened:
+            print(f"Open the live report at: {live_report_path}", file=sys.stderr)
     else:
         live_report_path = None
 

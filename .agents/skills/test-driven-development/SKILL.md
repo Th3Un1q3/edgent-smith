@@ -3,9 +3,10 @@ name: test-driven-development
 description: >
   Strict TDD workflow for every feature or bugfix, all languages. Load the appropriate workflow from this skill — create a new test suite (scaffold then one-by-one), modify existing tests, or get refactoring suggestions. Never write production code before a failing test proves it necessary. Use when implementing features, fixing bugs, adding behavior, or improving existing code with TDD. Trigger on: "implement X", "fix bug Y", "add test-driven development", "TDD this", "write tests first", any feature/bugfix request where test-first discipline applies.
 license: MIT
-compatibility: Universal
+compatibility: Requires OpenCode
 metadata:
-  version: "2.0.0"
+  version: "2.1.1"
+  delta: "2.1.1 — replaced the AP-number anti-pattern split with two cause files (testing-anti-patterns-mocks.md, testing-anti-patterns-lifecycle.md); moved red flags and destination content out of the deleted -closing grab-bag and refactor-and-red-flags.md; added the REFACTOR phase to red-green-refactor.md; added cycle-red-flags-and-checklist.md and handling-common-problems.md; all files routed."
 ---
 
 # Test-Driven Development (TDD)
@@ -14,7 +15,7 @@ Write the test first. Watch it fail for the right reason. Write minimal code to 
 
 **Core principle:** If you didn't watch the test fail, you don't know if it tests the right thing.
 
-Follow the relevant [workflow](#task-routing-table), avoid anti-pattens, and use project specific commands to run tests. See the [references](#references-load-as-needed) section for details.
+Follow the relevant [workflow](#task-routing-table), avoid anti-patterns, and use project specific commands to run tests. See the [references](#references-load-as-needed) section for details.
 
 ## When to Use
 
@@ -52,10 +53,13 @@ Identify your entry point below and load the corresponding workflow file:
 
 | Topic | File |
 |---|---|
-| Testing anti-patterns (mocking pitfalls, test-only methods) | [references/testing-anti-patterns.md](./references/testing-anti-patterns.md) |
-| Red-Green-Refactor cycle details and verification checklists | [references/red-green-refactor.md](./references/red-green-refactor.md) |
+| Testing anti-patterns caused by mocks — mock behavior, mocking without understanding, incomplete or over-complex mocks | [references/testing-anti-patterns-mocks.md](./references/testing-anti-patterns-mocks.md) |
+| Testing anti-patterns caused by the test lifecycle — test-only production code, tests as afterthought | [references/testing-anti-patterns-lifecycle.md](./references/testing-anti-patterns-lifecycle.md) |
+| Red-Green-Refactor cycle details — all three phases with verification for each | [references/red-green-refactor.md](./references/red-green-refactor.md) |
+| Cycle red flags to stop on, and the full-cycle checklist | [references/cycle-red-flags-and-checklist.md](./references/cycle-red-flags-and-checklist.md) |
+| Handling hard-to-test code, over-mocking, slow setup, and unclear assertions | [references/handling-common-problems.md](./references/handling-common-problems.md) |
 | Project-specific commands to run tests (Python project, OpenCode plugins) | [references/running-tests-commands.md](./references/running-tests-commands.md) |
-| Instruction on designing complete test cases(use for scaffold and extending test suites) | [.github/instructions/zombie-test-driven.instructions.md](.github/instructions/zombie-test-driven.instructions.md) |
+| Designing complete test cases — ZOMBIES mnemonic (use for scaffold and extending test suites) | [references/zombie-test-design.md](./references/zombie-test-design.md) |
 
 ## Verification Checklist
 

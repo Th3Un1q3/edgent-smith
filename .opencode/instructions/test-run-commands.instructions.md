@@ -1,17 +1,15 @@
 ---
 name: test-run-commands
-description: Instructs on how to run quality checks.
-applyTo: ".opencode/**/*.{ts,js,json}"
+description: Canonical runner policy — use `just` targets, never raw runners (pytest/npm test/vitest/bun/tsc), and verify each file as you finish it.
+applyTo: "{**/*.{py,ts,js},.opencode/**/*.json}"
 excludeAgents: "rug"
 ---
 
-# Manual run of quality gates
+# Canonical Runner Policy and Quality Gates
 
-> By default the quality gates trigger automatically on relevant files changes, and report the results in the chat. However, you can also run the quality gates manually to check the status of your plugin.
+> Quality gates trigger automatically on relevant file changes and report results in the chat; run them manually to check status.
 
-Always ensure the following when developing Opencode plugins:
-
-From the '.opencode' directory, run the following commands to ensure that the plugin is working correctly:
+Use `just` targets instead of raw runners. Plugin recipes run from `.opencode/`:
 
 ```bash
 just test
@@ -27,6 +25,10 @@ just mutation --mutate plugins/todo-enforcer.ts
 ```
 
 NEVER call underlying implementation commands directly (eg. `pytest`, `npm test`, `vitest`, `bun`, `tsc`) — always use the above commands to ensure that the plugin is tested, linted, and typechecked in the same way as it will be in production.
+
+## Python Execution and Virtualenvs
+
+Avoid manual venv activation (`source .venv/bin/activate`). Run Python via `uv run <command>` or a `just` recipe; the `uv run` path resolves the project environment without activation. For tests, lint, and typecheck still use the `just` targets above — not `uv run pytest`/`uv run mypy`.
 
 ## Per-File Verification is Mandatory
 

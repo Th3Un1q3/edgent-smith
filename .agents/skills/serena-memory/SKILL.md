@@ -5,8 +5,8 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.4.0"
-  delta: "1.4.0 — Gateway health-check guard: snapshot 2KB + bash fallback on empty content:[]; return ritual enforced via serena-gateway instruction"
+  version: "1.4.7"
+  delta: "1.4.7 — consolidated the gateway guard into one intra-skill reference (references/gateway-protocol.md: 2 KB snapshot, empty-return predicate, zero-retry bash cat fallback, list_memories -> read_memory return ritual) and pointed SKILL.md, disclosure.md, gating.md, store-memory.md, recall-memory.md, and frontmatter.md at it; trimmed frontmatter.md from 230 to 107 lines and de-duplicated the Q1/Q2/Q3 snippets into recall-memory.md."
   author: Th3Un1qu3
 ---
 
@@ -44,8 +44,9 @@ Gateway pre-flight (MANDATORY):
 - **Gate every write with 9 checks:** run blocking gate in references/gating.md; stop when any check fails; declare complete only after gate passes (all three scripts exit 0) — `validate_memory_frontmatter`, `validate_md_links`, `audit_fences` via `agent_utils/scripts` or `just agent_utils::validate-memories`.
 - **Verify staleness before consolidating:** check confidence, hotness, and claim status via references/claims.md and references/lifecycle.md; merge only with human trigger.
 - **Evolve claims into typed memories:** promote 3 cases → 1 trajectory → 1 experience with score ≥3 and human gate via workflows/evolve-memory.md.
-- **Handle truncation:** list_memories truncates silently — always prefix filter topic:"<domain>" + slice(0,32) + sort; youtube cursor loop (next_cursor, MAX_PAGES=9) is separate from serena pagination, do not mix — see workflows/recall-memory.md.
-- **Guard gateway intermittency with snapshot + fallback:** snapshot 2 KB before every gateway_mcp-exec (`snapshot(s){return s.length>2048?s.slice(0,2048)+"\n[...truncated]":s}`); on empty `content:[]` or `Access denied` fall back immediately to `bash cat .serena/memories/<id>.md` with 0 gateway retries; log flake once per call — see .opencode/instructions/serena-gateway.instructions.md.
+- **Handle truncation:** list_memories truncates silently — always prefix filter topic:"<domain>" + slice(0,32) + sort; see workflows/recall-memory.md.
+- **Guard every gateway call:** snapshot returns to 2 KB, treat an empty/stderr return as an infra flake and fall back once to `bash cat .serena/memories/<id>.md` (0 retries), and complete recall with the `read_memory` return ritual — see references/gateway-protocol.md.
+- **Never record a bypass recipe:** a memory must not tell an agent how to work around a gated action. Record the denial and the mechanism; ask the user when the gated action is essential.
 
 ## Routing pre-step
 
@@ -64,6 +65,7 @@ Every file appears here; pick the row that matches your task.
 | Choose the typed scope for a memory | [references/typing.md](./references/typing.md) |
 | Run the 9-check blocking gate | [references/gating.md](./references/gating.md) |
 | Apply progressive disclosure budgets | [references/disclosure.md](./references/disclosure.md) |
+| Run the gateway snapshot, empty-return fallback, and return ritual | [references/gateway-protocol.md](./references/gateway-protocol.md) |
 | Extract and manage claims | [references/claims.md](./references/claims.md) |
 | Track lifecycle, TTL, and hotness | [references/lifecycle.md](./references/lifecycle.md) |
 | Consolidate multiple memories into one | [recipes/consolidate.md](./recipes/consolidate.md) |

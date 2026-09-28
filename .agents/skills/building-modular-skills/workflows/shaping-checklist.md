@@ -10,7 +10,9 @@ Run this before declaring any skill complete — including this one. One uncheck
 2. Mark a box checked only when its pass statement holds.
 3. Run the self-audit command where one exists; confirm the output matches the stated pass.
 4. One unchecked box means the skill is NOT complete — fix the item, then re-run the gate from the top.
-5. The 24 checks map one-to-one to rules 1–24 in [references/guidance.md](../references/guidance.md); read the rule behind a failing check before fixing.
+4a. **Machine gate** — run the machine gate's repo realization (`just agent_utils::validate-skill <name>`); where the environment cannot run it, use an equivalent exit-code check or a named human verifier, and record which (see [divergence-and-gates.md](../references/divergence-and-gates.md) Protocol 3).
+4b. **Blind critique** — run the critic blind, isolated from your rationale and candidate list; where the environment cannot spawn a separate reviewer, a human performs the pass — then resolve every finding and keep the report as proof (see [divergence-and-gates.md](../references/divergence-and-gates.md) Protocol 2).
+5. The 24 checks map one-to-one to rules 1–24 in [references/guidance-structure.md](../references/guidance-structure.md), [references/guidance-content.md](../references/guidance-content.md), and [references/guidance-process.md](../references/guidance-process.md); read the rule behind a failing check before fixing.
 
 ## The 24 checks
 
@@ -63,20 +65,21 @@ Run this before declaring any skill complete — including this one. One uncheck
     Run: `git diff SKILL.md` — confirm the version field changed and the delta note records what moved.
     *If not:* fix per Rule 12 — bump the version and record the delta on every content change.
 
-13. **Self-audit** — Pass: this checklist applied to this skill (see Rule 13).
+13. **Self-audit** — Pass: this checklist applied to this skill, confirmed by the validator's exit code where the environment can run it, otherwise by a designated human reviewer, plus an independent critic pass; where a capability is absent, the gap and its verifier are recorded (see Rule 13).
     Verify root lean, routing complete, active-voice kickers, and Vocabulary lines against this skill's own files.
+    Run: `just agent_utils::validate-skill <name>` where the environment provides it, otherwise have a designated reviewer sign off; then run the blind critique per [divergence-and-gates.md](../references/divergence-and-gates.md) Protocol 2.
     *If not:* fix per Rule 13 — fix this skill, then re-run the gate.
 
 14. **Reader-benefit** — Pass: the reader path teaches the subject; no author-process content in body prose, headings, or fences; author-process history lives only in frontmatter `metadata.delta` (see Rule 14).
-    Run: the Rule 14 audit command in [guidance.md](../references/guidance.md) (run from the skill's root) — expect no matches outside the exception categories Rule 14 documents: metadata.delta, the audit command itself, the rule's enumeration, label-placement guidance, and the checklist's gate text (checks 6, 14, 23).
+    Run: the Rule 14 audit command in [guidance-content.md](../references/guidance-content.md) (run from the skill's root) — expect no matches outside the exception categories Rule 14 documents: metadata.delta, the audit command itself, the rule's enumeration, label-placement guidance, and the checklist's gate text (checks 6, 14, 23).
     *If not:* fix per Rule 14 — delete or rewrite each hit to teach the subject; move author-process records to `metadata.delta`.
 
 15. **Fences valid** — Pass: every code fence valid for its declared language; every ```json fence parses with `json.loads`; no comment lines inside JSON fences; multi-document fragments wrapped in arrays or split; `~~~~` fences audited like `` ``` `` fences (see Rule 15).
-   Run: `python3 agent_utils/scripts/audit_fences.py .agents/skills/<name>` — or `python3 agent_utils/scripts/audit_fences.py .` from the skill root (see [guidance.md](../references/guidance.md) Rule 15) — expect zero violations printed. Also run `python3 agent_utils/scripts/validate_md_links.py .agents/skills/<name>` per Rule 15.
+   Run: `python3 agent_utils/scripts/audit_fences.py .agents/skills/<name>` — or `python3 agent_utils/scripts/audit_fences.py .` from the skill root (see [guidance-content.md](../references/guidance-content.md) Rule 15) — expect zero violations printed. Also run `python3 agent_utils/scripts/validate_md_links.py .agents/skills/<name>` per Rule 15.
    *If not:* fix per Rule 15 — wrap or split multi-document fences; strip comment lines from JSON fences; re-run until silent.
 
 16. **Examples match facts** — Pass: every example uses the shapes, schema, labels, and option keys the skill's own references define; no legacy or invented format contradicts a reference (see Rule 16).
-    Run: the Rule 16 audit in [guidance.md](../references/guidance.md) — expect no example contradicting a reference the skill ships.
+    Run: the Rule 16 audit in [guidance-content.md](../references/guidance-content.md) — expect no example contradicting a reference the skill ships.
     *If not:* fix per Rule 16 — update the reference first, then rewrite every example that uses it.
 
 17. **Failure-mode-driven** — Pass: the description and When to Use name the agent failure mode the skill fixes; no structural mandate appears without a failure to justify it (see Rule 17).
@@ -88,11 +91,12 @@ Run this before declaring any skill complete — including this one. One uncheck
     *If not:* fix per Rule 18 — rewrite the description for the invocation path.
 
 19. **Progressive disclosure** — Pass: always-loaded content minimal; detail in companion files; every reference section = one idea; budgets hold (see Rule 19).
-    Run: `wc -l SKILL.md references/*.md` — expect root ≤ ~90; flag a reference over ~250 lines for splitting unless it is the rules reference.
+    Run: `wc -l SKILL.md references/*.md` — expect root ≤160 (hard gate; ~90 target per Rule 1); flag any reference over 120 lines for splitting.
     *If not:* fix per Rule 19 — push detail down or split the reference.
 
 20. **Executable with completion criteria** — Pass: every instruction executable or gated; steps state a "Done when:" signal; hard gates and honest out-of-scope lists present (see Rule 20).
     Spot-check each step for a completion signal and each phase for a gate.
+    Run: if just is available run `just agent_utils::validate-skill <name>`; else state the equivalent direct commands for that harness; where none exists, record the gap and the named verifier; the skill's own completion gate is executable, per [divergence-and-gates.md](../references/divergence-and-gates.md) Protocol 3.
     *If not:* fix per Rule 20 — add completion criteria per step; add gates and out-of-scope lists.
 
 21. **Positive prompting** — Pass: every behavioral prohibition carries a positive reframe; no no-op instructions in the reader path (see Rule 21).

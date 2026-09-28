@@ -10,9 +10,9 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.25.0"
+  version: "1.25.3"
   author: Th3Un1qu3
-  delta: "1.25.0 — Routing: replace 13-row overlap with 4-branch decision tree + concise routing table; researches/* owned by research-with-caching (transient), server-selection pointer"
+  delta: "1.25.3 — self-containment: inlined the gateway pre-flight (2 KB snapshot before every gateway_mcp-exec, empty/stderr predicate, zero-retry bash cat fallback) and the list_memories -> read_memory return ritual; removed every outbound instruction reference and the duplicated Minimal Workflow bullet. 1.25.0 — Routing: replaced the 13-row overlap with a 4-branch decision tree + concise routing table; researches/* owned by research-with-caching (transient), server-selection pointer."
   tools:
     - gateway_mcp-find
     - gateway_code-mode
@@ -40,19 +40,12 @@ Do not use this skill for:
 ## Minimal Workflow
 
 - Read the relevant recipes for the task (see the flowchart below).
-- `gateway_mcp-find` → `gateway_code-mode` (initialize sandbox with name+servers) → `gateway_mcp-exec` (synchronous JS chain).
 
 ### Gateway pre-flight (MANDATORY)
 
-```bash
-gateway_mcp-find query="serena"  // or "tavily", "fetch", "github" — finds SERVERS not answers
-gateway_code-mode '{"name":"<unique>","servers":["serena"]}' // BOTH name+servers same call
-# GOOD: '{"name":"serena-recall","servers":["serena"]}'
-# BAD: '{"servers":["serena"]}' // missing name → silent fail
-# BAD: gateway_mcp-find query="pydantic-ai docs" // topic not server
-```
-
-- [Sandbox activation details](./workflows/setup.md) — see SKILL.md § Gateway pre-flight for template
+- **Snapshot before every `gateway_mcp-exec`:** cap each return to 2 KB (`s.length>2048? s.slice(0,2048)+"\n[...truncated]": s`). An empty/stderr return (`!raw || raw.trim() == ""`, `/Access denied/`, `content:[]`) is an infra flake, not a retry: fall back once to `bash cat .serena/memories/<id>.md` with 0 gateway retries, and complete recall only after `list_memories` -> `read_memory({memory_name: ids[0]})` returns the payload.
+- `gateway_mcp-find` finds SERVERS, not answers — pass server keywords (`serena`, `tavily`, `fetch`, `github`), never topic names; every `gateway_code-mode` needs both `name` and `servers`; chain steps inside one synchronous `gateway_mcp-exec`.
+- [Sandbox activation details](./workflows/setup.md) — sandbox activation template
 - [Script rules and error handling](./workflows/scripting-workflow.md)
 
 ## Context Gathering Flows
@@ -100,7 +93,7 @@ flowchart TD
 
 ## Common Issues
 
-- **Never read Serena files directly**: Use gateway via serena server.
+- **Never read Serena files directly**: route every memory through the gateway chain; the only permitted direct read is the zero-retry `bash cat .serena/memories/<id>.md` fallback when the gateway returns empty.
 - **Always set name and servers**: Every gateway_code-mode needs both.
 - **gateway_mcp-find finds servers, not answers:** query server keywords (`tavily`, `fetch`, `github`), never topic names (`react`, `pydantic-ai`). Query the world inside gateway_mcp-exec; activate with gateway_code-mode after find.
 - **Top-level calls must be synchronous**: Async only inside devtools sandbox.

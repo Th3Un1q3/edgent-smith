@@ -82,7 +82,7 @@ grep -q 'set working-directory' evals/justfile agent_utils/justfile cli/justfile
 git ls-files --error-unmatch scripts/conductor/.gitkeep  # 0B file must stay tracked
 ```
 
-Fix missing directory with `mkdir -p scripts/conductor` in `justfile` gate 5 and keep `scripts/conductor/.gitkeep` tracked. When `bash` tool denies `git add` (AFK enforcer), fall back to `python -c "import subprocess; subprocess.run(['git','add','scripts/conductor/.gitkeep'])"`.
+Fix missing directory with `mkdir -p scripts/conductor` in `justfile` gate 5 and keep `scripts/conductor/.gitkeep` tracked.
 
 ## Notes
 

@@ -12,6 +12,7 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from scripts.utils import parse_skill_md
@@ -55,8 +56,14 @@ def improve_description(
     test_results: dict | None = None,
     log_dir: Path | None = None,
     iteration: int | None = None,
+    call_model: Callable[..., str] | None = None,
 ) -> str:
-    """Call Claude to improve the description based on eval results."""
+    """Improve a description based on eval results.
+
+    *call_model* injects the provider caller so a host loop can honor its own
+    provider selection on this path; it defaults to the ``claude -p`` CLI
+    realization.
+    """
     failed_triggers = [r for r in eval_results["results"] if r["should_trigger"] and not r["pass"]]
     false_triggers = [
         r for r in eval_results["results"] if not r["should_trigger"] and not r["pass"]
@@ -179,7 +186,8 @@ def improve_description(
         "tags, nothing else."
     )
 
-    text = _call_claude(prompt, model)
+    caller = call_model or _call_claude
+    text = caller(prompt, model)
 
     match = re.search(r"<new_description>(.*?)</new_description>", text, re.DOTALL)
     description = match.group(1).strip().strip('"') if match else text.strip().strip('"')
@@ -209,7 +217,7 @@ def improve_description(
             f"important trigger words and intent coverage. Respond with only "
             f"the new description in <new_description> tags."
         )
-        shorten_text = _call_claude(shorten_prompt, model)
+        shorten_text = caller(shorten_prompt, model)
         match = re.search(r"<new_description>(.*?)</new_description>", shorten_text, re.DOTALL)
         shortened = match.group(1).strip().strip('"') if match else shorten_text.strip().strip('"')
 

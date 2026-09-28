@@ -1,8 +1,8 @@
 # Reference: Anti-patterns to Avoid
 
-The nine failure patterns this skill guards against, each with the positive practice that replaces it. These patterns come from analyzing the most-adopted public skill libraries; a skill that exhibits one fails its users. The rules in [guidance.md](./guidance.md) prevent them; run the [Shaping Checklist](../workflows/shaping-checklist.md) to verify a skill carries none.
+The eleven failure patterns this skill guards against, each with the positive practice that replaces it. These patterns come from analyzing the most-adopted public skill libraries; a skill that exhibits one fails its users. The rules in [guidance-structure.md](./guidance-structure.md), [guidance-content.md](./guidance-content.md), and [guidance-process.md](./guidance-process.md) and the protocols in [divergence-and-gates.md](./divergence-and-gates.md) prevent them; run the [Shaping Checklist](../workflows/shaping-checklist.md) to verify a skill carries none.
 
-**When to load:** when you review a skill for failure patterns; when a review flags a pattern below; when you want the failure-mode map behind Rules 17-24.
+**When to load:** when you review a skill for failure patterns; when a review flags a pattern below; when you want the failure-mode map behind Rules 17-24 and the divergence protocols.
 
 ## Anti-pattern map
 
@@ -17,6 +17,8 @@ The nine failure patterns this skill guards against, each with the positive prac
 | Inventing or faking knowledge | Verify against trusted sources | Rule 23 |
 | Human doing the agent's job | Facts are the agent's job | Rule 23 |
 | Duplication | Single source of truth, reference by path | Rule 24 |
+| First-idea attractor | Forced divergence before the final tree | Diverge (Protocol 1) |
+| Unverified environment claim | Outcome plus generic fallback; cite a verifiable realization | Rule 23 |
 
 ## 1. Vague generic advice
 
@@ -71,3 +73,19 @@ Fix: finding facts is the agent's job, never the user's. Do not ask the user for
 What it is: the same content restated in two files; the copies drift and readers cannot tell which is canonical.
 
 Fix: keep one source of truth. Do not duplicate content captured in other artifacts — reference it by path or URL instead (Rule 24).
+
+## 10. First-idea attractor
+
+What it is: the first candidate shape becomes the only candidate; the author grades that draft itself and skips testing an alternative.
+
+Fix: draft at least two candidate shapes and pick the winner against a stated test; then require adversarial review — where the environment can spawn a separate reviewer, use one; where it cannot, a human performs the pass as a designated reviewer. Run [divergence-and-gates.md](./divergence-and-gates.md) Protocol 1. A single candidate confirmed by its own author is the failure, not the finished work.
+
+## 11. Unverified environment claim
+
+What it is: a mechanism attributed to an environment the repo does not show can run it — an invented config key, an unbuilt worker, or a runtime presented as a harness.
+
+Impact: downstream agents assume support that does not exist and fail silently, with no crash — just missing capability.
+
+Fix: set the scope honestly — keep `compatibility: Universal` only when no file contains harness-specific content; otherwise name the required harness in `Requires ...` form. State each mechanism as the outcome plus a generic fallback, and cite a verifiable realization before naming one. Never assert which environments support the skill.
+
+Check: grep the skill tree for each environment name; for every hit, cite the repo file or command that demonstrates the claim.

@@ -7,7 +7,9 @@ description: >
 license: MIT
 compatibility: Requires Python 3.10+
 metadata:
-  version: "1.1.0"
+  version: "1.1.1"
+  delta: |
+    1.1.1 — restore `Requires Python 3.10+` compatibility; the skill's code targets Python 3.10+.
   author: pydantic
 ---
 

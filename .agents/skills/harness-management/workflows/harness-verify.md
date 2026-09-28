@@ -1,4 +1,4 @@
-# Harness Verification Workflow — Live Ledger Process
+# DSH Harness Verification Workflow
 
 Use this workflow when any change touches DSH harness files (`.dsh/**/*`, `**/cordis*.yml`, `docs/deepseek-harness/**`).
 
@@ -63,12 +63,28 @@ pnpm --dir ~/.dsh/profiles/headless add @deepseek-ai/dsh-subagent-dsh-sdk@0.1.1-
 # re-run: dsh --profile web --dump-config | grep -c subagent-dsh-sdk  # expect >=1
 ```
 
+## Independent Review and Blocking Gate
+
+**Failure this prevents:** a harness change its own author approved. The author grades the work, confirms its own bias, and a prose "looks fine" talks past a weak check.
+
+Independent review runs before the change lands:
+
+1. Hand the proposed diff to an independent reviewer. Realization: a fresh agent session with the live ledger outputs and negative-gate results. Fallback where the environment cannot spawn a fresh agent session (GitHub Copilot); for Conductor (scaffold) and System A (harness-free runtime), which are not harnesses and have no session/loader layer, withhold the author's rationale in the prompt and record the reviewer identity and the blindness conditions enforced. Where no independent reviewer exists, mark the capability gap and name who verifies — a human who runs `just verify-agents`, or a CI job on the repo.
+2. The reviewer re-runs the ledger and the negative gates, then names every gate the author skipped, every claim the ledger does not support, and every file the change touches outside its stated scope.
+3. Record the findings. A finding blocks the change until fixed or explicitly waived by the user in the session.
+
+The gate is an exit code, not prose:
+
+- `just verify-agents` exits nonzero on any topology failure, and each negative gate `! grep -Rq ...` exits nonzero on a forbidden string.
+- Treat any nonzero exit as blocked. Do not proceed on a hand-written "verified" note. See `.opencode/instructions/no-permission-workarounds.instructions.md` for gated-command handling.
+- This gate runs on a shell with `just`. Where the environment has no shell (GitHub Copilot; Conductor scaffold and System A, which are not harnesses), the exit-code gate is not available: mark the capability gap and name the verifier — a human who runs `just verify-agents`, or a CI job on the repo.
+
 ## Verify
 
-- Run `just verify-agents` (wires `AGENTS.md:190-209` 7 grep gates) and confirm PASS.
+- Run `just verify-agents` (wires the `AGENTS.md` `## VALIDATION` section grep gates) and confirm PASS. Confirm the exit code is 0; a nonzero exit blocks the change per Independent Review and Blocking Gate.
 - Confirm `.dsh/AGENTS.md` exists as directory knowledge base for DSH/Cordis context (see `workflows/directory-agents-md.md`).
 - Confirm `.opencode/instructions/cordis-credentials.instructions.md` is removed — its credential content now lives in `.dsh/AGENTS.md` WHERE TO LOOK + CONVENTIONS (not a scoped instruction).
 
 ## Notes
 
-- Plugin and instruction changes load at opencode server start (see `troubleshooting/opencode-plugin-live-diagnosis`). After editing `.dsh/AGENTS.md` or this workflow or `harness-verify.instructions.md`, request an opencode restart — unit tests cannot prove live hook wiring.
+- Plugin changes load at opencode server start (see [passive-hooks.md](./passive-hooks.md)); unit tests cannot prove live hook wiring. After editing this workflow or `harness-verify.instructions.md`, request an opencode restart. DSH harness files (`.dsh/**`) need no opencode restart — DSH picks them up at the next DSH session (see the root `SKILL.md`).

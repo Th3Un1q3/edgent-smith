@@ -29,7 +29,7 @@ If you need the full store, call `list_memories({})` then sort and slice 32. Nev
 
 - Activate serena sandbox via gateway_mcp-find → gateway_code-mode.
 - Load [references/frontmatter.md](../references/frontmatter.md) § Search Method for Q1/Q2/Q3 and budgets; [references/disclosure.md](../references/disclosure.md) for budgets; [references/typing.md](../references/typing.md) for scope filters.
-- Guard every gateway return: `if (!raw||raw.trim()===""||/Access denied/.test(raw)) throw new Error("empty gateway return → retry")` + 2KB cap `function snapshot(s){return s.length>2048?s.slice(0,2048)+"\n[...truncated]":s}`
+- Guard every gateway return: cap to 2 KB (`snapshot`) and treat an empty/stderr return (`!raw || raw.trim() == ""`, `/Access denied/`, `content:[]`) as an infra flake — fall back once to `bash cat .serena/memories/<id>.md`, zero gateway retries.
 
 ## Tools
 
@@ -154,29 +154,9 @@ var excerpt = full.slice(0, 700);
 excerpt
 ```
 
-## Gateway Health-Check Guard + Return Ritual (MANDATORY)
+## Gateway Guard + Return Ritual (MANDATORY)
 
-Snapshot 2 KB before every gateway call; enforce list_memories → read_memory before responding.
-
-```javascript
-function snapshot(s){ return s.length>2048 ? s.slice(0,2048)+"\n[...truncated]" : s; }
-// Before gateway_mcp-exec:
-var snap = snapshot(JSON.stringify(parsed.memories || []).slice(0,2048));
-var res = gateway_mcp_exec({tool:"list_memories", args:{topic:"cache"}});
-if(!res || !res.content || res.content.length===0 || /Access denied/.test(String(res))){
-  // 0 retries — immediate bash fallback
-  var fallback = bash("cat .serena/memories/cache/github/edgent-smith/actions/runs-failed-2026-09-04.md | head -c 2048");
-}
-// Return ritual — gate fails if missing:
-var ids = JSON.parse(res).memories || [];
-if(ids.length===0) throw new Error("list_memories empty → fallback already taken");
-var payload = read_memory({memory_name: ids[0]}); // verify 1765c before synthesis
-if(!payload || payload.trim()==="") throw new Error("read_memory empty → use bash cat fallback");
-```
-
-Rules:
-- Every `list_memories` must be followed by `read_memory({memory_name: ids[0]})` before you answer; responding from names alone fails the gate.
-- Snapshot 2 KB first; on empty `content:[]` fall back to `bash cat .serena/memories/<id>.md` with 0 gateway retries.
+Apply the 2 KB `snapshot`, the empty-return fallback, and the `list_memories` → `read_memory` return ritual from [gateway-protocol.md](../references/gateway-protocol.md) before any synthesis.
 
 ## Acceptance Criteria
 
@@ -185,4 +165,3 @@ Rules:
 ## Related Skills
 
 - Call context-gathering via Skill tool on context-gathering/SKILL.md when external research supplements recall.
-- See .opencode/instructions/serena-gateway.instructions.md for the global health-check guard.

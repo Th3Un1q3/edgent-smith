@@ -72,7 +72,7 @@ export interface SubtaskParameters {
   skills?: string[]
   task_id?: string
   fork_from?: string
-  timeout_seconds?: number
+  timeout_minutes?: number
   schema?: Record<string, unknown>
 }
 
@@ -155,8 +155,8 @@ export interface WorkflowHelpers {
   log: LogFunction
 }
 
-export const DEFAULT_TIMEOUT_SECONDS = 600
-export const DEFAULT_PER_SUBTASK_TIMEOUT_SECONDS = 300
+export const DEFAULT_TIMEOUT_MINUTES = 90
+export const DEFAULT_PER_SUBTASK_TIMEOUT_MINUTES = 15
 export const DEFAULT_SUBTASK_AGENT = 'rug-swe'
 export const DEFAULT_MAX_CONCURRENT = 4
 export const MAX_MAX_CONCURRENT_CAP = 8

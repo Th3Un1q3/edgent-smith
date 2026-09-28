@@ -1,32 +1,30 @@
 # Running Tests — Project Commands
 
-**Load this reference when:** writing or changing tests and needing to run them. Every project has its own test runner; always use the commands below rather than guessing `npm test`, `pytest`, etc.
+**Load this reference when:** writing or changing tests and needing to run them.
 
-## Root Python Project (test-driven-development)
+Use `just` targets, never raw runners.
 
-| Action | Command | Notes |
-|---|---|---|
-| Run full suite | `just test` | Default: `uv run pytest tests/ -q` |
-| Run specific file(s) | `just test path/to/file.py` | Accepts any pytest arguments after the path |
-| Run with verbose output | `just test -v` | One assertion failure per line, full traceback |
-| Run a single test function | `just test tests/test_file.py::test_name` | Double colon = specific function; use `-k` for pattern matching |
-| Run with coverage | `uv run pytest --cov=.` | Requires `pytest-cov` in dev dependencies |
+```bash
+just test
+just test --coverage
+just test -- plugins/tests/skills-loader.test.ts
+just lint
+just typecheck
 
-**How it works:** `just test` delegates to `uv run pytest`. The `ARGS` default is `tests/ -q` (quiet mode, all tests). Append any valid pytest flags after the path.
+# Whole mutation suite — long runtime, run only for final verification before release
+just mutation
+# Mutation scoped to one plugin file, to confirm that file is well tested
+just mutation --mutate plugins/todo-enforcer.ts
+```
 
-## OpenCode Plugins (.opencode/)
+Never call the underlying tools directly (`pytest`, `npm test`, `vitest`, `bun`, `tsc`). The `just` targets run tests, lint, and typecheck the same way production does.
 
-| Action | Command | Notes |
-|---|---|---|
-| Run full suite | `cd .opencode && just test` | Runs `vitest run` from `.opencode/package.json` |
-| Watch mode (re-run on change) | `cd .opencode && just test:watch` | Runs `vitest` in watch mode |
+## Python Execution and Virtualenvs
 
-**How it works:** OpenCode plugins are a TypeScript project under `.opencode/`. The `just test` script is defined as `vitest run` in `.opencode/package.json`. Tests live in `.opencode/plugins/tests/`.
+Skip manual venv activation (`source .venv/bin/activate`). Run Python with `uv run <command>` or a `just` recipe; `uv run` resolves the project environment without activation. For tests, lint, and typecheck still use the `just` targets above, not `uv run pytest`/`uv run mypy`.
 
-## Quick Decision
+## Per-File Verification
 
-| Your need | Run this |
-|---|---|
-| Test changes to Python source or project tests | `just test [ARGS]` (from repo root) |
-| Test changes to OpenCode plugin code | `cd .opencode && just test` |
-| Verify the full suite is green before proceeding | Run both commands above — project tests then plugins |
+Verify each file as you finish it: after editing a file, run the relevant per-file check (`just test -- <path-to-file>`, or lint/typecheck scoped to that file) before moving on. A file is not done until its check passes or the failure is documented.
+
+Per-file verification consumes tool calls. Reserve budget for it; if the budget cannot cover everything, verify the most critical subset and report which files were not verified.

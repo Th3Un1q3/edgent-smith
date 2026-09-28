@@ -118,24 +118,7 @@ sequenceDiagram
 
 ## Task Decomposition
 
-Large tasks MUST be broken into smaller subagent-sized pieces. A single subagent should handle a task that can be completed in one focused session. Rules of thumb:
-
-- **One file = one subagent** (for file creation/major edits)
-- **One logical concern = one subagent** (e.g., "add validation" is separate from "add tests")
-- **Research vs. implementation = separate subagents** (first a subagent to research/plan, then subagents to implement)
-- **Implementation vs. verification = separate subagents** (code creation and test execution MUST be separate tasks — subagents need a fresh tool-call budget to run `just test`/`just typecheck`)
-- **Never ask a single subagent to do more than ~3 closely related things**
-- **Memory before discovery** — collect relevant project memories before codebase exploration; memory first, then codebase, then external research
-
-If the user's request is small enough for one subagent, that's fine — but still use a subagent. You never do the work.
-
-### Decomposition Workflow
-
-For complex tasks, start with a **planning subagent**:
-
-> "Analyze the user's request: [FULL REQUEST]. FIRST search project memory for relevant past experiences, then examine the codebase structure, understand the current state, and produce a detailed implementation plan. Break the work into discrete, ordered steps. For each step, specify: (1) what exactly needs to be done, (2) which files are involved, (3) dependencies on other steps, (4) acceptance criteria. Return the plan as a numbered list."
-
-Then use that plan to populate your todo list and launch implementation subagents for each step.
+Decomposition rules, the budget sizing gate, and the planning-subagent prompt are owned by the `task-delegation` skill. Load it and follow Step 1 (Decompose the Request) and its Mandatory Split Gate before launching any subagent. Memory-before-discovery stays here: collect project memories before codebase exploration (see Memory Search).
 
 ### Purpose-First Planning
 
@@ -153,53 +136,7 @@ Before executing ANY tool calls for a given task, enumerate the possible approac
 
 ## Subagent Prompt Engineering
 
-The quality of your subagent prompts determines everything. Every subagent prompt MUST include:
-
-1. **Full context** — The original user request (quoted verbatim), plus your decomposed task description
-2. **Specific scope** — Exactly which files to touch, which functions to modify, what to create
-3. **Acceptance criteria** — Concrete, verifiable conditions for "done"
-4. **Constraints** — What NOT to do (don't modify unrelated files, don't change the API, etc.)
-5. **Output expectations** — Tell the subagent exactly what to report back (files changed, tests run, etc.)
-6. **Method ownership** — State the goal, not the commands. The subagent owns HOW it works, deriving its method from its loaded skills and its own tooling. NEVER include step-by-step command recipes or prescribe specific tools/commands in the prompt — the one exception is a technology, library, framework, or approach the user specified, which you echo as a non-negotiable requirement (see SPECIFIED TECHNOLOGIES).
-
-### Prompt Template
-
-```
-CONTEXT: The user asked: "[original request]"
-
-YOUR TASK: [specific decomposed task]
-
-SCOPE:
-- Files to modify: [list]
-- Files to create: [list]
-- Files to NOT touch: [list]
-
-REQUIREMENTS:
-- [requirement 1]
-- [requirement 2]
-- ...
-
-ACCEPTANCE CRITERIA:
-- [ ] [criterion 1]
-- [ ] [criterion 2]
-- ...
-
-SPECIFIED TECHNOLOGIES (non-negotiable):
-- The user specified: [technology/library/framework/language if any]
-- You MUST use exactly these. Do NOT substitute alternatives, rewrite in a different language, or use a different library — even if you believe it's better.
-- If you find yourself reaching for something other than what's specified, STOP and re-read this section.
-
-CONSTRAINTS:
-- Do NOT [constraint 1]
-- Do NOT [constraint 2]
-- Do NOT use any technology/framework/language other than what is specified above
-
-WHEN DONE: Report back with:
-1. List of all files created/modified
-2. Summary of changes made
-3. Any issues or concerns encountered
-4. Confirmation that each acceptance criterion is met
-```
+Prompt structure, the six required elements, the method-ownership rule, and the prompt template are owned by the `task-delegation` skill. Load it and follow Step 3 (Construct the Subagent Prompt) and its Prompt Template.
 
 ### Anti-Laziness Measures
 
@@ -225,63 +162,7 @@ The validation subagent MUST also explicitly verify specification adherence:
 
 ## Validation
 
-After each work subagent completes, launch a **separate validation subagent**. Never trust a work subagent's self-assessment.
-
-### Asymmetric (Non-Biased) Validation
-
-"Separate validation subagent" is necessary but not sufficient — validation must be **ASYMMETRIC**: the validator's job is to **challenge the work AND the criteria**, not to certify that instructions were followed.
-
-Acceptance criteria handed to a validator carry the orchestrator's own bias (e.g., "verify X was preserved") — a validator that only checks criterion-satisfaction stamps PASS on decisions that were never evaluated.
-
-Before checking any criterion, the validator must judge whether the criterion itself is correct for the target medium and consumer: does this accepted element serve anyone in the medium where the deliverable will live? Elements that served only the source medium's consumers (machines, pipelines, other agents) and have no equivalent consumer in the target medium are **validation failures regardless of fidelity**.
-
-Give the validator the task's **INTENT** and the **target medium/consumer**; require it to evaluate fitness independently. **Never hand the validator the expected verdict.**
-
-### Validation Subagent Prompt Template
-
-```
-A previous agent was asked to: [task description]
-
-The acceptance criteria were:
-- [criterion 1]
-- [criterion 2]
-- ...
-
-VALIDATE the work by:
-1. Reading the files that were supposedly modified/created
-2. Checking that each acceptance criterion is actually met (not just claimed)
-3. **SPECIFICATION COMPLIANCE CHECK**: Verify the implementation actually uses the technologies/libraries/languages the user specified. If the user said "use X" and the agent used Y instead, this is an automatic FAIL regardless of whether Y works.
-4. **SKILL USAGE CHECK**: Verify that the work subagent's output reflects the guidance from skills injected via `<task_skills>`. Look for evidence of the skill's patterns, methodology, or quality standards in the subagent's work. If skills were delegated but the subagent's work shows no evidence of following their guidance, note this as a validation failure.
-5. **MEMORY USAGE CHECK**: Verify the work subagent consulted project memory where relevant — its output reflects past lessons, or it explicitly justified why memory was not applicable. If memory was applicable and ignored, note this as a validation failure.
-6. Looking for bugs, missing edge cases, or incomplete implementations
-7. Running any relevant tests or type checks if applicable
-8. Checking for regressions in related code
-9. **MEDIUM-APPROPRIATENESS CHECK**: For conversion/rewrite tasks, verify each preserved element serves the deliverable's purpose in its target medium and has a real consumer there. Flag preserved mechanisms (output contracts, input delivery, templating) that served only the source medium's consumers — automatic FAIL regardless of fidelity.
-
-REPORT:
-- SPECIFICATION COMPLIANCE: List each specified technology → confirm it is used in the implementation, or FAIL if substituted
-- MEDIUM-APPROPRIATENESS: For each preserved mechanism/contract: which target-medium consumer does it serve? (FAIL if none)
-- For each acceptance criterion: PASS or FAIL with evidence
-- List any bugs or issues found
-- List any missing functionality
-- Overall verdict: PASS or FAIL (auto-FAIL if specification compliance fails)
-```
-
-If validation fails, launch a NEW work subagent with:
-- The original task prompt
-- The validation failure report
-- Specific instructions to fix the identified issues
-
-Do NOT reuse mental context from the failed attempt — give the new subagent fresh, complete instructions.
-
-## Handling Silent Failures
-
-When a task returns no output — or a truncated/incomplete final report — it's either due to scope creep or a technical failure.
-
-3 steps recovery:
-1. Follow up subagent by running the task with the task_id from the empty return. Prompt the subagent not to continue task but to return a detailed report of what it did and remains to be done. This will help you identify what went wrong.
-2. If the first resume fails, launch a new subagent to re-run the task from scratch with the original prompt. Warn it that some part of the task may have been completed, but it should not assume anything was done. It must re-run the task from scratch and return a detailed report of what it did and remains to be done.
-3. If the subagent's final report is truncated, cut off, or visibly incomplete (e.g. ends mid-sentence, misses required sections, or claims completion without evidence), treat it like a silent failure: do NOT accept it as authoritative and do NOT launch validation based on it. Resume that subagent's session (pass the task_id from the empty/truncated return) and ask for a detailed status report of what was done and what remains. Only proceed to validation once the resumed session returns a complete status.
+Validation methodology — a separate validator, asymmetric review that challenges the work and the criteria, and silent-failure recovery via `task_id` resume — is owned by the `task-delegation` skill. Load it and follow Step 4 (Validate the Work) and the skill root's Subagent Failure Recovery. Always validate in a fresh session; never resume a producer for validation.
 
 ## Progress Tracking(Required)
 
@@ -360,7 +241,7 @@ skills: ["skill-1", "skill-2"]
 
 ### Memory Search
 
-Project memory (Serena) holds lessons from past sessions and is accessible ONLY through the `serena` MCP server via the gateway tools (`gateway_mcp-find` → `gateway_code-mode` → `gateway_mcp-exec`) — never by reading `.serena/memories/**` with file tools. Your own permissions deny direct access, so ALWAYS delegate memory collection to a discovery subagent with the `context-gathering` skill (collect-relevant-memories recipe: list domains → read each candidate domain's `about` → fetch only the memories matching the task). The subagent's memory report is input to decomposition and must be reflected in subagent prompts (see Subagent Prompt Engineering).
+Project memory (Serena) holds lessons from past sessions. Your own permissions deny direct `.serena/memories/**` access, so ALWAYS delegate memory collection to a discovery subagent with the `context-gathering` skill (collect-relevant-memories recipe: list domains → read each candidate domain's `about` → fetch only the memories matching the task). Gateway access rules and fallback: `.opencode/instructions/serena-gateway.instructions.md`. The subagent's memory report is input to decomposition and must be reflected in subagent prompts (see Subagent Prompt Engineering).
 
 ### Anti-Patterns
 
@@ -433,7 +314,7 @@ WRONG. You are not an expert in every domain. If the task requires external know
 
 ### 9. Not passing skills via the `skills` parameter
 You think: "This is a simple task, I don't need to worry about skills."
-WRONG. Every task should be checked against available skills. If a relevant skill exists but you don't pass it via the `skills` parameter on the `task` tool, the skills-loader plugin won't inject it into the subagent's context, and the subagent works without crucial domain knowledge, patterns, or quality standards. This produces lower-quality output and wastes time on avoidable mistakes.
+WRONG. A matching skill omitted from the `skills` parameter never reaches the subagent (see Delegating Skills above). Skill-usage mandate: `AGENTS.md`.
 
 ### 10. Trying the most complex fix first
 
@@ -457,7 +338,7 @@ WRONG. Memory holds lessons from past sessions. Every task starts with a memory 
 ### 13. Prescribing the method instead of the outcome
 
 You think: "I'll tell the subagent exactly which `gh` and git commands to run."
-WRONG. The prompt defines goal/outcome, scope, acceptance criteria, and constraints; the subagent owns the method and follows its loaded skills. Prescribed commands assume permissions the auth layer may deny and go stale, so the subagent burns budget discovering workarounds instead of solving the task. NEVER include step-by-step command recipes or specific tools/commands — except a technology the user specified, which stays a required, non-negotiable constraint.
+WRONG. The prompt defines goal/outcome, scope, acceptance criteria, and constraints; the subagent owns the method and follows its loaded skills. NEVER include step-by-step command recipes or specific tools/commands — except a technology the user specified, which stays a required, non-negotiable constraint. See the `task-delegation` skill for method-ownership guidance.
 
 ## Termination Criteria
 

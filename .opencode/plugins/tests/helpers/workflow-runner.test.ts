@@ -5,7 +5,7 @@ import {
   buildWorkflowFunction,
   checkScript,
   createSubtask,
-  DEFAULT_TIMEOUT_SECONDS,
+  DEFAULT_TIMEOUT_MINUTES,
   runWorkflow,
   serializeEnvelope,
 } from '@plugins/helpers/workflow-runner'
@@ -344,10 +344,10 @@ describe('runWorkflow', () => {
     expect(envelope.stats).toMatchObject({ subtasks: 2, ok: 1, aborted: 1 })
   })
 
-  it('honors a per-subtask timeout_seconds for a hanging subtask', async () => {
+  it('honors a per-subtask timeout_minutes for a hanging subtask', async () => {
     const client = makeClient({ prompt: abortablePrompt() })
     const envelope = parse(await runWorkflow(
-      options('return await subtask({ prompt: "x", description: "x", timeout_seconds: 0.02 })', { client, timeoutMs: 1000 }),
+      options('return await subtask({ prompt: "x", description: "x", timeout_minutes: 0.02 / 60 })', { client, timeoutMs: 1000 }),
     ))
 
     expect(envelope.status).toBe('ok')
@@ -380,7 +380,7 @@ describe('runWorkflow', () => {
     const script = [
       'const a = await subtask("a")',
       'const b = await subtask("b")',
-      'const c = await subtask({ prompt: "c", description: "c", timeout_seconds: 0.02 })',
+      'const c = await subtask({ prompt: "c", description: "c", timeout_minutes: 0.02 / 60 })',
       'return [a.status, b.status, c.status]',
     ].join('\n')
     const envelope = parse(await runWorkflow(options(script, { client, timeoutMs: 1000 })))
@@ -778,7 +778,7 @@ describe('barrel re-exports', () => {
     expect(typeof buildWorkflowFunction).toBe('function')
     expect(typeof createSubtask).toBe('function')
     expect(typeof BudgetExceededError).toBe('function')
-    expect(typeof DEFAULT_TIMEOUT_SECONDS).toBe('number')
+    expect(typeof DEFAULT_TIMEOUT_MINUTES).toBe('number')
     expect(typeof runWorkflow).toBe('function')
     expect(typeof serializeEnvelope).toBe('function')
   })

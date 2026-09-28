@@ -4,7 +4,7 @@ import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { log } from './helpers/logger'
 import { sendMessage } from './helpers/session-helpers'
-import { AFK_MESSAGE } from './helpers/afk'
+import { buildAfkMessage } from './helpers/afk'
 
 const PLUGIN_ID = 'afk-enforcer'
 
@@ -15,11 +15,18 @@ type AfkEnforcerOptions = { flagPath?: string } & PluginOptions
  *
  * Verified against `EventPermissionAsked` in
  * `@opencode-ai/sdk/dist/v2/gen/types.gen.d.ts`, where `properties.id` is the
- * permission request id and `properties.sessionID` the owning session. The v1
- * `Event` union re-exported from the package root still predates this member,
- * so the event is narrowed structurally rather than by discriminant.
+ * permission request id, `properties.sessionID` the owning session, and
+ * `properties.patterns` the strings matched against the permission config (for
+ * `bash`, the command). The v1 `Event` union re-exported from the package root
+ * still predates this member, so the event is narrowed structurally rather than
+ * by discriminant.
  */
-type PermissionAskedProperties = { id: string, sessionID: string }
+type PermissionAskedProperties = {
+  id: string
+  sessionID: string
+  permission: string
+  patterns: string[]
+}
 
 /**
 Returns the request/session ids when `event` is a well-formed `permission.asked`.
@@ -28,8 +35,15 @@ const readPermissionAsked = (event: Event): PermissionAskedProperties | undefine
   const candidate = event as unknown as { type?: string, properties?: Partial<PermissionAskedProperties> }
   if (candidate.type !== 'permission.asked') return undefined
 
-  const { id, sessionID } = candidate.properties ?? {}
-  return typeof id === 'string' && typeof sessionID === 'string' ? { id, sessionID } : undefined
+  const { id, sessionID, permission, patterns } = candidate.properties ?? {}
+  if (typeof id !== 'string' || typeof sessionID !== 'string') return undefined
+
+  return {
+    id,
+    sessionID,
+    permission: typeof permission === 'string' ? permission : '',
+    patterns: Array.isArray(patterns) ? patterns : [],
+  }
 }
 
 export const afkEnforcer: Plugin = async ({ client, directory }, options?) => {
@@ -56,7 +70,7 @@ export const afkEnforcer: Plugin = async ({ client, directory }, options?) => {
       const isAfk = await isAfkActive()
       if (!isAfk) return
 
-      const { id: requestID, sessionID } = asked
+      const { id: requestID, sessionID, permission, patterns } = asked
 
       await log(client, 'info', `afk active — rejecting permission ${requestID}`, PLUGIN_ID)
 
@@ -67,7 +81,7 @@ export const afkEnforcer: Plugin = async ({ client, directory }, options?) => {
         body: { response: 'reject' },
       })
 
-      await sendMessage({ client, sessionId: sessionID, message: AFK_MESSAGE, noReply: true })
+      await sendMessage({ client, sessionId: sessionID, message: buildAfkMessage(permission, patterns), noReply: true })
     },
 
     /**

@@ -6,7 +6,7 @@ Vitest is the primary test runner for TypeScript tests in the codebase.
 
 ## Automated Quality Gates
 
-Quality gates are configured in the project and described in the closest AGENTS.md file. Use them to run checks over using direct commands.
+Quality gates are configured in the project. Run them through the project's canonical task-runner targets (for example `just test`) instead of direct runner commands, so tests use the project's utilities and pre-configured test infrastructure.
 
 ```bash
 ## Good: run complete test suite

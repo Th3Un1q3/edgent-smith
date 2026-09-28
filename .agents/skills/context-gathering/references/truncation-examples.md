@@ -32,16 +32,15 @@ function snapshot(s, opts) {
 }
 // ponytail minimal — 2KB cap without keyword window (use when window not needed):
 // function snapshot(s){ return s.length>2048? s.slice(0,2048)+"\n[...truncated]": s }
-// empty guard — after every gateway_mcp-exec raw return (captures stderr):
-// if (!raw || raw.trim()==="" || /Access denied|No such file/.test(raw)) throw new Error("empty gateway return → retry");
-```
+// empty-return guard: gateway '' or content:[] or Access denied -> infra flake; bash cat fallback once, 0 retries
+}
 
-Minimal 2KB cap + empty guard — gateway template (copy-pasteable):
+Minimal 2KB cap — gateway template (copy-pasteable):
 
 ```javascript
 function snapshot(s){ return s.length>2048? s.slice(0,2048)+"\n[...truncated]": s }
 var raw = someTool({ query: "x" });
-if (!raw || raw.trim()==="" || /Access denied|No such file/.test(raw)) throw new Error("empty gateway return → retry");
+// empty-return guard: gateway '' or content:[] or Access denied -> infra flake; bash cat fallback once, 0 retries
 return snapshot(raw);
 ```
 

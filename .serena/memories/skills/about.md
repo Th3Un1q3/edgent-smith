@@ -9,6 +9,7 @@ Project-specific deltas and lessons learned about the agent skill system — the
 - Skill authoring/review lessons: generality (no overfit, labeled example sections), actionability (worked example per numeric rule), principles-before-instances, root leanness (root is the always-loaded, token-costed surface — instance mechanics out, pointers in), active-voice principle phrasing with defined jargon — see mem:skills/general/skill-review-generality-actionability, mem:skills/general/skill-root-leanness, mem:skills/general/skill-principles-active-voice.
 - Live-testing lessons: verifying skill recipes, MCP server interactions, and memory operations against real servers (return formats, anti-cheat validation).
 - Gateway-hosted MCP server deltas — observed runtime behavior of servers used by skill recipes (filesystem toolset, error-as-result semantics, server-side sandboxing, content-fetch toolset (tavily, youtube-transcript), research-with-caching toolset (deepwiki, github, fetch)) that differs from documented tool lists.
+- Instruction/skill loading mechanics — how the harness matches and loads instructions (applyTo glob on a touched file, display-only descriptions) and skills (by name, or a task_skills envelope) — see mem:skills/general/instruction-loading-mechanics.
 
 ## Boundaries (out of scope)
 

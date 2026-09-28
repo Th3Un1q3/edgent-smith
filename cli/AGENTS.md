@@ -16,7 +16,7 @@ cli/
 - **Shared State/Logic**: Core services like `CopilotSession` or `ProjectConfig` are located in `cli/services/`.
 
 ## CONVENTIONS
-- **Separation of Concerns**: Click decorators and command definitions belong strictly to `main.party`; all business logic must be implemented within the corresponding module in `commands/`.
+- **Separation of Concerns**: Click decorators and command definitions belong strictly to `main.py`; all business logic must be implemented within the corresponding module in `commands/`.
 - **Modular Routing**: Use the shared service layer (`services/`) for any logic required by multiple commands rather than duplicating code or passing heavy objects through CLI contexts directly.
 - **Context Management**: Utilize a structured command context (e.g., `CommandContext`) to inject services into running commands.
 

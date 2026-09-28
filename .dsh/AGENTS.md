@@ -42,7 +42,7 @@
 - **Credentials file primary, env fallback.** Forward `OPENCODE_GO_API_KEY` as `!!js process.env.OPENCODE_GO_API_KEY || undefined` so empty string does not shadow file store; `scrubbedParentEnv` strips `*KEY*` vars and `env` re-adds.
 - **Keep parent/child aligned.** `agent-default-model` identical in parent `.dsh/settings.yaml` and child `.dsh/child-runtime/cordis.yml`; verify with `dsh --profile web --dump-config | grep -A6 subagent-dsh-sdk`.
 - **Flat minimal child-runtime.** `child-runtime/cordis.yml` stays flat composition; no deepseek consumers; MCP gateway client `worker-mcp-gateway` only via `mcp_gateway:8080/mcp`.
-- **Verify binary first, write second.** Every `.dsh/**/*` or `**/cordis*.yml` edit preceded by verification via `just verify-agents`: `dsh --help` → `dsh --profile web --dump-config` → topology checks → `ls ~/.dsh/sessions/`.
+- **Harness edits are verification-gated.** Follow `.opencode/instructions/harness-verify.instructions.md` before editing `.dsh/**` or `**/cordis*.yml`; it owns the 5-step live ledger and the negative-string gates.
 - **Use `pnpm --dir` flags.** Install child-runtime via `pnpm --dir .dsh/child-runtime install --frozen-lockfile`, not bare `pnpm install`.
 
 ## ANTI-PATTERNS (THIS DIRECTORY)
@@ -50,5 +50,5 @@
 - Do not add an `isolate: {compaction:true}` group around `subagent-dsh-sdk` — top-level `insert` only; grouped isolate causes mount failure `row(s) did not activate` (`lib/index.js:680-850`).
 - Do not assume `.dsh/sessions/*.jsonl` — live sessions are at `~/.dsh/sessions/<id>/` via `DSH_HOME` (`dshHomePath('sessions')`); repo `.dsh/child-home/sessions/` is mirror, not canonical.
 - Do not use `ENV` as primary credential source — `env | grep OPENCODE_GO_API_KEY` is empty in container; verify credential via file exists instead.
-- Do not use `dsh agent-presets`, `dsh run`, or `setup-dev.sh` — `dsh 0.1.1-rc.2` only exposes `web` and `plugin`, requires `--profile web` flag (see `harness-verify.instructions.md` ledger).
+- Do not assume undocumented `dsh` subcommands — `dsh 0.1.1-rc.2` exposes only `web` and `plugin` and requires the `--profile web` flag. Negative-string gates live in `.opencode/instructions/harness-verify.instructions.md`.
 - Do not conflate System A (`agents/edge.py`, `config.py` root, `pydantic-ai` in `pyproject.toml`) with System B (`.dsh/*`); boundaries in `/workspace/AGENTS.md:158-169` forbid cross-edits.

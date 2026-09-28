@@ -8,4 +8,4 @@ Fix: building-modular-skills v3.2.0 — author obligations live outside the read
 
 Next time: derive the criteria twice — once for author obligations, once for reader content — and validate with the self-referential-commentary grep; wire worked examples positionally next to the rule they illustrate, without requiring "Implements:" labels.
 
-Source: operator session 2026-08-12 (building-modular-skills v3.2.0 hardening); verified against SKILL.md L16 (delta), guidance.md Rule 14, shaping-checklist.md checks 6 and 14. Related: mem:skills/general/skill-reader-benefit-no-meta-commentary; mem:skills/general/skill-fence-validity-and-example-facts; mem:skills/general/skill-root-leanness.
+Source: operator session 2026-08-12 (building-modular-skills v3.2.0 hardening); verified against SKILL.md L16 (delta), guidance-content.md Rule 14 (guidance.md later restructured by topic), shaping-checklist.md checks 6 and 14. Related: mem:skills/general/skill-reader-benefit-no-meta-commentary; mem:skills/general/skill-fence-validity-and-example-facts; mem:skills/general/skill-root-leanness.

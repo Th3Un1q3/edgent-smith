@@ -8,10 +8,11 @@ description: >
   customization files; or fixing cases where customizations are ignored,
   over-applied, or hard to maintain.
 license: MIT
-compatibility: Universal
+compatibility: Requires GitHub Copilot
 metadata:
-  version: "1.0.0"
-  author: Th3Un1q3
+  version: "1.0.2"
+  author: Th3Un1qu3
+  delta: "1.0.2 — merged responsibility-split and responsibility-split-confusions into the single ownership reference; collapsed the topic to one routing row."
 ---
 
 # GitHub Copilot Infrastructure
@@ -69,10 +70,11 @@ maintenance, troubleshooting, or validation.
 
 | Question or outcome | File |
 |---|---|
-| I am new to this. What should be an instruction, prompt, agent, skill, or hook? | [references/responsibility-split.md](./references/responsibility-split.md) |
+| What should be an instruction, prompt, agent, skill, or hook? How do I resolve the common confusions between them? | [references/responsibility-split.md](./references/responsibility-split.md) |
 | What already exists in this repo before I change anything? | [workflows/scan-and-compose-existing-customizations.md](./workflows/scan-and-compose-existing-customizations.md) |
 | I already have the inventory. Is the current stack clear, discoverable, and correctly split? | [workflows/audit-existing-stack.md](./workflows/audit-existing-stack.md) |
-| Where should this file live, what should it be called, and what frontmatter does it need? | [references/file-locations-and-frontmatter.md](./references/file-locations-and-frontmatter.md) |
+| Where should this file live and what should it be called? | [references/file-locations-and-frontmatter.md](./references/file-locations-and-frontmatter.md) |
+| What frontmatter does it need? | [references/frontmatter-reference.md](./references/frontmatter-reference.md) |
 | Set up a clean GitHub Copilot customization stack from scratch | [workflows/initial-setup.md](./workflows/initial-setup.md) |
 | How do I keep an existing stack small, current, and easy to understand over time? | [workflows/maintenance-and-governance.md](./workflows/maintenance-and-governance.md) |
 | Customizations are being ignored, over-applied, or loaded in the wrong place | [workflows/troubleshoot-loading-and-application.md](./workflows/troubleshoot-loading-and-application.md) |

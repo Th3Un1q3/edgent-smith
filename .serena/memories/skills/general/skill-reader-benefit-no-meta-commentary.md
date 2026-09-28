@@ -13,4 +13,4 @@ Fix: building-modular-skills v3.2.0 Rule/Check 14 "Write for the reader, not the
 
 Next time: after authoring or editing a skill, grep the tree for `Implements:|Example fragment:|verify against|Source anchor|completion gate` and clear every body hit outside frontmatter `metadata.delta` and the meta-skill's own gate.
 
-Source: operator session 2026-08-12 (building-modular-skills v3.2.0 hardening); verified against SKILL.md L16/L53, guidance.md Rule 14, shaping-checklist.md check 14, templates.md L61. Related: mem:skills/general/building-modular-skills-contradiction-resolution; mem:skills/general/skill-root-leanness.
+Source: operator session 2026-08-12 (building-modular-skills v3.2.0 hardening); verified against SKILL.md L16/L53, guidance-content.md Rule 14 (guidance.md later restructured by topic), shaping-checklist.md check 14, templates.md L61. Related: mem:skills/general/building-modular-skills-contradiction-resolution; mem:skills/general/skill-root-leanness.

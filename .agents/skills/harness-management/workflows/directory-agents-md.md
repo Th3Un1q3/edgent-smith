@@ -11,7 +11,7 @@ Use this change type when:
 ## Decide: Is This the Right Change Type?
 
 - Stable, durable context belongs in `AGENTS.md`.
-- Transient or emergent knowledge belongs in memories — follow the `context-gathering` [store-memories](../../context-gathering/recipes/store-memories.md) recipe. `AGENTS.md` must not contain emergent behaviors.
+- A learning that cannot yet become a solid, reusable skill belongs in memories — follow the `serena-memory` [store-memory](../../serena-memory/workflows/store-memory.md) recipe, then promote it to a skill once it stabilizes and generalizes. `AGENTS.md` must not contain emergent behavior.
 - Root or project-level context belongs in the existing `/workspace/AGENTS.md`; edit it carefully because it is injected project-wide.
 
 ## Procedure

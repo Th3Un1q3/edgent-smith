@@ -5,10 +5,11 @@ description: >
   Hugging Face papers, turn ideas into one submitted experiment, or brainstorm
   eval extensions that push the edge agent beyond its comfort zone.
 license: MIT
-compatibility: Universal
+compatibility: Requires GitHub Copilot
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   author: Th3Un1qu3
+  delta: "1.0.1 — compatibility label: Requires GitHub Copilot."
 ---
 
 # Edge Architect Workflows

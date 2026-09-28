@@ -5,8 +5,12 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   author: edgent-smith team
+  delta: >
+    1.0.1 — made the quality-gate rule in references/typescript-conventions.md
+    self-contained; it now states inline that checks run through the project's
+    canonical task-runner targets.
 ---
 
 # Test Design Skill

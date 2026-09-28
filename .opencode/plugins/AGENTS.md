@@ -16,11 +16,11 @@
 
 All these quality gates need to pass to conclude that the plugin is valid and ready for use.
 
-Tests: `cd /workspace/.opencode && just test`
-Linter: `cd /workspace/.opencode && just lint`
-Typecheck: `cd /workspace/.opencode && just typecheck`
+Tests: `just opencode::test` (from repo root)
+Linter: `just opencode::lint`
+Typecheck: `just opencode::typecheck`
 
-All commands support additional parameters eg. to run a single test file: `cd /workspace/.opencode && just test -- tests/helpers/instruction-indexer.test.ts`
+All commands support additional parameters eg. to run a single test file: `just opencode::test -- tests/helpers/instruction-indexer.test.ts`
 
 ### Technical Stack
 

@@ -157,7 +157,7 @@ describe('createSubtask session title reporting', () => {
     const fake = createClient({ prompt })
     const context = makeContext(fake.client, { signal: controller.signal })
 
-    const run = createSubtask(context)({ prompt: 'do work', description: 'work', timeout_seconds: 5 })
+    const run = createSubtask(context)({ prompt: 'do work', description: 'work', timeout_minutes: 5 })
     await waitUntil(() => fake.prompt.mock.calls.length === 1)
     controller.abort()
 
@@ -215,7 +215,7 @@ describe('createSubtask session title reporting', () => {
     const fake = createClient({ update })
     const context = makeContext(fake.client)
 
-    const result = await createSubtask(context)({ prompt: 'do work', description: 'work', timeout_seconds: 5 })
+    const result = await createSubtask(context)({ prompt: 'do work', description: 'work', timeout_minutes: 5 })
 
     expect(result.status).toBe('ok')
     expect(result.outputText).toBe('OUT')

@@ -1,5 +1,7 @@
 # Building-Modular-Skills Contradiction-Resolution Pass
 
+> **HISTORICAL — superseded.** This records the v3.1.0 pass, when the rules lived in the monolithic `references/guidance.md`. That file (and the interim `guidance-rules-10-19.md` / `guidance-rules-20-24.md` split) is deleted; the rules were later restructured by topic into `references/guidance-structure.md` (Rules 1,2,7,8,9,19 + Vocabulary), `references/guidance-content.md` (Rules 3,4,5,6,14,15,16,21), and `references/guidance-process.md` (Rules 10,11,12,13,17,18,20,22,23,24,25 + example application). Treat every `guidance.md` reference below as pointing to the corresponding topic file.
+
 building-modular-skills resolved to v3.1.0 on 2026-08-10 (second pass; validated PASS — all changes checked). The v3.1.0 pass rewrote references/guidance.md as skill-agnostic rule guidance: all "lesson" terminology is GONE, the 13 items are now `## Rule N:` headers, and the load-bearing mapping is the 13-check <-> 13-rule mapping (numbering preserved, one check per rule). This CORRECTS the v3.0.0 record "lesson survives as load-bearing content" framing — that framing is obsolete; "lesson" no longer appears in the skill.
 
 ## Canonical State (2026-08-10, v3.1.0)
@@ -16,7 +18,7 @@ building-modular-skills resolved to v3.1.0 on 2026-08-10 (second pass; validated
 - SKILL.md (68 lines)
 - workflows/authoring-workflow.md (49)
 - workflows/shaping-checklist.md (71)
-- references/guidance.md (166)
+- references/guidance.md (166) — DELETED; rules later split by topic into references/guidance-structure.md / guidance-content.md / guidance-process.md
 - references/templates.md (134)
 
 ## Process Lessons
@@ -32,7 +34,7 @@ building-modular-skills resolved to v3.1.0 on 2026-08-10 (second pass; validated
 - templates.md has no recipe/script skeletons despite routing-table rows advertising them (root template rows for `recipes/x.md` and `scripts/x.md` exist) — still open.
 - SKILL.md frontmatter description still enumerates only workflow/reference files — still open (intentional, per earlier directive).
 - SKILL.md L22/L67 + authoring-workflow L10 keep context-gathering as the canonical exemplar — intentional user scope; leave alone.
-- guidance.md Rule 4 writing-style link points at the `.opencode/instructions/` copy — user-owned; leave alone.
+- guidance-content.md Rule 4 writing-style link points at the `.opencode/instructions/` copy — user-owned; leave alone.
 - RESOLVED in v3.1.0: "apply per store" (old Lesson 7) vs "apply per instance" wording drift — check 7 and Rule 7 now both say per instance / one instance.
 
 Source: operator-validated post-pass report (2026-08-10, v3.1.0); file inventory and content per ground-truth pass on observed files.

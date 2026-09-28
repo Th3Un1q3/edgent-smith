@@ -219,6 +219,7 @@ afk action="status":
 # Validate
 # ---------------------------------------------------------------------------
 # Validate Serena memory frontmatter, links, and fences (3-script pre-commit gate).
+
 # Usage: just agent_utils::validate-memories
 validate-memories:
     #!/usr/bin/env bash
@@ -229,11 +230,20 @@ validate-memories:
     python3 "/workspace/agent_utils/scripts/audit_fences.py" "/workspace/.agents/skills/serena-memory" "/workspace/.agents/skills/context-gathering" "/workspace/.agents/skills/building-modular-skills"
 
 # Validate any skill against the shaping line budgets and audits.
+
 # Usage: just agent_utils::validate-skill serena-memory
 validate-skill name:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Checking {{ name }} budgets: SKILL.md ≤160, refs ≤120"
     wc -l "/workspace/.agents/skills/{{ name }}/SKILL.md" "/workspace/.agents/skills/{{ name }}/references"/*.md "/workspace/.agents/skills/{{ name }}/workflows"/*.md || true
+    sk_lines=$(wc -l < "/workspace/.agents/skills/{{ name }}/SKILL.md")
+    if [ "$sk_lines" -gt 160 ]; then echo "FAIL: SKILL.md has $sk_lines lines (budget 160)"; exit 1; fi
+    for ref in "/workspace/.agents/skills/{{ name }}/references"/*.md; do
+      [ -e "$ref" ] || continue
+      ref_lines=$(wc -l < "$ref")
+      if [ "$ref_lines" -gt 120 ]; then echo "FAIL: $ref has $ref_lines lines (budget 120)"; exit 1; fi
+    done
+    echo "Budgets OK: SKILL.md $sk_lines lines; every reference <=120"
     python3 "/workspace/agent_utils/scripts/validate_md_links.py" "/workspace/.agents/skills/{{ name }}"
     python3 "/workspace/agent_utils/scripts/audit_fences.py" "/workspace/.agents/skills/{{ name }}"

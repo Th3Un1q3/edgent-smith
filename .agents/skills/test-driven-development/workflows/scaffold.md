@@ -1,6 +1,6 @@
 # Workflow: Create Test Scaffold
 
-Create **only a minimal scaffold** for new functionality — an empty `describe`/test block with the import boilerplate and a TODO comment listing what test cases *will* go inside. Do **not** write named test stubs, assertions, or case descriptions in the scaffold. You will fill each test case one at a time using [one-by-one.md](./workflows/one-by-one.md) afterward.
+Create **only a minimal scaffold** for new functionality — an empty `describe`/test block with the import boilerplate and a TODO comment listing what test cases *will* go inside. Do **not** write named test stubs, assertions, or case descriptions in the scaffold. You will fill each test case one at a time using [one-by-one.md](./one-by-one.md) afterward.
 
 ## When to Use This Workflow
 
@@ -8,7 +8,7 @@ Create **only a minimal scaffold** for new functionality — an empty `describe`
 - Adding a new module/class with TDD — create its test suite first
 - Bug fix where the relevant code has no regression tests yet
 
-**Do not use this when:** an existing test file already covers related behavior — see [modify-existing.md](./workflows/modify-existing.md) instead.
+**Do not use this when:** an existing test file already covers related behavior — see [modify-existing.md](./modify-existing.md) instead.
 
 ## Steps
 
@@ -55,4 +55,4 @@ If you see individual `it()`/`test()` blocks with names — remove them. That is
 
 ### 4. Save the scaffold file and proceed
 
-Write the scaffold to its final location. **Do not run it.** Proceed to [one-by-one.md](./workflows/one-by-one.md) to implement each test case and its subject code incrementally, one at a time.
+Write the scaffold to its final location. **Do not run it.** Proceed to [one-by-one.md](./one-by-one.md) to implement each test case and its subject code incrementally, one at a time.

@@ -36,7 +36,9 @@ Run before any write_memory or edit_memory — every content write or edit inclu
 Gate script inside gateway_mcp-exec (9 checks, copy-pasteable):
 
 ```javascript
+// gateway guard: 2 KB cap + empty/stderr detection (infra flake -> bash cat, 0 retries)
 function snapshot(s){ return s.length>2048? s.slice(0,2048)+"\n[...truncated]": s }
+function gatewayEmpty(raw){ return !raw || raw.trim() == "" || /Access denied|No such file/.test(raw) || raw.indexOf("content:[]")>=0; }
 function gate(memory, fm){
   var exempt = /^(serena|cache|researches|private|browser-automation)\//.test(memory);
   var checks={
@@ -54,11 +56,11 @@ function gate(memory, fm){
   if(failed.length>0) throw new Error("gate failed: "+failed.join(","));
   return "pass";
 }
-// guard every gateway_mcp-exec return — empty + stderr capture + 2KB cap
+// gateway guard: stop on empty/stderr return; fall back once to the filesystem, 0 retries
 var raw = list_memories({ topic: "entities" });
-if (!raw || raw.trim()==="" || /Access denied|No such file/.test(raw)) throw new Error("empty gateway return → retry");
+if(gatewayEmpty(raw)) throw new Error("gateway empty - bash cat .serena/memories/<id>.md");
 snapshot(raw)
-// Implements: 9-check blocking gate with Disclosed quoted L0 or inferred fallback + snapshot 2KB cap + empty guard (capture_stderr)
+// Implements: 9-check blocking gate with Disclosed quoted L0 or inferred fallback + snapshot 2KB cap
 ```
 
 Dedup table usage (numeric thresholds 0.9 and 0.6):

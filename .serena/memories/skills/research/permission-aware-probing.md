@@ -4,15 +4,11 @@
 
 ## Pitfalls
 
-- curl/web-fetch denied → subagents stall or return empty instead of adapting.
-- git commands blocked ("ask" policy) → tasks return empty.
-- Compound commands / heredocs blocked.
-- `pkill -f <tool>` killing the orchestrating session itself.
+- A denied probe is fuzzy/format (canonical form expected) or gated (final); the AFK denial message carries the hint when one exists - follow it.
+- `pkill -f <tool>` can kill the orchestrating session itself.
 
 ## Rules
 
-1. If curl is denied, use `python3 urllib` for HTTP checks.
-2. Use sandbox git allowlist forms exactly (`git status *`, `git diff *`, `git log *`, `git show *`) with no pipes; verify ignore-status via `git status`, not `check-ignore`.
-3. Prefer single, simple commands over heredocs/compounds.
-4. Kill background processes by PID only: capture `$!`, `kill $PID`, verify with `kill -0`, escalate to `-9` only if needed; confirm stopped before continuing.
-5. If a probe is blocked, report which mechanism was used and paste the denial — never silently skip.
+1. Follow the denial hint for the canonical form - see `.opencode/instructions/no-permission-workarounds.instructions.md`.
+2. Gated actions and authorizations follow the permission policy - see `.opencode/instructions/no-permission-workarounds.instructions.md`.
+3. Kill background processes by PID only: capture `$!`, `kill $PID`, verify with `kill -0`, escalate to `-9` only if needed; confirm stopped before continuing.

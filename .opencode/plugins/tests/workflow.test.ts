@@ -319,10 +319,10 @@ describe('workflow plugin', () => {
       expect(envelope.status).toBe('budget_exceeded')
     })
 
-    it('enforces timeout_seconds forwarded from args', async () => {
+    it('enforces timeout_minutes forwarded from args', async () => {
       const { envelope } = await runTool({
         script: 'await new Promise(() => undefined); return 1',
-        timeout_seconds: 1,
+        timeout_minutes: 0.0005,
       })
 
       expect(envelope.status).toBe('timeout')
@@ -357,8 +357,8 @@ describe('workflow plugin', () => {
       const workflowTool = await loadWorkflowTool(createFakeClient())
       const schema = tool.schema.object(workflowTool.args)
       const invalidPatches = [
-        { timeout_seconds: 0 },
-        { timeout_seconds: 36_001 },
+        { timeout_minutes: 0 },
+        { timeout_minutes: 601 },
         { max_concurrent: 0 },
         { max_concurrent: 9 },
         { max_subtasks: 0 },
@@ -375,7 +375,7 @@ describe('workflow plugin', () => {
       const schema = tool.schema.object(workflowTool.args)
       const parsed = schema.parse({ script: 'return 1' })
 
-      expect(parsed.timeout_seconds).toBe(600)
+      expect(parsed.timeout_minutes).toBe(90)
       expect(parsed.max_concurrent).toBe(4)
       expect(parsed.max_subtasks).toBe(32)
     })
@@ -445,7 +445,7 @@ describe('workflow plugin', () => {
       try {
         const workflowTool = await loadWorkflowTool(fake)
         const result = await workflowTool.execute(
-          { script: 'return await subtask("x")', timeout_seconds: 1 } as never,
+          { script: 'return await subtask("x")', timeout_minutes: 1 / 60 } as never,
           createContext() as never,
         ) as unknown as WorkflowToolResult | string
 

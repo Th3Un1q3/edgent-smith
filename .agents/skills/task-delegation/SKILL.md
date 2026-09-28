@@ -3,10 +3,21 @@ name: task-delegation
 description: >
   Teaches the RUG (Repeat Until Good) orchestrator pattern for decomposing user requests into discrete, independently-completable agent subagent tasks and routing them to specialized agents based on scope, expertise, and limitations.
 license: MIT
+compatibility: Requires OpenCode
 metadata:
-  version: "1.4"
+  version: "1.5.3"
   author: "Th3Un1qu3"
   delta: >
+    1.5.3 — replaced the outbound permission-policy pointer with a self-contained
+    permission block for delegation: prompts must not instruct bypassing gates or
+    reproducing denied effects, gated writes need explicit authorization, and a
+    denial is final — the subagent reports it and continues with permitted work.
+    1.5.2 — permission policy prose in the delegation workflow reduced to a compact
+    standing rule; kept the prompt-design rule against unsanctioned fallback offers.
+    1.5.1 — compatibility value narrowed from Universal to Requires OpenCode; the label
+    itself was already documented under 1.5.
+    1.5 — added the documented compatibility label; stated the generic fallback for
+    delegation: where the environment cannot spawn subagents, a human performs the pass.
     1.4 — routed method ownership (prompts state outcomes and acceptance criteria, not command recipes) into the delegation workflow, with a root pointer; prompted by auth-denied `gh`/git recipes.
     1.3 — added the Size Bulk Edits to Fit Subagent Budgets rule; prompted by a
     retrospective where one implementation subagent asked to edit 19 slide blocks plus
@@ -48,7 +59,8 @@ When the request is a parity or porting task — "as close as possible to X", "m
 ## What Not to Do
 
 - Delegate tasks without reading the agent cards and rightsizing the task to the subagent's capabilities.
-- Attempt to complete tasks yourself or bypass the RUG orchestrator pattern. All work must be delegated to subagents with explicit scope and acceptance criteria.
+- Attempt to complete tasks yourself or bypass the RUG orchestrator pattern. All work must be delegated to subagents with explicit scope and acceptance criteria. Where the environment cannot spawn subagents, a human performs the pass.
+- Write subagent prompts that instruct bypassing a permission gate or reproducing a denied effect by another mechanism. Gated writes (`git add`, `git commit`, `git push`) require explicit user authorization in the current session; when a delegated action is denied, the subagent reports the exact command, the denial, and the intended outcome, then continues with permitted work — the denial is final for that action.
 - Sticking to the initial plan despite evidence that it is not working. Be flexible and willing to adjust the plan as needed based on feedback and results.
 
 ## Size Bulk Edits to Fit Subagent Budgets

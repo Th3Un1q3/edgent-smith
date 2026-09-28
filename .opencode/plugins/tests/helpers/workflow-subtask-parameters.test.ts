@@ -26,7 +26,7 @@ describe('normalizeParameters', () => {
       agent: 'a',
       skills: ['s'],
       task_id: 't',
-      timeout_seconds: 0.005,
+      timeout_minutes: 0.005,
     })
 
     expect(result).toEqual({
@@ -35,7 +35,7 @@ describe('normalizeParameters', () => {
       agent: 'a',
       skills: ['s'],
       task_id: 't',
-      timeout_seconds: 0.005,
+      timeout_minutes: 0.005,
     })
   })
 
@@ -117,17 +117,17 @@ describe('normalizeParameters prompt and description text', () => {
 
 describe('normalizeParameters option validation', () => {
   it.each([0, -1, NaN, Infinity, '5', null])(
-    'throws a TypeError naming timeout_seconds for invalid %#',
-    (timeout_seconds) => {
-      const input = { prompt: 'p', description: 'd', timeout_seconds } as unknown as SubtaskInput
+    'throws a TypeError naming timeout_minutes for invalid %#',
+    (timeout_minutes) => {
+      const input = { prompt: 'p', description: 'd', timeout_minutes } as unknown as SubtaskInput
 
       expect(() => normalizeParameters(input)).toThrow(TypeError)
-      expect(() => normalizeParameters(input)).toThrow(/timeout_seconds/)
+      expect(() => normalizeParameters(input)).toThrow(/timeout_minutes/)
     },
   )
 
-  it('passes a valid timeout_seconds through', () => {
-    expect(normalizeParameters({ prompt: 'p', description: 'd', timeout_seconds: 1 }).timeout_seconds).toBe(1)
+  it('passes a valid timeout_minutes through', () => {
+    expect(normalizeParameters({ prompt: 'p', description: 'd', timeout_minutes: 1 }).timeout_minutes).toBe(1)
   })
 
   it.each([['a'], [1], [null], [['a', 1]]])('throws a TypeError naming skills for invalid %#', (skills) => {

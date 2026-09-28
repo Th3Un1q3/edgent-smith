@@ -23,7 +23,7 @@ import { access } from 'node:fs/promises'
 
 import { afkEnforcer } from '@plugins/afk-enforcer'
 
-import { AFK_MESSAGE } from '@plugins/helpers/afk'
+import { AFK_MESSAGE, buildAfkMessage } from '@plugins/helpers/afk'
 
 const DEFAULT_FLAG_PATH = '/workspace/.tmp/is_afk'
 const REQUEST_ID = 'perm_afk_test'
@@ -38,14 +38,17 @@ interface AfkEnforcerPlugin {
  * `@opencode-ai/sdk/dist/v2/gen/types.gen.d.ts`. The v1 `Event` union exported
  * from the package root predates this member, hence the cast.
  */
-const makePermissionAskedEvent = (sessionID: string): Event => ({
+const makePermissionAskedEvent = (
+  sessionID: string,
+  overrides: { permission?: string, patterns?: string[] } = {},
+): Event => ({
   id: 'evt_afk_test',
   type: 'permission.asked',
   properties: {
     id: REQUEST_ID,
     sessionID,
-    permission: 'bash',
-    patterns: ['*'],
+    permission: overrides.permission ?? 'bash',
+    patterns: overrides.patterns ?? ['*'],
     metadata: {},
     always: [],
   },
@@ -131,6 +134,43 @@ describe('afkEnforcer', () => {
         expect(vi.mocked(access)).not.toHaveBeenCalledWith(DEFAULT_FLAG_PATH)
       })
     })
+
+    describe('message selection by hint', () => {
+      beforeEach(() => {
+        vi.mocked(access).mockResolvedValue(undefined)
+      })
+
+      const selectionCases: { name: string, sessionID: string, permission?: string, patterns: string[] }[] = [
+        { name: 'a git command', sessionID: 'ses_git', patterns: ['git -C /workspace status'] },
+        { name: 'an env-prefixed git command', sessionID: 'ses_git_env', patterns: ['FOO=1 git status'] },
+        { name: 'a git command wrapped in a shell', sessionID: 'ses_git_shell', patterns: ['bash -c "git push"'] },
+        { name: 'a curl command', sessionID: 'ses_curl', patterns: ['curl https://example.com'] },
+        { name: 'a curl compound command', sessionID: 'ses_curl_chain', patterns: ['curl x && echo ok'] },
+        { name: 'a wrapped runner', sessionID: 'ses_runner', patterns: ['python3 -m pytest'] },
+        { name: 'a runner compound command', sessionID: 'ses_runner_chain', patterns: ['vitest run && echo ok'] },
+        { name: 'a compound command', sessionID: 'ses_compound', patterns: ['ls -la && echo ok'] },
+        { name: 'an unrelated command', sessionID: 'ses_default', patterns: ['ls -la'] },
+      ]
+
+      it.each(selectionCases)('sends the built message for $name', async ({ sessionID, permission, patterns }) => {
+        await plugin.event({ event: makePermissionAskedEvent(sessionID, { permission, patterns }) })
+        expect(sendMessage).toHaveBeenCalledWith({
+          client,
+          sessionId: sessionID,
+          message: buildAfkMessage(permission ?? 'bash', patterns),
+          noReply: true,
+        })
+      })
+
+      it('still rejects the request while sending the built message', async () => {
+        await plugin.event({ event: makePermissionAskedEvent('ses_write', { patterns: ['git commit -m x'] }) })
+        expect(client.postSessionIdPermissionsPermissionId).toHaveBeenCalledWith({
+          path: { id: 'ses_write', permissionID: REQUEST_ID },
+          body: { response: 'reject' },
+        })
+        expect(sendMessage).toHaveBeenCalledWith({ client, sessionId: 'ses_write', message: buildAfkMessage('bash', ['git commit -m x']), noReply: true })
+      })
+    })
   })
 
   describe('permission.ask placeholder', () => {
@@ -146,21 +186,5 @@ describe('afkEnforcer', () => {
       expect(output.status).toBe('ask')
       expect(sendMessage).not.toHaveBeenCalled()
     })
-  })
-})
-
-describe('AFK_MESSAGE', () => {
-  it('is wrapped in a steering element with warning priority and a reason attribute', () => {
-    expect(AFK_MESSAGE).toMatch(/^<steering\s+priority="warning"\s+reason="[^"]+"[^>]*>[\s\S]*<\/steering>$/)
-  })
-
-  it('pushes the agent to continue with alternative tools when not completely blocked', () => {
-    expect(AFK_MESSAGE).toContain('continue')
-    expect(AFK_MESSAGE).toContain('alternative')
-  })
-
-  it('tells the agent to report progress and the exact blockage when fully blocked', () => {
-    expect(AFK_MESSAGE).toContain('report')
-    expect(AFK_MESSAGE).toContain('blockage')
   })
 })

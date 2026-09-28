@@ -50,7 +50,7 @@ Use several sequential `workflow` calls only when a real boundary forces it:
 
 - You need a human answer first; use `question` between calls.
 - You must branch on the envelope before the next script can be written. If the branch can live inside the script, keep it there.
-- The phase exceeds one script's subtask budget or timeout. Size `max_subtasks`, `max_concurrent`, and `timeout_seconds` deliberately; see Script-Design Discipline.
+- The phase exceeds one script's subtask budget or timeout. Size `max_subtasks`, `max_concurrent`, and `timeout_minutes` deliberately; see Script-Design Discipline.
 
 A `workflow` call wrapping a single `subtask()` is a decomposition failure: either you merged work that should be split or you mis-sized the phase. A small request is not a single-subtask script; its first call is still the skill selector, so the smallest phase carries the selector plus its work.
 
@@ -66,7 +66,7 @@ Before you write a line of script, name every `subtask()` and its one-line purpo
 - Default to prose and read `outputText`; use `schema` only for values the script reads by field (see Structured-Output Discipline).
 - Fan out with `Promise.all`. The runtime bounds concurrency, so hand it more work than `max_concurrent`.
 - Always `await` every `subtask()`; each call costs one budget unit.
-- Always `return` a small reducer of counts, statuses, and key `data`. Keep it JSON-serializable; never return full child transcripts.
+- Always `return` a small reducer. Keep it JSON-serializable; never echo child `data` fields and never return full child transcripts. The orchestrator reads prose fine. The return carries only what the envelope does not already show: a final decision or outcome line, an artifact path, or a decision-bearing domain count. Never restate step statuses, step counts, task ids, durations, or logs; read those from `steps[]` and `stats` (see Reading the Result Envelope).
 - Keep child prompts self-contained; a child does not see your conversation.
 - Never `import`, `require`, `fetch`, call `Function(` or `eval(`, or touch `process`, `globalThis`, `global`, or `constructor`. The guard rejects these with `forbidden_script`. Do all IO through `subtask`.
 - Reference resolved values, never the promise object: reading a promise's `.status` or `.data` yields undefined and makes the reducer return nulls.
@@ -77,12 +77,12 @@ Budgets:
 |---|---|---|
 | `max_subtasks` | 32 | 64 |
 | `max_concurrent` | 4 | 8 |
-| `timeout_seconds` | 600 | 36000 |
-| per-child `timeout_seconds` | 300 | none |
+| `timeout_minutes` | 90 | 600 |
+| per-child `timeout_minutes` | 15 | none |
 
 - Count every designed `subtask()` call against `max_subtasks`; raise it up to 64 when needed. Retries and `aborted` calls count too.
-- Raise `timeout_seconds` up to 36000 when children are long: a few waves of 300 second children pass the 600 second default.
-- Before calling the tool, confirm each reducer stays under about 2 KB and each subtask over about 4 minutes sets an explicit `timeout_seconds`.
+- Raise `timeout_minutes` up to 600 when children are long: a few waves of 15-minute children pass the 90-minute default.
+- Before calling the tool, confirm each reducer stays under about 2 KB and each subtask that may exceed the 15-minute default sets an explicit `timeout_minutes`.
 
 Visible progress is server-side and needs no script work. Every run gets a run id (`wf#<6 hex>`) shown in every toast and child-session title. Toasts cover the start (`started · wf#<id>`), a milestone per completed subtask for runs of up to five subtasks and every fifth completion after that (`<status> <ok>/<total> · wf#<id> · <description>`, where `<status>` is `ok` on success and the failing status otherwise), and a terminal summary (`workflow ok · <ok>/<n> subtasks · wf#<id> · <n>.<d>s` on success, `workflow timed out after <n>.<d>s · wf#<id>` on timeout, `workflow aborted · wf#<id>` on abort, or `workflow <status> · wf#<id> · <reason>` for every other failure); each child title moves from `wf#<id> · [running] <description>` to `wf#<id> · [ok]`/`[error]`/`[aborted] <description>`. Child sessions are real, parented sessions, so the session list and switcher expose them; they are not nested inline under the `workflow` call.
 
@@ -129,7 +129,7 @@ const selection = await subtask({
     required: ['assignments'],
   },
 })
-if (selection.status !== 'ok' || !selection.data) return { status: 'skill-selection-failed', stepStatus: selection.status }
+if (selection.status !== 'ok' || !selection.data) return { status: 'skill-selection-failed' }
 const assignments = Array.isArray(selection.data.assignments) ? selection.data.assignments : []
 const skillsByStep = Object.fromEntries(assignments.map((a) => [a.step, Array.isArray(a.skills) ? a.skills : []]))
 const draft = await subtask({ prompt: steps[0].prompt, description: steps[0].description, skills: skillsByStep.draft ?? [] })
@@ -138,7 +138,7 @@ const tightened = await subtask({ prompt: steps[1].prompt, description: steps[1]
 if (tightened.status !== 'ok') return { status: 'chain-failed', at: 'tighten', error: tightened.error }
 const topRisk = await subtask({ prompt: steps[2].prompt, description: steps[2].description, task_id: tightened.task_id, skills: skillsByStep.topRisk ?? [] })
 if (topRisk.status !== 'ok') return { status: 'chain-failed', at: 'top-risk', error: topRisk.error }
-return { status: 'ok', turns: 3, topRisk: topRisk.outputText, planSession: tightened.task_id }
+return { status: 'ok', topRisk: topRisk.outputText }
 ```
 
 When a later step needs specific fields, request them with `schema` and pass `data` instead of text (see Structured-Output Discipline).
@@ -155,7 +155,7 @@ const questions = [
 const branches = await Promise.all(
   questions.map((q) => subtask({ prompt: q.prompt, description: `audit ${q.id}`, fork_from: base.task_id })),
 )
-return { forks: branches.map((r, i) => ({ audit: questions[i].id, status: r.status, fork_id: r.task_id })) }
+return branches.every((r) => r.status === 'ok') ? 'audits complete' : 'audits failed; inspect steps'
 ```
 
 **Use when.** Steps depend on the previous child's output, the work is serial, and continuity saves restating context. **Do not use when.** Steps are independent (fan out) or the next step needs an unbiased view. **Cost.** A resume reuses context but grows the session every turn, so turn N re-pays for turns 1 through N-1. Break the chain when that growth outgrows continuity and start fresh with a summary or path (see Hand-off Economics: Pass References, Not Payloads). **Validation.** Validate in a fresh session after it, never a `task_id` resume (see Asymmetric (Non-Biased) Validation).
@@ -180,10 +180,10 @@ if (failedIdx.length > 0) {
   retried.forEach((r, j) => { results[failedIdx[j]] = r })
   const stillFailed = failedIdx.filter((i) => results[i].status !== 'ok')
   if (stillFailed.length > 0) {
-    return { status: 'error', ok: modules.length - stillFailed.length, unresolved: stillFailed.map((i) => modules[i]), errors: stillFailed.map((i) => results[i].error) }
+    return { status: 'error', unresolved: stillFailed.map((i) => modules[i]), errors: stillFailed.map((i) => results[i].error) }
   }
 }
-return { status: 'ok', surveyed: results.map((r, i) => ({ module: modules[i], status: r.status })) }
+return { status: 'ok', surveyed: modules.join(', ') }
 ```
 
 `subtask` failures are values, so `Promise.all` resolves with every result and the guard handles partial failure. Reach for `Promise.allSettled` only to survive a thrown `BudgetExceededError`, the one failure that rejects instead of returning.
@@ -192,7 +192,7 @@ return { status: 'ok', surveyed: results.map((r, i) => ({ module: modules[i], st
 
 ### Map-Reduce
 
-A map-reduce fans out a map phase that returns structured `data` through `schema`, then runs exactly one reduce subtask over each result's `data`. Typed answers let the reduce read fields instead of parsing prose.
+A map-reduce fans out a map phase that returns structured `data` through `schema`, then runs exactly one reduce subtask over each result's `data`. This is one of the three justified schema uses: the reduce merges by field instead of parsing prose.
 
 ```js
 const issues = ['login fails', 'slow search', 'stale cache']
@@ -207,7 +207,7 @@ const mapped = await Promise.all(
   ),
 )
 const usable = mapped.filter((r) => r.status === 'ok' && r.data)
-if (usable.length === 0) return { status: 'map-failed', statuses: mapped.map((r) => r.status) }
+if (usable.length === 0) return { status: 'map-failed' }
 const reduce = await subtask({
   prompt:
     'Rank these classified issues as one list of ids, highest priority first.\n' +
@@ -215,11 +215,11 @@ const reduce = await subtask({
   description: 'rank classified issues',
   schema: { type: 'object', properties: { order: { type: 'array', items: { type: 'string' } } }, required: ['order'] },
 })
-if (reduce.status !== 'ok' || !reduce.data || !Array.isArray(reduce.data.order)) return { status: 'reduce-failed', mapped: usable.length }
-return { status: 'ok', mapped: usable.length, order: reduce.data.order }
+if (reduce.status !== 'ok' || !reduce.data || !Array.isArray(reduce.data.order)) return { status: 'reduce-failed' }
+return { status: 'ok', order: reduce.data.order }
 ```
 
-The guard `r.status === 'ok' && r.data` drops schema misses, since `data` is absent when parsing fails. The reduce result gets the same treatment before its fields are read.
+The guard `r.status === 'ok' && r.data` drops schema misses, since `data` is absent when parsing fails. The reduce result gets the same treatment before its fields are read. The reduce output is terminal here; when nothing branches, loops, or merges on `order`, return prose instead of a reduce schema.
 
 **Use when.** Independent items share one shape and the decision needs one merged answer. **Do not use when.** Items depend on each other, or the merge must keep each item's full text. **Cost.** N map children each pay their own prompt; the reduce pays for the concatenated `data`, so the embedded array bounds its cost. Prefer ids or file references and let the reduce read (see Hand-off Economics: Pass References, Not Payloads). **Validation.** The reduce is aggregation, not validation; run a separate fresh validator over the reduced artifact (see Asymmetric (Non-Biased) Validation).
 
@@ -244,24 +244,22 @@ while (attempt < MAX_ATTEMPTS) {
     feedback = 'producer ' + producer.status + ': ' + producer.error
     continue
   }
-  // Fresh session, never the producer's task_id.
+  // Fresh session, never the producer's task_id. Prose verdict: PASS or FAIL on the first line.
   const validator = await subtask({
     prompt: `A previous agent was asked to: ${INTENT} Artifact: src/cli_main.py.\n${CRITERIA}\n` +
-      'Challenge the criteria first, then verify each survivor with evidence and FAIL any you cannot confirm.',
+      'Put PASS or FAIL alone on the first line, then challenge the criteria, verify each survivor with evidence, and name any you cannot confirm.',
     description: `validate attempt ${attempt}`,
     skills: ['test-design'],
-    schema: {
-      type: 'object',
-      properties: { verdict: { type: 'string' }, findings: { type: 'array', items: { type: 'string' } } },
-      required: ['verdict'],
-    },
   })
-  if (validator.status === 'ok' && validator.data && validator.data.verdict === 'PASS') return { status: 'passed', attempts: attempt }
-  lastFailure = validator.status === 'ok' && validator.data ? validator.data.findings : validator.error
-  feedback = Array.isArray(lastFailure) ? lastFailure.join('\n') : String(lastFailure)
+  const passed = validator.status === 'ok' && /^\s*PASS\b/.test(validator.outputText)
+  if (passed) return { status: 'passed' }
+  lastFailure = validator.status === 'ok' ? validator.outputText : validator.error
+  feedback = String(lastFailure)
 }
-return { status: 'capped', attempts: attempt, report: lastFailure }
+return { status: 'capped', report: lastFailure }
 ```
+
+The default validator returns prose. Opt in with a `schema` only when the loop must read individual fields per criterion, and guard `data` (see Validation).
 
 Two loops hide behind "retry". In-session refinement resumes the same child with `task_id`: cheap, builds on context, but imports that child's bias, so it fits formatting, structure, or copy fixes and is never validation. A fresh producer plus fresh validator starts a new session each turn; the producer gets the failure report as a self-contained prompt and the validator never shares its context. Use it for independent judgment, mandatory for validation.
 
@@ -291,7 +289,7 @@ Reasoning procedure, in order:
 The script moves data between children; each prompt spends tokens, so pass the smallest thing the consumer needs.
 
 - Pass a path when the consumer can read the file: a few tokens against thousands, and content truncates in transit.
-- Pass the smallest thing the consumer needs: a path, or a one-line prose summary. Use `schema`/`data` only when the consumer reads named fields (id, status, count).
+- Pass the smallest thing the consumer needs: a path, or a one-line prose summary. Use `schema`/`data` only when the consumer branches, loops, or merges on named fields (id, status, count).
 - Never pass a full transcript. `outputText` caps near 4000 characters per step and the envelope caps at 8192 bytes.
 - Persist large artifacts to a file and pass the path; the filesystem is shared state. A child writes it, returns its path and a one-line summary, and the next child reads it.
 
@@ -325,7 +323,7 @@ Every token in a prompt is paid by its emitter and again by each consumer; a pat
 
 ## Skill Selection as a Workflow Step
 
-You have no `skill` tool and no skill-file read access; never load a skill yourself. The selector is the script's first `subtask()`, delegated with structured output.
+You have no `skill` tool and no skill-file read access; never load a skill yourself. The selector is the script's first `subtask()`, delegated with structured output, a justified typed hand-off because later calls consume `data.assignments`.
 
 1. Design the steps first, each with a stable `id`, `purpose`, `prompt`, and `description`. The selector receives the full step list (id plus purpose) and the `<available_skills />` catalog (name plus description), and returns `data.assignments`, mapping each step id to skill names.
 
@@ -358,7 +356,7 @@ const selection = await subtask({
        required: ['assignments'],
      },
    })
-   if (selection.status !== 'ok' || !selection.data) return { status: 'skill-selection-failed', stepStatus: selection.status }
+   if (selection.status !== 'ok' || !selection.data) return { status: 'skill-selection-failed' }
    const assignments = Array.isArray(selection.data.assignments) ? selection.data.assignments : []
    const skillsByStep = Object.fromEntries(assignments.map((a) => [a.step, Array.isArray(a.skills) ? a.skills : []]))
    const draft = await subtask({ prompt: steps[0].prompt, description: steps[0].description, skills: skillsByStep[steps[0].id] ?? [] })
@@ -384,20 +382,31 @@ Matching discipline:
 
 ## Structured-Output Discipline
 
-Default to prose. Ask the child for a short written answer and read `outputText`. Use `schema` with `data` only when the script must consume a value mechanically, in one of four cases:
+Default to prose. Ask the child for a short written answer and read `outputText`. Use `schema` with `data` only when the script must consume a value mechanically, in one of three cases:
 
-- Parallel reduce: N parallel subtasks whose outputs the script merges by field (see Map-Reduce).
-- Control-flow branch: the script branches on a typed value, not a fuzzy string.
-- Typed chaining: a downstream call consumes named fields, as the skill selector feeds `skills: [...]`.
-- Truncation-safe hand-off: the value must survive transport compactly.
+- Branch or loop condition: the script reads a named field to choose a path or end a loop, such as a per-criterion `pass` flag. A lone completion verdict is not this case: have the child put `PASS` or `FAIL` on the first line and match it with a regex.
+- Fan-out or loop driver: an array the script iterates or fans out over.
+- Typed hand-off or merge: a later step consumes named fields, as the skill selector feeds `skills: [...]`, or a map-reduce merges by field (see Map-Reduce).
 
-A single verdict or one-field answer does not qualify. Have the child put `PASS` or `FAIL` on the first line and match it with a regex.
+Decision test: does the script branch, loop, merge, or template on this value? Yes: use `schema`. No: use prose.
+
+Schema belongs only where the script consumes it. These shapes are anti-patterns:
+
+- A final reducer that echoes child data fields or reshapes prose into nested objects, such as a return that mirrors every child's `.status` and `.data` instead of a short reducer.
+- Status mirror keys, such as a `*Status:` key per child that the orchestrator never reads.
+- Producer bookkeeping nobody reads, such as `produced: { source: p1.data.filesChanged }`.
+- A report schema that wraps prose, such as `schema: { report: { type: 'string' } }`, when the child's prose already carries the content.
+- A single-verdict schema where a first-line `PASS` or `FAIL` check works. Have the child put `PASS` or `FAIL` on the first line and match it with a regex.
+
+Return-value redundancy. The envelope already carries `status`, `stats`, every `steps[]` record, and `logs[]`, so a reducer carries only what those fields cannot infer: one final decision or outcome line, an artifact path, or a decision-bearing domain count such as "3 of 5 gates failed". Never restate a per-child `status` or `*Status:` key, a status map, step counts (`ok`, `failed`, `total`), `attempts`/`rounds`, a `task_id`, a duration, a truncation flag, or anything already passed to `log()`. Child-derived content the envelope does not carry belongs in a prose one-liner, not a nested fielded object. The flagged shape mirrors each child's status and echoes its `data` (`code: { verdict: v.data.verdict, findings: v.data.findings.slice(0, 3) }`); return a prose outcome line instead.
+
+Script-defined values. Return only outcomes the run produced, never a value the script itself defines. The orchestrator wrote every hardcoded path, id, label, and config constant in the script, so echoing one back adds nothing: `reports: { changeReport: "docs/x/change-report.md" }` repeats a constant rather than reporting a result. A return also restates nothing the envelope already shows: never list step statuses, step counts, task ids, durations, or log lines. Return a short outcome line, decisions reached, artifact paths a child produced, and decision-bearing counts; when nothing beyond the envelope needs saying, return a one-line overall outcome.
 
 - `schema` is a JSON Schema object. The child returns its full answer, optionally with prose or code, plus one JSON block between `<result_json>` and `</result_json>`.
 - Validation is a prompt contract plus parse plus a required-keys check, not a full JSON-Schema validator; nested constraints, types, enums, and formats go unchecked. Inspect `data` before trusting it.
 - `schema.required` must be a non-empty string array and every name must be a key of the parsed object. A non-string entry makes the runtime skip the check, silently disabling required-key validation.
 - On an unusable reply the runtime sends one corrective follow-up on the same session and parses again. If still unusable the subtask returns `status: 'error'`, or `status: 'empty'` when the child returned no text.
-- `data` is never truncated. `outputText` caps around 4000 characters per step. Read `data` for machine values and `outputText` only for debugging.
+- `data` is never truncated. `outputText` caps around 4000 characters per step. Read `outputText` by default; read `data` only when the script needs machine values.
 - Always guard `if (r.status === 'ok' && r.data) { ... }`.
 - Do not use `schema` for prose, file content, a narrative report, or open research; those need the child's full text, and a forced JSON shape loses it or makes the child fabricate fields.
 
@@ -406,7 +415,7 @@ A single verdict or one-field answer does not qualify. Have the child put `PASS`
 `workflow` returns `{ title, output }`; `output` is one JSON string envelope. Parse it and read the fields in order.
 
 1. `status`, one of `ok`, `error`, `timeout`, `aborted`, `budget_exceeded`, `invalid_script`, `forbidden_script`. Read `result` only when `status` is `ok`.
-2. `result`, the script's return value. JSON omits it when the script returned `undefined`.
+2. `result`, the script's return value. JSON omits it when the script returned `undefined`. Return only what the envelope does not already show: a final decision or outcome line, an artifact path, or a decision-bearing domain count. Step statuses, task ids, durations, step counts, and logs already live in `steps[]`, `stats`, and `logs[]`; never restate them. `data` is not the default read path; inside the script, read `data` only when a branch, loop, or merge needs machine values, and read `outputText` otherwise.
 3. `stats`: `subtasks`, `ok`, `error`, `empty`, `timeout`, `aborted`, `totalMs`, `truncated`.
 4. `steps[]`, one record per executed `subtask()` call: `description`, `task_id`, `status`, `durationMs`, `error?`, `truncated`.
 5. `logs[]`, values you passed to `log`, plus runtime warnings.
@@ -418,7 +427,7 @@ Map failures to fixes:
 - `invalid_script`: syntax error; rewrite the failing line and rerun.
 - `forbidden_script`: remove the banned token named in `error` and rerun.
 - `budget_exceeded`: fewer `subtask()` calls, or raise `max_subtasks`.
-- `timeout`: shorten the script or raise `timeout_seconds`.
+- `timeout`: shorten the script or raise `timeout_minutes`.
 - `error` or failed steps: read each step's `error`, then retry or fall back.
 - Missing step detail can be truncation: past the byte cap the runtime drops logs, then truncates `result`, then drops steps; `stats.truncated` reports any of those trims, including dropped logs.
 
@@ -549,7 +558,7 @@ Before checking any criterion, the validator must judge whether the criterion it
 
 Give the validator the task's intent, target medium, and consumer. Require independent fitness evaluation. Never hand the validator the expected verdict.
 
-Use structured output from the validator only when the script reads its fields, such as `criteria` or `findings`. When you need only a verdict, a first-line `PASS`/`FAIL` in `outputText` is sufficient. The schema below covers the criteria case:
+Default to prose: ask the validator for `PASS` or `FAIL` on the first line and its findings in prose. Use `schema` only when the script reads named fields, such as per-criterion `criteria` it branches on. The schema below is the opt-in for the criteria case:
 
 ```js
 const verdict = await subtask({
@@ -558,11 +567,9 @@ const verdict = await subtask({
   schema: {
     type: 'object',
     properties: {
-      verdict: { type: 'string' },
       criteria: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, pass: { type: 'boolean' }, evidence: { type: 'string' } }, required: ['name', 'pass'] } },
-      findings: { type: 'array', items: { type: 'string' } },
     },
-    required: ['verdict', 'criteria'],
+    required: ['criteria'],
   },
 })
 ```
@@ -661,8 +668,9 @@ Access memory ONLY through the `serena` MCP server via the gateway tools, never 
 14. **Treating envelope `ok` as success without checking `steps[]`.** Read every `steps[]` record and `stats`; an `empty`/`aborted` step or any `truncated` flag marks a partial run (see Reading the Result Envelope). A phase is complete only when every step is `ok` and `stats.truncated` is false.
 15. **Exceeding `max_subtasks`.** Count designed calls, including retries, against `max_subtasks` before you call the tool; raise the limit or move work to a later phase (see Script-Design Discipline). A `budget_exceeded` envelope wastes the whole run.
 16. **Omitting `description`.** `description` is required for the object form and becomes the step description and child session title (see Script-Design Discipline). Without it you cannot map an envelope step back to its work.
-17. **Parsing prose for a value a fielded consumer needs.** When a downstream call or merge reads named fields, pass `schema`, read `data`, and guard it (see Structured-Output Discipline). When the script needs only a decision or a summary, prose is correct.
-18. **Splitting one phase across multiple `workflow` calls.** Call `workflow` once per phase and orchestrate fan-out, chains, and retries inside the script; splitting multiplies envelope-reading overhead and loses shared state. Several phases for one goal are legitimate when a human question, an envelope branch, sizing, or budget forces it.
+17. **Parsing prose for a value a fielded consumer needs.** When a downstream call, branch, loop, or merge reads named fields, pass `schema`, read `data`, and guard it (see Structured-Output Discipline). When the script needs only a decision or a summary, prose is correct.
+18. **Schema decoration.** Requesting a schema the script never consumes: a reducer that echoes child data (`code: { verdict: v.data.verdict, findings: v.data.findings.slice(0, 3) }`) instead of prose, `*Status:` mirror keys, `produced: { source: p1.data.filesChanged }` bookkeeping, a report schema wrapping `outputText`, or a single verdict that a first-line `PASS`/`FAIL` check covers. Apply the decision test: no branch, loop, merge, or template on the value means prose (see Structured-Output Discipline).
+19. **Splitting one phase across multiple `workflow` calls.** Call `workflow` once per phase and orchestrate fan-out, chains, and retries inside the script; splitting multiplies envelope-reading overhead and loses shared state. Several phases for one goal are legitimate when a human question, an envelope branch, sizing, or budget forces it.
 
 ## Termination Criteria
 
