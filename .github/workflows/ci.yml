@@ -77,7 +77,7 @@ jobs:
       # bump -v2- to invalidate wholesale (e.g. a Stryker major schema change).
       - name: Restore Stryker incremental cache
         id: stryker-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: .opencode/reports/stryker-incremental.json
           key: ${{ runner.os }}-stryker-v2-${{ hashFiles('.opencode/bun.lock', '.opencode/package.json', '.devcontainer/devcontainer.json', '.devcontainer/docker-compose.yml', '.devcontainer/setup-dev.sh') }}-${{ hashFiles('.opencode/plugins/**/*.ts', '.opencode/plugins/tests/**/*.test.ts', '.opencode/stryker.config.mjs', '.opencode/vitest.config.ts', '.opencode/tsconfig.json') }}
@@ -144,7 +144,7 @@ jobs:
 
       - name: Save Stryker incremental cache
         if: always() && steps.stryker-cache.outputs.cache-primary-key != '' && steps.stryker-cache-marker.outputs.present == 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: .opencode/reports/stryker-incremental.json
           key: ${{ steps.stryker-cache.outputs.cache-primary-key }}
