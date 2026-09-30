@@ -1,0 +1,160 @@
+{
+  // Reusable single-container Dev Container template, agnostic to any repository.
+  // Hardened for untrusted code: no host Docker/SSH/GPG socket, no credential or
+  // host config mount, no host environment passthrough, non-root user, dropped
+  // capabilities, and no-new-privileges. Port auto-forwarding stays enabled.
+  //
+  // Residual risk this file cannot remove: VS Code Dev Containers still forwards
+  // the host SSH agent and copies the host .gitconfig plus a host-backed git
+  // credential helper. The workspace bind mount lets untrusted code plant files
+  // the trusted host later executes, and disk use is unbounded. Digest-pin the
+  // image and Feature refs before a hostile run. See devcontainer.SECURITY.md.
+  "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.schema.json",
+  "name": "Sandbox (Dev Container)",
+
+  // First-party Microsoft base image, multi-arch (x86-64 + arm64). It ships the
+  // non-root `vscode` user. Pin by digest before running hostile code:
+  //   mcr.microsoft.com/devcontainers/base:ubuntu-24.04@sha256:<digest>
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+
+  // Non-root intent, stated twice because the two keys cover different things.
+  // containerUser sets the user for tools that honor it; remoteUser sets the
+  // remote/editor process user. A bare `docker run` of the image still starts as
+  // root, so run untrusted workloads only on providers that honor these keys.
+  "containerUser": "vscode",
+  "remoteUser": "vscode",
+
+  "features": {
+    // First-party ghcr.io/devcontainers/features pins, plus two reviewed
+    // devcontainers-extra Features. No docker-outside-of-docker: it mounts the
+    // host Docker socket. The `version` option selects the upstream tool version.
+    "ghcr.io/devcontainers/features/common-utils:2.7.0": {
+      "username": "vscode",
+      "userUid": "1000",
+      "userGid": "1000",
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "configureZshAsDefaultShell": true,
+      "upgradePackages": false,
+      // no-new-privileges already makes passwordless sudo inert; false keeps the
+      // dead sudoers entry out and states the intent. See the sudo policy below.
+      "sudoers": false
+    },
+    "ghcr.io/devcontainers/features/git:1.3.8": {
+      "version": "os-provided"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1.1.3": {},
+    "ghcr.io/devcontainers/features/node:2.1.0": {
+      "version": "22",
+      "nodeGypDependencies": true
+    },
+    "ghcr.io/devcontainers/features/python:1.8.0": {
+      "version": "3.13",
+      "installTools": true
+    },
+
+    // uv: no vendor Feature; devcontainers-extra is the trusted publisher.
+    "ghcr.io/devcontainers-extra/features/uv:1": { "version": "0.5.11" },
+    // opencode: no vendor Feature; devcontainers-extra is the trusted publisher.
+    "ghcr.io/devcontainers-extra/features/opencode:1": { "version": "1.18.32" },
+    // jq has no trusted dedicated Feature. Install the distro package through
+    // the trusted devcontainers-extra apt Feature (same Ubuntu-archive provenance
+    // as a Dockerfile `apt-get install jq`). unzip/xz-utils support installers.
+    "ghcr.io/devcontainers-extra/features/apt-packages:1": {
+      "packages": "jq,unzip,xz-utils"
+    }
+  },
+
+  // just has no trusted Feature and is absent from the Ubuntu archive. Fall back
+  // to the pinned official binary, installed as the non-root user into
+  // ~/.local/bin and verified against the release's per-asset .sha256sum file.
+  // This needs network at create time, so run it before any offline untrusted phase.
+  //
+  // Privilege / sudo policy: the sandbox runs as non-root and no-new-privileges
+  // makes passwordless sudo inert, so `sudo` cannot elevate. Install tools through
+  // Features, `uv tool install`, `pip install --user`, or `npm --prefix ~/.local`.
+  // A profile that needs real root is a separate, deliberately weaker template.
+  "postCreateCommand": {
+    "git-safe-directory": [
+      "git",
+      "config",
+      "--global",
+      "--add",
+      "safe.directory",
+      "${containerWorkspaceFolder}"
+    ],
+    "just": [
+      "bash",
+      "-lc",
+      "set -euo pipefail; v=1.36.0; case \"$(uname -m)\" in x86_64) t=x86_64-unknown-linux-musl;; aarch64|arm64) t=aarch64-unknown-linux-musl;; *) echo unsupported >&2; exit 1;; esac; f=\"just-$v-$t.tar.gz\"; mkdir -p \"$HOME/.local/bin\"; base=https://github.com/casey/just/releases/download/$v; curl -fsSL -o \"/tmp/$f\" \"$base/$f\"; curl -fsSL -o \"/tmp/$f.sha256sum\" \"$base/$f.sha256sum\"; (cd /tmp && sha256sum -c \"$f.sha256sum\"); tar -xzf \"/tmp/$f\" -C \"$HOME/.local/bin\" just; just --version"
+    ]
+  },
+
+  // Put the user-local tool bin on PATH. This appends the container's own PATH;
+  // it does not forward any host variable.
+  "containerEnv": {
+    "PATH": "${containerEnv:PATH}:/home/vscode/.local/bin"
+  },
+
+  // Least-privilege runtime hardening, applied at container create time. Raise
+  // or lower the resource ceilings to fit the workload (they are tunable):
+  // --memory limits RAM, --cpus limits CPU, --pids-limit caps process count.
+  // Disk is NOT bounded here and untrusted code can fill host disk through the
+  // workspace bind mount (residual risk).
+  //
+  // Optional stricter mode: add "--network=none" as a trailing element when the
+  // workload needs no network. It blocks installs, git fetch, and gh, so install
+  // dependencies first. It does not hide the injected credential channels.
+  "runArgs": [
+    "--init",
+    "--cap-drop=ALL",
+    "--security-opt=no-new-privileges:true",
+    "--pids-limit=2048",
+    "--memory=8g",
+    "--cpus=4"
+  ],
+
+  // Source persists through a host bind mount so edits survive rebuilds. Residual:
+  // the host directory is shared read-write, so untrusted code can plant files the
+  // host later executes and can fill host disk. Swap in the named-volume pair in
+  // the commented block below to close that channel at the cost of host visibility.
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  // "workspaceMount": "source=devcontainer-ws-${devcontainerId},target=/workspaces/app,type=volume",
+  // "workspaceFolder": "/workspaces/app",
+
+  // Per-instance scratch volumes, unique per dev container and stable across
+  // rebuilds. Remove them between untrusted runs so persisted temp does not carry
+  // state across runs.
+  "mounts": [
+    "source=devcontainer-tmp-${devcontainerId},target=/tmp,type=volume",
+    "source=devcontainer-vartmp-${devcontainerId},target=/var/tmp,type=volume"
+  ],
+  // Port auto-forwarding is ON but not silent: a port untrusted code opens is
+  // surfaced to the human (`notify`) rather than auto-opened, so a listener is
+  // not published unattended. Avoid openBrowser/openBrowserOnce for hostile code.
+  "otherPortsAttributes": {
+    "onAutoForward": "notify"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "EditorConfig.EditorConfig",
+        "eamodio.gitlens",
+        "esbenp.prettier-vscode",
+        "streetsidesoftware.code-spell-checker"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.profiles.linux": {
+          "zsh": {
+            "path": "/bin/zsh"
+          }
+        },
+        // VS Code-specific alias for the spec-level port policy above.
+        "remote.autoForwardPorts": true
+      }
+    }
+  }
+}

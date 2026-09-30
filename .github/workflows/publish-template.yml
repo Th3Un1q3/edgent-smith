@@ -1,0 +1,45 @@
+name: Publish Dev Container Template
+
+# Publishes the Template collection under ./templates as OCI artifacts to GHCR.
+# Versioning: the OCI tag comes from the "version" field in each
+# templates/<id>/devcontainer-template.json. Publishing skips an exact version
+# that is already published, so bump that version to publish a new immutable
+# version; the moving major/minor tags (and the collection :latest) are
+# republished in line with semver.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "templates/**"
+      - ".github/workflows/publish-template.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: read the repo for checkout, write OCI artifacts to GHCR.
+# GITHUB_TOKEN is the registry credential; no PAT or docker/login-action step.
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish-template:
+    name: Publish Template to GHCR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Publish Dev Container Template
+        uses: devcontainers/action@v1
+        with:
+          publish-templates: "true"
+          base-path-to-templates: "./templates"
+          oci-registry-for-templates: "ghcr.io"
+          # Templates-specific namespace: keeps the collection index from
+          # colliding with the repo image at ghcr.io/<owner>/edgent-smith.
+          templates-namespace: "${{ github.repository_owner }}/edgent-smith-templates"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
