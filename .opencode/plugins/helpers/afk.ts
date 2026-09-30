@@ -56,10 +56,7 @@ const stripQuotes = (value: string): string => {
   const trimmed = value.trim()
   const first = trimmed[0]
   const last = trimmed.at(-1)
-  if (first === last && trimmed.length >= 2 && (first === '"' || first === '\'')) {
-    return trimmed.slice(1, -1).trim()
-  }
-  return trimmed
+  return first === last && trimmed.length >= 2 && (first === '"' || first === '\'') ? trimmed.slice(1, -1).trim() : trimmed
 }
 
 /**
@@ -70,9 +67,7 @@ const stripWrapper = (command: string): string | undefined => {
   if (wrapper && WRAPPER_TOKENS.has(wrapper[1])) return command.slice(wrapper[0].length).trim()
 
   const environment = command.match(ENV_ASSIGNMENT)
-  if (environment) return command.slice(environment[0].length).trim()
-
-  return undefined
+  return environment ? command.slice(environment[0].length).trim() : undefined
 }
 
 /**
@@ -86,9 +81,7 @@ const unwrapIndirection = (command: string): string | undefined => {
   if (backtick) return backtick[1].trim()
 
   const substitution = command.match(WHOLE_SUBSTITUTION)
-  if (substitution) return substitution[1].trim()
-
-  return undefined
+  return substitution ? substitution[1].trim() : undefined
 }
 
 /**

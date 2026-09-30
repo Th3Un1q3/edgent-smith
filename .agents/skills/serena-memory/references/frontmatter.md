@@ -40,7 +40,7 @@ No other keys belong in frontmatter; the body holds remaining content.
 
 ## Which Memories Carry FM
 
-Typed scopes (profile/*, preferences/*, entities/*, events/*, cases/*, trajectories/*, experiences/*, claims/*) require Typed FM + L0. architecture/adr/* uses ADR FM. */about uses About FM + L0_table. overview/* and index/* are derived. cache/* uses the limited header only. researches/* synthesis, serena/*, browser-automation/*, private/*, tooling/* stay untyped until promoted; on promotion add Typed FM.
+Typed scopes (profile/\*, preferences/\*, entities/\*, events/\*, cases/\*, trajectories/\*, experiences/\*, claims/\*) require Typed FM + L0. architecture/adr/\* uses ADR FM. \*/about uses About FM + L0_table. overview/\* and index/\* are derived. cache/\* uses the limited header only. researches/\* synthesis, serena/\*, browser-automation/\*, private/\*, tooling/\* stay untyped until promoted; on promotion add Typed FM.
 
 ## FM vs Inferred
 

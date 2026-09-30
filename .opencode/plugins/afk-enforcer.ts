@@ -36,14 +36,14 @@ const readPermissionAsked = (event: Event): PermissionAskedProperties | undefine
   if (candidate.type !== 'permission.asked') return undefined
 
   const { id, sessionID, permission, patterns } = candidate.properties ?? {}
-  if (typeof id !== 'string' || typeof sessionID !== 'string') return undefined
-
-  return {
-    id,
-    sessionID,
-    permission: typeof permission === 'string' ? permission : '',
-    patterns: Array.isArray(patterns) ? patterns : [],
-  }
+  return typeof id !== 'string' || typeof sessionID !== 'string'
+    ? undefined
+    : {
+        id,
+        sessionID,
+        permission: typeof permission === 'string' ? permission : '',
+        patterns: Array.isArray(patterns) ? patterns : [],
+      }
 }
 
 export const afkEnforcer: Plugin = async ({ client, directory }, options?) => {

@@ -41,6 +41,26 @@ fi
 
 # Install dsh (DeepSeek Harness CLI) - pinned rc, allow-scripts whitelist for native deps (node-pty, koffi, dsh-subprocess-local)
 export PATH="$(npm prefix -g)/bin:$PATH"
+
+# Install opencode (pinned) from the npm registry. The removed
+# devcontainers-extra opencode Feature resolved the sst/opencode release through
+# the unauthenticated GitHub REST API at image-build time, which returned
+# HTTP 403 (rate limit exceeded) on shared CI runner IPs and failed the whole
+# image build. The npm package ships the platform binary as an optional
+# dependency, so this path only contacts registry.npmjs.org. The allow-scripts
+# entry is required: npm here defaults allow-scripts to an empty list, so the
+# package's postinstall (which places the binary) would otherwise be blocked.
+OPENCODE_VERSION="1.18.32"
+if ! command -v opencode &> /dev/null || [[ "$(opencode --version 2>/dev/null | head -n1)" != "$OPENCODE_VERSION" ]]; then
+  echo "Installing opencode v${OPENCODE_VERSION} (npm registry)..."
+  npm install -g --allow-scripts=opencode-ai "opencode-ai@${OPENCODE_VERSION}" || echo "WARNING: opencode install failed"
+fi
+# npm's global bin is on PATH only for login shells; ~/.opencode/bin is set in
+# containerEnv PATH, so link the binary there for non-interactive runs (CI).
+if command -v opencode &> /dev/null; then
+  mkdir -p /home/vscode/.opencode/bin
+  ln -sf "$(command -v opencode)" /home/vscode/.opencode/bin/opencode
+fi
 # ~/.dsh is the dsh_persistent named volume, with cordis.patch.yml, README.md
 # and agent-presets/ bind-mounted on top from the repo (see docker-compose.yml).
 # A fresh volume is root-owned, so dsh could not create sessions/ or storages/

@@ -288,10 +288,7 @@ const fitBoundedError = (
   cap: number,
 ): string | WorkflowEnvelope => {
   const bounded = withBoundedError(envelope, cap)
-  if (bounded === undefined) {
-    return envelope
-  }
-  return serializeIfFits(bounded, cap) ?? bounded
+  return bounded === undefined ? envelope : serializeIfFits(bounded, cap) ?? bounded
 }
 
 // Linear size-fitting: keep the full envelope when it fits, drop logs, bound an

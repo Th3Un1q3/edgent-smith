@@ -16,9 +16,6 @@
     "ghcr.io/jsburckhardt/devcontainer-features/just:1": {},
     "ghcr.io/devcontainers-extra/features/bun:1": {
       "version": "1.4.2"
-    },
-    "ghcr.io/devcontainers-extra/features/opencode:1": {
-      "version": "1.18.32"
     }
   },
   "customizations": {
