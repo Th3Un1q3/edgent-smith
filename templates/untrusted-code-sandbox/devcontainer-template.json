@@ -1,8 +1,8 @@
 {
   "id": "untrusted-code-sandbox",
-  "version": "1.0.0",
+  "version": "1.0.7",
   "name": "Untrusted Code Sandbox",
-  "description": "Hardened single-container Dev Container for running untrusted code: non-root vscode user, all Linux capabilities dropped, no-new-privileges, no host Docker/SSH/GPG socket, no credential or host config mount, no host environment passthrough.",
+  "description": "Single-container Dev Container for running untrusted code: proven multi-arch Microsoft base image, pinned-feature toolchain, named volumes for opencode data/state and /tmp, non-root vscode user, and a permission-fixing post-create script. No Dockerfile, no host Docker/SSH/GPG socket, no credential or host config mount, no host environment passthrough.",
   "documentationURL": "https://github.com/th3un1q3/edgent-smith/tree/main/templates/untrusted-code-sandbox",
   "platforms": ["Any"]
 }
