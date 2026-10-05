@@ -22,7 +22,7 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directory: "/.opencode"
     schedule:
       interval: "weekly"
@@ -60,7 +60,7 @@ updates:
       - dependency-name: "@vitest/coverage-istanbul"
         versions: [">=5"]
 
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directory: "/docs"
     schedule:
       interval: "weekly"

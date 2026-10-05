@@ -42,24 +42,39 @@ fi
 # Install dsh (DeepSeek Harness CLI) - pinned rc, allow-scripts whitelist for native deps (node-pty, koffi, dsh-subprocess-local)
 export PATH="$(npm prefix -g)/bin:$PATH"
 
-# Install opencode (pinned) from the npm registry. The removed
-# devcontainers-extra opencode Feature resolved the sst/opencode release through
-# the unauthenticated GitHub REST API at image-build time, which returned
-# HTTP 403 (rate limit exceeded) on shared CI runner IPs and failed the whole
-# image build. The npm package ships the platform binary as an optional
-# dependency, so this path only contacts registry.npmjs.org. The allow-scripts
-# entry is required: npm here defaults allow-scripts to an empty list, so the
-# package's postinstall (which places the binary) would otherwise be blocked.
-OPENCODE_VERSION="1.18.32"
-if ! command -v opencode &> /dev/null || [[ "$(opencode --version 2>/dev/null | head -n1)" != "$OPENCODE_VERSION" ]]; then
-  echo "Installing opencode v${OPENCODE_VERSION} (npm registry)..."
-  npm install -g --allow-scripts=opencode-ai "opencode-ai@${OPENCODE_VERSION}" || echo "WARNING: opencode install failed"
-fi
-# npm's global bin is on PATH only for login shells; ~/.opencode/bin is set in
-# containerEnv PATH, so link the binary there for non-interactive runs (CI).
-if command -v opencode &> /dev/null; then
-  mkdir -p /home/vscode/.opencode/bin
-  ln -sf "$(command -v opencode)" /home/vscode/.opencode/bin/opencode
+# Install opencode via the official v2 installer (https://opencode.ai/v2/install).
+# VERSION is intentionally left unset: the installer resolves the latest release
+# when it is empty, so this always installs the newest version. The installer
+# is non-interactive (no prompts, no TTY, no rc-file edits) and places the
+# binary in $HOME/.opencode/bin, which devcontainer.json already puts on PATH.
+# The guard is missing-only: re-running the script must not re-invoke the
+# installer.
+export HOME="${HOME:-/home/vscode}"
+if command -v opencode &> /dev/null || [[ -x "$HOME/.opencode/bin/opencode" ]]; then
+  echo "opencode already present, skipping install"
+else
+  if command -v curl &> /dev/null && command -v tar &> /dev/null && command -v bash &> /dev/null; then
+    if curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 15 https://opencode.ai/v2/install | bash; then
+      # The installer does not modify PATH. If opencode is still not
+      # resolvable, link the installed binary into the PATH directory
+      # devcontainer.json sets.
+      if ! command -v opencode &> /dev/null && [[ -x "$HOME/.opencode/bin/opencode" ]]; then
+        mkdir -p /home/vscode/.opencode/bin
+        if [[ ! -e /home/vscode/.opencode/bin/opencode ]]; then
+          ln -sf "$HOME/.opencode/bin/opencode" /home/vscode/.opencode/bin/opencode
+        fi
+      fi
+      if command -v opencode &> /dev/null; then
+        echo "opencode $(opencode --version 2>/dev/null | head -n1)"
+      else
+        echo "ERROR: opencode not found after install" >&2
+      fi
+    else
+      echo "WARNING: opencode install failed"
+    fi
+  else
+    echo "WARNING: curl, tar, or bash missing; skipping opencode install"
+  fi
 fi
 # ~/.dsh is the dsh_persistent named volume, with cordis.patch.yml, README.md
 # and agent-presets/ bind-mounted on top from the repo (see docker-compose.yml).
