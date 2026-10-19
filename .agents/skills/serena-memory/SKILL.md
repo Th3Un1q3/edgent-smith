@@ -5,8 +5,8 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.4.7"
-  delta: "1.4.7 — consolidated the gateway guard into one intra-skill reference (references/gateway-protocol.md: 2 KB snapshot, empty-return predicate, zero-retry bash cat fallback, list_memories -> read_memory return ritual) and pointed SKILL.md, disclosure.md, gating.md, store-memory.md, recall-memory.md, and frontmatter.md at it; trimmed frontmatter.md from 230 to 107 lines and de-duplicated the Q1/Q2/Q3 snippets into recall-memory.md."
+  version: "1.4.10"
+  delta: "1.4.10 — replaced the When-Not-to-Use store enumeration with an AGENTS.md STORAGE SELECTION pointer; 1.4.9 — reduced the promote-rather-than-duplicate principle to a pointer at AGENTS.md STORAGE SELECTION, so the one-authoritative-copy rule has one home; 1.4.8 — fenced memory to durable, provenance-bearing knowledge: added a When-Not-to-Use bullet routing scratch and deliverables to .tmp/ or a repository file, and a Principles bullet requiring promotion over duplication; 1.4.7 — consolidated the gateway guard into one intra-skill reference (references/gateway-protocol.md: 2 KB snapshot, empty-return predicate, zero-retry bash cat fallback, list_memories -> read_memory return ritual) and pointed SKILL.md, disclosure.md, gating.md, store-memory.md, recall-memory.md, and frontmatter.md at it; trimmed frontmatter.md from 230 to 107 lines and de-duplicated the Q1/Q2/Q3 snippets into recall-memory.md."
   author: Th3Un1qu3
 ---
 
@@ -25,7 +25,8 @@ Invoke this skill when:
 ## When Not to Use This Skill
 
 Do not use this skill for:
-- Transient research, external fetch, or synthesis without persistence — Call context-gathering via Skill tool on context-gathering/SKILL.md first; return here only to persist via typed store
+- Transient or unverified research, external fetch, or synthesis without persistence — Call context-gathering via Skill tool on context-gathering/SKILL.md first; unverified findings stay out of memory, and return here only to persist verified ones via typed store
+- Not for scratch or deliverables - route per AGENTS.md STORAGE SELECTION.
 - Pure codebase edits with no memory persistence
 - One-off file reads that do not require recall or storage
 
@@ -40,6 +41,7 @@ Gateway pre-flight (MANDATORY):
 
 - **Route every memory through gateway:** chain gateway_mcp-find → gateway_code-mode → gateway_mcp-exec; never read .serena/memories directly.
 - **Type every memory before gating:** assign one of 9 typed scopes via references/typing.md before you gate.
+- **Promote rather than duplicate:** follow AGENTS.md STORAGE SELECTION for what to keep, where, and which copy is authoritative.
 - **Apply disclosure budgets before gating:** load L0 256c / L1 4000c / 700c excerpt via references/disclosure.md; Disclosed check verifies quoted L0.
 - **Gate every write with 9 checks:** run blocking gate in references/gating.md; stop when any check fails; declare complete only after gate passes (all three scripts exit 0) — `validate_memory_frontmatter`, `validate_md_links`, `audit_fences` via `agent_utils/scripts` or `just agent_utils::validate-memories`.
 - **Verify staleness before consolidating:** check confidence, hotness, and claim status via references/claims.md and references/lifecycle.md; merge only with human trigger.

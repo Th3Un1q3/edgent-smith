@@ -188,11 +188,24 @@ The system is architected around high-centrality components in the following mod
 - Never invent environment capabilities. State what a harness can do only when a repo file shows it; otherwise state the outcome plus a generic fallback. This document shows only OpenCode and DSH loading skills - never claim skill support for GitHub Copilot, Conductor, or System A.
 - Use canonical harness names: OpenCode, DSH (DeepSeek Harness), GitHub Copilot, Conductor. 'RUG' qualifies an orchestration pattern (OpenCode RUG, DSH RUG (Cordis)), not a harness. No composite or invented variants ('Copilot Agents', 'DSH/Cordis RUG'). System A is a harness-free runtime, never a harness.
 
-## WORKING MEMORY
+## STORAGE SELECTION
 
-When you need to store a temporary state for a task that has not explicitly declared the storage place here is priority order for working memory:
-- via memory - follow serena-memory skill to find the correct namespace.
-- in .tmp/ (local ephemeral storage) directory - absolute path is /workspace/.tmp/; do not use /tmp/ or /var/tmp/ as they are not guaranteed to be writable in all harnesses.
+Choose the store by who needs it next, before writing:
+
+- **Repository file** - the artifact itself: code, tests, configs, docs, schemas. It ships, runs, or is reviewed.
+- **Serena memory** - durable knowledge with provenance: decisions and rationale, verified research, conventions, lessons. It is found and cited later.
+- **`/workspace/.tmp/`** - disposable scratch: drafts, intermediates, regenerable output. Losing it is harmless.
+
+Ordered test, first match wins:
+
+1. Is it the thing itself - shipped, run, reviewed, or versioned? -> repository file.
+2. Will someone need the reasoning, evidence, or decision later? -> memory.
+3. Otherwise -> `.tmp/`; delete it when done.
+4. Must it survive the session but fits none above? -> memory, as knowledge rather than an artifact.
+
+Promote before calling the work done. A `.tmp/` path in a hand-off, commit, or deliverable is a defect; hand off a repository path or a `mem:` reference. When artifact and rationale both matter, the artifact is the file and the rationale is a memory entry linking it - never two authoritative copies.
+
+An explicit repository convention overrides these defaults; nothing else does. The `.tmp/` absolute path is `/workspace/.tmp/`; do not use `/tmp/` or `/var/tmp/`, which are not guaranteed to be writable in all harnesses.
 
 ## VALIDATION
 

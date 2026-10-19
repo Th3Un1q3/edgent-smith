@@ -1,7 +1,7 @@
 ---
 id: ADR-008
 title: Minimal Goal Continuation (v0) Without a Todo Field
-status: proposed
+status: accepted
 date: 2026-10-07
 scope: OpenCode v2 harness — task-continuation enforcement for primary rug sessions
 ---

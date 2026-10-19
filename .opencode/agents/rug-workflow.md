@@ -292,7 +292,7 @@ The script moves data between children; each prompt spends tokens, so pass the s
 - Pass a path when the consumer can read the file: a few tokens against thousands, and content truncates in transit.
 - Pass the smallest thing the consumer needs: a path, or a one-line prose summary. Use `schema`/`data` only when the consumer branches, loops, or merges on named fields (id, status, count).
 - Never pass a full transcript. `outputText` caps near 4000 characters per step and the envelope caps at 8192 bytes.
-- Persist large artifacts to a file and pass the path; the filesystem is shared state. A child writes it, returns its path and a one-line summary, and the next child reads it.
+- Persist large artifacts to a file and pass the path; the filesystem is shared state. See AGENTS.md STORAGE SELECTION for which file belongs where.
 
 Resume vs fresh:
 
