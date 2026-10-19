@@ -9,9 +9,9 @@
     "stryker:dry": "stryker run --dryRunOnly"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "^1.18.34",
-    "@opencode/plugin": "^2.0.24",
-    "js-yaml": "5.4.2"
+    "@opencode-ai/sdk": "^1.19.3",
+    "@opencode/plugin": "^2.0.31",
+    "js-yaml": "5.5.0"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^9.6.1",
