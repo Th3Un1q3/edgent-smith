@@ -87,4 +87,4 @@ The gate is an exit code, not prose:
 
 ## Notes
 
-- Plugin changes load at opencode server start (see [passive-hooks.md](./passive-hooks.md)); unit tests cannot prove live hook wiring. After editing this workflow or `harness-verify.instructions.md`, request an opencode restart. DSH harness files (`.dsh/**`) need no opencode restart — DSH picks them up at the next DSH session (see the root `SKILL.md`).
+- OpenCode v2 hot-reloads plugin changes (see [passive-hooks.md](./passive-hooks.md)); unit tests cannot prove live hook wiring. Restart only for unwatched local plugin dependencies. After editing this workflow or `harness-verify.instructions.md`, no manual restart is needed. DSH harness files (`.dsh/**`) need no opencode restart — DSH picks them up at the next DSH session (see the root `SKILL.md`).

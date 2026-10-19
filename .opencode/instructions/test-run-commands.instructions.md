@@ -14,14 +14,14 @@ Use `just` targets instead of raw runners. Plugin recipes run from `.opencode/`:
 ```bash
 just test
 just test --coverage
-just test -- plugins/tests/skills-loader.test.ts
+just test -- plugins/tests/tool-limit-reminder.test.ts
 just lint
 just typecheck
 
 # Run entire mutation test suite - has a long runtime, so only run for final verification before release
 just mutation
 # Run mutation tests to ensure the plugin is well tested
-just mutation --mutate plugins/todo-enforcer.ts
+just mutation --mutate plugins/tool-limit-reminder.ts
 ```
 
 NEVER call underlying implementation commands directly (eg. `pytest`, `npm test`, `vitest`, `bun`, `tsc`) — always use the above commands to ensure that the plugin is tested, linted, and typechecked in the same way as it will be in production.

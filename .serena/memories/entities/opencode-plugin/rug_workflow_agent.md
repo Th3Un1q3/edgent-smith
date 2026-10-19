@@ -25,6 +25,6 @@ Delegated to the FIRST in-script subtask with structured output, which returns a
 - Call workflow once per PHASE (not per goal, not per subtask).
 - Read the envelope status/stats/steps[]; step status is the real signal.
 - Validation is always a fresh-session subtask.
-- Agents load only at server restart.
+- Agent changes: OpenCode v2 hot-reloads automatically; no manual restart required (agent reload is not explicitly documented in v2 docs).
 
 Source: operator-verified live session 2026-09-21. See claims/opencode/sdk_subagent_spawn, cases/opencode/workflow_producer_unverified_tree, architecture/adr/ADR-003-tag-delimited-structured-output.

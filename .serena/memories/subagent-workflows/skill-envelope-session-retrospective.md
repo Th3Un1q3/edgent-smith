@@ -5,7 +5,7 @@ Process lessons from building the skills-loader envelope mechanism through a RUG
 ## When building plugin mechanisms, do differently next time
 
 - Clarify design constraints UP FRONT: storage scope (in-memory vs disk-backed), tag genericity (generic vs skill-specific), and documentation placement (AGENTS.md vs memory-only). Under-specified requirements caused repeated implement, validate, operator-correct iterations. Operator decisions that ended the churn: in-memory store (short-lived between two same-process hooks), generic `<envelope>` tag, memory-only docs (AGENTS.md must not contain emergent behaviors).
-- Live-verify hook wiring: mandatory, cannot be replaced by unit tests. The pipeline final live step caught a bug all unit tests missed. Restart-to-apply keeps plugin verification operator-in-the-loop.
+- Live-verify hook wiring: mandatory, cannot be replaced by unit tests. The pipeline final live step caught a bug all unit tests missed. OpenCode v2 hot-reloads plugin changes automatically (no manual restart required), but live verification still keeps the operator in the loop.
 - When testing a detection mechanism, either keep the stimulus free of the detected strings or make the mechanism robust to such prose: the live test prompt itself contained tag-shaped examples and defeated loose substring detection. Precise UUID-shaped id detection is the robust fix (mem:troubleshooting/opencode-plugin-live-diagnosis).
 
 ## What worked

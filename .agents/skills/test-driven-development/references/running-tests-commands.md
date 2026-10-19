@@ -7,14 +7,14 @@ Use `just` targets, never raw runners.
 ```bash
 just test
 just test --coverage
-just test -- plugins/tests/skills-loader.test.ts
+just test -- plugins/tests/tool-limit-reminder.test.ts
 just lint
 just typecheck
 
 # Whole mutation suite — long runtime, run only for final verification before release
 just mutation
 # Mutation scoped to one plugin file, to confirm that file is well tested
-just mutation --mutate plugins/todo-enforcer.ts
+just mutation --mutate plugins/tool-limit-reminder.ts
 ```
 
 Never call the underlying tools directly (`pytest`, `npm test`, `vitest`, `bun`, `tsc`). The `just` targets run tests, lint, and typecheck the same way production does.

@@ -34,7 +34,6 @@ Use this change type when:
 - Confirm the section headings match sibling instruction files in `.opencode/instructions/`.
 - Confirm every path and command cited exists on disk.
 
-## Apply and Restart
+## Apply
 
-- The instructions-loader reads instruction files at server start.
-- Ask for an opencode restart to apply the new instruction.
+- OpenCode v2 hot-reloads instruction files; no manual restart needed.

@@ -6,8 +6,8 @@ Diagnosis and root-causing knowledge: opencode plugin runtime failures (live-vs-
 
 - Diagnosing opencode plugin live failures: runtime-log correlation, log location and format, hook-level evidence (a typed hook is a contract, not a guarantee).
 - Robust detection patterns: precise token shapes (UUID-v4 ids, full self-closing tags) over substring matching.
-- Plugin runtime gotchas: restart-to-apply for plugin changes, per-plugin log attribution.
-- Session-review subdomain (`session-review/`): session_parts.py CLI resilience gotchas and opencode restart-verification status.
+- Plugin runtime gotchas: OpenCode v2 hot-reloads plugin/instruction changes automatically (no manual restart required), per-plugin log attribution.
+- Session-review subdomain (`session-review/`): session_parts.py CLI resilience gotchas and opencode live-verification status.
 
 - Web/frontend gotchas and no-build static-HTML visualization recipes (subdomain `web/`): script-tag JSON embedding escapes, standalone graph rendering.
 

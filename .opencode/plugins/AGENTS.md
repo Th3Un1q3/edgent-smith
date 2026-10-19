@@ -4,13 +4,13 @@
 
 | Path | Purpose | Naming Convention |
 |------|---------|-------------------|
-| `*.ts` (root) | Plugin entry points only | PascalCase or kebab-case plugins (`harness-plugin.ts`, `session-tracker.ts`) |
+| `*.ts` (root) | Plugin entry points only | PascalCase or kebab-case plugins (`harness-plugin.ts`, `goal-continuation.ts`) |
 | `helpers/*.ts` | Shared utility modules, helpers, and discovery logic | camelCase filenames representing their domain (`kv-store.ts`, `logger.ts`, `file-discovery.ts`) |
 | `AGENTS.md` | Discoverable instruction file matched by the `**/AGENTS.md` glob | Must be capitalized — lowercase `agents.md` is not discovered |
 | `helpers/` | Shared plugin utilities (logging, KV store, session helpers) | camelCase filenames representing their domain |
 | `types/` | TypeScript type definitions shared across modules | Descriptive singular or plural names (`instructions.ts`) |
 | `sessions/` | Runtime JSON state files (1000+ files, auto-generated), contains plugin metadata, not actual sessions. | Pattern: `ses_<timestamp>_<random>.json` — do not create manually |
-| `tests/` | Unit and integration tests for the plugin | Structure and file names map 1:1 to source files. eg. source file `todo-enforcer.ts` -> test file `tests/todo-enforcer.test.ts`. Same naming and folder structure with `tests/` directory and `.test.ts` suffix |
+| `tests/` | Unit and integration tests for the plugin | Structure and file names map 1:1 to source files. eg. source file `tool-limit-reminder.ts` -> test file `tests/tool-limit-reminder.test.ts`. Same naming and folder structure with `tests/` directory and `.test.ts` suffix |
 
 ### Quality Gates
 

@@ -12,12 +12,6 @@ sudo chown -R $(id -u):$(id -g) /home/vscode/.local/
 # Ensure opencode bin directory is in PATH for this script
 export PATH="/home/vscode/.opencode/bin:$PATH"
 
-if ! command -v rtk &> /dev/null; then
-  echo "Installing rtk..."
-  curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh || echo "WARNING: rtk install failed"
-  echo "" | RTK_TELEMETRY_DISABLED=1 rtk init -g --opencode 2>/dev/null || true
-fi
-
 # Install codegraph cli(required for MCP)
 
 # curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh

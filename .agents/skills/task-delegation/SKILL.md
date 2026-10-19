@@ -43,7 +43,7 @@ Teaches the RUG (Repeat Until Good) orchestrator pattern for decomposing user re
 3. If no workflow exists, decompose the user request into discrete tasks.
 4. For each task identify skills that are relevant to the task that are best suited to complete it.
 5. Use the `task` tool to delegate each task to the appropriate subagent, providing clear instructions, acceptance criteria, and any necessary context.
-6. Use the `todowrite` tool to track progress and ensure that each subagent completes their task successfully.
+6. Track progress against the task list and confirm that each subagent completes its task successfully.
 7. Use the `question` tool to ask for clarification or additional information from the user as needed.
 8. Validate the results of each subagent's work independently, and iterate until the overall task is completed successfully.
 

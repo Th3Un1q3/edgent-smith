@@ -45,12 +45,12 @@ Prioritize the action items per the harness-management skill's Prioritization po
 
 Record the items in `$FILE`.
 
-## Step 4: Implement and restart
+## Step 4: Implement
 
 Implement the top 1–3 action items using the harness-management skill:
 
-Load the harness-management skill by name using your `skill` tool, then follow its Change Type Reference and matching workflow. Ask for an opencode restart after implementing.
+Load the harness-management skill by name using your `skill` tool, then follow its Change Type Reference and matching workflow.
 
 Select the change type (scoped instructions, skill, `AGENTS.md`, or agent definition), read the matching workflow, and execute the changes.
 
-Then ask for an opencode restart to apply them. Recall the project lesson in memory `troubleshooting/opencode-plugin-live-diagnosis`: plugin and instruction changes load at server start, and unit tests cannot prove live hook wiring — the changes take effect only after an opencode restart.
+OpenCode v2 hot-reloads plugins, instructions, commands, and config automatically — no manual restart is required (restart only for unwatched local plugin dependencies or nested instruction edits). Recall the project lesson in memory `troubleshooting/opencode-plugin-live-diagnosis`: unit tests cannot prove live hook wiring.

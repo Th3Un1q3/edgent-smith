@@ -22,10 +22,25 @@ declare module "bun" {
         scan(options?: { cwd?: string; dot?: boolean; absolute?: boolean }): AsyncIterable<string>
     }
 
+    interface ShellOutput {
+        exitCode: number
+        stdout: string
+        stderr: string
+        text(): Promise<string>
+        json(): Promise<unknown>
+    }
+
+    interface ShellPromise extends Promise<ShellOutput> {
+        nothrow(): ShellPromise
+        quiet(): ShellPromise
+    }
+
+    function $(strings: TemplateStringsArray, ...values: unknown[]): ShellPromise
+
     const BunGlobal: any
 
     export default BunGlobal
-    export { Glob, type GlobScanResult, BunFile }
+    export { $, Glob, type GlobScanResult, BunFile }
 }
 
 declare module "bun:fs" {

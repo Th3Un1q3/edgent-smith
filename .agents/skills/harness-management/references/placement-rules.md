@@ -17,7 +17,8 @@ generic homes below are fallbacks, not defaults — see Domain Match in `SKILL.m
   is rule 3, not root `AGENTS.md`; one agent's workflow is rule 2.
 - **Workflow:** [workflows/directory-agents-md.md](../workflows/directory-agents-md.md).
 - **Verify/restart:** root `AGENTS.md` is injected project-wide — edit it carefully and
-  re-read it as a fresh agent. Ask for an opencode restart so it is picked up fully.
+  re-read it as a fresh agent. OpenCode v2 detects the edit and applies it before the next
+  model request; no manual restart needed.
 
 ## 2. Permanent for one agent — `.opencode/agents/<name>.md`
 
@@ -28,7 +29,7 @@ generic homes below are fallbacks, not defaults — see Domain Match in `SKILL.m
   guidance that applies only while editing a file type is rule 3.
 - **Workflow:** [workflows/agent-definition.md](../workflows/agent-definition.md).
 - **Verify/restart:** confirm the agent loads with a real `description`, identity, and
-  permission surface. Ask for an opencode restart.
+  permission surface. OpenCode v2 hot-reloads agent files; no manual restart needed.
 
 ## 3. Applies only while editing certain files or file types — `.opencode/instructions/`
 
@@ -41,7 +42,7 @@ generic homes below are fallbacks, not defaults — see Domain Match in `SKILL.m
   a file-edit-triggered instruction; make it rule 1 or rule 2 instead.
 - **Workflow:** [workflows/scoped-instructions.md](../workflows/scoped-instructions.md).
 - **Verify/restart:** confirm the `applyTo` glob matches the intended files and no wider.
-  Ask for an opencode restart.
+  OpenCode v2 hot-reloads instruction files; no manual restart needed.
 
 ## 4. Knowledge, not behavior, about a directory and its contents — that directory's `AGENTS.md`
 
@@ -53,7 +54,8 @@ generic homes below are fallbacks, not defaults — see Domain Match in `SKILL.m
   behavior.
 - **Workflow:** [workflows/directory-agents-md.md](../workflows/directory-agents-md.md).
 - **Verify/restart:** read it as a fresh agent; confirm every path and command resolves.
-  Ask for an opencode restart.
+  OpenCode v2 applies an edited upward-discovered `AGENTS.md` before the next model request;
+  a nested `AGENTS.md` is not auto-detected after load — start a new session.
 
 ## 5. Behavior crossing several concerns, or situational but repeatable — a skill
 
@@ -65,8 +67,8 @@ generic homes below are fallbacks, not defaults — see Domain Match in `SKILL.m
   record, not a skill; a rule scoped to one file type is rule 3; one agent's behavior is
   rule 2.
 - **Workflow:** [workflows/manage-skill.md](../workflows/manage-skill.md).
-- **Verify/restart:** run the shaping gate and link/fence audits, then ask for an opencode
-  restart.
+- **Verify/restart:** run the shaping gate and link/fence audits. OpenCode v2 hot-reloads
+  skills; no manual restart needed.
 
 ## 6. A learning that cannot yet become a solid, reusable skill — a Serena memory
 

@@ -33,7 +33,6 @@ Use this change type when:
 - Run `just agent_utils::validate-skill <name>` on the skill: it checks the shaping line budgets and runs the shared `agent_utils/scripts/validate_md_links.py` and `agent_utils/scripts/audit_fences.py` validators. Fix every failure it reports.
 - Run the shaping checklist from `building-modular-skills` and fix every failing check.
 
-## Apply and Restart
+## Apply
 
-- The skills-loader plugin injects skills at server start.
-- Ask for an opencode restart so the skill loads for the next session.
+- OpenCode v2 hot-reloads skills; no manual restart needed.

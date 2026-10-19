@@ -9,4 +9,4 @@ The dev container is arm64 (OrbStack) with NO runnable Chrome. `node .agents/ski
 
 ## Harness lesson
 
-Skills/instructions/agent changes load at opencode server start — restart required after harness edits. See `mem:troubleshooting/opencode-plugin-live-diagnosis` and `mem:troubleshooting/session-review/opencode-restart-verification-status`.
+OpenCode v2 hot-reloads skills/instructions/agent changes — no manual restart required (restart only for unwatched local plugin dependencies or nested instruction edits). See `mem:troubleshooting/opencode-plugin-live-diagnosis` and `mem:cases/opencode/plugin_hot_reload_safe_development`.

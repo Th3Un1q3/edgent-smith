@@ -1,573 +1,774 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { Cause, Effect, Exit, Fiber, Logger, Option, Queue, Stream } from 'effect'
 
-import type { PluginInput } from '@opencode-ai/plugin'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Synchronous mock factories — no dynamic imports to avoid circular dependency issues.
-import { defaultCreateClient, makeLoggerMockFactory, makeSessionHelpersMockFactory } from '@tests/helpers/mock-utilities'
+import type { Context } from '@opencode/plugin/effect/plugin'
 
-import type { ClientMock } from '@tests/helpers/mock-utilities'
+import { Tool } from '@opencode/schema/tool'
 
-import { makeKvStoreMockFactory, resetMockState } from '@tests/__utils/kv-store.mock'
+/**
+ * tool-limit-reminder — OpenCode v2 Effect plugin (three-tier tool-call gate).
+ *
+ * Pinned contract (storage is keyed per session):
+ *   review/<sessionID> -> { problems: ProblemStatement[] }   // durable
+ *   metadata.needsReview on the session                      // durable, native
+ * Counters, the budget cache and the prompt-tag guard are in-memory and per-turn.
+ *
+ * Gate semantics (T = limits[agent] ?? floor(steps * factor), P = padding). The
+ * pre-increment attempt count in `execute.before` drives all three tiers:
+ *   current === T         -> reminder synthetic
+ *   T < current <= T + P  -> needsReview + one deduped problem + review synthetic
+ *   current > T + P       -> `execute.before` fails with Tool.Error(BLOCK_TEXT)
+ * `callsCompleted` (`execute.after`, status completed) is the problem `actual`.
+ */
 
-vi.mock('@plugins/helpers/logger', () => makeLoggerMockFactory())
-vi.mock('@plugins/helpers/kv-store', () => makeKvStoreMockFactory())
-vi.mock('@plugins/helpers/session-helpers', () => makeSessionHelpersMockFactory())
+const BLOCK_TEXT
+  = 'Error calling tools. Reason: tools are blocked. STOP YOUR WORK. DON\'T change, read, write files, execute commands in this session. Follow the instructions in the previous message to summarize your work and stop.'
+
+const REMINDER_TEXT = 'tool call limit reached'
+const REVIEW_TEXT = 'tool call limit exceeded'
+
+// Config is read at plugin-registration time; mutate this hoisted object before
+// `register()` to steer the gate per scenario. The getter keeps the
+// "missing section" fallback case reachable from a mocked module.
+const tlrConfig = vi.hoisted(() => ({
+  present: true,
+  factor: 0.8,
+  padding: 2,
+  limits: {} as Record<string, number>,
+  ignoreTools: ['goal'],
+  review: { export: true, command: 'just agent_utils/export-opencode-session', writeMarkdown: true },
+}))
+
+// The export shell. `$` is a plain function (not a `vi.fn`) so `mockReset`
+// cannot strip its implementation; calls are recorded in hoisted state.
+const shell = vi.hoisted(() => ({ exitCode: 0, commands: [] as string[] }))
+
+vi.mock('@plugins/config/harness.config', () => ({
+  harnessConfig: {
+    plugins: {
+      get 'tool-limit-reminder'() {
+        return tlrConfig.present
+          ? {
+              factor: tlrConfig.factor,
+              padding: tlrConfig.padding,
+              limits: tlrConfig.limits,
+              ignoreTools: tlrConfig.ignoreTools,
+              review: tlrConfig.review,
+            }
+          : undefined
+      },
+    },
+  },
+}))
+
+// `bun` is aliased to the repo shim (no `$`); this mock supplies the export shell.
+vi.mock('bun', () => ({
+  $: (strings: TemplateStringsArray) => {
+    shell.commands.push(String(strings))
+
+    const promise = Promise.resolve({ exitCode: shell.exitCode, stdout: '', stderr: '' })
+    const shellPromise = promise as typeof promise & { nothrow: () => unknown, quiet: () => unknown }
+
+    shellPromise.nothrow = () => promise
+    shellPromise.quiet = () => promise
+    return promise
+  },
+}))
+
+// Real writes must never reach `.tmp/session-review` during tests.
 vi.mock('node:fs/promises', () => ({ mkdir: vi.fn(), writeFile: vi.fn() }))
-
-import { toolLimitReminder } from '@plugins/tool-limit-reminder'
-
-import { log } from '@plugins/helpers/logger'
-
-import { sendMessage } from '@plugins/helpers/session-helpers'
-
-import { SessionStorage } from '@plugins/helpers/kv-store'
-
-import { readProblems, agentProblemStatement, skillProblemStatement } from '@plugins/helpers/review'
 
 import { writeFile } from 'node:fs/promises'
 
-const logMock = vi.mocked(log)
+import plugin from '@plugins/tool-limit-reminder'
 
-const sendMessageMock = vi.mocked(sendMessage)
+type Event = { type: string } & Record<string, unknown>
 
-// ── Types ────────────────────────────────────────────────────────
-// Looser than the SDK Hooks type: runtime handlers accept optional fields
-// (e.g. missing sessionID) that the SDK types require.
+type Hook = (event: unknown) => Effect.Effect<unknown, unknown>
 
-interface ChatPart {
-  id: string
-  sessionID: string
-  messageID: string
-  type: string
-  text: string
-  synthetic?: boolean
-}
-
-interface ChatMessageOutput {
-  message: { role: string, content: string }
-  parts: ChatPart[]
-}
-
-interface ToolLimitReminderHooks {
-  'tool.execute.before': (input: { sessionID?: string, tool?: string }) => void | Promise<void>
-  'chat.message': (input: { sessionID?: string, agent?: string, messageID?: string }, output: ChatMessageOutput) => void | Promise<void>
-  'event': (input: { event: { type: string, properties?: Record<string, unknown> } }) => Promise<void>
-  'dispose': () => Promise<void>
-}
-
-// ClientMock's nested `client` type omits `app`, but the runtime object includes
-// it — that nested shape is what the plugin receives as PluginInput.client.
-type TestClient = ClientMock & { client: { app: { agents: ReturnType<typeof vi.fn> } } }
-
-interface PluginFixture {
-  hooks: ToolLimitReminderHooks
-  client: TestClient
-}
-
-// ── Helpers ──────────────────────────────────────────────────────
-
-/**
-Builds a plugin; the file's only casts live here so test bodies stay cast-free.
-*/
-const makePlugin = async (options: {
+interface SessionRecord {
   agent?: string
-  agents?: Array<{ name: string, steps?: number }>
-  agentsMock?: ReturnType<typeof vi.fn>
-  client?: TestClient | ClientMock
-} = {}): Promise<PluginFixture> => {
-  const client = (options.client ?? defaultCreateClient({ agent: options.agent }, undefined, options.agents)) as TestClient
-  if (options.agentsMock) client.client.app.agents = options.agentsMock
-
-  const hooks = (await toolLimitReminder(client as unknown as PluginInput)) as unknown as ToolLimitReminderHooks
-  return { hooks, client }
+  parentID?: string
+  metadata?: Record<string, unknown>
 }
 
-const makeChatOutput = (parts: ChatPart[]): ChatMessageOutput => ({
-  message: { role: 'user', content: 'prompt' },
-  parts,
+interface Problem {
+  source: string
+  thresholdName: string
+  expectedMax: number
+  actual: number
+  message: string
+}
+
+interface Harness {
+  context: Context
+  storage: Map<string, unknown>
+  synthetics: Array<{ sessionID: string, text: string, resume?: boolean, delivery?: string }>
+  sessions: Map<string, SessionRecord>
+  sessionUpdates: Array<{ sessionID: string, metadata?: Record<string, unknown> }>
+  agentGets: string[]
+  agents: Map<string, 'fail' | { steps?: number }>
+  agentList: unknown[]
+  logs: string[]
+  ready: () => Promise<void>
+  emit: (event: Event) => Promise<void>
+  before: (event: unknown) => Promise<Exit.Exit<unknown, unknown>>
+  after: (event: unknown) => Promise<Exit.Exit<unknown, unknown>>
+  prompt: (event: { sessionID: string, prompt: { text: string } }) => Promise<Exit.Exit<unknown, unknown>>
+}
+
+const REVIEW_PREFIX = 'review/'
+const NOOP: Event = { type: 'noop' }
+
+const reviewKey = (sessionID: string): string => REVIEW_PREFIX + sessionID
+
+const idle = (sessionID: string): Event => ({ type: 'session.idle', data: { sessionID } })
+
+const statusIdle = (sessionID: string): Event => ({
+  type: 'session.status',
+  data: { sessionID, status: { type: 'idle' } },
 })
 
-const getState = (sessionID: string): Record<string, unknown> =>
-  new SessionStorage().readState(sessionID, s => s as Record<string, unknown>) ?? {}
+const toolEvent = (tool: string, sessionID = 'ses_1', agent = 'build'): Record<string, unknown> => ({
+  tool,
+  sessionID,
+  agent,
+  messageID: 'msg_1',
+  id: 'call_1',
+  input: {},
+})
 
-/**
-Builds a $ shell mock whose export command resolves with the given exit code.
-*/
-const makeExportShellMock = (exitCode: number) =>
-  vi.fn().mockReturnValue({
-    nothrow: () => ({ quiet: vi.fn().mockResolvedValue({ exitCode }) }),
-  })
+const afterEvent = (status: string, tool = 'read', sessionID = 'ses_1', agent = 'build'): Record<string, unknown> => ({
+  tool,
+  sessionID,
+  agent,
+  messageID: 'msg_1',
+  id: 'call_1',
+  status,
+  input: {},
+})
 
-const BUDGET_AGENTS = [{ name: 'test-agent', steps: 15 }]
+// One `read` attempt through the gate. Keeping the `toolEvent(...)` call out of
+// the assertion keeps it within the maximum call-nesting depth.
+const attempt = (h: Harness, sessionID = 'ses_1'): Promise<Exit.Exit<unknown, unknown>> =>
+  h.before(toolEvent('read', sessionID))
 
-const AGENTS = [
-  { agent: 'rug-swe', limit: 20 }, // floor(25 * 0.8)
-  { agent: 'rug-mcp', limit: 8 }, // floor(10 * 0.8)
-  { agent: 'rug-expert', limit: 15 }, // floor(19 * 0.8)
-]
+const makeHarness = (): Harness => {
+  const storage = new Map<string, unknown>()
+  const synthetics: Harness['synthetics'] = []
+  const logs: string[] = []
+  const sessions = new Map<string, SessionRecord>([['ses_1', { agent: 'build', metadata: {} }]])
+  const sessionUpdates: Harness['sessionUpdates'] = []
+  const agentGets: string[] = []
+  const agents = new Map<string, 'fail' | { steps?: number }>([['build', { steps: 5 }]])
+  const agentList: unknown[] = []
+  const hooks: Record<string, Hook> = {}
 
-describe('toolLimitReminder', () => {
-  let fixture: PluginFixture
+  // One queue per `event.subscribe()` call (the plugin subscribes twice: idle
+  // and agent-selected). Capacity 0 makes every offer a rendezvous, so `emit`
+  // resolves only after the handler for that element has run.
+  const queues = [Effect.runSync(Queue.bounded<Event>(0)), Effect.runSync(Queue.bounded<Event>(0))]
+  let subscriptions = 0
 
-  beforeEach(async () => {
-    resetMockState({})
-    vi.mocked(writeFile).mockClear()
-    fixture = await makePlugin({ agent: 'rug-swe' })
-  })
+  const offer = async (queue: Queue.Queue<Event>, event: Event): Promise<void> => {
+    await Effect.runPromise(Queue.offer(queue, event))
+  }
 
-  it('logs the init message on plugin creation', () => {
-    expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', 'init', 'tool-limit-reminder')
-  })
-
-  it('warns and returns when sessionID is missing', async () => {
-    await fixture.hooks['tool.execute.before']({})
-    expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'warn', expect.stringContaining('missing sessionID'), 'tool-limit-reminder')
-    expect(sendMessageMock).not.toHaveBeenCalled()
-  })
-
-  describe('tool.execute.before', () => {
-    it.each([
-      { name: 'the agent is absent from the list', agent: 'build', agents: undefined },
-      { name: 'the agent has no maxSteps', agent: 'unlimited-agent', agents: [{ name: 'unlimited-agent' }] },
-      { name: 'the agent list is empty', agent: 'rug-swe', agents: [] },
-    ])('skips the limit check when $name', async ({ agent, agents }) => {
-      fixture = await makePlugin({ agent, agents })
-      await fixture.hooks['tool.execute.before']({ sessionID: 'skip-sess' })
-      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('not listed in TOOL_LIMITS'), 'tool-limit-reminder')
-      expect(sendMessageMock).not.toHaveBeenCalled()
-    })
-
-    it('logs the session agent, count, and threshold for limited agents', async () => {
-      await fixture.hooks['tool.execute.before']({ sessionID: 'info-sess' })
-      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('sessionID: info-sess, agent: rug-swe'), 'tool-limit-reminder')
-      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'warn', expect.stringContaining('reached tool call limit of 20'), 'tool-limit-reminder')
-    })
-
-    describe.each(AGENTS)('known agent $agent (limit $limit)', ({ agent, limit }) => {
-      beforeEach(async () => {
-        fixture = await makePlugin({ agent })
-      })
-
-      it('sends reminder steering at the exact threshold', async () => {
-        for (let index = 0; index <= limit; index++) {
-          await fixture.hooks['tool.execute.before']({ sessionID: 'sess-boundary' })
-        }
-        expect(sendMessageMock).toHaveBeenCalledTimes(1)
-        expect(sendMessageMock).toHaveBeenCalledWith(expect.objectContaining({
-          sessionId: 'sess-boundary',
-          noReply: true,
-          message: expect.stringContaining('tool call limit reached'),
-        }))
-        expect(logMock).not.toHaveBeenCalledWith(expect.anything(), 'info', expect.stringContaining('flagging session'), 'tool-limit-reminder')
-      })
-
-      it('flags the session for review above the threshold', async () => {
-        for (let index = 0; index <= limit + 1; index++) {
-          await fixture.hooks['tool.execute.before']({ sessionID: 'sess-boundary' })
-        }
-        expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('flagging session'), 'tool-limit-reminder')
-        expect(sendMessageMock).toHaveBeenLastCalledWith(expect.objectContaining({
-          message: expect.stringContaining('tool call limit exceeded'),
-        }))
-        expect(getState('sess-boundary')?.needsReview).toBe(true)
-        // The crossing writes an agent problem into the shared sessionReview key.
-        expect(readProblems(new SessionStorage(), 'sess-boundary')).toEqual([
-          agentProblemStatement(agent, limit, limit + 1),
-        ])
-      })
-
-      it('throws after calls exceed limit plus padding', async () => {
-        // limit + 3 calls resolve; the next call (currentCount = limit + 3)
-        // exceeds limit + PADDING_TILL_ERROR(2) and is blocked.
-        for (let index = 0; index < limit + 3; index++) {
-          await expect(fixture.hooks['tool.execute.before']({ sessionID: 'sess-boundary' })).resolves.toBeUndefined()
-        }
-
-        await expect(fixture.hooks['tool.execute.before']({ sessionID: 'sess-boundary' })).rejects.toThrow('STOP YOUR WORK.')
-        expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'error', expect.stringContaining('tool call limit exceeded'), 'tool-limit-reminder')
-      })
-    })
-
-    it.each([
-      { maxSteps: 25, expectedLimit: 20 }, // floor(20) — integer result
-      { maxSteps: 13, expectedLimit: 10 }, // floor(10.4) — kills ceil mutants
-    ])('uses floor(maxSteps * 0.8) = $expectedLimit as the dynamic limit', async ({ maxSteps, expectedLimit }) => {
-      fixture = await makePlugin({ agent: 'dyn-agent', agents: [{ name: 'dyn-agent', steps: maxSteps }] })
-      for (let index = 0; index <= expectedLimit; index++) {
-        await fixture.hooks['tool.execute.before']({ sessionID: 'dyn-sess' })
+  const h: Harness = {
+    storage,
+    synthetics,
+    sessions,
+    sessionUpdates,
+    agentGets,
+    agents,
+    agentList,
+    logs,
+    ready: async () => {
+      await Promise.all(queues.map(async queue => offer(queue, NOOP)))
+    },
+    emit: async (event) => {
+      for (const queue of queues) {
+        await offer(queue, event)
+        await offer(queue, NOOP)
       }
-      expect(sendMessageMock).toHaveBeenCalledTimes(1)
-      expect(sendMessageMock).toHaveBeenCalledWith(expect.objectContaining({
-        sessionId: 'dyn-sess',
-        message: expect.stringContaining('tool call limit reached'),
-      }))
-    })
-
-    it('writes the agent problem with the exact expectedMax and actual at the crossing', async () => {
-      // 21 calls land at the reminder tier (currentCount = 20); the 22nd call
-      // crosses into NEEDS REVIEW (currentCount = 21 > 20).
-      const hook = fixture.hooks['tool.execute.before']
-      for (let index = 0; index <= 21; index++) {
-        await hook({ sessionID: 'cross-sess' })
-      }
-
-      const problems = readProblems(new SessionStorage(), 'cross-sess')
-
-      expect(problems).toEqual([
-        agentProblemStatement('rug-swe', 20, 21),
-      ])
-      expect(problems[0]?.message).toBe(
-        'The session took 21 tool calls for agent \'rug-swe\', exceeding the agent\'s budget of 20 steps. Investigate why the agent exceeded its step budget.',
-      )
-    })
-
-    it('writes the agent problem only once across repeated crossings (dedupe)', async () => {
-      const hook = fixture.hooks['tool.execute.before']
-      // currentCount 21 and 22 both land in the NEEDS REVIEW tier; BLOCK only starts at 23.
-      for (let index = 0; index <= 22; index++) {
-        await hook({ sessionID: 'dedupe-sess' })
-      }
-
-      const problems = readProblems(new SessionStorage(), 'dedupe-sess')
-
-      expect(problems).toHaveLength(1)
-      expect(problems[0]).toEqual(agentProblemStatement('rug-swe', 20, 21))
-
-      const reviewWrites = vi.mocked(new SessionStorage().updateState).mock.calls.filter(([sessionID, updater]) =>
-        sessionID === 'dedupe-sess'
-        && typeof updater === 'function'
-        && Object.hasOwn((updater as (s: Record<string, unknown>) => Record<string, unknown>)({}), 'sessionReview'),
-      )
-
-      expect(reviewWrites).toHaveLength(1)
-    })
-
-    it('applies dynamic limits only to agents with maxSteps', async () => {
-      fixture = await makePlugin({
-        agent: 'limited-agent',
-        agents: [
-          { name: 'limited-agent', steps: 30 },
-          { name: 'unlimited-agent' },
-        ],
-      })
-      await fixture.hooks['tool.execute.before']({ sessionID: 'mixed-sess' })
-      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('agent: limited-agent'), 'tool-limit-reminder')
-      expect(logMock).not.toHaveBeenCalledWith(expect.anything(), 'info', expect.stringContaining('not listed in TOOL_LIMITS'), 'tool-limit-reminder')
-    })
-
-    it('fetches the agent list only once and reuses the cached limits', async () => {
-      const hook = fixture.hooks['tool.execute.before']
-
-      await hook({ sessionID: 'cache-1' })
-      await hook({ sessionID: 'cache-2' })
-      await hook({ sessionID: 'cache-3' })
-      expect(vi.mocked(fixture.client.client.app.agents)).toHaveBeenCalledTimes(1)
-    })
-
-    it('logs the fetched agent list with exact prefix and mapped shape', async () => {
-      fixture = await makePlugin({ agent: 'shape-agent', agents: [{ name: 'shape-agent', steps: 12 }] })
-      await fixture.hooks['tool.execute.before']({ sessionID: 'shape-sess' })
-      expect(logMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        'info',
-        expect.stringContaining('fetched agent list: [{"name":"shape-agent","maxSteps":12}]'),
-        'tool-limit-reminder',
-      )
-    })
-
-    it('handles an agents() response without a data property', async () => {
-      fixture = await makePlugin({ agentsMock: vi.fn().mockResolvedValue({}) })
-
-      await expect(fixture.hooks['tool.execute.before']({ sessionID: 'no-data-sess' })).resolves.toBeUndefined()
-      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('not listed in TOOL_LIMITS'), 'tool-limit-reminder')
-    })
-
-    it('treats an agents() failure as an empty list', async () => {
-      fixture = await makePlugin({ agentsMock: vi.fn().mockRejectedValue(new Error('agents down')) })
-
-      await expect(fixture.hooks['tool.execute.before']({ sessionID: 'agents-fail-sess' })).resolves.toBeUndefined()
-      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('not listed in TOOL_LIMITS'), 'tool-limit-reminder')
-    })
-  })
-
-  describe('chat.message', () => {
-    beforeEach(async () => {
-      fixture = await makePlugin({ agents: BUDGET_AGENTS })
-    })
-
-    it('prepends the budget tag to the first text part', async () => {
-      const output = makeChatOutput([
-        { id: 'p1', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'first' },
-        { id: 'p2', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'second' },
-      ])
-
-      await fixture.hooks['chat.message']({ sessionID: 'budget-sess', agent: 'test-agent' }, output)
-      expect(output.parts[0].text).toBe('<task-budget tool-calls="12" />\nfirst')
-      expect(output.parts[1].text).toBe('second')
-    })
-
-    it.each([
-      { steps: 13, expected: 10 }, // floor(10.4) — kills ceil mutants
-      { steps: 16, expected: 12 }, // floor(12.8) — kills round/ceil mutants
-      { steps: 25, expected: 20 }, // rug-swe — advertised tag matches the enforced floor(25 * 0.8)
-    ])('advertises floor(steps * 0.8) = $expected as the budget tag for steps=$steps', async ({ steps, expected }) => {
-      fixture = await makePlugin({ agents: [{ name: 'test-agent', steps }] })
-
-      const output = makeChatOutput([{ id: 'p1', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'first' }])
-
-      await fixture.hooks['chat.message']({ sessionID: 'budget-sess', agent: 'test-agent' }, output)
-      expect(output.parts[0].text).toBe(`<task-budget tool-calls="${expected}" />\nfirst`)
-    })
-
-    it('creates a synthetic text part when no text part exists', async () => {
-      const output = makeChatOutput([])
-
-      await fixture.hooks['chat.message']({ sessionID: 'budget-sess', agent: 'test-agent' }, output)
-      expect(output.parts).toHaveLength(1)
-      expect(output.parts[0]).toMatchObject({
-        id: 'task-budget',
-        sessionID: 'budget-sess',
-        messageID: '',
-        type: 'text',
-        text: '<task-budget tool-calls="12" />',
-        synthetic: true,
-      })
-    })
-
-    it('does not inject when the agent has no steps', async () => {
-      fixture = await makePlugin({ agents: [{ name: 'no-steps-agent' }] })
-
-      const output = makeChatOutput([{ id: 'p1', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'original prompt' }])
-
-      await fixture.hooks['chat.message']({ sessionID: 'budget-sess', agent: 'no-steps-agent' }, output)
-      expect(output.parts[0].text).toBe('original prompt')
-    })
-
-    it.each([
-      { name: 'sessionID is missing', input: { agent: 'test-agent' } },
-      { name: 'agent is missing', input: { sessionID: 'budget-sess' } },
-    ])('does not inject when $name', async ({ input }) => {
-      const output = makeChatOutput([{ id: 'p1', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'original prompt' }])
-
-      await fixture.hooks['chat.message'](input, output)
-      expect(output.parts[0].text).toBe('original prompt')
-    })
-
-    it('injects the tag only once per session', async () => {
-      const input = { sessionID: 'budget-sess', agent: 'test-agent' }
-
-      const output = makeChatOutput([{ id: 'p1', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'original prompt' }])
-
-      await fixture.hooks['chat.message'](input, output)
-      expect(output.parts[0].text).toBe('<task-budget tool-calls="12" />\noriginal prompt')
-      await fixture.hooks['chat.message'](input, output)
-      expect(output.parts[0].text).toBe('<task-budget tool-calls="12" />\noriginal prompt')
-    })
-
-    it('re-injects the tag after the session goes idle', async () => {
-      const input = { sessionID: 'budget-sess', agent: 'test-agent' }
-
-      const output = makeChatOutput([{ id: 'p1', sessionID: 'budget-sess', messageID: 'm1', type: 'text', text: 'original prompt' }])
-
-      await fixture.hooks['chat.message'](input, output)
-      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'budget-sess' } } })
-      await fixture.hooks['chat.message'](input, output)
-      expect(output.parts[0].text).toBe('<task-budget tool-calls="12" />\n<task-budget tool-calls="12" />\noriginal prompt')
-    })
-  })
-
-  describe('event', () => {
-    it.each([
-      { name: 'non-session.idle events', event: { type: 'tool.execute.after' } },
-      { name: 'session.idle events without a sessionID', event: { type: 'session.idle' } },
-    ])('ignores $name', async ({ event }) => {
-      await fixture.hooks.event({ event })
-      expect(logMock).not.toHaveBeenCalledWith(expect.anything(), 'info', expect.stringContaining('cleared tool call counter'), 'tool-limit-reminder')
-    })
-
-    it('resets the tool call counter when the session goes idle', async () => {
-      fixture = await makePlugin({ agent: 'rug-mcp' }) // limit = floor(10 * 0.8) = 8
-
-      const hook = fixture.hooks['tool.execute.before']
-      for (let index = 0; index <= 8; index++) {
-        await hook({ sessionID: 'idle-sess' })
-      }
-      expect(sendMessageMock).toHaveBeenCalledTimes(1) // steering fired at the exact threshold
-
-      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'idle-sess' } } })
-      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('cleared tool call counter'), 'tool-limit-reminder')
-
-      await hook({ sessionID: 'idle-sess' })
-      expect(sendMessageMock).toHaveBeenCalledTimes(1) // counter was cleared — no new steering
-    })
-
-    it('does not export sessions without review state (no flag, no problems)', async () => {
-      const client = defaultCreateClient({ agent: 'rug-swe' })
-
-      const shell = vi.fn()
-
-      client.$ = shell
-      fixture = await makePlugin({ client })
-      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'plain-sess' } } })
-      expect(shell).not.toHaveBeenCalled()
-      expect(writeFile).not.toHaveBeenCalled()
-      expect(getState('plain-sess')?.needsReview).toBeUndefined()
-      expect(getState('plain-sess')?.sessionReview).toBeUndefined()
-    })
-
-    it('exports flagged sessions, writes problems.md, and clears the review flag', async () => {
-      resetMockState({ 'flagged-sess': { needsReview: true } })
-
-      const client = defaultCreateClient({ agent: 'rug-swe' })
-
-      const shell = makeExportShellMock(0)
-
-      client.$ = shell
-      fixture = await makePlugin({ client })
-
-      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'flagged-sess' } } })
-
-      expect(shell).toHaveBeenCalledWith(['just agent_utils/export-opencode-session ', ''], 'flagged-sess')
-      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('export completed'), 'tool-limit-reminder')
-      expect(writeFile).toHaveBeenCalledWith('/workspace/.tmp/session-review/flagged-sess/problems.md', '# Reported Threshold Violations\n\n*None reported.*\n')
-      expect(getState('flagged-sess')?.needsReview).toBeUndefined()
-      expect(getState('flagged-sess')?.sessionReview).toBeUndefined()
-    })
-
-    it('exports sessions that have problems even without a needsReview flag', async () => {
-      resetMockState({
-        'prob-sess': { sessionReview: [agentProblemStatement('rug-swe', 20, 21)] },
-      })
-
-      const client = defaultCreateClient({ agent: 'rug-swe' })
-
-      const shell = makeExportShellMock(0)
-
-      client.$ = shell
-      fixture = await makePlugin({ client })
-
-      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'prob-sess' } } })
-
-      expect(shell).toHaveBeenCalledTimes(1)
-      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', expect.stringContaining('export completed'), 'tool-limit-reminder')
-      expect(writeFile).toHaveBeenCalledWith(
-        '/workspace/.tmp/session-review/prob-sess/problems.md',
-        expect.stringContaining('## agent: rug-swe'),
-      )
-
-      const state = getState('prob-sess')
-
-      expect(state?.sessionReview).toBeUndefined()
-      expect(state?.needsReview).toBeUndefined()
-    })
-
-    it('exports flagged sessions with no problems and writes the none-reported markdown', async () => {
-      resetMockState({ 'flag-only-sess': { needsReview: true } })
-
-      const client = defaultCreateClient({ agent: 'rug-swe' })
-
-      const shell = makeExportShellMock(0)
-
-      client.$ = shell
-      fixture = await makePlugin({ client })
-
-      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'flag-only-sess' } } })
-
-      expect(shell).toHaveBeenCalledTimes(1)
-      expect(writeFile).toHaveBeenCalledWith('/workspace/.tmp/session-review/flag-only-sess/problems.md', '# Reported Threshold Violations\n\n*None reported.*\n')
-      expect(getState('flag-only-sess')?.needsReview).toBeUndefined()
-    })
-
-    it('clears both sessionReview and needsReview after a successful export', async () => {
-      resetMockState({
-        'clear-sess': { sessionReview: [agentProblemStatement('rug-swe', 20, 21)], needsReview: true },
-      })
-
-      const client = defaultCreateClient({ agent: 'rug-swe' })
-
-      const shell = makeExportShellMock(0)
-
-      client.$ = shell
-      fixture = await makePlugin({ client })
-
-      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'clear-sess' } } })
-
-      const state = getState('clear-sess')
-
-      expect(state?.sessionReview).toBeUndefined()
-      expect(state?.needsReview).toBeUndefined()
-    })
-
-    it('exports both agent and skill problems in a single problems.md', async () => {
-      resetMockState({
-        'mixed-sess': {
-          sessionReview: [
-            skillProblemStatement('test-design', 10, 13),
-            agentProblemStatement('rug-swe', 20, 21),
-          ],
+    },
+    before: async event => Effect.runPromiseExit(hooks['tool:execute.before'](event)),
+    after: async event => Effect.runPromiseExit(hooks['tool:execute.after'](event)),
+    prompt: async event => Effect.runPromiseExit(hooks['session:prompt'](event)),
+    context: {
+      options: {},
+      location: { directory: '/workspace' },
+      agent: {
+        list: () => Effect.succeed({ data: agentList }),
+        get: (input: { agentID: string }) => {
+          agentGets.push(input.agentID)
+
+          const entry = agents.get(input.agentID)
+          return entry === undefined || entry === 'fail' ? Effect.fail(new Error('agent not found: ' + input.agentID)) : Effect.succeed({ data: { id: input.agentID, steps: entry.steps } })
         },
-      })
+      },
+      tool: {
+        hook: (name: string, callback: Hook) => {
+          hooks['tool:' + name] = callback
+          return Effect.succeed({ dispose: Effect.void })
+        },
+      },
+      event: {
+        subscribe: () => {
+          const queue = (queues[subscriptions] ??= Effect.runSync(Queue.bounded<Event>(0)))
 
-      const client = defaultCreateClient({ agent: 'rug-swe' })
+          subscriptions += 1
+          return Stream.fromQueue(queue)
+        },
+      },
+      session: {
+        get: (input: { sessionID: string }) => {
+          const session = sessions.get(input.sessionID)
+          return session === undefined
+            ? Effect.fail(new Error('session not found: ' + input.sessionID))
+            : Effect.succeed(session)
+        },
+        update: (input: { sessionID: string, metadata?: Record<string, unknown> }) => Effect.sync(() => {
+          sessionUpdates.push({ sessionID: input.sessionID, metadata: input.metadata })
 
-      const shell = makeExportShellMock(0)
+          const session = sessions.get(input.sessionID)
+          if (session !== undefined && input.metadata !== undefined) session.metadata = input.metadata
+        }),
+        synthetic: (input: Harness['synthetics'][number]) => {
+          synthetics.push(input)
+          return Effect.succeed({})
+        },
+        hook: (name: string, callback: Hook) => {
+          hooks['session:' + name] = callback
+          return Effect.succeed({ dispose: Effect.void })
+        },
+      },
+      storage: {
+        get: (key: string) => Effect.succeed(storage.get(key)),
+        set: (key: string, value: unknown) => Effect.sync(() => { storage.set(key, value) }),
+        remove: (key: string) => Effect.sync(() => { storage.delete(key) }),
+        // Page size 1 forces the replay loop to drain via `StorageScanResult.next`.
+        scan: (options: { prefix: string, after?: string, limit?: number }) => {
+          const matching = [...storage]
+            .filter(([key]) => key.startsWith(options.prefix))
+            .filter(([key]) => options.after === undefined || key > options.after)
+            .sort(([a], [b]) => (a < b ? -1 : (a > b ? 1 : 0)))
+          const limit = options.limit ?? 1
+          const page = matching.slice(0, limit)
+          const last = page.at(-1)
+          const next = last !== undefined && matching.length > limit ? last[0] : undefined
+          return Effect.succeed({
+            entries: page.map(([key, value]) => ({ key, value })),
+            ...(next !== undefined && { next }),
+          })
+        },
+      },
+    } as unknown as Context }
 
-      client.$ = shell
-      fixture = await makePlugin({ client })
+  return h
+}
 
-      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'mixed-sess' } } })
+const fibers: Array<Fiber.Fiber<never, never>> = []
 
-      expect(writeFile).toHaveBeenCalledWith(
-        '/workspace/.tmp/session-review/mixed-sess/problems.md',
-        expect.stringContaining('## skill: test-design'),
-      )
-      expect(writeFile).toHaveBeenCalledWith(
-        '/workspace/.tmp/session-review/mixed-sess/problems.md',
-        expect.stringContaining('## agent: rug-swe'),
-      )
-      expect(getState('mixed-sess')?.sessionReview).toBeUndefined()
+const register = async (h: Harness): Promise<void> => {
+  // Captures the plugin's Effect logs so activation is observable in tests.
+  const collectLogger = Logger.make<unknown, void>(({ message }) => {
+    h.logs.push(Array.isArray(message) ? message.map(String).join(' ') : String(message))
+  })
+  const program = Effect.scoped(Effect.flatMap(plugin.effect(h.context), () => Effect.never))
+  const fiber = Effect.runFork(Effect.withLogger(program, collectLogger))
+
+  fibers.push(fiber)
+  await h.ready()
+}
+
+const storedProblems = (h: Harness, sessionID: string): Problem[] =>
+  (h.storage.get(reviewKey(sessionID)) as { problems?: Problem[] } | undefined)?.problems ?? []
+
+const reminderSynthetics = (h: Harness): Harness['synthetics'] =>
+  h.synthetics.filter(synthetic => synthetic.text.includes(REMINDER_TEXT))
+
+const reviewSynthetics = (h: Harness): Harness['synthetics'] =>
+  h.synthetics.filter(synthetic => synthetic.text.includes(REVIEW_TEXT))
+
+const storedReview = (actual: number): { problems: Problem[] } => ({
+  problems: [{
+    source: 'agent',
+    thresholdName: 'build',
+    expectedMax: 4,
+    actual,
+    message: 'pre-existing problem',
+  }],
+})
+
+describe('tool-limit-reminder (v2)', () => {
+  beforeEach(() => {
+    tlrConfig.present = true
+    tlrConfig.factor = 0.8
+    tlrConfig.padding = 2
+    tlrConfig.limits = {}
+    tlrConfig.ignoreTools = ['goal']
+    tlrConfig.review = { export: true, command: 'just agent_utils/export-opencode-session', writeMarkdown: true }
+    shell.exitCode = 0
+    shell.commands = []
+  })
+
+  afterEach(async () => {
+    await Promise.all(fibers.map(fiber => Effect.runPromise(Fiber.interrupt(fiber))))
+    fibers.length = 0
+  })
+
+  describe('counting', () => {
+    it('treats an agent whose lookup fails as unlimited', async () => {
+      const h = makeHarness()
+
+      h.agents.set('build', 'fail')
+      await register(h)
+
+      const exit = await h.before(toolEvent('read'))
+
+      expect(Exit.isSuccess(exit)).toBe(true)
+      expect(h.synthetics).toHaveLength(0)
+
+      const prompt = { sessionID: 'ses_1', prompt: { text: 'hello' } }
+
+      await h.prompt(prompt)
+
+      expect(prompt.prompt.text).toBe('hello')
     })
 
-    it('retains review state when the export fails and does not write problems.md', async () => {
-      resetMockState({ 'failed-sess': { needsReview: true } })
+    it('treats a non-numeric step budget as unlimited', async () => {
+      const h = makeHarness()
 
-      const client = defaultCreateClient({ agent: 'rug-swe' })
+      h.agents.set('build', { steps: undefined })
+      await register(h)
 
-      const shell = makeExportShellMock(1)
+      const exit = await h.before(toolEvent('read'))
 
-      client.$ = shell
-      fixture = await makePlugin({ client })
-      await fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'failed-sess' } } })
-      expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'error', expect.stringContaining('failed to trigger export'), 'tool-limit-reminder')
-      expect(writeFile).not.toHaveBeenCalled()
-      expect(getState('failed-sess')?.needsReview).toBe(true)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      expect(h.synthetics).toHaveLength(0)
     })
 
-    it('logs the caught error, retains review state, and resolves when the export command throws', async () => {
-      resetMockState({ 'throw-sess': { needsReview: true } })
+    it('allows the first call below the threshold and counts it exactly once', async () => {
+      tlrConfig.limits = { build: 1 }
 
-      const client = defaultCreateClient({ agent: 'rug-swe' })
+      const h = makeHarness()
 
-      // The shell rejects with null: errorString falls back to String(null) ('null'),
-      // and `(error as Error)?.message` without the optional chain would throw on null.
-      const shell = vi.fn().mockReturnValue({
-        nothrow: () => ({ quiet: vi.fn().mockRejectedValue(null) }),
-      })
+      await register(h)
 
-      client.$ = shell
-      fixture = await makePlugin({ client })
+      expect(Exit.isSuccess(await attempt(h))).toBe(true)
+      expect(h.synthetics).toHaveLength(0)
 
-      await expect(fixture.hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'throw-sess' } } })).resolves.toBeUndefined()
-
-      expect(shell).toHaveBeenCalledTimes(1)
-      expect(logMock).toHaveBeenCalledWith(expect.anything(), 'error', 'failed to trigger export for session throw-sess: null', 'tool-limit-reminder')
-      expect(writeFile).not.toHaveBeenCalled()
-      expect(getState('throw-sess')?.needsReview).toBe(true)
+      // The single recorded attempt puts the next call exactly at the limit.
+      expect(Exit.isSuccess(await attempt(h))).toBe(true)
+      expect(reminderSynthetics(h)).toHaveLength(1)
     })
   })
 
-  it('logs the dispose message on shutdown', async () => {
-    await fixture.hooks.dispose()
-    expect(logMock).toHaveBeenCalledWith(expect.any(Object), 'info', 'dispose', 'tool-limit-reminder')
+  describe('boundary', () => {
+    it('reminds exactly once when the pre-increment count reaches the limit', async () => {
+      const h = makeHarness()
+
+      await register(h)
+
+      for (let index = 0; index < 6; index += 1) {
+        expect(Exit.isSuccess(await attempt(h))).toBe(true)
+      }
+
+      expect(reminderSynthetics(h)).toHaveLength(1)
+      expect(reminderSynthetics(h)[0].text).toContain('You\'ve made 4 tool calls which is the limit')
+      expect(reminderSynthetics(h)[0].sessionID).toBe('ses_1')
+      expect(reminderSynthetics(h)[0].resume).toBe(false)
+    })
+
+    it('records one deduped problem in the padding band and flags the session', async () => {
+      const h = makeHarness()
+
+      await register(h)
+
+      for (let index = 0; index < 7; index += 1) {
+        await h.before(toolEvent('read'))
+      }
+
+      expect(h.sessions.get('ses_1')?.metadata).toEqual({ needsReview: true })
+      expect(storedProblems(h, 'ses_1')).toHaveLength(1)
+      expect(storedProblems(h, 'ses_1')[0]).toEqual({
+        source: 'agent',
+        thresholdName: 'build',
+        expectedMax: 4,
+        actual: 0,
+        message: 'The session took 0 tool calls for agent \'build\', exceeding the agent\'s budget of 4 steps. Investigate why the agent exceeded its step budget.',
+      })
+      expect(reviewSynthetics(h)).toHaveLength(2)
+      expect(reviewSynthetics(h)[0].text).toContain('Current count: 6, Limit: 4')
+      expect(reviewSynthetics(h)[0].resume).toBe(false)
+    })
+
+    it('blocks past the padding band with the byte-identical v1 text', async () => {
+      const h = makeHarness()
+
+      await register(h)
+
+      for (let index = 0; index < 7; index += 1) {
+        expect(Exit.isSuccess(await attempt(h))).toBe(true)
+      }
+
+      const blocked = await h.before(toolEvent('read'))
+
+      expect(Exit.isFailure(blocked)).toBe(true)
+      if (!Exit.isFailure(blocked)) return
+
+      const failure = Option.getOrUndefined(Cause.findErrorOption(blocked.cause))
+
+      expect(failure).toBeInstanceOf(Tool.Error)
+      if (!(failure instanceof Tool.Error)) return
+      expect(failure.message).toBe(BLOCK_TEXT)
+      expect(h.synthetics.some(synthetic => synthetic.text.includes('tools are blocked'))).toBe(false)
+    })
+  })
+
+  describe('two counters', () => {
+    it('counts attempts for the gate but completed calls for the report', async () => {
+      tlrConfig.limits = { build: 1 }
+      tlrConfig.padding = 1
+
+      const h = makeHarness()
+
+      await register(h)
+
+      // Two calls completed before the gate ever trips.
+      await h.after(afterEvent('completed'))
+      await h.after(afterEvent('completed'))
+
+      expect(Exit.isSuccess(await attempt(h))).toBe(true)
+      expect(Exit.isSuccess(await attempt(h))).toBe(true)
+      expect(Exit.isSuccess(await attempt(h))).toBe(true)
+
+      expect(reviewSynthetics(h)[0].text).toContain('Current count: 3, Limit: 1')
+      expect(storedProblems(h, 'ses_1')[0].actual).toBe(2)
+
+      // The fourth attempt trips the block: attempts advanced, `actual` did not.
+      expect(Exit.isFailure(await attempt(h))).toBe(true)
+      expect(storedProblems(h, 'ses_1')[0].actual).toBe(2)
+    })
+  })
+
+  describe('budget tag', () => {
+    it('prepends the resolved budget tag to the first prompt only', async () => {
+      const h = makeHarness()
+
+      await register(h)
+
+      const first = { sessionID: 'ses_1', prompt: { text: 'hello' } }
+
+      await h.prompt(first)
+
+      expect(first.prompt.text).toBe('<task-budget tool-calls="4" />\nhello')
+
+      const second = { sessionID: 'ses_1', prompt: { text: 'again' } }
+
+      await h.prompt(second)
+
+      expect(second.prompt.text).toBe('again')
+    })
+
+    it('skips the tag when the session has no agent', async () => {
+      const h = makeHarness()
+
+      h.sessions.set('ses_1', { metadata: {} })
+      await register(h)
+
+      const prompt = { sessionID: 'ses_1', prompt: { text: 'hello' } }
+
+      await h.prompt(prompt)
+
+      expect(prompt.prompt.text).toBe('hello')
+    })
+
+    it('re-injects the tag after an idle reset', async () => {
+      const h = makeHarness()
+
+      await register(h)
+
+      const first = { sessionID: 'ses_1', prompt: { text: 'hello' } }
+
+      await h.prompt(first)
+      await h.emit(idle('ses_1'))
+
+      const second = { sessionID: 'ses_1', prompt: { text: 'again' } }
+
+      await h.prompt(second)
+
+      expect(second.prompt.text).toBe('<task-budget tool-calls="4" />\nagain')
+    })
+  })
+
+  describe('budget resolution', () => {
+    it('resolves an agent budget once and reuses the cache', async () => {
+      const h = makeHarness()
+
+      await register(h)
+
+      for (let index = 0; index < 3; index += 1) {
+        await h.before(toolEvent('read'))
+      }
+
+      expect(h.agentGets).toEqual(['build'])
+    })
+
+    it('invalidates the cached budget when the agent selection changes', async () => {
+      const h = makeHarness()
+
+      await register(h)
+      await h.before(toolEvent('read'))
+
+      await h.emit({ type: 'session.agent.selected', data: { sessionID: 'ses_1', agent: 'build' } })
+      await h.before(toolEvent('read'))
+
+      expect(h.agentGets).toEqual(['build', 'build'])
+    })
+
+    it('resolves a budget at load even though agent.list is empty', async () => {
+      const h = makeHarness()
+
+      h.agentList = []
+      await register(h)
+
+      for (let index = 0; index < 5; index += 1) {
+        await h.before(toolEvent('read'))
+      }
+
+      expect(reminderSynthetics(h)).toHaveLength(1)
+      expect(h.agentGets).toEqual(['build'])
+    })
+  })
+
+  describe('config', () => {
+    it('falls back to DEFAULT_TOOL_LIMIT when the section is missing', async () => {
+      tlrConfig.present = false
+
+      const h = makeHarness()
+
+      await register(h)
+
+      for (let index = 0; index < 5; index += 1) {
+        await h.before(toolEvent('read'))
+      }
+
+      expect(reminderSynthetics(h)).toHaveLength(1)
+      expect(reminderSynthetics(h)[0].text).toContain('You\'ve made 4 tool calls which is the limit')
+
+      // The default `ignoreTools: ['goal']` keeps `goal` out of the counters.
+      await h.before(toolEvent('goal'))
+
+      expect(h.synthetics).toHaveLength(1)
+    })
+
+    it('prefers a per-agent limit override over floor(steps * factor)', async () => {
+      tlrConfig.limits = { build: 3 }
+
+      const h = makeHarness()
+
+      await register(h)
+
+      for (let index = 0; index < 3; index += 1) {
+        await h.before(toolEvent('read'))
+      }
+
+      expect(h.synthetics).toHaveLength(0)
+
+      await h.before(toolEvent('read'))
+
+      expect(reminderSynthetics(h)).toHaveLength(1)
+      expect(reminderSynthetics(h)[0].text).toContain('You\'ve made 3 tool calls which is the limit')
+
+      const prompt = { sessionID: 'ses_1', prompt: { text: 'hello' } }
+
+      await h.prompt(prompt)
+
+      expect(prompt.prompt.text).toBe('<task-budget tool-calls="3" />\nhello')
+    })
+
+    it('excludes ignoreTools from both counters', async () => {
+      tlrConfig.limits = { build: 1 }
+      tlrConfig.padding = 1
+
+      const h = makeHarness()
+
+      await register(h)
+
+      for (let index = 0; index < 3; index += 1) {
+        await h.before(toolEvent('goal'))
+        await h.after(afterEvent('completed', 'goal'))
+      }
+
+      expect(h.synthetics).toHaveLength(0)
+
+      await h.before(toolEvent('read'))
+      await h.before(toolEvent('read'))
+      await h.before(toolEvent('read'))
+
+      expect(storedProblems(h, 'ses_1')[0].actual).toBe(0)
+    })
+  })
+
+  describe('review export', () => {
+    it('retains review state when the export fails and retries on the next idle', async () => {
+      tlrConfig.limits = { build: 1 }
+      tlrConfig.padding = 1
+
+      const h = makeHarness()
+
+      await register(h)
+      await h.before(toolEvent('read'))
+      await h.before(toolEvent('read'))
+      await h.before(toolEvent('read'))
+
+      expect(storedProblems(h, 'ses_1')).toHaveLength(1)
+
+      shell.exitCode = 1
+      await h.emit(idle('ses_1'))
+
+      expect(storedProblems(h, 'ses_1')).toHaveLength(1)
+      expect(h.sessions.get('ses_1')?.metadata).toEqual({ needsReview: true })
+      expect(vi.mocked(writeFile)).not.toHaveBeenCalled()
+
+      shell.exitCode = 0
+      await h.emit(idle('ses_1'))
+
+      expect(h.storage.has(reviewKey('ses_1'))).toBe(false)
+      expect(h.sessions.get('ses_1')?.metadata).toEqual({})
+      expect(vi.mocked(writeFile)).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(writeFile).mock.calls[0][0]).toBe('/workspace/.tmp/session-review/ses_1/problems.md')
+      expect(String(vi.mocked(writeFile).mock.calls[0][1])).toContain('# Reported Threshold Violations')
+    })
+
+    it('clears the flag with a read-modify-write that preserves sibling metadata', async () => {
+      tlrConfig.limits = { build: 1 }
+      tlrConfig.padding = 1
+
+      const h = makeHarness()
+
+      h.sessions.set('ses_1', { agent: 'build', metadata: { keep: 'yes' } })
+      await register(h)
+      await h.before(toolEvent('read'))
+      await h.before(toolEvent('read'))
+      await h.before(toolEvent('read'))
+
+      await h.emit(idle('ses_1'))
+
+      expect(h.sessions.get('ses_1')?.metadata).toEqual({ keep: 'yes' })
+      expect(h.sessionUpdates.at(-1)?.metadata).toEqual({ keep: 'yes' })
+      expect(h.sessionUpdates.every(update => update.metadata !== undefined)).toBe(true)
+    })
+  })
+
+  describe('idle triggers', () => {
+    it('exports on a session.status idle event', async () => {
+      tlrConfig.limits = { build: 1 }
+      tlrConfig.padding = 1
+
+      const h = makeHarness()
+
+      await register(h)
+      await h.before(toolEvent('read'))
+      await h.before(toolEvent('read'))
+      await h.before(toolEvent('read'))
+
+      await h.emit(statusIdle('ses_1'))
+
+      expect(h.storage.has(reviewKey('ses_1'))).toBe(false)
+    })
+
+    it('resets the attempt counter on idle', async () => {
+      tlrConfig.limits = { build: 1 }
+
+      const h = makeHarness()
+
+      await register(h)
+      await h.before(toolEvent('read'))
+      await h.before(toolEvent('read'))
+
+      expect(reminderSynthetics(h)).toHaveLength(1)
+
+      await h.emit(idle('ses_1'))
+      await h.before(toolEvent('read'))
+
+      expect(reminderSynthetics(h)).toHaveLength(1)
+    })
+
+    it('replays a pre-existing review record at registration and drains the scan', async () => {
+      const h = makeHarness()
+
+      h.storage.set(reviewKey('ses_a'), storedReview(5))
+      h.storage.set(reviewKey('ses_b'), storedReview(6))
+
+      await register(h)
+
+      expect(h.storage.has(reviewKey('ses_a'))).toBe(false)
+      expect(h.storage.has(reviewKey('ses_b'))).toBe(false)
+      expect(shell.commands).toHaveLength(2)
+      expect(shell.commands.every(command => command.includes('export-opencode-session'))).toBe(true)
+    })
+  })
+
+  describe('isolation and concurrency', () => {
+    it('exempts a child session from blocking and keeps the parent counters separate', async () => {
+      tlrConfig.limits = { build: 1 }
+      tlrConfig.padding = 0
+
+      const h = makeHarness()
+
+      h.sessions.set('ses_child', { agent: 'build', parentID: 'ses_parent', metadata: {} })
+      await register(h)
+
+      expect(Exit.isSuccess(await attempt(h, 'ses_child'))).toBe(true)
+      expect(Exit.isSuccess(await attempt(h, 'ses_child'))).toBe(true)
+      expect(reminderSynthetics(h).filter(synthetic => synthetic.sessionID === 'ses_child')).toHaveLength(1)
+
+      // The attempt past the block edge would fail for a top-level session.
+      expect(Exit.isSuccess(await attempt(h, 'ses_child'))).toBe(true)
+
+      // The child's calls left the parent's own counter untouched.
+      expect(Exit.isSuccess(await attempt(h))).toBe(true)
+      expect(h.synthetics.filter(synthetic => synthetic.sessionID === 'ses_1')).toHaveLength(0)
+    })
+
+    it('lands both increments for two parallel execute.before calls', async () => {
+      tlrConfig.limits = { build: 1 }
+      tlrConfig.padding = 0
+
+      const h = makeHarness()
+
+      await register(h)
+
+      const [first, second] = await Promise.all([h.before(toolEvent('read')), h.before(toolEvent('read'))])
+
+      expect(Exit.isSuccess(first)).toBe(true)
+      expect(Exit.isSuccess(second)).toBe(true)
+      // Exactly one call read the pre-increment value 1: no increment was lost.
+      expect(reminderSynthetics(h)).toHaveLength(1)
+    })
+
+    it('counts an attempt that never completes without inflating the report', async () => {
+      tlrConfig.limits = { build: 1 }
+      tlrConfig.padding = 1
+
+      const h = makeHarness()
+
+      await register(h)
+
+      // A goal-continuation stand-in denies the call from its own `execute.before`,
+      // so no `execute.after` ever follows: the attempt still counts.
+      await h.before(toolEvent('bash'))
+      await h.before(toolEvent('bash'))
+
+      expect(reminderSynthetics(h)).toHaveLength(1)
+
+      await h.before(toolEvent('bash'))
+
+      expect(storedProblems(h, 'ses_1')[0].actual).toBe(0)
+    })
   })
 })

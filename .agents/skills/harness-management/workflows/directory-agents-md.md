@@ -33,7 +33,7 @@ Use this change type when:
 - Confirm every path and command resolves.
 - Check that `## WHERE TO LOOK` answers the questions an agent would ask.
 
-## Apply and Restart
+## Apply
 
 - Tooling discovers directory `AGENTS.md` files for scoped context.
-- Ask for an opencode restart so the change is picked up fully.
+- OpenCode v2 applies an edited upward-discovered `AGENTS.md` before the next model request; a nested `AGENTS.md` is not auto-detected after load — start a new session.

@@ -15,7 +15,7 @@ Use this change type when:
 
 | Harness | Variant home | Load behavior |
 |---|---|---|
-| OpenCode | `.opencode/instructions/`, `.opencode/agents/` | loads at server start |
+| OpenCode | `.opencode/instructions/`, `.opencode/agents/` | hot-reloaded automatically |
 | DSH | `.dsh/cordis.patch.yml`, `.dsh/child-runtime/cordis.yml` (Cordis `skill` plugin), `.dsh/settings.yaml` | picked up at the next DSH session |
 | GitHub Copilot | `.github/agents/`, `.github/prompts/`, `.github/instructions/`, `.github/copilot-instructions.md` | read by the GitHub Copilot Chat agent and prompt picker |
 
@@ -33,7 +33,7 @@ The universal source lives under `.agents/skills/<name>/` and stays harness-neut
 2. List the harness deltas. A variant differs only in frontmatter, file paths, and load semantics. Write the deltas down in one place, not inside the generated file.
 3. Generate each variant from the source with a deterministic transform. No generator ships in this repo: write a small script or a documented manual transform, and commit it next to the source. A transform you cannot re-run is a copy, and copies drift.
 4. Add the parity check. Regenerate into a temporary path and compare against the checked-in variant; any difference fails.
-5. Apply per harness. OpenCode changes need a restart; DSH changes are picked up at the next session.
+5. Apply per harness. OpenCode changes hot-reload automatically; DSH changes are picked up at the next session.
 
 ## Parity Check
 

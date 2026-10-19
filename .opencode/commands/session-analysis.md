@@ -119,7 +119,7 @@ Load the harness-management skill by name using your `skill` tool, then map the 
 
 Apply the Prioritization policy in harness-management — do not restate or copy its content here. Read review.md Section 7 (token distribution and cost) for the cost evidence the policy scores. Then use the question tool over the capped list of proposed improvements from Section 8 of review.md. For each selected improvement, specify the exact file path and concrete change to be made. Keep the list within the policy's cap of 1–3 actions, and write the selected items to Section 9 of review.md as action items in the shared 5-field schema (Domain match / Change / Where / Trigger / Next step).
 
-## Step 7: Implement and Restart
+## Step 7: Implement
 
 Implement the top 1–3 items from Step 6's prioritization:
 
@@ -131,7 +131,7 @@ Finalize the review only after implementing:
 sed -i 's|status: "in-progress"|status: "completed"|' "$REVIEW_MD"
 ```
 
-Then ask for an opencode restart to apply the changes: instructions, plugins, and skills load at server start, so the restart is what makes the new guidance and plugin behavior take effect. This is a documented limitation, not an error — unit tests cannot prove live wiring (recall the project lesson `troubleshooting/opencode-plugin-live-diagnosis`).
+OpenCode v2 hot-reloads plugins, instructions, commands, and config automatically — no manual restart is required, so the new guidance and plugin behavior take effect without one (restart only for unwatched local plugin dependencies or nested instruction edits). Unit tests cannot prove live wiring (recall the project lesson `troubleshooting/opencode-plugin-live-diagnosis`).
 
 ## Constraints
 

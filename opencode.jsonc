@@ -12,7 +12,7 @@
     "compaction": {
         "auto": true,
         "prune": true,
-        "reserved": 2000
+        // "reserved": 2000
     },
     "experimental": {
         "continue_loop_on_deny": true

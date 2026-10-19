@@ -11,6 +11,6 @@ The session-review flow keeps two commands separate on a shared evidence spine: 
 ## session-analysis behavior
 
 - Reads the pre-filled review.md §3-§7 (no recompute); single residual jq step (crossing step).
-- Step 7 implements the top 1-3 items per the policy, then asks for an opencode restart (plugin changes load at server start).
+- Step 7 implements the top 1-3 items per the policy; under OpenCode v2 plugin changes hot-reload automatically (no manual restart required).
 
 Related: mem:refactoring/session-review/review-document-contract, mem:refactoring/session-review/open-decisions, mem:troubleshooting/opencode-plugin-live-diagnosis.

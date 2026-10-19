@@ -86,4 +86,4 @@ Fix missing directory with `mkdir -p scripts/conductor` in `justfile` gate 5 and
 
 ## Notes
 
-- Instruction loads at opencode server start (see `troubleshooting/opencode-plugin-live-diagnosis`). After editing this file, request an opencode restart.
+- OpenCode v2 hot-reloads instructions and plugins automatically — no manual restart is required for edits to this file. Restart only for unwatched local plugin dependencies or nested instruction edits (see `troubleshooting/opencode-plugin-live-diagnosis`).

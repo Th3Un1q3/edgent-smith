@@ -12,14 +12,13 @@ description: >-
 license: MIT
 compatibility: Requires OpenCode + DSH + GitHub Copilot
 metadata:
-  version: "1.4.1"
+  version: "1.4.3"
   delta: |
+    1.4.3 — passive-hooks.md: repointed the live hook entry-point list to the four current live plugins (quality-gate-enforcer, instructions-loader, goal-continuation, workflow); dropped the quarantined todo-enforcer, skills-loader, and session-tracker names.
+    1.4.2 — replaced stale "ask for an opencode restart" claims with OpenCode v2 hot-reload facts across SKILL.md, references/placement-rules.md, and the workflow files.
     1.4.1 — repointed manage-skill.md link validation from the removed per-skill building-modular-skills/scripts path to the shared agent_utils/scripts tooling and `just agent_utils::validate-skill`.
     1.4.0 — repointed Rule 25 citations to references/guidance-process.md; renamed references/portability-checklist.md to references/harness-change-checklist.md and cross-referenced the building-modular-skills Shaping Checklist.
-    1.0.0 — initial harness management skill
-    1.1.0 — routed session-audit findings via references/improvement-patterns.md; referenced session-insights
-    1.1.1 — compatibility label: Requires OpenCode + DSH + GitHub Copilot.
-    1.1.2 — pointer to the building-modular-skills reference-direction rule added after the Change Type Reference.
+    1.1.0–1.1.2 — routed session-audit findings via references/improvement-patterns.md (references session-insights); compatibility label Requires OpenCode + DSH + GitHub Copilot; added a pointer to the building-modular-skills reference-direction rule after the Change Type Reference.
     1.2.0 — added the six-rule Placement Decision List (compact table in SKILL.md, expanded references/placement-rules.md); root AGENTS.md added to Supported Homes; reference-direction pointer keeps placement ownership; manage-skill creation routing and directory rule-6 framing fixed; memories route to serena-memory.
     1.3.0 — added workflows/dedupe-verification.md (consolidation/dedupe/move verification with an information-loss audit); routed it in the Task Routing Table.
   author: Th3Un1qu3
@@ -47,7 +46,7 @@ Apply the first rule that matches; a domain-governing skill overrides (see Domai
 | Scope | Homes | When it applies |
 |---|---|---|
 | **Shared (with per-harness realization)** | `.agents/skills/<name>/`, `AGENTS.md (root / directory)` | `.agents/skills/` loads in OpenCode and DSH; GitHub Copilot has no skill loader — see per-harness-compile.md for details. Root `/workspace/AGENTS.md` is injected project-wide; `<directory>/AGENTS.md` is scoped to its subtree. |
-| **OpenCode-specific** | `.opencode/instructions/<name>.instructions.md`, `.opencode/agents/<name>.md` | OpenCode RUG only; requires `opencode` restart |
+| **OpenCode-specific** | `.opencode/instructions/<name>.instructions.md`, `.opencode/agents/<name>.md` | OpenCode RUG only; OpenCode v2 hot-reloads these files — no manual restart needed |
 | **DeepSeek-specific** | `.dsh/cordis.patch.yml`, `.dsh/child-runtime/cordis.yml`, `.dsh/.agent-presets/**`, `.dsh/settings.yaml` | DSH / Cordis RUG only; place only DSH / Cordis behavior here; picked up next DSH session, no restart |
 | **GitHub Copilot-specific** | `.github/agents/*.agent.md`, `.github/prompts/*.md`, `.github/instructions/*.instructions.md`, `.github/copilot-instructions.md` | GitHub Copilot Chat only; read by the agent and prompt picker |
 
@@ -128,7 +127,7 @@ For a recurring failure, the harness change belongs in the SKILL that governs th
 
 ### OpenCode-specific (step 4)
 
-4. Ask for an opencode restart to apply the changes — agents, plugins, and skills load at server start.
+4. No manual restart needed — OpenCode v2 hot-reloads these changes: instructions, commands, config, and plugins reload automatically, and agent and skill edits follow the same hot-reload path. Restart only for unwatched local plugin dependencies, and start a new session after editing a nested `AGENTS.md` (not auto-detected after load).
 
 ### DeepSeek-specific
 

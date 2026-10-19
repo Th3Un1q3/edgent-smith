@@ -24,9 +24,9 @@ Use this change type when:
 1. Name the event the rule binds to: an edit or write to a path, a session start, a tool call, or a todo transition.
 2. Pick the existing hook that owns that event, or add a new plugin entry point.
    - `.opencode/plugins/quality-gate-enforcer.ts` runs configured gates on `edit` and `write` through `tool.execute.before` and `tool.execute.after`, then reports status transitions.
-   - `.opencode/plugins/skills-loader.ts` injects skills at server start.
-   - `.opencode/plugins/session-tracker.ts` tracks per-session state.
-   - `.opencode/plugins/todo-enforcer.ts` enforces todo transitions.
+   - `.opencode/plugins/instructions-loader.ts` injects scoped instructions into the agent context.
+   - `.opencode/plugins/goal-continuation.ts` owns the `goal` tool, the goal-first enforcement gate, and the idle nudge loop (ADR-008).
+   - `.opencode/plugins/workflow.ts` registers the workflow tool that runs workflow envelopes.
    The full set of entry points and helper roles is in `.opencode/plugins/AGENTS.md`.
 3. Write the hook as a named-export async function that returns the registration object. Store per-session state through `helpers/kv-store.ts` (`SessionStorage`) and log through `helpers/logger.ts`. Namespace every state key so two plugins do not clobber each other.
 4. Make the hook fail closed. An exception must report failure, never skip the check. `quality-gate-enforcer.ts` sets the reference: a thrown gate error becomes `{ exitCode: 1 }` (lines 89 to 96), so an errored gate counts as failed. For a new hook, trace what the caller sees when the check cannot run. If the error path allows, fix it.
@@ -45,13 +45,12 @@ Use this change type when:
 - Confirm the hook fires on the intended event, not a neighboring one. Check this in the plugin tests; a passing unit test alone does not prove live wiring.
 - Force the error path and confirm it reports failure, not success. This is the fail-closed check from step 4.
 
-## Apply and Restart
+## Apply
 
-- Plugins load by directory scan at opencode server start.
-- Ask for an opencode restart. Unit tests cannot prove live hook wiring.
+- OpenCode v2 hot-reloads plugin changes; no manual restart needed. Unit tests cannot prove live hook wiring; restart only for unwatched local plugin dependencies.
 
 ## Done When
 
 - The hook's tests pass and the three gate commands exit 0.
-- A restart loads the plugin with no error.
+- The plugin loads with no error.
 - The fail-closed check fails the run on a forced error.

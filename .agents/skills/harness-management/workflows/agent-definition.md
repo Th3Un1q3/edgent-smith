@@ -32,7 +32,6 @@ Use this change type when:
 - Confirm the permission block is coherent with the workflow it governs.
 - Confirm the change reads as a directive to the agent, not a description of it.
 
-## Apply and Restart
+## Apply
 
-- Agent definitions load at server start.
-- Ask for an opencode restart to apply the change.
+- OpenCode v2 hot-reloads agent files; no manual restart needed.

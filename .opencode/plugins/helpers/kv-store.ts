@@ -13,8 +13,6 @@ export enum SESSION_FIELDS {
   toolCalls = 'toolCalls',
   agent = 'agent',
   needsReview = 'needsReview',
-  todoFollowupErrorCount = 'todoFollowupErrorCount',
-  todoFollowupBrokenAt = 'todoFollowupBrokenAt',
 }
 
 interface SessionStorageAdapter {

@@ -1,21 +1,14 @@
 /**
- * Modular, extensible configuration for the entire plugin infrastructure.
+ * Modular configuration for the plugin infrastructure: each plugin's config is a
+ * named section under `plugins`, keyed by plugin id. Add sections as plugins grow.
  *
- * Designed eslint-style: each plugin's config is a named section under `plugins`,
- * keyed by plugin id. Add new plugin sections as they grow (quality gates, etc.).
- *
- * Referenced by plugins via:
- *   import { harnessConfig } from './config/harness.config'
- *
- * File location: .opencode/plugins/config/harness.config.ts
- * (in a subdirectory so it is NOT auto-loaded as a plugin — only root *.ts are plugins;
- * helpers/ and types/ subdirs already prove this.)
- *
- * Test reference: .opencode/plugins/tests/skill-usage-tracker.test.ts L262
- * Test reference: .opencode/plugins/tests/helpers/gate-config.test.ts
+ * Lives in a subdirectory so it is NOT auto-loaded as a plugin — only root
+ * `.opencode/plugins/*.ts` files are plugins.
  */
 
 import type { GateConfig } from '../types/quality-gate'
+import type { GoalEnforcementConfig } from '../types/goal-enforcement'
+import type { ToolLimitConfig } from '../types/tool-limit'
 
 /**
  * Declared as a typed `GateConfig[]` (not an inline literal) so the `as const`
@@ -53,26 +46,36 @@ const qualityGates: GateConfig[] = [
   },
 ]
 
+// Goal-first enforcement gate (ADR-008): enabled for the agents listed below;
+// the code default in `../types/goal-enforcement` enforces nothing.
+const goalEnforcement: GoalEnforcementConfig = {
+  enforceAll: false,
+  agents: ['rug', 'rug-workflow'],
+  optOut: [],
+  readOnlyAllowlist: ['question', 'read', 'glob', 'grep', 'skill'],
+  maxSteeringRepeats: 3,
+}
+
+/**
+ * Declared as a typed `ToolLimitConfig` (not an inline literal) so the `as const`
+ * on `harnessConfig` does not widen `ignoreTools`/`limits` into `readonly`,
+ * which would not satisfy `ToolLimitConfig.ignoreTools: string[]`.
+ */
+const toolLimit: ToolLimitConfig = {
+  factor: 0.8, // agent budget = floor(steps * factor)
+  padding: 2, // PADDING_TILL_ERROR — extra calls for the in-flight current call
+  limits: {}, // agent -> budget override; wins over floor(steps * factor)
+  ignoreTools: ['goal'], // never counted (both counters)
+  review: { export: true, command: 'just agent_utils/export-opencode-session', writeMarkdown: true },
+}
+
 export const harnessConfig = {
   plugins: {
-    'skill-usage-tracker': {
-      thresholds: {
-        // Read relevant references + read relevant file, update relevant file, run test, fix test, update implementation, run test.
-        'test-design': 8,
-        // read 3 recepis, find mcp + create sandbox + read something + write an update ideally 4 steps. + 1 step for correction.
-        'context-gathering': 12,
-      },
-    },
-    'tool-limit-reminder': {
-      factor: 0.8, // agent budget = floor(steps * factor)
-      padding: 2, // PADDING_TILL_ERROR — extra calls for the in-flight current call
-    },
+    'tool-limit-reminder': toolLimit,
     'quality-gate-enforcer': {
       gates: qualityGates,
       debounceMs: 1500,
     },
-    'todo-enforcer': {
-      maxConsecutiveErrors: 3,
-    },
+    'goal-continuation': goalEnforcement,
   },
 } as const

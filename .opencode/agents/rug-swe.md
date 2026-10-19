@@ -10,7 +10,6 @@ permission:
   grep: deny
   list_mcp_*: deny
   read_mcp_*: deny
-  todowrite: deny
   workflow: deny
   read:
    ".serena/memories/*": deny
