@@ -83,7 +83,7 @@ registry:
 
   filesystem:
     type: server
-    description: "Local filesystem access via the Rust MCP filesystem server (rust-mcp-stack/rust-mcp-filesystem). Access scope limited by the server allowed-directories (command): .opencode/, agents/, agent_utils/, cli/, evals/, experiments/, mcp/, scripts/, tests/ — writable (ALLOW_WRITE=true). Paths outside this list are denied by the server (e.g., .env, secrets/, .serena/, .git/). digest-pinned; disableNetwork."
+    description: "Local filesystem access via the Rust MCP filesystem server (rust-mcp-stack/rust-mcp-filesystem). Access scope limited by the server allowed-directories (command): .opencode/, .tmp/, agents/, agent_utils/, cli/, evals/, experiments/, mcp/, scripts/, tests/ — writable (ALLOW_WRITE=true). Paths outside this list are denied by the server (e.g., .env, secrets/, .serena/, .git/). digest-pinned; disableNetwork."
     title: "Filesystem (Rust) - Workspace File Access"
     image: "mcp/rust-mcp-filesystem@sha256:0a8d6879a67649fc9801c48e33e39c4f994e5fbfd9b5df8ba7260d63dbc1a242"
     env:
@@ -91,6 +91,7 @@ registry:
         value: "true"
     command:
       - "/workspace/.opencode"
+      - "/workspace/.tmp"
       - "/workspace/agents"
       - "/workspace/agent_utils"
       - "/workspace/cli"

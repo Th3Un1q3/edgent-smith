@@ -77,5 +77,10 @@ export const harnessConfig = {
       debounceMs: 1500,
     },
     'goal-continuation': goalEnforcement,
+    'workflow': {
+      // ADR-010: instruction source is configurable; string literals need no
+      // typed const because `as const` widening only affects arrays/objects.
+      instructions: '.agents/skills/task-delegation/SKILL.md',
+    },
   },
 } as const

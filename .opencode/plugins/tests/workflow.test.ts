@@ -1,4 +1,8 @@
-import { Effect } from 'effect'
+import { Effect, Logger, LogLevel, References } from 'effect'
+
+import { readFileSync } from 'node:fs'
+
+import path from 'node:path'
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -13,16 +17,27 @@ import { runWorkflow } from '@plugins/helpers/workflow-runner'
 
 import { createWorkflowClient } from '@plugins/helpers/workflow-client-adapter'
 
-import plugin from '@plugins/workflow'
+import plugin, { WORKFLOW_INSTRUCTIONS_SENTINEL } from '@plugins/workflow'
+
+type ContextEvent = { tools: Record<string, unknown>, system: Array<{ type: string, text: string }> }
 
 interface Harness {
   context: Context
   tools: Array<Record<string, unknown>>
+  logs: Array<ReadonlyArray<unknown>>
+  contextHook: (event: ContextEvent) => Effect.Effect<void>
   execute: (input: unknown) => Promise<Record<string, unknown>>
 }
 
+const collectLogger = (logs: Harness['logs']): Logger.Logger<unknown, void> =>
+  Logger.make<unknown, void>(({ message }) => {
+    logs.push(Array.isArray(message) ? message : [message])
+  })
+
 const makeHarness = (): Harness => {
   const tools: Array<Record<string, unknown>> = []
+  const logs: Array<ReadonlyArray<unknown>> = []
+  let contextHook: Harness['contextHook'] | undefined
   const context = {
     options: {},
     location: { directory: '/workspace' },
@@ -41,6 +56,10 @@ const makeHarness = (): Harness => {
       hook: () => Effect.succeed({ dispose: Effect.void }),
     },
     session: {
+      hook: (name: string, callback: Harness['contextHook']) => {
+        if (name === 'context') contextHook = callback
+        return Effect.succeed({ dispose: Effect.void })
+      },
       create: () => Effect.succeed({ id: 'ses_child' }),
       prompt: () => Effect.succeed({}),
       fork: () => Effect.succeed({ id: 'ses_fork' }),
@@ -53,6 +72,11 @@ const makeHarness = (): Harness => {
   return {
     context,
     tools,
+    logs,
+    contextHook: (event) => {
+      if (contextHook === undefined) throw new Error('context hook was not registered')
+      return contextHook(event)
+    },
     execute: async (input) => {
       const tool = tools[0]
       const executeFunction = tool.execute as (value: unknown, context_: unknown) => Effect.Effect<unknown>
@@ -63,7 +87,9 @@ const makeHarness = (): Harness => {
 }
 
 const register = async (h: Harness): Promise<void> => {
-  await Effect.runPromise(Effect.scoped(plugin.effect(h.context)))
+  const effect = Effect.scoped(plugin.effect(h.context))
+
+  await Effect.runPromise(Effect.withLogger(collectLogger(h.logs))(effect))
 }
 
 describe('workflow (v2)', () => {
@@ -118,6 +144,154 @@ describe('workflow (v2)', () => {
     expect(call.timeoutMs).toBe(90 * 60_000)
     expect(call.maxConcurrent).toBeUndefined()
     expect(call.maxSubtasks).toBeUndefined()
+  })
+})
+
+describe('workflow instructions log lines', () => {
+  const runContextHook = async (h: Harness, event: ContextEvent, minimumLogLevel: LogLevel.LogLevel = 'Debug'): Promise<void> => {
+    const effect = Effect.provideService(h.contextHook(event), References.MinimumLogLevel, minimumLogLevel)
+
+    await Effect.runPromise(Effect.withLogger(collectLogger(h.logs))(effect))
+  }
+
+  it('logs the loaded instruction source and content size once at registration', async () => {
+    const h = makeHarness()
+
+    await register(h)
+
+    const loaded = h.logs.filter(entry => entry[0] === 'workflow.instructions.loaded')
+
+    expect(loaded).toHaveLength(1)
+
+    const details = loaded[0][1] as { path: string, resolvedPath: string, contentBytes: number }
+
+    expect(details.resolvedPath).toBe(path.resolve('/workspace', details.path))
+    expect(details.contentBytes).toBe(Buffer.byteLength(readFileSync(details.resolvedPath, 'utf8'), 'utf8'))
+  })
+
+  it('logs the context event shape then a debug skip and leaves the context untouched when the workflow tool is absent', async () => {
+    const h = makeHarness()
+
+    await register(h)
+    h.logs.length = 0
+
+    const system = [{ type: 'text', text: 'base' }]
+
+    await runContextHook(h, { tools: { read: {}, grep: {} }, system })
+
+    expect(system).toEqual([{ type: 'text', text: 'base' }])
+    expect(h.logs).toEqual([
+      ['workflow.instructions.context', { received: true, eventKeys: ['tools', 'system'], toolsIsObject: true, tools: ['read', 'grep'] }],
+      ['workflow.instructions.skipped', { tools: ['read', 'grep'] }],
+    ])
+  })
+
+  it('keeps the per-request context line below the production info level while still logging the injection', async () => {
+    const h = makeHarness()
+
+    await register(h)
+    h.logs.length = 0
+
+    await runContextHook(h, { tools: { workflow: {} }, system: [] }, 'Info')
+
+    expect(h.logs.map(entry => entry[0])).toEqual(['workflow.instructions.injected'])
+  })
+
+  it('keeps the skip line below the production info level', async () => {
+    const h = makeHarness()
+
+    await register(h)
+    h.logs.length = 0
+
+    await runContextHook(h, { tools: { read: {} }, system: [] }, 'Info')
+
+    expect(h.logs).toEqual([])
+  })
+
+  it('logs an info injection with the block size, tool keys and no strip', async () => {
+    const h = makeHarness()
+
+    await register(h)
+    h.logs.length = 0
+
+    const system: ContextEvent['system'] = []
+
+    await runContextHook(h, { tools: { workflow: {}, read: {} }, system })
+
+    expect(system).toHaveLength(1)
+    expect(system[0].text.startsWith(WORKFLOW_INSTRUCTIONS_SENTINEL)).toBe(true)
+    expect(h.logs).toHaveLength(2)
+    expect(h.logs[0][0]).toBe('workflow.instructions.context')
+    expect(h.logs[1][0]).toBe('workflow.instructions.injected')
+    expect(h.logs[1][1]).toEqual({
+      carrier: 'system',
+      reason: 'entry-unavailable',
+      blockBytes: Buffer.byteLength(system[0].text, 'utf8'),
+      tools: ['workflow', 'read'],
+      exposure: 'workflow',
+      stripped: false,
+    })
+  })
+
+  it('reports stripped true when a prior sentinel block is replaced', async () => {
+    const h = makeHarness()
+
+    await register(h)
+    h.logs.length = 0
+
+    const system = [
+      { type: 'text', text: `${WORKFLOW_INSTRUCTIONS_SENTINEL}\nold\n</workflow_instructions>` },
+      { type: 'text', text: 'base' },
+    ]
+
+    await runContextHook(h, { tools: { workflow: {} }, system })
+
+    expect(system.map(part => part.text.startsWith(WORKFLOW_INSTRUCTIONS_SENTINEL))).toEqual([false, true])
+    expect((h.logs[1][1] as { stripped: boolean }).stripped).toBe(true)
+  })
+
+  it('logs received false and skips when the hook receives no event', async () => {
+    const h = makeHarness()
+
+    await register(h)
+    h.logs.length = 0
+
+    await runContextHook(h, undefined as unknown as ContextEvent)
+
+    expect(h.logs).toEqual([
+      ['workflow.instructions.context', { received: false, eventKeys: [], toolsIsObject: false }],
+      ['workflow.instructions.skipped', { tools: [] }],
+    ])
+  })
+
+  const missingToolsEvents: Array<{ name: string, event: ContextEvent }> = [
+    { name: 'an event without a tools field', event: { system: [] } as unknown as ContextEvent },
+    { name: 'a non-object tools field', event: { tools: 'workflow', system: [] } as unknown as ContextEvent },
+  ]
+
+  it.each(missingToolsEvents)('logs the shape and skips with an empty tool list for $name', async ({ event }) => {
+    const h = makeHarness()
+
+    await register(h)
+    h.logs.length = 0
+
+    await runContextHook(h, event)
+
+    expect(h.logs).toEqual([
+      ['workflow.instructions.context', { received: true, eventKeys: Object.keys(event), toolsIsObject: false }],
+      ['workflow.instructions.skipped', { tools: [] }],
+    ])
+  })
+
+  it('logs an error instead of throwing when the event has no system array', async () => {
+    const h = makeHarness()
+
+    await register(h)
+    h.logs.length = 0
+
+    await runContextHook(h, { tools: { workflow: {} } } as unknown as ContextEvent)
+
+    expect(h.logs[1]).toEqual(['workflow.instructions.error', { message: 'context event has no system array' }])
   })
 })
 

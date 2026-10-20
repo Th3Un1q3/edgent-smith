@@ -52,7 +52,11 @@ line_ending: "lf"
 language_backend: LSP
 
 # whether to use project's .gitignore files to ignore files
-ignore_all_files_in_gitignore: true
+# Gitignore-driven ignoring is disabled because it is applied after the explicit
+# ignored_paths list in the file-scanning path, so a gitignore entry for .tmp/
+# makes read_file refuse scratch files no matter what ignored_paths negates.
+# Explicit ignored_paths below is the single source of truth for exclusions.
+ignore_all_files_in_gitignore: false
 
 # advanced configuration option allowing to configure language server-specific options.
 # Maps the language key to the options.
@@ -135,7 +139,17 @@ ignored_memory_patterns: []
 # list of additional paths to ignore in this project.
 # Same syntax as gitignore, so you can use * and **.
 # Note: global ignored_paths from serena_config.yml are also applied additively.
-ignored_paths: []
+ignored_paths:
+- "/.git/"
+- "/.venv/"
+- "/.logs/"
+- "/node_modules/"
+- "/.opencode/node_modules/"
+- "__pycache__/"
+- "/.serena/cache/"
+- "/.serena/memories/private/"
+- "/dist/"
+- "/build/"
 
 # whether the project is in read-only mode
 # If set to true, all editing tools will be disabled and attempts to use them will result in an error

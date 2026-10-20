@@ -79,7 +79,7 @@ Invoke this skill when:
 
 | Your goal | Change type | Where it lives | Responsibility | Workflow |
 |---|---|---|---|---|
-| Improve quality or accuracy of editing a specific file type (markdown, code, config) | Scoped instructions | `.opencode/instructions/<name>.instructions.md` | OpenCode-specific | [workflows/scoped-instructions.md](./workflows/scoped-instructions.md) |
+| Improve quality or accuracy of EDITING a specific file type (markdown, code, config) | Scoped instructions | `.opencode/instructions/<name>.instructions.md` | OpenCode-specific | [workflows/scoped-instructions.md](./workflows/scoped-instructions.md) |
 | Improve or memorize a process or workflow | Skill — find, modify, or create | `.agents/skills/<name>/` | Universal | [workflows/manage-skill.md](./workflows/manage-skill.md) |
 | Provide scoped context for a directory and its subdirectories (key files, structure, commands, in/out of scope) | Directory knowledge base | `<directory>/AGENTS.md` | Universal | [workflows/directory-agents-md.md](./workflows/directory-agents-md.md) |
 | Enhance orchestration process and principles to prevent repeated agent mistakes | Agent definition | `.opencode/agents/<name>.md` | OpenCode-specific | [workflows/agent-definition.md](./workflows/agent-definition.md) |

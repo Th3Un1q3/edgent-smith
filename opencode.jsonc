@@ -67,6 +67,8 @@
             "rtk git status *": "allow",
             "git show *": "allow",
             "rtk git show *": "allow",
+            "git check-ignore *": "allow",
+            "rtk git check-ignore *": "allow",
             "git ls *": "allow",
             "rtk git ls *": "allow",
             "git log *": "allow",

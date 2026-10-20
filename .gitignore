@@ -69,7 +69,7 @@ eval_result.json
 secrets/
 
 # Opencode artifacts
-.tmp/
+.tmp/*
 .logs/
 .opencode/plugins/sessions
 .opencode/opencode-notifier-state.json

@@ -1,307 +1,170 @@
 ---
 name: opencode-plugin-interfaces
-description: Explains how to structure opencode plugins. Required when designing an opencode plugin.
+description: OpenCode v2 plugin interfaces for the Effect and promise APIs, where the type definitions live, how to validate a plugin, and what to avoid. Required when designing or editing an OpenCode plugin.
 applyTo: ".opencode/plugins/*.ts"
 excludeAgents: "rug"
 ---
 
-## Plugin Conventions
+# OpenCode v2 plugin interfaces
 
-### Architecture Overview
+OpenCode v2 removed the v1 hook-object plugin API. A v2 plugin is a default-exported object with a stable `id` and one entry point, `effect(context)` or `setup(context)`, and it registers behavior by calling scoped methods on `context`. This file is a map of that API: where the interfaces live, the smallest working shape, how to prove a plugin works, and which v1 habits now fail. It is not an API reference. The installed `.d.ts` files are normative, and this file only points at them.
 
-OpenCode plugins use a **functional, hook-based architecture**. Each plugin is a single async function typed as `Plugin` from `@opencode-ai/plugin` that returns a registration object mapping string-literal hook keys to handler functions. Zero decorators, zero classes — purely functional with named exports only (no default exports).
+## Sources of truth
 
-### Export Conventions
+Use these in order. When a lower source disagrees with a higher one, the higher source wins.
 
-- **No default exports** — every module uses only named exports.
-- **Plugin entry points** (all `.ts` files in `.opencode/plugins/`) export an async function that receives the OpenCode plugin context `{ client, directory? }` and returns a `PluginOutput` object with hooks (`tool.execute.before`, `tool.execute.after`, etc.), optional extension points (`event`, `dispose`, `tool`, `config`, `auth`, `provider`).
-- **Naming convention** — export names follow `{description}Tracker`, `{description}Enforcer`, or `{description}Loader` patterns (e.g., `sessionTracker`, `todoEnforcer`, `instructionsContextLoader`).
-- **Helper modules** (`helpers/`) export domain-specific utilities for cross-plugin reuse.
-- **Type definitions** (`types/`) are interfaces/types only — no runtime logic beyond what the type system requires.
+1. Installed types, authoritative. `@opencode/plugin@2.0.24` and `effect@4.0.0-rc.112` under `/workspace/.opencode/node_modules/`.
+   - `/workspace/.opencode/node_modules/@opencode/plugin/dist/effect/plugin.d.ts`: `Plugin`, `Context`, `define`.
+   - `/workspace/.opencode/node_modules/@opencode/plugin/dist/effect/index.d.ts`: namespace exports (`export * as Plugin`).
+   - `/workspace/.opencode/node_modules/@opencode/plugin/dist/effect/{tool,registration,event,session,permission}.d.ts`: domain signatures and hook payloads.
+   - `/workspace/.opencode/node_modules/@opencode/schema/dist/tool.d.ts`: `Tool.Info`, `Tool.Result`, `ValueSchema`.
+   - `/workspace/.opencode/node_modules/@opencode/plugin/dist/promise/plugin.d.ts`: the `setup` variant.
+2. Installed package metadata. `/workspace/.opencode/node_modules/@opencode/plugin/package.json` lists the export subpaths: `.` (promise), `./effect`, `./host`, `./tui`, plus a `./*` wildcard that reaches `dist/*.d.ts`.
+3. Official v2 docs.
+   - <https://opencode.ai/v2/docs/build/plugins>
+   - <https://opencode.ai/v2/docs/build/plugins/effect>
+   - <https://opencode.ai/v2/docs/build/plugins/migrate-v1/>
 
-### Module Format
+   The unversioned <https://opencode.ai/docs/plugins/> documents v1. Do not cite it for v2.
+4. Repo examples that compile and pass tests.
+   - `.opencode/plugins/workflow.ts`: `id` 199, `effect` 200, `session.hook('context')` 215, `tool.transform` 248, `export default` 271. Smallest complete example.
+   - `.opencode/plugins/goal-continuation.ts`: `tool.transform` 273, `session.hook('prompt')` 303, `tool.hook('execute.before')` 320, `event.subscribe()` 395.
+   - `.opencode/plugins/quality-gate-enforcer.ts`: hook-only plugin, `effect` 43, hooks at 83 and 90.
+   - `.opencode/plugins/tests/workflow.test.ts:90-92`: how a test drives `plugin.effect` with `Effect.runPromise(Effect.scoped(...))`.
 
-All files use **pure ESM** with named exports only. No classes are used anywhere in the plugins directory. Runtime behavior is entirely function-based.
+All five root plugins import `Plugin` from `@opencode/plugin/effect/plugin`; three of them also import `Context` there. None imports from the documented `@opencode/plugin/effect` subpath, which exposes `Plugin` only as a namespace (`export * as Plugin`).
 
-## Import Conventions
+```ts
+import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
+```
 
-OpenCode distinguishes two import contexts with different rules:
+`@opencode/plugin/effect` is the documented subpath; `/effect/plugin` resolves through the `./*` wildcard. Prefer the documented subpath for values, and use the deep path when you need `Context`.
 
-| Context | Files | Import Style | Why |
-|---------|-------|-------------|-----|
-| **Plugin source** | `plugins/*.ts`, `plugins/helpers/*.ts`, `plugins/types/*.ts` | **Relative imports only** (`./helpers/logger`, `../types/quality-gate`) | The OpenCode plugin runtime loads `.ts` files directly and does **not** resolve TypeScript `paths` aliases. `@plugins/...` would fail at runtime. |
-| **Test files** | `plugins/tests/**/*.test.ts` | **Alias imports** (`@plugins/...`, `@tests/...`) | Vitest resolves `paths` from `tsconfig.json` via tsconfig-paths. Aliases keep test imports concise and resilient to directory restructuring. |
+## Module shape
 
-**Rule:** Plugin source files MUST use relative paths for all internal imports. The `@plugins/*` and `@tests/*` aliases defined in `tsconfig.json` are for test files only. Both the runtime and `tsc` will fail to resolve these aliases in source code.
+Effect API (`dist/effect/plugin.d.ts`):
 
-## Development Workflow
+```ts
+export interface Plugin<R = Scope.Scope> {
+  readonly id: string
+  readonly effect: (context: Context) => Effect.Effect<void, never, R>
+}
+```
 
-### Install dependencies
+Promise API (root import `@opencode/plugin`, `dist/promise/plugin.d.ts`):
 
-Plugin dependencies are tracked in `/workspace/.opencode/package.json` and installed with bun:
+```ts
+export interface Plugin {
+  readonly id: string
+  readonly setup: (context: Context) => Promise<Cleanup | void> | Cleanup | void
+}
+```
+
+`define(plugin)` returns its argument unchanged (`dist/effect/plugin.js`). The repo skips it and default-exports an object literal (`instructions-loader.ts:58-60`). `Plugin.define` needs the namespace value import `import { Plugin } from '@opencode/plugin/effect'`; a type-only import gives the interface, which has no `.define`.
+
+Every registration is scoped. Register inside `Effect.gen` and the runtime releases it when the plugin unloads; the promise variant returns a cleanup function instead. There is no `dispose` key.
+
+## Minimal anatomy
+
+```ts
+import { Effect, Schema } from 'effect'
+import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
+
+const plugin: Plugin = {
+  id: 'opencode.example',
+  effect: (context: Context) =>
+    Effect.gen(function* () {
+      yield* context.tool.transform((editor) => {
+        editor.add({
+          name: 'example',
+          description: 'Echo the query',
+          input: Schema.Struct({ query: Schema.String }),
+          execute: (input) => Effect.succeed({ content: input.query }),
+        })
+      })
+
+      yield* context.session.hook('context', (event) => {
+        event.tools.example = { description: 'Echo the query', input: {} }
+        return Effect.void
+      })
+    }),
+}
+
+export default plugin
+```
+
+`tool.transform` receives an editor with `list`, `get`, `add`, `update`, `remove`, and `namespace`. Tool `input` accepts Effect Schema, Standard Schema, or JSON Schema. `execute` returns `Effect<{ output?, content?, metadata? }, Tool.Error>`, never a string. Hook names are the keys of the domain's hook interface: `tool.hook` accepts `execute.before` and `execute.after`; `session.hook` accepts `prompt`, `context`, `compaction`, `generate`, `title`, `model.request`, `http.request`, `http.response`, `retry`, and three `experimental.ws.*` names; `permission.hook` accepts `evaluate`. Read `dist/effect/<domain>.d.ts` for payloads instead of trusting a list in prose.
+
+Events are a scoped stream, not a plugin key: `yield* context.event.subscribe().pipe(Stream.filter(...), Stream.runForEach(...), Effect.forkScoped)`.
+
+## Loading and imports
+
+The loader scans root `.opencode/plugins/*.ts` only. `helpers/`, `types/`, and `tests/` are not plugin entry points. Each entry point default-exports one plugin object and may import helpers with relative paths.
+
+- Source files use relative imports (`./helpers/logger`). The runtime loads `.ts` directly and does not resolve TypeScript `paths`, so `@plugins/*` fails at load time.
+- Tests use the aliases `@plugins/*` and `@tests/*` from `.opencode/tsconfig.json`; `.opencode/vitest.config.ts` also maps `bun` to a mock.
+- Import types with `import type` so the compiler erases the import and no runtime package copy is pulled in.
+- Import `Effect`, `Stream`, and `Schema` from the single installed `effect` copy. A second copy under `@opencode/plugin/node_modules/effect` breaks `Effect.isEffect` and schema identity checks.
+- Keep the default export reachable. The package declares no `sideEffects`, so a bundler can drop an unused plugin object.
+
+`applyTo` matches only direct children of `.opencode/plugins/`. `helpers/*.ts` and `tests/*.ts` do not load this file (`instruction-indexer.ts:112-135`, `glob-match.ts:16`).
+
+## Validate
+
+Run `just` targets only. They pass the Bun and istanbul flags this runtime needs. Never call `bun`, `tsc`, `vitest`, or `eslint` directly.
+
+| Gate | Command | Wiring |
+|---|---|---|
+| Typecheck | `just .opencode/typecheck` | CI (`scripts/ci.sh:76`) |
+| One test file | `just .opencode/test -- plugins/tests/<name>.test.ts` | CI |
+| Coverage | `just .opencode/test --coverage` | CI, 90% branch/function/line/statement |
+| Lint | `just .opencode/lint` | CI (`scripts/ci.sh:75`) |
+
+A unit test builds a fake `Context`, calls `Effect.runPromise(Effect.scoped(plugin.effect(context)))`, then asserts the registrations. `.opencode/plugins/tests/workflow.test.ts` is the model.
+
+Green unit tests do not prove the plugin works in a live session. A Serena memory, `mem:cases/opencode/sdk_detached_method_this`, records the failure: a detached client method loses `this` and throws, so call it as a member instead of storing the function. Unit fakes exercise neither the real client nor the real event stream nor load order.
+
+Live smoke, optional and not CI-wired. Treat it as PLAUSIBLE; no repo script runs it.
 
 ```bash
-cd .opencode && bun install
+opencode run --format json --standalone "<prompt that triggers the plugin>"
 ```
 
-## Plugin Architecture
-
-### Plugin Registration & Loading
-
-Plugins are loaded by **directory scanning** — every `.ts` file at the root of `.opencode/plugins/` is an independent plugin. No entry-point file or registry is needed. The runtime:
-1. Scans `plugins/*.ts` for top-level named exports matching the `Plugin` interface shape.
-2. Imports each module, invokes its exported async function with `{ client, directory? }`.
-3. Collects all returned hook registrations into per-key arrays.
-4. Dispatches events by iterating those arrays in insertion (load) order when the corresponding runtime event fires.
-
-### Hooks & Extension Points — Core Concepts
-
-Plugins intercept behavior through **event hooks** and **extension points**:
-
-- **Event hooks** are keyed strings in the returned object that fire at specific lifecycle points. All hook handlers follow an `(input, output) => void | Promise<void>` pattern where `output` is mutable — handlers mutate it directly rather than returning values.
-- **Extension points** (`tool`, `event`, `dispose`, `config`, `auth`, `provider`) have different shapes and do not follow the mutation pattern.
-
-### Hook Compositability & Mutation Model
-
-Multiple plugins can register the same hook key. All handlers fire **sequentially in load order**, each seeing mutations from prior hooks. This means plugins communicate through a shared mutable state store (`SessionStorage` / `kv-store`) rather than direct imports — both a strength (loose coupling) and a consideration for reasoning about cross-plugin interactions.
-
-### Extension Points Reference
-
-#### `tool` — Custom Tool Registration
-
-Register new AI-callable tools that appear alongside built-in tools. Custom tools take precedence over built-in tools if naming conflicts occur. Built via the `tool()` helper from `@opencode-ai/plugin`.
-
-```ts
-import { tool } from "@opencode-ai/plugin"
-
-export const MyPlugin = async (ctx) => ({
-  tool: {
-    myCustomTool: tool({
-      description: "Does something custom",
-      args: {
-        name: tool.schema.string().describe("The name parameter"),
-        count: tool.schema.number().optional().describe("Optional count"),
-      },
-      execute: async (args, context) => {
-        // context has { agent, sessionID, messageID, directory, worktree }
-        return `Result for ${args.name}`;
-      },
-    }),
-  },
-})
-```
-
-#### `event` — System Event Subscription
-
-Registers a handler that subscribes to all internal system events. The callback receives every emitted event object. Used for side effects (logging, analytics, notifications). **Event data shapes are not part of the stable public API** — they vary by event type and may change between versions. Use with caution in production plugins.
-
-```ts
-export const MyPlugin = async (ctx) => ({
-  event: async (input) => {
-    if (input.event.type === "session.idle") {
-      sendNotification("Session is idle");
-    }
-  },
-})
-```
-
-#### `dispose` — Plugin Teardown Handler
-
-Fires when the plugin is being unloaded/terminated. Essential for preventing resource leaks. No input or output parameters. Must be async (`Promise<void>`).
-
-```ts
-export const MyPlugin = async (ctx) => ({
-  dispose: async () => {
-    await connection.close();
-    clearInterval(timer);
-  },
-})
-```
-
-#### `config` — Configuration Observer
-
-Read-only hook for observing OpenCode's configuration at startup. Does not accept or return mutable data. Receives the full `Config` object.
-
-#### `auth` & `provider` — Authentication & Provider Customization
-
-Custom authentication provider and LLM provider customization hooks. Interact with internal account/provider systems. Signatures are implementation-specific.
-
-### Hook Documentation Strategy
-
-Specific hook names, field types, and event type lists are **version-dependent** and drift across OpenCode releases. For the current stable hook reference:
-1. Check the `@opencode-ai/plugin` package's type definitions (`.d.ts` files) for the most accurate interface shapes.
-2. Consult the plugin registry or documentation bundled with your installed OpenCode version.
-3. Treat any undocumented event types as experimental — they may change without notice.
-
-## Directory Structure & Infrastructure
-
-### Layout Rationale
-
-```
-plugins/
-├── *.ts                  # Each file = one independent plugin (loaded by directory scan)
-├── helpers/              # Shared helper modules (logger, kv-store, session-helpers)
-│   ├── kv-store.ts       # Per-session state persistence (SessionStorage)
-│   ├── logger.ts         # Singleton logging utility (shared across all plugins)
-│   └── session-helpers.ts  # Session communication utilities
-├── types/                # Shared type definitions (interfaces/types only)
-├── sessions/             # Runtime ephemeral state (disk-backed per-session KV store instances)
-```
-
-| Design Choice | Rationale |
-|---------------|-----------|
-| Plugins at root level | Maximum discoverability; no nesting to traverse for new plugin creation |
-| No entry-point file | Eliminates registration overhead — any `.ts` is a valid plugin by convention |
-| Helpers subdirectory | Groups shared utilities separately from plugin logic, reducing cognitive load |
-| Types subdirectory | Centralizes shared type definitions to avoid duplication across plugins and helpers |
-| Sessions directory | Separates ephemeral runtime state from source code; disk-backed per-session isolation enables persistence across process restarts and direct inspection for debugging |
-
-### Helper Module Roles
-
-| Module | Exports / Purpose | Consumed By | Dependency Type |
-|--------|-------------------|-------------|-----------------|
-| `kv-store.ts` | `SessionStorage`, `State`, `SESSION_FIELDS` — per-session KV store abstraction | Multiple plugins | Core state layer; all consumers read/write the same storage instance |
-| `logger.ts` | Singleton logging utility | All plugins and helpers | Logging — single shared logger instance ensures consistent output |
-| `session-helpers.ts` | `sendMessage` utility for session communication | Session-dependent consumers | Action utility — no persistent state, pure function |
-
-## Design Patterns & Best Practices
-
-### 1. Functional-Only Architecture
-Every plugin is a single named `const` that is an async function typed as `Plugin`. No class definitions, no decorators, no inheritance anywhere in the codebase.
-
-**Implications:** Low ceremony for adding plugins; implicit contracts enforced by TypeScript typing; trivially testable pure functions.
-
-### 2. Mutation-Based Inter-Plugin Communication
-Plugins coordinate through shared session state via `SessionStorage` (disk-backed KV store in `sessions/*.json`) rather than direct imports or return-value chaining. This is equivalent to an **implicit context object** pattern where the KV store acts as per-session thread-local storage.
-
-**Trade-off:** Loose coupling (plugins don't import each other) at the cost of explicitness — cross-plugin interactions are invisible without tracing all mutations in `SessionStorage`.
-
-### 3. Singleton Logger
-`logger.ts` provides a singleton logging utility shared across all helpers and plugins. No dependency injection for logging — every module imports the same instance directly. Simple but creates a tight coupling point; swapping or mocking requires changing every import site. Adequate at this scale (5+ plugins).
-
-### 4. Ephemeral Session State Isolation
-`sessions/` contains per-session KV store instances persisted to disk by `kv-store.ts`. Disk-backed isolation enables session persistence across process restarts and debugging via direct file inspection, with potential scalability considerations at high concurrency if file I/O becomes a bottleneck.
-
-## New Plugin Onboarding Checklist
-
-1. Create `<plugin-name>.ts` at plugin root level (no directory nesting).
-2. Import `{ Plugin }` from `@opencode-ai/plugin`.
-3. Export an async function typed as `Plugin` that receives `{ client, directory? }`.
-4. Register hook keys via returned handler functions — use the mutation pattern `(input, output) => void | Promise<void>`.
-5. Use helpers from `helpers/` (`SessionStorage`, `logger`) for shared state and logging if needed.
-6. Add corresponding tests to `tests/` if the plugin modifies behavior or state.
-
-## Hook Ordering & Conflict Resolution Summary
-
-| Concern | Rule |
-|---------|------|
-| **Multiple plugins registering the same hook** | All handlers fire sequentially in plugin load order. Each sees the mutations of prior hooks. |
-| **`permission.ask` — multiple handlers** | Last loaded plugin's return value takes precedence for `output.status`. |
-| **Custom tool naming conflicts** | Plugin-registered tools take precedence over built-in tools with the same name. |
-| **Experimental hook stability** | Experimental hooks may change or be removed between OpenCode versions. Do not rely on them in production plugins without version guards. |
-
-## SessionStorage Data Shape Consistency
-
-When using `SessionStorage` for per-plugin KV state, follow these rules to prevent shape mismatch bugs:
-
-### Rule 1: Namespace Your Keys
-
-Always store plugin state under a plugin-specific top-level key. Never write at the root level.
-
-```typescript
-// CORRECT: nested under plugin namespace
-sessionStorage.updateState(sessionID, (state) => ({
-  ...state,
-  qualityGateStatuses: {                    // plugin namespace
-    ...(state.qualityGateStatuses ?? {}),
-    [gateName]: { dirty: false, status: "pass" },
-  },
-}))
-
-// WRONG: writes at root, overwrites other plugins' state
-sessionStorage.updateState(sessionID, () => ({
-  dirty: false,                             // root-level — will clobber everything
-  status: "pass",
-}))
-```
-
-### Rule 2: Read and Write the Same Path
-
-The read path in `readState` MUST match the write path in `updateState`. Use the same key structure in both operations.
-
-```typescript
-// CORRECT: read and write both access qualityGateStatuses[gateName]
-const state = sessionStorage.readState(sessionID, (s) => s)
-const oldStatus = state?.qualityGateStatuses?.[gateName]?.status ?? "unknown"
-
-sessionStorage.updateState(sessionID, (state) => ({
-  ...state,
-  qualityGateStatuses: {
-    ...(state.qualityGateStatuses ?? {}),
-    [gateName]: { dirty: false, status: newStatus },
-  },
-}))
-
-// WRONG: writes nested but reads from root — shape mismatch
-const oldStatus = state?.status ?? "unknown"  // reads root, but data is at qualityGateStatuses[gateName].status
-```
-
-### Rule 3: Preserve Existing State on Write
-
-Always spread the existing state object when calling `updateState`. The updater function receives the current state; you MUST return a complete state object, not a partial replacement.
-
-```typescript
-// CORRECT: spreads existing state, only updates the target key
-updateState(id, (state) => ({ ...state, myPlugin: newValue }))
-
-// WRONG: replaces entire state, destroying all other plugins' data
-updateState(id, () => ({ myPlugin: newValue }))
-```
-
-### Rule 4: Verify Shape in Tests
-
-Tests that mock `readState` must return the exact nested shape the code expects. If the code reads `state.qualityGateStatuses[gateName].status`, the mock must return `{ qualityGateStatuses: { [gateName]: { status: "pass" } } }` — not `{ status: "pass" }`.
-
-## Steering Message Compliance
-
-Any plugin that emits `<steering>` messages to the agent MUST follow the steering message schema defined in `.opencode/instructions/steering-message.md`.
-
-### Required Attributes
-
-Every `<steering>` element must include:
-
-| Attribute | Required | Description |
-|-----------|----------|-------------|
-| `priority` | Yes | `"info"`, `"warning"`, or `"high"` |
-| `reason` | Yes | Short description of what triggered the message |
-| `type` | Recommended | `"instructions"`, `"quality-gate"`, `"todo"` |
-
-### Example — Compliant
-
-```xml
-<steering priority="high" reason="relevant files touched" type="instructions">
-  <instruction>
-    <description>CLI structure</description>
-    <path>.opencode/instructions/cli-structure.instructions.md</path>
-    <content>...</content>
-  </instruction>
-</steering>
-```
-
-### Example — Non-Compliant (Legacy, Deprecated)
-
-```xml
-<!-- Missing priority, type attributes — deprecated format -->
-<steering reason="Relevant files touched">
-  === INSTRUCTION: CLI structure ===
-  ...
-</steering>
-```
-
-### Adding a Steering Message
-
-1. Choose the correct `priority` for your use case
-2. Write a clear, lowercase `reason` string
-3. Add the appropriate `type`
-4. Document any new patterns in `steering-message.md`
-5. Use structured XML for message body content (prefer `<element>` over ASCII delimiters)
+Run it from `/workspace`. Success is a valid JSON event stream on stdout that shows the expected tool or behavior, with exit 0. Absence of errors in the log is not success. `--standalone` keeps a bad edit away from a shared server.
+
+### Prove an injected context block
+
+- Run under an agent that exposes the tool, confirmed with `opencode debug agents`; the default agent may deny it.
+- `event.tools` is the model-visible map, and plugin tools can collapse into the Code Mode `execute` entry. Gate on the exposure tool the harness actually uses, not only the registered name; a `workflow`-only check never fires.
+- Proof is a completed run plus the branch log. An aborted run proves nothing.
+- `opencode session export` omits system messages and the system prompt, so read `workflow.instructions.*` from stderr or the log file.
+- `workflow.instructions.injected` is info and carries `blockBytes`, `tools`, `exposure`, and `stripped`, e.g. `blockBytes=9560 exposure=execute`. `workflow.instructions.context` and `workflow.instructions.skipped` are debug, and skipped carries only `tools`, so proving the hook did not fire requires debug logging. Correlate lines by log sink timestamp and agent. The payload carries no run id.
+- Auto-discovered plugins receive empty `options`, so repo config belongs in `harness.config.ts` under `plugins[id]`.
+
+Hot reload is active: `dist/source.node.js` appends `__opencode_reload=<generation>` to every local module it resolves, so a running server picks up a saved plugin. Assume hot reload for instruction files too: saving either kind of file can change live behavior immediately, and a broken save can break the agent loop before you run anything (`mem:cases/opencode/plugin_hot_reload_safe_development`, confidence 0.9). Develop in a staging directory outside loader roots, such as `/workspace/.tmp/` or a plugin subdirectory that is not a loader entry point; typecheck before saving; keep the plugin out of the loaded set until a live check passes.
+
+Logs: `~/.local/share/opencode/log/opencode.log`. `--print-logs` writes to stderr and needs `--standalone`.
+
+## Avoid
+
+| Don't | Symptom |
+|---|---|
+| Import `@opencode-ai/plugin` | The package is not installed under `.opencode/node_modules`; the import fails before the plugin loads. |
+| Export only named functions | The loader reads the default export, so the module registers nothing. |
+| Return a string from tool `execute` | Type error: `execute` must return `Effect<Result, Tool.Error>`. |
+| Use `chat.message`, `permission.ask`, `config`, `auth`, `dispose`, or `event` as plugin keys | Absent from every installed `.d.ts`; excess-property typecheck fails and the runtime ignores them. Use `session.hook('prompt')`, `permission.hook('evaluate')`, `context.event.subscribe()`, and scoped release. |
+| Register `tool.execute.before` as a plugin key | Gone. Register `context.tool.hook('execute.before', ...)`. |
+| Install a second `effect` copy | `Effect.isEffect` and schema brand checks fail across instances. |
+| Mix `@opencode-ai/sdk@1.18.34` types with `@opencode/*@2.0.24` | The generations are not interchangeable; type errors appear at the helper boundary. |
+| Treat a deep import as a stable path | Only the `./*` wildcard reaches it; prefer `@opencode/plugin/effect`. |
+| Use `@plugins/*` in plugin source | No alias resolution at runtime; the plugin fails to load. |
+| Assume cwd or absolute paths | The server cwd is `context.location.directory`; imports resolve relative to the source file. |
+| Reproduce the event union from memory | The union is large and not exhaustively verified here; read `dist/effect/event.d.ts`. |
+| Edit a live plugin before typechecking | Hot reload applies the broken module to the running session. |
+
+## New plugin checklist
+
+1. Pick a stable, namespaced `id` (`opencode.<name>`).
+2. Sweep the finished file for v1 survivors: `@opencode-ai/plugin`, `chat.message`, `permission.ask`, `dispose`, and `event` as a plugin key.
+
+Steering messages and their attributes: `.opencode/instructions/steering-message.md`.
