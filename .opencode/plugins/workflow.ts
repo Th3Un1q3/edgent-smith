@@ -12,12 +12,12 @@ import path from 'node:path'
 import { Cause, Effect, Stream } from 'effect'
 import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
 import { harnessConfig } from './config/harness.config'
-import { DEFAULT_TIMEOUT_MINUTES, runWorkflow } from './helpers/workflow-runner'
+import { listSteps, readStoredSteps } from './helpers/subtask-ls'
+import { runStandaloneSubtask } from './helpers/subtask-run'
+import { recordTailOutput, tailOutputs } from './helpers/subtask-tail'
 import { createWorkflowClient } from './helpers/workflow-client-adapter'
-import { formatElapsed } from './helpers/workflow-subtask'
 import { writeEntry, removeEntry, entryValueBytes, MAX_ENTRY_VALUE_BYTES } from './helpers/instruction-entry-client'
 import type { EntryResult } from './helpers/instruction-entry-client'
-import { DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_SUBTASKS } from './helpers/workflow-types'
 
 const WORKFLOW_INSTRUCTIONS_SENTINEL = '<workflow_instructions'
 const WORKFLOW_INSTRUCTIONS_CLOSING = '</workflow_instructions>'
@@ -28,7 +28,9 @@ const WORKFLOW_INSTRUCTIONS_CLOSING = '</workflow_instructions>'
 // not reject the entry file; tests need the sentinel to assert the injected block.
 export { WORKFLOW_INSTRUCTIONS_SENTINEL }
 
-const WORKFLOW_TOOL_NAME = 'workflow'
+const SUBTASK_LS_TOOL_NAME = 'subtask_ls'
+const SUBTASK_RUN_TOOL_NAME = 'subtask_run'
+const SUBTASK_TAIL_TOOL_NAME = 'subtask_tail'
 const WORKFLOW_CONFIG_KEY = 'workflow'
 // Server namespaces entry keys as api/<key>; the key must match ^[a-z0-9][a-z0-9._-]*$.
 const WORKFLOW_ENTRY_KEY = 'workflow.instructions'
@@ -184,70 +186,82 @@ export const handleSessionEvent = (
   ),
 )
 
-const WORKFLOW_TOOL_DESCRIPTION = [
-  'Execute a JavaScript workflow script that orchestrates subagents.',
-  'The script runs with two helpers: subtask and log.',
-  '',
-  'subtask(input) -> Promise<result>',
-  '- input: a string prompt, or {prompt, description, agent?, skills?, task_id?, fork_from?, timeout_minutes?, schema?}',
-  '- description: required for the object form; a one-line indication of what the subtask does.',
-  '- timeout_minutes: per-subtask timeout in minutes (default 15).',
-  '- result: {outputText, task_id, status, error?, durationMs, truncated, data?, forked_from?}',
-  '- status: \'ok\' | \'error\' | \'empty\' | \'timeout\' | \'aborted\'',
-  '- Failed children never throw; inspect status. Concurrency is bounded automatically (default 4).',
-  '- Children default to the rug-swe agent; pass agent per subtask to override.',
-  '- task_id continues/resumes an existing child session; fork_from forks a session (V2: unsupported, returns an error result).',
-  '- skills: string[] loads .agents/skills/<name>/SKILL.md into the child prompt.',
-  '- schema: a JSON Schema object; the child returns a JSON block between <result_json> and </result_json>.',
-  '',
-  'log(message) -> appends a marker to the envelope logs.',
-  '',
-  'The script must return a small JSON-serializable object (becomes result).',
-  'A guard rejects import/require, Function(, eval(, constructor, process, globalThis, global, Bun, Deno, fetch(;',
-  'forbidden tokens return forbidden_script, syntax errors invalid_script.',
-  '',
-  'Tool result: {title, output}. output is the JSON envelope string; title is a summary such as',
-  '"workflow: ok · 3/5 subtasks · 12.4s". Per-subtask details live in steps[].',
-  '',
-  'Envelope: {status, result, error?, steps, stats, logs} with status one of',
-  'ok | error | timeout | aborted | budget_exceeded | invalid_script | forbidden_script.',
-].join('\n')
+// ADR-012: workflow tool retired. Standalone trio (subtask_ls, subtask_run,
+// subtask_tail) is the only execution surface; no script wrapper remains.
+const SUBTASK_LS_TOOL_DESCRIPTION = [
+  'List subtasks from the latest finished workflow run in this server process.',
+  'Returns an array of {description, durationMs, task_id, status}.',
+  'A restart clears the snapshot, so an empty array means no run yet.',
+].join(' ')
 
-const WORKFLOW_INPUT = {
+const SUBTASK_LS_INPUT = {
   type: 'object',
   properties: {
-    script: { type: 'string', minLength: 1, description: 'JS workflow script; runs with two helpers: subtask and log, no import/require.' },
-    timeout_minutes: { type: 'integer', minimum: 1, maximum: 600, default: DEFAULT_TIMEOUT_MINUTES, description: 'Overall workflow timeout in minutes (1-600).' },
-    max_concurrent: { type: 'integer', minimum: 1, maximum: 8, default: DEFAULT_MAX_CONCURRENT, description: 'Maximum concurrent child subagents.' },
-    max_subtasks: { type: 'integer', minimum: 1, maximum: 64, default: DEFAULT_MAX_SUBTASKS, description: 'Maximum subtasks before the budget is exhausted.' },
+    count: { type: 'integer', minimum: 1, maximum: 50, default: 10, description: 'Maximum rows to return (default 10, capped at 50).' },
+    status: { type: 'string', enum: ['ok', 'error', 'empty', 'timeout', 'aborted'], description: 'Return only subtasks with this status.' },
   },
-  required: ['script'],
   additionalProperties: false,
 }
 
-interface WorkflowArguments {
-  script: string
-  timeout_minutes?: number
-  max_concurrent?: number
-  max_subtasks?: number
+interface SubtaskLsArguments {
+  count?: number
+  status?: 'ok' | 'error' | 'empty' | 'timeout' | 'aborted'
 }
 
-const readNumber = (value: unknown): number => (Number.isFinite(value) ? (value as number) : 0)
+const SUBTASK_RUN_TOOL_DESCRIPTION = [
+  'Run a single subtask directly without a workflow script.',
+  'Accepts description and prompt plus the standard subtask passthrough',
+  '(task_id, fork_from, agent, skills, timeout_minutes, schema).',
+  'Returns the subtask result JSON with status and output.',
+].join(' ')
 
-const toToolResult = (output: string): { content: string, metadata: { title: string } } => {
-  try {
-    const envelope = JSON.parse(output) as {
-      status?: unknown
-      stats?: { ok?: unknown, subtasks?: unknown, totalMs?: unknown }
-    }
-    const status = typeof envelope.status === 'string' ? envelope.status : 'unknown'
-    const stats = envelope.stats ?? {}
-    const elapsed = formatElapsed(Math.max(0, readNumber(stats.totalMs)))
-    return { content: output, metadata: { title: `workflow: ${status} · ${readNumber(stats.ok)}/${readNumber(stats.subtasks)} subtasks · ${elapsed}` } }
-  }
-  catch {
-    return { content: output, metadata: { title: 'workflow: unparseable envelope' } }
-  }
+const SUBTASK_RUN_INPUT = {
+  type: 'object',
+  properties: {
+    prompt: { type: 'string', minLength: 1, description: 'Subtask prompt; what the child should do.' },
+    description: { type: 'string', minLength: 1, description: 'One-line indication of what the subtask does.' },
+    agent: { type: 'string', description: 'Override the child agent (default rug-swe).' },
+    skills: { type: 'array', items: { type: 'string' }, description: 'Skill names loaded into the child prompt.' },
+    task_id: { type: 'string', description: 'Continue/resume an existing child session.' },
+    fork_from: { type: 'string', description: 'Fork a session and run the child there.' },
+    timeout_minutes: { type: 'number', description: 'Per-subtask timeout in minutes (default 15).' },
+    schema: { type: 'object', description: 'JSON Schema for a structured <result_json> reply.' },
+  },
+  required: ['prompt', 'description'],
+  additionalProperties: false,
+}
+
+interface SubtaskRunArguments {
+  prompt: string
+  description: string
+  agent?: string
+  skills?: string[]
+  task_id?: string
+  fork_from?: string
+  timeout_minutes?: number
+  schema?: Record<string, unknown>
+}
+
+const SUBTASK_TAIL_TOOL_DESCRIPTION = [
+  'Return the last outputs recorded for a subtask id.',
+  'Returns an array of {task_id, outputText, status, truncated, updated_at}.',
+  'An unknown or expired id returns an empty array.',
+].join(' ')
+
+const SUBTASK_TAIL_INPUT = {
+  type: 'object',
+  properties: {
+    task_id: { type: 'string', minLength: 1, description: 'Subtask id to tail; matches the task_id returned by subtask_run.' },
+    id: { type: 'string', minLength: 1, description: 'Alias for task_id.' },
+    count: { type: 'integer', minimum: 1, maximum: 5, default: 3, description: 'Maximum outputs to return (default 3, capped at 5).' },
+  },
+  additionalProperties: false,
+}
+
+interface SubtaskTailArguments {
+  task_id?: string
+  id?: string
+  count?: number
 }
 
 const plugin: Plugin = {
@@ -287,26 +301,67 @@ const plugin: Plugin = {
       Effect.forkScoped,
     )
 
+    let lsRegistrationError: unknown
     yield* context.tool.transform((editor) => {
-      editor.add({
-        name: WORKFLOW_TOOL_NAME,
-        description: WORKFLOW_TOOL_DESCRIPTION,
-        input: WORKFLOW_INPUT,
-        execute: (input, toolContext) => Effect.gen(function* () {
-          const arguments_ = input as WorkflowArguments
-          const output = yield* Effect.promise(() => runWorkflow({
-            script: arguments_.script,
-            client: createWorkflowClient(context.session),
-            parentSessionID: toolContext.sessionID as unknown as string,
-            directory: context.location.directory as unknown as string,
-            timeoutMs: (arguments_.timeout_minutes ?? DEFAULT_TIMEOUT_MINUTES) * 60_000,
-            maxConcurrent: arguments_.max_concurrent,
-            maxSubtasks: arguments_.max_subtasks,
-          }))
-          return toToolResult(output)
-        }),
-      })
+      try {
+        editor.add({
+          name: SUBTASK_LS_TOOL_NAME,
+          description: SUBTASK_LS_TOOL_DESCRIPTION,
+          input: SUBTASK_LS_INPUT,
+          execute: input => Effect.gen(function* () {
+            const arguments_ = input as SubtaskLsArguments
+            const entries = listSteps(readStoredSteps(), { count: arguments_.count, status: arguments_.status })
+            const content = JSON.stringify(entries)
+            return { content, metadata: { title: `subtask_ls: ${entries.length} subtask(s)` } }
+          }),
+        })
+        editor.add({
+          name: SUBTASK_RUN_TOOL_NAME,
+          description: SUBTASK_RUN_TOOL_DESCRIPTION,
+          input: SUBTASK_RUN_INPUT,
+          execute: (input, toolContext) => Effect.gen(function* () {
+            const arguments_ = input as SubtaskRunArguments
+            const result = yield* Effect.promise(() => runStandaloneSubtask(
+              {
+                client: createWorkflowClient(context.session),
+                parentSessionID: toolContext.sessionID as unknown as string,
+                directory: context.location.directory as unknown as string,
+              },
+              {
+                prompt: arguments_.prompt,
+                description: arguments_.description,
+                agent: arguments_.agent,
+                skills: arguments_.skills,
+                task_id: arguments_.task_id,
+                fork_from: arguments_.fork_from,
+                timeout_minutes: arguments_.timeout_minutes,
+                schema: arguments_.schema,
+              },
+            ))
+            recordTailOutput(result)
+            return { content: JSON.stringify(result), metadata: { title: `subtask_run: ${result.status}` } }
+          }),
+        })
+        editor.add({
+          name: SUBTASK_TAIL_TOOL_NAME,
+          description: SUBTASK_TAIL_TOOL_DESCRIPTION,
+          input: SUBTASK_TAIL_INPUT,
+          execute: input => Effect.gen(function* () {
+            const arguments_ = input as SubtaskTailArguments
+            const taskId = arguments_.task_id ?? arguments_.id ?? ''
+            const entries = taskId === '' ? [] : tailOutputs(taskId, { count: arguments_.count })
+            const content = JSON.stringify(entries)
+            return { content, metadata: { title: `subtask_tail: ${entries.length} output(s)` } }
+          }),
+        })
+      }
+      catch (error) {
+        lsRegistrationError = error
+      }
     })
+    if (lsRegistrationError !== undefined) {
+      yield* Effect.logError('subtask_ls.register.failed', { message: describeCause(lsRegistrationError) })
+    }
   }),
 }
 

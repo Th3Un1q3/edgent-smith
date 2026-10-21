@@ -1,3 +1,5 @@
+> **Retired:** `tools.workflow` is retired. This page is legacy-only reference. New work uses the standalone trio: `subtask_ls`, `subtask_run`, `subtask_tail`.
+
 # Workflow tool
 
 The `workflow` tool runs a short JavaScript script that orchestrates subagents. Any agent granted the `workflow` permission can call it; `rug-workflow` is the configured workflow orchestrator. Reach for it when a goal needs several child agents working in parallel, a chain of follow-ups, or a merge step, and you want each call to run one phase and produce one result.

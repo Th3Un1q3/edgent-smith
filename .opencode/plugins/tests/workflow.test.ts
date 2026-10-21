@@ -31,11 +31,6 @@ const harness = vi.hoisted(() => {
 
 vi.mock('@plugins/config/harness.config', () => ({ harnessConfig: harness.config }))
 
-vi.mock('@plugins/helpers/workflow-runner', async (importOriginal) => {
-  const actual = (await importOriginal()) as unknown as Record<string, unknown>
-  return { ...actual, runWorkflow: vi.fn() }
-})
-
 const entryClient = vi.hoisted(() => ({
   writeEntry: vi.fn(),
   removeEntry: vi.fn(),
@@ -47,8 +42,6 @@ vi.mock('@plugins/helpers/instruction-entry-client', () => ({
   entryValueBytes: (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8'),
   get MAX_ENTRY_VALUE_BYTES() { return 256 * 1024 },
 }))
-
-import { runWorkflow } from '@plugins/helpers/workflow-runner'
 
 import { createWorkflowClient } from '@plugins/helpers/workflow-client-adapter'
 
@@ -66,7 +59,6 @@ interface Harness {
   tools: Array<Record<string, unknown>>
   logs: Array<ReadonlyArray<unknown>>
   subscriptions: number
-  execute: (input: unknown) => Promise<Record<string, unknown>>
 }
 
 const collectLogger = (logs: Harness['logs']): Logger.Logger<unknown, void> =>
@@ -116,12 +108,6 @@ const makeHarness = (events: SessionEventPayload[] = []): Harness => {
     tools,
     logs,
     get subscriptions() { return subscriptions },
-    execute: async (input) => {
-      const tool = tools[0]
-      const executeFunction = tool.execute as (value: unknown, context_: unknown) => Effect.Effect<unknown>
-      const result = await Effect.runPromise(executeFunction(input, { sessionID: 'ses_parent', agent: 'build', messageID: 'msg_1', id: 'call_1', progress: () => Effect.void }))
-      return result as unknown as Record<string, unknown>
-    },
   }
 }
 
@@ -148,81 +134,23 @@ const register = async (h: Harness): Promise<void> => {
 
 describe('workflow (v2)', () => {
   beforeEach(() => {
-    vi.mocked(runWorkflow).mockReset()
     entryClient.writeEntry.mockReset().mockResolvedValue({ status: 'written' })
     entryClient.removeEntry.mockReset().mockResolvedValue({ status: 'absent' })
   })
 
-  it('registers a workflow tool with a JSON-Schema input', async () => {
+  it('registers the standalone trio with JSON-Schema inputs (workflow retired)', async () => {
     const h = makeHarness()
 
     await register(h)
-    expect(h.tools).toHaveLength(1)
-    expect(h.tools[0].name).toBe('workflow')
-    expect(typeof h.tools[0].execute).toBe('function')
+    expect(h.tools).toHaveLength(3)
+    expect(h.tools[0].name).toBe('subtask_ls')
+    expect(h.tools[1].name).toBe('subtask_run')
+    expect(h.tools[2].name).toBe('subtask_tail')
+    expect(typeof h.tools[1].execute).toBe('function')
 
-    const input = h.tools[0].input as { type: string, required?: string[] }
+    const names = h.tools.map(tool => tool.name)
 
-    expect(input.type).toBe('object')
-    expect(input.required).toContain('script')
-  })
-
-  it('executes the script and returns the workflow envelope', async () => {
-    const h = makeHarness()
-
-    vi.mocked(runWorkflow).mockResolvedValue(JSON.stringify({ status: 'ok', stats: { subtasks: 2, ok: 2, totalMs: 1234 } }))
-    await register(h)
-
-    const result = await h.execute({ script: 'return 1', timeout_minutes: 5, max_concurrent: 2, max_subtasks: 10 })
-
-    expect(runWorkflow).toHaveBeenCalledTimes(1)
-
-    const call = vi.mocked(runWorkflow).mock.calls[0][0] as unknown as Record<string, unknown>
-
-    expect(call.script).toBe('return 1')
-    expect(call.parentSessionID).toBe('ses_parent')
-    expect(call.timeoutMs).toBe(5 * 60_000)
-    expect(call.maxConcurrent).toBe(2)
-    expect(call.maxSubtasks).toBe(10)
-    expect(result.content).toContain('"status":"ok"')
-    expect((result.metadata as { title: string }).title).toContain('workflow: ok · 2/2')
-  })
-
-  it('applies defaults when optional parameters are omitted', async () => {
-    const h = makeHarness()
-
-    vi.mocked(runWorkflow).mockResolvedValue('{"status":"ok","stats":{"subtasks":0,"ok":0,"totalMs":0}}')
-    await register(h)
-    await h.execute({ script: 'return 1' })
-
-    const call = vi.mocked(runWorkflow).mock.calls[0][0] as unknown as Record<string, unknown>
-
-    expect(call.timeoutMs).toBe(90 * 60_000)
-    expect(call.maxConcurrent).toBeUndefined()
-    expect(call.maxSubtasks).toBeUndefined()
-  })
-
-  it('titles a non-string status as unknown and reports the elapsed time', async () => {
-    const h = makeHarness()
-
-    vi.mocked(runWorkflow).mockResolvedValue('{"status":7,"stats":{"subtasks":2,"ok":1,"totalMs":1234}}')
-    await register(h)
-
-    const result = await h.execute({ script: 'return 1' })
-
-    expect((result.metadata as { title: string }).title).toBe('workflow: unknown · 1/2 subtasks · 1.2s')
-  })
-
-  it('titles an unparseable envelope instead of throwing', async () => {
-    const h = makeHarness()
-
-    vi.mocked(runWorkflow).mockResolvedValue('not-json')
-    await register(h)
-
-    const result = await h.execute({ script: 'return 1' })
-
-    expect(result.content).toBe('not-json')
-    expect((result.metadata as { title: string }).title).toBe('workflow: unparseable envelope')
+    expect(names).not.toContain('workflow')
   })
 })
 

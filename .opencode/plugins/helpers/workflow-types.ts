@@ -178,3 +178,15 @@ export const createEmptyStats = (): WorkflowStats => ({
   totalMs: 0,
   truncated: false,
 })
+
+export interface LsParameters {
+  count?: number
+  status?: SubtaskStatus
+}
+
+export interface LsEntry {
+  description: string
+  durationMs: number
+  task_id: string
+  status: SubtaskStatus
+}
