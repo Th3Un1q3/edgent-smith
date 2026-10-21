@@ -1,6 +1,8 @@
-import { Effect, Logger, LogLevel, References } from 'effect'
+import { Effect, Fiber, Logger, Stream } from 'effect'
 
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+
+import { tmpdir } from 'node:os'
 
 import path from 'node:path'
 
@@ -8,24 +10,62 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import type { Context } from '@opencode/plugin/effect/plugin'
 
+const harness = vi.hoisted(() => {
+  const defaults = {
+    instructions: '.agents/skills/task-delegation/SKILL.md',
+    agents: ['rug', 'rug-workflow'],
+  }
+  const config: { plugins: { workflow?: { instructions?: unknown, agents?: unknown } } } = {
+    plugins: { workflow: { ...defaults } },
+  }
+  return {
+    config,
+    set: (overrides: { instructions?: unknown, agents?: unknown }) => {
+      config.plugins.workflow = { ...defaults, ...overrides }
+    },
+    reset: () => {
+      config.plugins.workflow = { ...defaults }
+    },
+  }
+})
+
+vi.mock('@plugins/config/harness.config', () => ({ harnessConfig: harness.config }))
+
 vi.mock('@plugins/helpers/workflow-runner', async (importOriginal) => {
   const actual = (await importOriginal()) as unknown as Record<string, unknown>
   return { ...actual, runWorkflow: vi.fn() }
 })
 
+const entryClient = vi.hoisted(() => ({
+  writeEntry: vi.fn(),
+  removeEntry: vi.fn(),
+}))
+
+vi.mock('@plugins/helpers/instruction-entry-client', () => ({
+  writeEntry: entryClient.writeEntry,
+  removeEntry: entryClient.removeEntry,
+  entryValueBytes: (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8'),
+  get MAX_ENTRY_VALUE_BYTES() { return 256 * 1024 },
+}))
+
 import { runWorkflow } from '@plugins/helpers/workflow-runner'
 
 import { createWorkflowClient } from '@plugins/helpers/workflow-client-adapter'
 
-import plugin, { WORKFLOW_INSTRUCTIONS_SENTINEL } from '@plugins/workflow'
+import plugin, { handleSessionEvent, isWorkflowSessionEvent, loadWorkflowInstructions, WORKFLOW_INSTRUCTIONS_SENTINEL } from '@plugins/workflow'
 
-type ContextEvent = { tools: Record<string, unknown>, system: Array<{ type: string, text: string }> }
+import type { WorkflowSessionHandlerOptions } from '@plugins/workflow'
+
+interface SessionEventPayload {
+  type: string
+  data: { sessionID: string, agent?: string }
+}
 
 interface Harness {
   context: Context
   tools: Array<Record<string, unknown>>
   logs: Array<ReadonlyArray<unknown>>
-  contextHook: (event: ContextEvent) => Effect.Effect<void>
+  subscriptions: number
   execute: (input: unknown) => Promise<Record<string, unknown>>
 }
 
@@ -34,13 +74,19 @@ const collectLogger = (logs: Harness['logs']): Logger.Logger<unknown, void> =>
     logs.push(Array.isArray(message) ? message : [message])
   })
 
-const makeHarness = (): Harness => {
+const makeHarness = (events: SessionEventPayload[] = []): Harness => {
   const tools: Array<Record<string, unknown>> = []
   const logs: Array<ReadonlyArray<unknown>> = []
-  let contextHook: Harness['contextHook'] | undefined
+  let subscriptions = 0
   const context = {
     options: {},
     location: { directory: '/workspace' },
+    event: {
+      subscribe: () => {
+        subscriptions += 1
+        return events.length === 0 ? Stream.empty : Stream.fromIterable(events).pipe(Stream.concat(Stream.never))
+      },
+    },
     tool: {
       transform: (callback: (editor: unknown) => void) => {
         callback({
@@ -56,10 +102,6 @@ const makeHarness = (): Harness => {
       hook: () => Effect.succeed({ dispose: Effect.void }),
     },
     session: {
-      hook: (name: string, callback: Harness['contextHook']) => {
-        if (name === 'context') contextHook = callback
-        return Effect.succeed({ dispose: Effect.void })
-      },
       create: () => Effect.succeed({ id: 'ses_child' }),
       prompt: () => Effect.succeed({}),
       fork: () => Effect.succeed({ id: 'ses_fork' }),
@@ -73,10 +115,7 @@ const makeHarness = (): Harness => {
     context,
     tools,
     logs,
-    contextHook: (event) => {
-      if (contextHook === undefined) throw new Error('context hook was not registered')
-      return contextHook(event)
-    },
+    get subscriptions() { return subscriptions },
     execute: async (input) => {
       const tool = tools[0]
       const executeFunction = tool.execute as (value: unknown, context_: unknown) => Effect.Effect<unknown>
@@ -84,6 +123,21 @@ const makeHarness = (): Harness => {
       return result as unknown as Record<string, unknown>
     },
   }
+}
+
+const emitSessionEvent = async (
+  event: SessionEventPayload,
+  options?: WorkflowSessionHandlerOptions,
+): Promise<Harness['logs']> => {
+  const logs: Harness['logs'] = []
+  const effect = handleSessionEvent(event, options ?? {
+    agentAllowlist: new Set(['rug', 'rug-workflow']),
+    block: 'BLOCK-BODY',
+    entryBytes: 10,
+  })
+
+  await Effect.runPromise(Effect.withLogger(collectLogger(logs))(effect))
+  return logs
 }
 
 const register = async (h: Harness): Promise<void> => {
@@ -95,6 +149,8 @@ const register = async (h: Harness): Promise<void> => {
 describe('workflow (v2)', () => {
   beforeEach(() => {
     vi.mocked(runWorkflow).mockReset()
+    entryClient.writeEntry.mockReset().mockResolvedValue({ status: 'written' })
+    entryClient.removeEntry.mockReset().mockResolvedValue({ status: 'absent' })
   })
 
   it('registers a workflow tool with a JSON-Schema input', async () => {
@@ -145,15 +201,226 @@ describe('workflow (v2)', () => {
     expect(call.maxConcurrent).toBeUndefined()
     expect(call.maxSubtasks).toBeUndefined()
   })
+
+  it('titles a non-string status as unknown and reports the elapsed time', async () => {
+    const h = makeHarness()
+
+    vi.mocked(runWorkflow).mockResolvedValue('{"status":7,"stats":{"subtasks":2,"ok":1,"totalMs":1234}}')
+    await register(h)
+
+    const result = await h.execute({ script: 'return 1' })
+
+    expect((result.metadata as { title: string }).title).toBe('workflow: unknown · 1/2 subtasks · 1.2s')
+  })
+
+  it('titles an unparseable envelope instead of throwing', async () => {
+    const h = makeHarness()
+
+    vi.mocked(runWorkflow).mockResolvedValue('not-json')
+    await register(h)
+
+    const result = await h.execute({ script: 'return 1' })
+
+    expect(result.content).toBe('not-json')
+    expect((result.metadata as { title: string }).title).toBe('workflow: unparseable envelope')
+  })
 })
 
-describe('workflow instructions log lines', () => {
-  const runContextHook = async (h: Harness, event: ContextEvent, minimumLogLevel: LogLevel.LogLevel = 'Debug'): Promise<void> => {
-    const effect = Effect.provideService(h.contextHook(event), References.MinimumLogLevel, minimumLogLevel)
+describe('workflow instruction session events', () => {
+  beforeEach(() => {
+    entryClient.writeEntry.mockReset().mockResolvedValue({ status: 'written' })
+    entryClient.removeEntry.mockReset().mockResolvedValue({ status: 'absent' })
+  })
 
-    await Effect.runPromise(Effect.withLogger(collectLogger(h.logs))(effect))
-  }
+  it('writes the entry when a session.created payload names a listed agent', async () => {
+    await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_created', agent: 'rug-workflow' } })
 
+    expect(entryClient.writeEntry).toHaveBeenCalledWith('ses_created', 'workflow.instructions', 'BLOCK-BODY')
+  })
+
+  it('removes the entry for an unlisted agent', async () => {
+    entryClient.removeEntry.mockResolvedValue({ status: 'removed' })
+
+    await emitSessionEvent({ type: 'session.agent.selected', data: { sessionID: 'ses_unlisted', agent: 'build' } })
+
+    expect(entryClient.removeEntry).toHaveBeenCalledWith('ses_unlisted', 'workflow.instructions')
+    expect(entryClient.writeEntry).not.toHaveBeenCalled()
+  })
+
+  it('logs the removed status when the entry was present', async () => {
+    entryClient.removeEntry.mockResolvedValue({ status: 'removed' })
+
+    const logs = await emitSessionEvent({ type: 'session.agent.selected', data: { sessionID: 'ses_removed', agent: 'build' } })
+
+    expect(logs).toContainEqual([
+      'workflow.instructions.skipped',
+      expect.objectContaining({ sessionID: 'ses_removed', status: 'removed' }),
+    ])
+  })
+
+  it('logs the absent status without an error when there is no entry to remove', async () => {
+    const logs = await emitSessionEvent({ type: 'session.agent.selected', data: { sessionID: 'ses_absent', agent: 'build' } })
+
+    expect(logs).toContainEqual([
+      'workflow.instructions.skipped',
+      expect.objectContaining({ sessionID: 'ses_absent', status: 'absent' }),
+    ])
+    expect(logs).not.toContainEqual(['workflow.instructions.error', expect.anything()])
+  })
+
+  it('logs one skip line when the payload carries no agent', async () => {
+    const logs = await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_no_agent' } })
+
+    expect(logs).toContainEqual([
+      'workflow.instructions.skipped',
+      expect.objectContaining({ sessionID: 'ses_no_agent', agent: 'unknown' }),
+    ])
+  })
+
+  it('writes the entry when session.agent.selected names a listed agent', async () => {
+    const logs = await emitSessionEvent({ type: 'session.agent.selected', data: { sessionID: 'ses_selected', agent: 'rug' } })
+
+    expect(entryClient.writeEntry).toHaveBeenCalledWith('ses_selected', 'workflow.instructions', 'BLOCK-BODY')
+    expect(logs).toContainEqual([
+      'workflow.instructions',
+      expect.objectContaining({ sessionID: 'ses_selected', status: 'written' }),
+    ])
+  })
+
+  it('logs the unchanged status when the entry value is already current', async () => {
+    entryClient.writeEntry.mockResolvedValue({ status: 'unchanged' })
+
+    const logs = await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_unchanged', agent: 'rug-workflow' } })
+
+    expect(logs).toContainEqual([
+      'workflow.instructions',
+      expect.objectContaining({ sessionID: 'ses_unchanged', status: 'unchanged' }),
+    ])
+  })
+
+  it('skips the write when the entry would exceed the size limit', async () => {
+    const logs = await emitSessionEvent(
+      { type: 'session.created', data: { sessionID: 'ses_big', agent: 'rug-workflow' } },
+      { agentAllowlist: new Set(['rug', 'rug-workflow']), block: 'BLOCK-BODY', entryBytes: 300_000 },
+    )
+
+    expect(logs).toContainEqual([
+      'workflow.instructions.skipped',
+      expect.objectContaining({ sessionID: 'ses_big', reason: 'entry-too-large' }),
+    ])
+    expect(entryClient.writeEntry).not.toHaveBeenCalled()
+  })
+
+  it('writes an entry that is exactly at the size limit and skips the next byte', async () => {
+    const options = { agentAllowlist: new Set(['rug', 'rug-workflow']), block: 'BLOCK-BODY', entryBytes: 256 * 1024 }
+
+    await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_at_limit', agent: 'rug-workflow' } }, options)
+    expect(entryClient.writeEntry).toHaveBeenCalledTimes(1)
+
+    entryClient.writeEntry.mockClear()
+
+    await emitSessionEvent(
+      { type: 'session.created', data: { sessionID: 'ses_over_limit', agent: 'rug-workflow' } },
+      { ...options, entryBytes: 256 * 1024 + 1 },
+    )
+    expect(entryClient.writeEntry).not.toHaveBeenCalled()
+  })
+
+  it('writes the entry once per subscribed event and ignores other event types', async () => {
+    const h = makeHarness([
+      { type: 'session.created', data: { sessionID: 'ses_stream_created', agent: 'rug-workflow' } },
+      { type: 'session.agent.selected', data: { sessionID: 'ses_stream_selected', agent: 'rug' } },
+      { type: 'session.idle', data: { sessionID: 'ses_stream_idle', agent: 'rug-workflow' } },
+    ])
+
+    const log = collectLogger(h.logs)
+    const subscribed = Effect.scoped(Effect.flatMap(plugin.effect(h.context), () => Effect.never))
+
+    const fiber = Effect.runFork(Effect.withLogger(log)(subscribed))
+
+    try {
+      await vi.waitFor(() => {
+        expect(entryClient.writeEntry).toHaveBeenCalledWith('ses_stream_created', 'workflow.instructions', expect.stringContaining(WORKFLOW_INSTRUCTIONS_SENTINEL))
+        expect(entryClient.writeEntry).toHaveBeenCalledWith('ses_stream_selected', 'workflow.instructions', expect.stringContaining(WORKFLOW_INSTRUCTIONS_SENTINEL))
+      })
+    }
+    finally {
+      await Effect.runPromise(Fiber.interrupt(fiber))
+    }
+
+    expect(entryClient.writeEntry).toHaveBeenCalledTimes(2)
+    expect(entryClient.writeEntry).not.toHaveBeenCalledWith('ses_stream_idle', expect.anything(), expect.anything())
+  })
+
+  it('reports a failed write status as an error', async () => {
+    entryClient.writeEntry.mockResolvedValue({ status: 'failed', error: 'put failed' })
+
+    const logs = await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_put_error', agent: 'rug-workflow' } })
+
+    expect(logs).toContainEqual([
+      'workflow.instructions',
+      expect.objectContaining({ sessionID: 'ses_put_error', status: 'failed' }),
+    ])
+    expect(logs).toContainEqual([
+      'workflow.instructions.error',
+      expect.objectContaining({ message: expect.stringContaining('put failed') }),
+    ])
+  })
+
+  it('reports a failed removal status as an error', async () => {
+    entryClient.removeEntry.mockResolvedValue({ status: 'failed', error: 'remove failed' })
+
+    const logs = await emitSessionEvent({ type: 'session.agent.selected', data: { sessionID: 'ses_remove_error', agent: 'build' } })
+
+    expect(logs).toContainEqual([
+      'workflow.instructions.skipped',
+      expect.objectContaining({ sessionID: 'ses_remove_error', status: 'failed' }),
+    ])
+    expect(logs).toContainEqual([
+      'workflow.instructions.error',
+      expect.objectContaining({ message: expect.stringContaining('remove failed') }),
+    ])
+  })
+
+  it('reports a rejected write as an error instead of swallowing it', async () => {
+    entryClient.writeEntry.mockRejectedValue(new Error('write exploded'))
+
+    const logs = await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_write_reject', agent: 'rug-workflow' } })
+
+    expect(logs).toContainEqual([
+      'workflow.instructions.error',
+      expect.objectContaining({ message: expect.stringContaining('write exploded') }),
+    ])
+  })
+
+  it('logs an error when the handler throws', async () => {
+    const agentAllowlist = {
+      has: () => {
+        throw new Error('allowlist exploded')
+      },
+    } as unknown as ReadonlySet<string>
+
+    const logs = await emitSessionEvent(
+      { type: 'session.created', data: { sessionID: 'ses_throw', agent: 'rug-workflow' } },
+      { agentAllowlist, block: 'BLOCK-BODY', entryBytes: 10 },
+    )
+
+    expect(logs).toContainEqual(['workflow.instructions.error', expect.objectContaining({ message: 'allowlist exploded' })])
+  })
+
+  it('subscribes to session.created and session.agent.selected', async () => {
+    const h = makeHarness()
+
+    await register(h)
+
+    expect(h.subscriptions).toBe(2)
+    expect(isWorkflowSessionEvent({ type: 'session.created' }, 'session.created')).toBe(true)
+    expect(isWorkflowSessionEvent({ type: 'session.agent.selected' }, 'session.agent.selected')).toBe(true)
+    expect(isWorkflowSessionEvent({ type: 'session.idle' }, 'session.created')).toBe(false)
+  })
+})
+
+describe('workflow instructions registration log', () => {
   it('logs the loaded instruction source and content size once at registration', async () => {
     const h = makeHarness()
 
@@ -163,135 +430,66 @@ describe('workflow instructions log lines', () => {
 
     expect(loaded).toHaveLength(1)
 
-    const details = loaded[0][1] as { path: string, resolvedPath: string, contentBytes: number }
+    const details = loaded[0][1] as { path: string, resolvedPath: string, contentBytes: number, agents: string[] }
 
     expect(details.resolvedPath).toBe(path.resolve('/workspace', details.path))
     expect(details.contentBytes).toBe(Buffer.byteLength(readFileSync(details.resolvedPath, 'utf8'), 'utf8'))
+    expect(details.agents).toEqual(['rug', 'rug-workflow'])
+  })
+})
+
+describe('workflow instruction config validation', () => {
+  beforeEach(() => {
+    harness.reset()
   })
 
-  it('logs the context event shape then a debug skip and leaves the context untouched when the workflow tool is absent', async () => {
-    const h = makeHarness()
+  it('rejects a whitespace-only instructions path', () => {
+    harness.set({ instructions: ' '.repeat(3) })
 
-    await register(h)
-    h.logs.length = 0
-
-    const system = [{ type: 'text', text: 'base' }]
-
-    await runContextHook(h, { tools: { read: {}, grep: {} }, system })
-
-    expect(system).toEqual([{ type: 'text', text: 'base' }])
-    expect(h.logs).toEqual([
-      ['workflow.instructions.context', { received: true, eventKeys: ['tools', 'system'], toolsIsObject: true, tools: ['read', 'grep'] }],
-      ['workflow.instructions.skipped', { tools: ['read', 'grep'] }],
-    ])
+    expect(() => loadWorkflowInstructions('/workspace')).toThrow(/plugins\["workflow"\]\.instructions: missing or not a non-empty string/)
   })
 
-  it('keeps the per-request context line below the production info level while still logging the injection', async () => {
-    const h = makeHarness()
+  it('names the instructions config key when the path is empty', () => {
+    harness.set({ instructions: '' })
 
-    await register(h)
-    h.logs.length = 0
-
-    await runContextHook(h, { tools: { workflow: {} }, system: [] }, 'Info')
-
-    expect(h.logs.map(entry => entry[0])).toEqual(['workflow.instructions.injected'])
+    expect(() => loadWorkflowInstructions('/workspace')).toThrow(/plugins\["workflow"\]\.instructions/)
   })
 
-  it('keeps the skip line below the production info level', async () => {
-    const h = makeHarness()
+  it('treats a path reading "Stryker was here!" as an ordinary path', () => {
+    harness.set({ instructions: 'Stryker was here!' })
 
-    await register(h)
-    h.logs.length = 0
-
-    await runContextHook(h, { tools: { read: {} }, system: [] }, 'Info')
-
-    expect(h.logs).toEqual([])
+    expect(() => loadWorkflowInstructions('/workspace')).toThrow(/cannot read/)
   })
 
-  it('logs an info injection with the block size, tool keys and no strip', async () => {
-    const h = makeHarness()
-
-    await register(h)
-    h.logs.length = 0
-
-    const system: ContextEvent['system'] = []
-
-    await runContextHook(h, { tools: { workflow: {}, read: {} }, system })
-
-    expect(system).toHaveLength(1)
-    expect(system[0].text.startsWith(WORKFLOW_INSTRUCTIONS_SENTINEL)).toBe(true)
-    expect(h.logs).toHaveLength(2)
-    expect(h.logs[0][0]).toBe('workflow.instructions.context')
-    expect(h.logs[1][0]).toBe('workflow.instructions.injected')
-    expect(h.logs[1][1]).toEqual({
-      carrier: 'system',
-      reason: 'entry-unavailable',
-      blockBytes: Buffer.byteLength(system[0].text, 'utf8'),
-      tools: ['workflow', 'read'],
-      exposure: 'workflow',
-      stripped: false,
-    })
+  it('rejects a non-string project directory', () => {
+    expect(() => loadWorkflowInstructions(42 as unknown as string)).toThrow(/project directory is missing/)
   })
 
-  it('reports stripped true when a prior sentinel block is replaced', async () => {
-    const h = makeHarness()
+  it('rejects an instructions file that is only whitespace', () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'workflow-instructions-'))
+    const file = path.join(directory, 'empty.md')
 
-    await register(h)
-    h.logs.length = 0
+    writeFileSync(file, '  \n')
+    harness.set({ instructions: file })
 
-    const system = [
-      { type: 'text', text: `${WORKFLOW_INSTRUCTIONS_SENTINEL}\nold\n</workflow_instructions>` },
-      { type: 'text', text: 'base' },
-    ]
-
-    await runContextHook(h, { tools: { workflow: {} }, system })
-
-    expect(system.map(part => part.text.startsWith(WORKFLOW_INSTRUCTIONS_SENTINEL))).toEqual([false, true])
-    expect((h.logs[1][1] as { stripped: boolean }).stripped).toBe(true)
+    try {
+      expect(() => loadWorkflowInstructions('/workspace')).toThrow(/file is empty or whitespace/)
+    }
+    finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
 
-  it('logs received false and skips when the hook receives no event', async () => {
-    const h = makeHarness()
+  it('fails registration when the instructions file cannot be read', async () => {
+    harness.set({ instructions: '/nonexistent/workflow-instructions.md' })
 
-    await register(h)
-    h.logs.length = 0
-
-    await runContextHook(h, undefined as unknown as ContextEvent)
-
-    expect(h.logs).toEqual([
-      ['workflow.instructions.context', { received: false, eventKeys: [], toolsIsObject: false }],
-      ['workflow.instructions.skipped', { tools: [] }],
-    ])
+    await expect(register(makeHarness())).rejects.toThrow(/cannot read/)
   })
 
-  const missingToolsEvents: Array<{ name: string, event: ContextEvent }> = [
-    { name: 'an event without a tools field', event: { system: [] } as unknown as ContextEvent },
-    { name: 'a non-object tools field', event: { tools: 'workflow', system: [] } as unknown as ContextEvent },
-  ]
+  it('rejects a whitespace-only agent entry at registration', async () => {
+    harness.set({ agents: ['rug', '  '] })
 
-  it.each(missingToolsEvents)('logs the shape and skips with an empty tool list for $name', async ({ event }) => {
-    const h = makeHarness()
-
-    await register(h)
-    h.logs.length = 0
-
-    await runContextHook(h, event)
-
-    expect(h.logs).toEqual([
-      ['workflow.instructions.context', { received: true, eventKeys: Object.keys(event), toolsIsObject: false }],
-      ['workflow.instructions.skipped', { tools: [] }],
-    ])
-  })
-
-  it('logs an error instead of throwing when the event has no system array', async () => {
-    const h = makeHarness()
-
-    await register(h)
-    h.logs.length = 0
-
-    await runContextHook(h, { tools: { workflow: {} } } as unknown as ContextEvent)
-
-    expect(h.logs[1]).toEqual(['workflow.instructions.error', { message: 'context event has no system array' }])
+    await expect(register(makeHarness())).rejects.toThrow(/not a non-empty string array/)
   })
 })
 

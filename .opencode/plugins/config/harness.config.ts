@@ -69,6 +69,16 @@ const toolLimit: ToolLimitConfig = {
   review: { export: true, command: 'just agent_utils/export-opencode-session', writeMarkdown: true },
 }
 
+/**
+ * Declared as a typed literal so `as const` does not widen `agents` into a
+ * `readonly` tuple. `agents` is the sole gate for workflow instruction
+ * injection; tool exposure is diagnostic only.
+ */
+const workflowPlugin: { instructions: string, agents: string[] } = {
+  instructions: '.agents/skills/task-delegation/SKILL.md',
+  agents: ['rug', 'rug-workflow'],
+}
+
 export const harnessConfig = {
   plugins: {
     'tool-limit-reminder': toolLimit,
@@ -77,10 +87,6 @@ export const harnessConfig = {
       debounceMs: 1500,
     },
     'goal-continuation': goalEnforcement,
-    'workflow': {
-      // ADR-010: instruction source is configurable; string literals need no
-      // typed const because `as const` widening only affects arrays/objects.
-      instructions: '.agents/skills/task-delegation/SKILL.md',
-    },
+    'workflow': workflowPlugin,
   },
 } as const

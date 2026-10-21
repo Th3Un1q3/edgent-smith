@@ -163,7 +163,7 @@ The live `agent-default-model` in `.dsh/settings.yaml` sets `provider: openroute
 
 **Why it is a problem.** It records a task, not a fact, and carries no owner or acceptance condition.
 
-**What to do instead.** Resolve it, or state the invariant and the blocker with an issue reference. Omit an empty row until content exists.
+**What to do instead.** Resolve by changing the design; a renamed helper that hides the blocker does not resolve it. Otherwise state the invariant and the blocker with an issue reference. Omit an empty row until content exists.
 
 ### 8. Commentary about commentary
 

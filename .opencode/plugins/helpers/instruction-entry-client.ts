@@ -16,6 +16,13 @@ export interface InstructionEntry {
   readonly value: unknown
 }
 
+export type EntryStatus = 'written' | 'unchanged' | 'removed' | 'absent' | 'failed'
+
+export interface EntryResult {
+  readonly status: EntryStatus
+  readonly error?: string
+}
+
 export const listEntries = async (sessionID: string): Promise<InstructionEntry[]> => {
   const client = await getClient()
   const entries = await client.session.instructions.entry.list({ sessionID })
@@ -27,24 +34,36 @@ export const findEntry = async (sessionID: string, key: string): Promise<Instruc
   return entries.find(entry => entry.key === key)
 }
 
-/**
-Writes the entry only when the stored value differs; returns whether a write happened.
-*/
-export const didPutEntry = async (sessionID: string, key: string, value: string): Promise<boolean> => {
+const describeError = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause)
+
+export const isEntryValueCurrent = (entry: InstructionEntry | undefined, value: string): boolean =>
+  entry !== undefined && entry.value === value
+
+export const writeEntry = async (sessionID: string, key: string, value: string): Promise<EntryResult> => {
   if (entryValueBytes(value) > MAX_ENTRY_VALUE_BYTES) {
     throw new Error(`entry ${key} exceeds ${MAX_ENTRY_VALUE_BYTES} bytes`)
   }
-  const existing = await findEntry(sessionID, key)
-  if (existing !== undefined && existing.value === value) return false
-  const client = await getClient()
-  await client.session.instructions.entry.put({ sessionID, key, value })
-  return true
+  try {
+    const existing = await findEntry(sessionID, key)
+    if (isEntryValueCurrent(existing, value)) return { status: 'unchanged' }
+    const client = await getClient()
+    await client.session.instructions.entry.put({ sessionID, key, value })
+    return { status: 'written' }
+  }
+  catch (error) {
+    return { status: 'failed', error: describeError(error) }
+  }
 }
 
-export const didRemoveEntry = async (sessionID: string, key: string): Promise<boolean> => {
-  const existing = await findEntry(sessionID, key)
-  if (existing === undefined) return false
-  const client = await getClient()
-  await client.session.instructions.entry.remove({ sessionID, key })
-  return true
+export const removeEntry = async (sessionID: string, key: string): Promise<EntryResult> => {
+  try {
+    const existing = await findEntry(sessionID, key)
+    if (existing === undefined) return { status: 'absent' }
+    const client = await getClient()
+    await client.session.instructions.entry.remove({ sessionID, key })
+    return { status: 'removed' }
+  }
+  catch (error) {
+    return { status: 'failed', error: describeError(error) }
+  }
 }

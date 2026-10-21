@@ -226,6 +226,20 @@ Smells that make changes expensive by scattering related logic.
 - Move Method / Move Field -- consolidate related logic into one class
 - Inline Class -- if scattered pieces are too small, merge them into the class that should own the responsibility
 
+### Decide-and-Act Method
+
+**Description:** A function that both decides whether to act and performs the action. The decision cannot be reused or tested on its own, and the action's real outcome is flattened into a boolean.
+
+**Detection heuristics:**
+- The body holds both a condition and the effect it guards
+- It returns a boolean that stands in for an outcome (changed, skipped, applied, failed)
+- A caller repeats the same condition to learn what the action did
+- The name carries a conditional to dodge a lint rule about predicates
+
+**Typical fixes:**
+- Extract Method -- split it into a decision (returns a boolean) and an action (returns what it did)
+- Give the action a status return -- `{ changed: boolean, status: 'applied' | 'skipped' | 'failed' }` -- so the caller sees the outcome without recomputing the condition
+
 ---
 
 ## Family 4: Dispensables
@@ -336,6 +350,7 @@ Smells where classes are too tightly bound to each other.
 | Refused Bequest | Replace Inheritance with Delegation | Push Down Method |
 | Divergent Change | Extract Class | -- |
 | Shotgun Surgery | Move Method / Move Field | Inline Class |
+| Decide-and-Act Method | Extract Method -- split the decision from the action | Return a status object from the action |
 | Lazy Class | Inline Class | Collapse Hierarchy |
 | Dead Code | Delete it | -- |
 | Speculative Generality | Collapse Hierarchy | Inline Class |

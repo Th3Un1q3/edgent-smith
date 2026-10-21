@@ -61,6 +61,8 @@
             "*": "allow",
             "git *": "ask",
             "rtk git *": "ask",
+            "git blame *": "allow",
+            "rtk git blame *": "allow",
             "git diff *": "allow",
             "rtk git diff *": "allow",
             "git status *": "allow",

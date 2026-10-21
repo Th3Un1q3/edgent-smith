@@ -59,6 +59,34 @@ const pluginExportGuard = {
   },
 }
 
+// --- unicorn/consistent-boolean-name ---------------------------------------------------
+// A lint rule that rejects a name is a report about the design, not about the spelling.
+// Change the design or this rule's configuration; never distort a name to satisfy the rule.
+//
+// The accepted predicate prefixes are listed explicitly so the demand is legible instead of
+// surprising.
+const BOOLEAN_NAME_PREFIXES = {
+  is: true,
+  are: true,
+  has: true,
+  have: true,
+  can: true,
+  should: true,
+  requires: true,
+  was: true,
+  were: true,
+  did: true, // kept enabled: workflow-runner.ts has a boolean parameter named didTruncateResult
+  will: true,
+}
+
+// Action-shaped names (verb + object) that change state are exempt from the naming demand: a
+// boolean-returning action must not be forced into a misleading predicate name. The exemption
+// lists state-changing verbs only, so a read-only name such as `readFile` stays subject to the
+// rule.
+const ACTION_NAME_PATTERN =
+  "^(?:put|write|remove|delete|update|patch|set|save|store|insert|upsert|replace|append|add|" +
+  "clear|reset|invalidate|prune|commit|flush|sync|persist)(?:[A-Z][A-Za-z0-9]*)+$"
+
 export default [
   ...tseslint.configs.recommended.map((c) => ({
     ...c,
@@ -92,6 +120,23 @@ export default [
 
       // Bun Glob.scan() on for-await header is the idiomatic pattern
       "unicorn/no-unreadable-for-of-expression": "off",
+
+      // Predicate naming: a lint rule that rejects a name is a report about the design, not
+      // about the spelling — change the design or this configuration, never distort a name to
+      // satisfy the rule. The accepted prefixes and the action-shaped-name exemption are
+      // declared above (BOOLEAN_NAME_PREFIXES, ACTION_NAME_PATTERN).
+      "unicorn/consistent-boolean-name": [
+        "error",
+        {
+          checkVariables: "always",
+          checkArguments: "always",
+          checkFunctions: "always",
+          checkMethods: "never",
+          checkFields: "never",
+          prefixes: BOOLEAN_NAME_PREFIXES,
+          ignore: [ACTION_NAME_PATTERN],
+        },
+      ],
     },
   },
 

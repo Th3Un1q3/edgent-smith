@@ -4,41 +4,54 @@ import { tmpdir } from 'node:os'
 
 import path from 'node:path'
 
-import { Effect } from 'effect'
+import { Effect, Logger, Stream } from 'effect'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Context } from '@opencode/plugin/effect/plugin'
 
+import type { SessionID } from '@opencode/schema/session-id'
+
 // Config is read at plugin-registration time; mutate this hoisted object before
 // `register()` to steer the instructions path per scenario.
 const workflowConfig = vi.hoisted(() => ({
   instructions: '.agents/skills/task-delegation/SKILL.md',
+  agents: ['rug-workflow'],
+  missing: false,
 }))
 
 vi.mock('@plugins/config/harness.config', () => ({
-  harnessConfig: { plugins: { workflow: workflowConfig } },
+  harnessConfig: {
+    plugins: {
+      get workflow() { return workflowConfig.missing ? undefined : workflowConfig },
+    },
+  },
 }))
 
-import { loadWorkflowInstructions, WORKFLOW_INSTRUCTIONS_SENTINEL } from '@plugins/workflow'
+const entryClient = vi.hoisted(() => ({
+  writeEntry: vi.fn(),
+  removeEntry: vi.fn(),
+  limits: { max: 256 * 1024 },
+}))
+
+vi.mock('@plugins/helpers/instruction-entry-client', () => ({
+  writeEntry: entryClient.writeEntry,
+  removeEntry: entryClient.removeEntry,
+  entryValueBytes: (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8'),
+  get MAX_ENTRY_VALUE_BYTES() { return entryClient.limits.max },
+}))
+
+import { handleSessionEvent, loadWorkflowInstructions, WORKFLOW_INSTRUCTIONS_SENTINEL } from '@plugins/workflow'
 
 import plugin from '@plugins/workflow'
 
 const CONFIGURED_INSTRUCTIONS = '.agents/skills/task-delegation/SKILL.md'
 
-const SENTINEL_CLOSING = '</workflow_instructions>'
-
-interface SystemPart {
-  type: string
-  text: string
-}
-
 interface Harness {
   context: Context
-  emit: (event: { tools: Record<string, unknown>, system: SystemPart[] }) => Promise<void>
+  logs: Array<ReadonlyArray<unknown>>
+  subscriptions: number
 }
-
-type Hook = (event: { tools: Record<string, unknown>, system: SystemPart[] }) => Effect.Effect<void>
 
 const directories: string[] = []
 
@@ -53,16 +66,24 @@ const writeInstructions = (directory: string, content: string | Buffer): void =>
   writeFileSync(path.join(directory, 'instructions.md'), content)
 }
 
-const makeHarness = (directory: string): Harness => {
-  const hooks: Record<string, Hook> = {}
+const collectLogger = (logs: Harness['logs']): Logger.Logger<unknown, void> =>
+  Logger.make<unknown, void>(({ message }) => {
+    logs.push(Array.isArray(message) ? message : [message])
+  })
+
+const makeHarness = (directory: string, events: ReadonlyArray<{ type: string, data: { sessionID: SessionID, agent?: string } }> = []): Harness => {
+  const logs: Harness['logs'] = []
+  let subscriptions = 0
   const context = {
     options: {},
     location: { directory },
-    session: {
-      hook: (name: string, callback: Hook) => {
-        hooks[name] = callback
-        return Effect.succeed({ dispose: Effect.void })
+    event: {
+      subscribe: () => {
+        subscriptions += 1
+        return events.length === 0 ? Stream.empty : Stream.fromIterable(events)
       },
+    },
+    session: {
       create: () => Effect.succeed({ id: 'ses_child' }),
       prompt: () => Effect.succeed({}),
       fork: () => Effect.succeed({ id: 'ses_fork' }),
@@ -88,22 +109,25 @@ const makeHarness = (directory: string): Harness => {
 
   return {
     context,
-    emit: async (event) => {
-      const callback = hooks.context
-
-      if (callback === undefined) throw new Error('plugin did not register a context hook')
-      await Effect.runPromise(callback(event))
-    },
+    logs,
+    get subscriptions() { return subscriptions },
   }
 }
 
 const register = async (h: Harness): Promise<void> => {
-  await Effect.runPromise(Effect.scoped(plugin.effect(h.context)))
+  const scoped = Effect.scoped(plugin.effect(h.context))
+  const logged = Effect.withLogger(collectLogger(h.logs))(scoped)
+
+  await Effect.runPromise(logged)
 }
 
 describe('workflow instructions', () => {
   beforeEach(() => {
     workflowConfig.instructions = CONFIGURED_INSTRUCTIONS
+    workflowConfig.agents = ['rug-workflow']
+    workflowConfig.missing = false
+    entryClient.writeEntry.mockReset().mockResolvedValue({ status: 'written' })
+    entryClient.removeEntry.mockReset().mockResolvedValue({ status: 'absent' })
   })
 
   afterEach(() => {
@@ -111,20 +135,20 @@ describe('workflow instructions', () => {
   })
 
   describe('loadWorkflowInstructions', () => {
-    it('returns the configured file content verbatim', () => {
+    it('returns the configured file content verbatim beside its resolved source', () => {
       const directory = makeDirectory()
       const body = '# Custom Workflow\n\nBODY-MARKER-123\n'
 
       writeInstructions(directory, body)
       workflowConfig.instructions = 'instructions.md'
 
-      expect(loadWorkflowInstructions(directory)).toBe(body)
+      expect(loadWorkflowInstructions(directory)).toEqual({ source: path.resolve(directory, 'instructions.md'), content: body })
     })
 
     it('loads the task-delegation skill configured for the repository', () => {
       const expected = readFileSync(path.join('/workspace', CONFIGURED_INSTRUCTIONS), 'utf8')
 
-      const content = loadWorkflowInstructions('/workspace')
+      const { content } = loadWorkflowInstructions('/workspace')
 
       expect(content).toBe(expected)
       expect(content).toContain('# Task Delegation Skill')
@@ -166,16 +190,84 @@ describe('workflow instructions', () => {
 
       expect(Buffer.byteLength(body, 'utf8')).toBeGreaterThanOrEqual(100 * 1024)
 
-      const content = loadWorkflowInstructions(directory)
+      const { content } = loadWorkflowInstructions(directory)
 
       expect(content).toBe(body)
       expect(Buffer.byteLength(content, 'utf8')).toBe(Buffer.byteLength(body, 'utf8'))
     })
   })
 
-  describe('context hook injection', () => {
+  describe('configuration and content guards', () => {
+    const harnessWithInstructions = (): Harness => {
+      const directory = makeDirectory()
+
+      writeInstructions(directory, '# Body\n')
+      workflowConfig.instructions = 'instructions.md'
+      return makeHarness(directory)
+    }
+
+    it('names the instructions key when the workflow section is absent', () => {
+      workflowConfig.missing = true
+
+      expect(() => loadWorkflowInstructions(makeDirectory())).toThrow('harnessConfig.plugins["workflow"].instructions')
+    })
+
+    it('names the instructions key when the configured value is not a string', () => {
+      workflowConfig.instructions = 42 as unknown as string
+
+      expect(() => loadWorkflowInstructions(makeDirectory())).toThrow('harnessConfig.plugins["workflow"].instructions')
+    })
+
+    it('rejects an agents value that is not an array', async () => {
+      workflowConfig.agents = 'rug' as unknown as string[]
+
+      await expect(register(harnessWithInstructions())).rejects.toThrow('.agents: missing or not a non-empty string array')
+    })
+
+    it('rejects an empty agents list', async () => {
+      workflowConfig.agents = []
+
+      await expect(register(harnessWithInstructions())).rejects.toThrow('.agents: missing or not a non-empty string array')
+    })
+
+    it('rejects a blank agent name', async () => {
+      workflowConfig.agents = ['rug', '']
+
+      await expect(register(harnessWithInstructions())).rejects.toThrow('.agents: missing or not a non-empty string array')
+    })
+
+    it('rejects a non-string agent name', async () => {
+      workflowConfig.agents = [42] as unknown as string[]
+
+      await expect(register(harnessWithInstructions())).rejects.toThrow('.agents: missing or not a non-empty string array')
+    })
+
+    it('rejects a blank project directory', () => {
+      expect(() => loadWorkflowInstructions(' '.repeat(3))).toThrow('project directory is missing')
+    })
+
+    it('rejects content that contains a NUL byte', () => {
+      const directory = makeDirectory()
+
+      writeInstructions(directory, 'A\0B')
+      workflowConfig.instructions = 'instructions.md'
+
+      expect(() => loadWorkflowInstructions(directory)).toThrow('NUL byte')
+    })
+
+    it('rejects content that contains U+FFFD', () => {
+      const directory = makeDirectory()
+
+      writeInstructions(directory, 'A\u{FFFD}B')
+      workflowConfig.instructions = 'instructions.md'
+
+      expect(() => loadWorkflowInstructions(directory)).toThrow('U+FFFD')
+    })
+  })
+
+  describe('session event entry', () => {
     const body = '# Workflow Instructions\n\nDELEGATION-BODY\n'
-    const wrapped = `${WORKFLOW_INSTRUCTIONS_SENTINEL}\n${body}\n${SENTINEL_CLOSING}`
+    const entryValue = `${WORKFLOW_INSTRUCTIONS_SENTINEL} source="/workspace/.agents/skills/task-delegation/SKILL.md" version="1">\n${body}\n</workflow_instructions>`
 
     const setup = async (): Promise<Harness> => {
       const directory = makeDirectory()
@@ -189,57 +281,183 @@ describe('workflow instructions', () => {
       return h
     }
 
-    it('injects the sentinel-wrapped content when the workflow tool is available', async () => {
+    const emit = async (h: Harness, event: { type: string, data: { sessionID: SessionID, agent?: string } }): Promise<void> => {
+      const effect = handleSessionEvent(event, {
+        agentAllowlist: new Set(workflowConfig.agents),
+        block: entryValue,
+        entryBytes: Buffer.byteLength(JSON.stringify(entryValue), 'utf8'),
+      })
+
+      await Effect.runPromise(Effect.withLogger(collectLogger(h.logs))(effect))
+    }
+
+    it('writes the entry for an agent named on the session.agent.selected event', async () => {
       const h = await setup()
-      const event = { tools: { workflow: {} }, system: [{ type: 'text', text: 'prefix' }] as SystemPart[] }
 
-      await h.emit(event)
+      await emit(h, { type: 'session.agent.selected', data: { sessionID: 'ses_selected' as unknown as SessionID, agent: 'rug-workflow' } })
 
-      expect(event.system).toHaveLength(2)
-      expect(event.system[1]).toEqual({ type: 'text', text: wrapped })
+      expect(entryClient.writeEntry).toHaveBeenCalledWith('ses_selected', 'workflow.instructions', entryValue)
     })
 
-    it('injects the sentinel-wrapped content when the workflow tool is exposed through code mode', async () => {
-      const h = await setup()
-      const event = { tools: { execute: {} }, system: [{ type: 'text', text: 'prefix' }] as SystemPart[] }
+    describe('when the entry value is already current', () => {
+      beforeEach(() => {
+        entryClient.writeEntry.mockResolvedValueOnce({ status: 'written' }).mockResolvedValueOnce({ status: 'unchanged' })
+      })
 
-      await h.emit(event)
+      it('calls the writer and logs that nothing was written', async () => {
+        const h = await setup()
 
-      expect(event.system).toHaveLength(2)
-      expect(event.system[1]).toEqual({ type: 'text', text: wrapped })
+        await emit(h, { type: 'session.created', data: { sessionID: 'ses_repeat' as unknown as SessionID, agent: 'rug-workflow' } })
+        await emit(h, { type: 'session.created', data: { sessionID: 'ses_repeat' as unknown as SessionID, agent: 'rug-workflow' } })
+
+        expect(entryClient.writeEntry).toHaveBeenCalledTimes(2)
+        expect(entryClient.writeEntry).toHaveBeenLastCalledWith('ses_repeat', 'workflow.instructions', entryValue)
+        expect(h.logs).toContainEqual(['workflow.instructions', expect.objectContaining({ sessionID: 'ses_repeat', status: 'unchanged' })])
+      })
     })
 
-    it('does not inject when the workflow tool is absent', async () => {
-      const h = await setup()
-      const system = [{ type: 'text', text: 'prefix' }]
-      const event = { tools: { bash: {} }, system }
+    describe('when the session agent is not listed', () => {
+      beforeEach(() => {
+        entryClient.removeEntry.mockResolvedValue({ status: 'removed' })
+      })
 
-      await h.emit(event)
+      it('removes the existing entry and writes nothing', async () => {
+        const h = await setup()
 
-      expect(event.system).toEqual(system)
+        await emit(h, { type: 'session.agent.selected', data: { sessionID: 'ses_unlisted' as unknown as SessionID, agent: 'build' } })
+
+        expect(entryClient.removeEntry).toHaveBeenCalledWith('ses_unlisted', 'workflow.instructions')
+        expect(entryClient.writeEntry).not.toHaveBeenCalled()
+        expect(h.logs).toContainEqual(['workflow.instructions.skipped', expect.objectContaining({ sessionID: 'ses_unlisted', status: 'removed' })])
+      })
     })
 
-    it('replaces an existing sentinel block instead of duplicating it', async () => {
+    describe('when the session holds no instruction entry', () => {
+      it('logs the absent status without an error', async () => {
+        const h = await setup()
+
+        await emit(h, { type: 'session.agent.selected', data: { sessionID: 'ses_absent' as unknown as SessionID, agent: 'build' } })
+
+        expect(h.logs).toContainEqual(['workflow.instructions.skipped', expect.objectContaining({ sessionID: 'ses_absent', status: 'absent' })])
+        expect(h.logs).not.toContainEqual(['workflow.instructions.error', expect.anything()])
+      })
+    })
+
+    it('reports a failed write status as an error', async () => {
+      entryClient.writeEntry.mockResolvedValue({ status: 'failed', error: 'write failed' })
+
       const h = await setup()
-      const event = {
-        tools: { workflow: {} },
-        system: [
-          { type: 'text', text: 'before' },
-          { type: 'text', text: `${WORKFLOW_INSTRUCTIONS_SENTINEL}\nstale\n${SENTINEL_CLOSING}` },
-          { type: 'text', text: 'after' },
-        ] as SystemPart[],
+
+      await emit(h, { type: 'session.created', data: { sessionID: 'ses_write_failed' as unknown as SessionID, agent: 'rug-workflow' } })
+
+      expect(h.logs).toContainEqual(['workflow.instructions', expect.objectContaining({ sessionID: 'ses_write_failed', status: 'failed' })])
+      expect(h.logs).toContainEqual(['workflow.instructions.error', expect.objectContaining({ message: expect.stringContaining('write failed') })])
+    })
+
+    describe('when the event carries no agent', () => {
+      it('logs one skip line and writes nothing', async () => {
+        const h = await setup()
+
+        await expect(emit(h, { type: 'session.created', data: { sessionID: 'ses_no_agent' as unknown as SessionID } })).resolves.toBeUndefined()
+
+        expect(h.logs).toContainEqual(['workflow.instructions.skipped', expect.objectContaining({ sessionID: 'ses_no_agent', agent: 'unknown' })])
+        expect(entryClient.writeEntry).not.toHaveBeenCalled()
+      })
+    })
+  })
+
+  describe('rendered instruction block', () => {
+    const body = '# Workflow Instructions\n\nDELEGATION-BODY\n'
+
+    const parseTagAttributes = (tag: string): Record<string, string> => {
+      const attributes: Record<string, string> = {}
+      for (const [, name, value] of tag.matchAll(/([a-z_]+)="([^"]*)"/g)) {
+        attributes[name] = value
       }
+      return attributes
+    }
 
-      await h.emit(event)
+    const decodeEntities = (value: string): string =>
+      value.replaceAll('&lt;', '<').replaceAll('&quot;', '"').replaceAll('&amp;', '&')
 
-      const blocks = event.system.filter(part => part.text.includes(WORKFLOW_INSTRUCTIONS_SENTINEL))
+    const renderBlock = async (directory: string): Promise<string> => {
+      let written: string | undefined
+      let resumeWrite: (() => void) | undefined
 
-      expect(blocks).toHaveLength(1)
-      expect(event.system).toEqual([
-        { type: 'text', text: 'before' },
-        { type: 'text', text: 'after' },
-        { type: 'text', text: wrapped },
-      ])
+      entryClient.writeEntry.mockClear()
+      entryClient.writeEntry.mockImplementation(async (_sessionID: string, _key: string, value: string) => {
+        written = value
+        resumeWrite?.()
+        return { status: 'written' }
+      })
+
+      const h = makeHarness(directory, [{ type: 'session.created', data: { sessionID: 'ses_rendered' as unknown as SessionID, agent: 'rug-workflow' } }])
+      const registered = plugin.effect(h.context)
+      const awaitWrite = Effect.callback<void>((resume) => {
+        if (written === undefined) {
+          resumeWrite = () => {
+            resume(Effect.void)
+          }
+          return
+        }
+        resume(Effect.void)
+      })
+
+      await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
+        yield* registered
+        yield* awaitWrite
+      })))
+
+      entryClient.writeEntry.mockResolvedValue({ status: 'written' })
+
+      if (written === undefined) throw new Error('the workflow instruction entry was not written')
+      return written
+    }
+
+    it('writes the resolved instruction source path alongside the content', async () => {
+      const directory = makeDirectory()
+
+      writeInstructions(directory, body)
+      workflowConfig.instructions = 'instructions.md'
+
+      const block = await renderBlock(directory)
+      const [openingTag] = block.split('\n', 1)
+
+      expect(openingTag).toBe(`${WORKFLOW_INSTRUCTIONS_SENTINEL} source="${path.resolve(directory, 'instructions.md')}" version="1">`)
+    })
+
+    it('keeps the instruction content unchanged inside the block', async () => {
+      const directory = makeDirectory()
+
+      writeInstructions(directory, body)
+      workflowConfig.instructions = 'instructions.md'
+
+      const block = await renderBlock(directory)
+      const openingTag = `${WORKFLOW_INSTRUCTIONS_SENTINEL} source="${path.resolve(directory, 'instructions.md')}" version="1">`
+
+      expect(block).toBe(`${openingTag}\n${body}\n</workflow_instructions>`)
+    })
+
+    it('escapes a quote in the resolved source path so the opening tag stays well formed', async () => {
+      const directory = makeDirectory()
+      const fileName = String.raw`inst"ruc&t<ions\.md`
+
+      writeFileSync(path.join(directory, fileName), body)
+      workflowConfig.instructions = fileName
+
+      const block = await renderBlock(directory)
+      const [openingTag] = block.split('\n', 1)
+
+      expect(openingTag).toMatch(new RegExp(`^${WORKFLOW_INSTRUCTIONS_SENTINEL} source="[^"]*" version="1">$`))
+      expect(openingTag).toContain('&quot;')
+      expect(openingTag).toContain('&lt;')
+      expect(openingTag).toContain('&amp;')
+      expect(openingTag).not.toContain(fileName)
+
+      const attributes = parseTagAttributes(openingTag)
+
+      expect(Object.keys(attributes)).toEqual(['source', 'version'])
+      expect(decodeEntities(attributes.source)).toBe(path.resolve(directory, fileName))
     })
   })
 })

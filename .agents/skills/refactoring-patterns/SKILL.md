@@ -37,6 +37,7 @@ Six areas of focus for systematically improving code structure:
 - A method that needs a comment to explain *what* it does is a smell — extract and name the block instead
 - Shotgun Surgery (one change, many classes) and Divergent Change (one class, many reasons to change) are opposite signals of misplaced responsibilities
 - Primitive Obsession — raw strings/ints instead of small domain objects — spreads errors and duplication
+- Decide-and-Act — a function that both decides whether to act and performs the action; split it into a decision and an action, and let the action return a status, not a boolean
 
 **Code applications:**
 
@@ -46,6 +47,7 @@ Six areas of focus for systematically improving code structure:
 | Switch on type code | Replace Conditional with Polymorphism | Subclass per order type |
 | Same params in many methods | Introduce Parameter Object | `startDate, endDate` → `DateRange` |
 | Copy-pasted logic | Extract Method + Pull Up Method | Share via common method or base class |
+| Function decides and acts | Extract Method | `shouldUpdate()` returns a boolean; `update()` returns `{ changed, status }` |
 
 See: [references/smell-catalog.md](references/smell-catalog.md) when you need the full smell-to-refactoring mapping.
 

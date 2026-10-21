@@ -9,18 +9,21 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
-import { Cause, Effect } from 'effect'
-import type { Plugin } from '@opencode/plugin/effect/plugin'
+import { Cause, Effect, Stream } from 'effect'
+import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
 import { harnessConfig } from './config/harness.config'
 import { DEFAULT_TIMEOUT_MINUTES, runWorkflow } from './helpers/workflow-runner'
 import { createWorkflowClient } from './helpers/workflow-client-adapter'
 import { formatElapsed } from './helpers/workflow-subtask'
-import { didPutEntry, entryValueBytes, findEntry, didRemoveEntry } from './helpers/instruction-entry-client'
+import { writeEntry, removeEntry, entryValueBytes, MAX_ENTRY_VALUE_BYTES } from './helpers/instruction-entry-client'
+import type { EntryResult } from './helpers/instruction-entry-client'
 import { DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_SUBTASKS } from './helpers/workflow-types'
 
-const WORKFLOW_INSTRUCTIONS_SENTINEL = '<workflow_instructions version="1">'
+const WORKFLOW_INSTRUCTIONS_SENTINEL = '<workflow_instructions'
 const WORKFLOW_INSTRUCTIONS_CLOSING = '</workflow_instructions>'
 
+// The sentinel is the strip key for a previously injected block, so it stays a
+// prefix of the rendered opening tag whatever attributes that tag carries.
 // Exported as a binding (not a declaration) so the plugin-export-guard rule does
 // not reject the entry file; tests need the sentinel to assert the injected block.
 export { WORKFLOW_INSTRUCTIONS_SENTINEL }
@@ -30,12 +33,36 @@ const WORKFLOW_CONFIG_KEY = 'workflow'
 // Server namespaces entry keys as api/<key>; the key must match ^[a-z0-9][a-z0-9._-]*$.
 const WORKFLOW_ENTRY_KEY = 'workflow.instructions'
 
-// The workflow tool is registered by this plugin, but the per-request tool map
-// exposes it through Code Mode (`execute`); `workflow` is kept for harness modes
-// that surface it directly.
-const WORKFLOW_EXPOSURE_TOOLS = ['workflow', 'execute'] as const
-
 const describeCause = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause)
+
+type PluginEvent = Stream.Success<ReturnType<Context['event']['subscribe']>>
+
+export type WorkflowSessionEventType = 'session.created' | 'session.agent.selected'
+
+export interface WorkflowSessionEventView {
+  readonly type: string
+  readonly data: { readonly sessionID: unknown, readonly agent?: unknown }
+}
+
+export interface WorkflowInstructions {
+  readonly source: string
+  readonly content: string
+}
+
+export interface WorkflowSessionHandlerOptions {
+  readonly agentAllowlist: ReadonlySet<string>
+  readonly block: string
+  readonly entryBytes: number
+}
+
+export const isWorkflowSessionEvent = (event: { readonly type: string }, type: WorkflowSessionEventType): boolean =>
+  event.type === type
+
+const isSessionCreated = (event: PluginEvent): event is Extract<PluginEvent, { type: 'session.created' }> =>
+  isWorkflowSessionEvent(event, 'session.created')
+
+const isSessionAgentSelected = (event: PluginEvent): event is Extract<PluginEvent, { type: 'session.agent.selected' }> =>
+  isWorkflowSessionEvent(event, 'session.agent.selected')
 
 const workflowInstructionsError = (target: string, cause: string): Error =>
   new Error(`workflow instructions: ${target}: ${cause}`)
@@ -47,6 +74,18 @@ const configuredInstructionsPath = (): string => {
     throw workflowInstructionsError(
       `harnessConfig.plugins["${WORKFLOW_CONFIG_KEY}"].instructions`,
       'missing or not a non-empty string',
+    )
+  }
+  return configured
+}
+
+const configuredAgentAllowlist = (): string[] => {
+  const section = (harnessConfig.plugins as { workflow?: { agents?: unknown } }).workflow
+  const configured = section?.agents
+  if (!Array.isArray(configured) || configured.length === 0 || configured.some(agent => typeof agent !== 'string' || agent.trim() === '')) {
+    throw workflowInstructionsError(
+      `harnessConfig.plugins["${WORKFLOW_CONFIG_KEY}"].agents`,
+      'missing or not a non-empty string array',
     )
   }
   return configured
@@ -72,10 +111,12 @@ const assertInstructionContent = (content: string, label: string): void => {
 
 /**
  * Resolves `harnessConfig.plugins["workflow"].instructions` against `directory`
- * and reads it once as UTF-8. Throws with the configured path in the message on
- * any problem — callers surface the failure instead of falling back.
+ * and reads it once as UTF-8. Returns the resolved path beside the verbatim
+ * content so the container can name its source. Throws with the configured path
+ * in the message on any problem — callers surface the failure instead of
+ * falling back.
  */
-export function loadWorkflowInstructions(directory: string): string {
+export function loadWorkflowInstructions(directory: string): WorkflowInstructions {
   const configured = configuredInstructionsPath()
   const resolved = resolveInstructionsPath(directory, configured)
 
@@ -88,103 +129,60 @@ export function loadWorkflowInstructions(directory: string): string {
   }
 
   assertInstructionContent(content, `${resolved} (configured as ${configured})`)
-  return content
+  return { source: resolved, content }
 }
 
-const formatWorkflowInstructions = (content: string): string =>
-  `${WORKFLOW_INSTRUCTIONS_SENTINEL}\n${content}\n${WORKFLOW_INSTRUCTIONS_CLOSING}`
+// The configured path reaches the model as an attribute value, so a quote or an
+// angle bracket in it must not end the attribute and break the block.
+const escapeAttribute = (value: string): string =>
+  value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;')
 
-const objectKeys = (value: unknown): string[] => {
-  try {
-    return typeof value !== 'object' || value === null ? [] : Object.keys(value as Record<string, unknown>)
-  }
-  catch {
-    return []
-  }
-}
-
-// Diagnostics for the context hook: reads only through optional chaining and
-// try/catch so instrumentation can never be the reason the hook fails.
-const describeContextEvent = (event: unknown): Record<string, unknown> => {
-  try {
-    const tools = (event as { tools?: unknown } | null | undefined)?.tools
-    const isToolsIsObject = typeof tools === 'object' && tools !== null
-    return {
-      received: event !== null && event !== undefined,
-      eventKeys: objectKeys(event),
-      toolsIsObject: isToolsIsObject,
-      ...(isToolsIsObject && { tools: objectKeys(tools) }),
-    }
-  }
-  catch {
-    return { received: event !== null && event !== undefined, eventKeys: [], toolsIsObject: false }
-  }
-}
-
-const sessionIDOf = (event: unknown): string | undefined => {
-  try {
-    const value = (event as { sessionID?: unknown } | null | undefined)?.sessionID
-    return typeof value === 'string' && value !== '' ? value : undefined
-  }
-  catch {
-    return undefined
-  }
-}
-
-const safeToolKeys = (event: unknown): string[] => {
-  try {
-    return objectKeys((event as { tools?: unknown } | null | undefined)?.tools)
-  }
-  catch {
-    return []
-  }
-}
+const formatWorkflowInstructions = (source: string, content: string): string =>
+  `${WORKFLOW_INSTRUCTIONS_SENTINEL} source="${escapeAttribute(source)}" version="1">\n${content}\n${WORKFLOW_INSTRUCTIONS_CLOSING}`
 
 const utf8Bytes = (value: string): number => new TextEncoder().encode(value).byteLength
 
-const didRemoveInstructionEntry = async (sessionID: string): Promise<boolean> => {
-  try {
-    return await didRemoveEntry(sessionID, WORKFLOW_ENTRY_KEY)
-  }
-  catch {
-    return false
-  }
-}
+// The entry client names the outcome of an action; only `failed` carries a
+// cause worth surfacing, so `unchanged` and `absent` stay quiet.
+const reportEntryFailure = (action: string, result: EntryResult): Effect.Effect<void> =>
+  result.status === 'failed'
+    ? Effect.logError('workflow.instructions.error', { message: `workflow instructions: ${action} failed: ${result.error ?? 'unknown error'}` })
+    : Effect.void
 
-const readInstructionEntry = async (sessionID: string): Promise<{ value: unknown, error: string }> => {
-  try {
-    const entry = await findEntry(sessionID, WORKFLOW_ENTRY_KEY)
-    return { value: entry?.value, error: '' }
+export const handleSessionEvent = (
+  event: WorkflowSessionEventView,
+  options: WorkflowSessionHandlerOptions,
+): Effect.Effect<void> => Effect.gen(function* () {
+  const sessionID = event.data.sessionID as unknown as string
+  const agent = event.data.agent as string | undefined
+
+  if (agent === undefined) {
+    yield* Effect.logInfo('workflow.instructions.skipped', { sessionID, agent: 'unknown' })
+    return
   }
-  catch (error) {
-    return { value: undefined, error: describeCause(error) }
+
+  if (!options.agentAllowlist.has(agent)) {
+    const removal = yield* Effect.promise(() => removeEntry(sessionID, WORKFLOW_ENTRY_KEY))
+    yield* Effect.logInfo('workflow.instructions.skipped', { sessionID, agent, status: removal.status })
+    yield* reportEntryFailure('remove', removal)
+    return
   }
-}
 
-const releaseUnusedSession = (
-  sessionID: string | undefined,
-  gatedSessions: Set<string>,
-): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    if (sessionID === undefined) return
-    gatedSessions.delete(sessionID)
-    const removed = yield* Effect.promise(() => didRemoveInstructionEntry(sessionID))
-    if (removed) yield* Effect.logInfo('workflow.instructions.cleared', { sessionID })
-  })
-
-const didStripWorkflowSystemBlocks = (system: unknown[]): boolean => {
-  let isStripped = false
-  for (let index = system.length - 1; index >= 0; index -= 1) {
-    const part = system[index] as { type?: unknown, text?: unknown }
-    if (!(part.type === 'text' && typeof part.text === 'string' && part.text.includes(WORKFLOW_INSTRUCTIONS_SENTINEL))) continue
-
-    system.splice(index, 1)
-    isStripped = true
+  if (options.entryBytes > MAX_ENTRY_VALUE_BYTES) {
+    yield* Effect.logInfo('workflow.instructions.skipped', { sessionID, agent, reason: 'entry-too-large', entryBytes: options.entryBytes })
+    return
   }
-  return isStripped
-}
 
-const instructionReason = (error: string): string => (error === '' ? 'entry-missing' : 'entry-unavailable')
+  const write = yield* Effect.promise(() => writeEntry(sessionID, WORKFLOW_ENTRY_KEY, options.block))
+  yield* Effect.logInfo('workflow.instructions', { sessionID, agent, status: write.status, entryBytes: options.entryBytes })
+  yield* reportEntryFailure('write', write)
+}).pipe(
+  // The subscription contract is Effect<void, never>, so surface failures
+  // as a log line instead of a silent defect; the session keeps running.
+  Effect.catchCause(cause =>
+    Effect.logError('workflow.instructions.error', { message: describeCause(Cause.squash(cause)) }),
+  ),
+)
 
 const WORKFLOW_TOOL_DESCRIPTION = [
   'Execute a JavaScript workflow script that orchestrates subagents.',
@@ -257,7 +255,7 @@ const plugin: Plugin = {
   effect: context => Effect.gen(function* () {
     const directory = context.location.directory as unknown as string
     // Read once per plugin lifetime; a change requires a restart.
-    const instructions = yield* Effect.try({
+    const loaded = yield* Effect.try({
       try: () => loadWorkflowInstructions(directory),
       catch: cause => cause instanceof Error ? cause : new Error(String(cause)),
     }).pipe(Effect.orDie)
@@ -265,88 +263,29 @@ const plugin: Plugin = {
     const configuredPath = configuredInstructionsPath()
     yield* Effect.logInfo('workflow.instructions.loaded', {
       path: configuredPath,
-      resolvedPath: resolveInstructionsPath(directory, configuredPath),
-      contentBytes: utf8Bytes(instructions),
+      resolvedPath: loaded.source,
+      contentBytes: utf8Bytes(loaded.content),
+      agents: [...configuredAgentAllowlist()],
     })
 
-    // ADR-011: instructions travel as a session instruction entry, written in
-    // the prompt hook so the same turn sees them. The context hook is the only
-    // place the tool map is visible, so it decides the gate: it records the
-    // per-session flag the prompt hook reads, and splices `system` only when the
-    // entry is missing (first gated turn, or a failed write) so nothing is
-    // delivered twice.
-    const gatedSessions = new Set<string>()
+    // ADR-011: instructions travel as a session instruction entry. Session
+    // creation and agent selection are the only moments the owning agent is
+    // known or changes; there is no system-prompt carrier and no fallback.
+    const agentAllowlist = new Set(configuredAgentAllowlist())
+    const block = formatWorkflowInstructions(loaded.source, loaded.content)
+    const entryBytes = entryValueBytes(block)
+    const handlerOptions: WorkflowSessionHandlerOptions = { agentAllowlist, block, entryBytes }
 
-    yield* context.session.hook('prompt', event => Effect.gen(function* () {
-      const sessionID = sessionIDOf(event)
-      if (sessionID === undefined || !gatedSessions.has(sessionID)) return
-
-      const block = formatWorkflowInstructions(instructions)
-      const result = yield* Effect.promise(async () => {
-        try {
-          return { wrote: await didPutEntry(sessionID, WORKFLOW_ENTRY_KEY, block), error: '' }
-        }
-        catch (error) {
-          return { wrote: false, error: describeCause(error) }
-        }
-      })
-      yield* Effect.logInfo('workflow.instructions.prompt', {
-        sessionID,
-        carrier: result.error === '' ? 'entry' : 'system',
-        wrote: result.wrote,
-        blockBytes: utf8Bytes(block),
-        entryBytes: entryValueBytes(block),
-        error: result.error || 'none',
-      })
-    }).pipe(
-      Effect.catchCause(cause =>
-        Effect.logError('workflow.instructions.error', { message: describeCause(Cause.squash(cause)) }),
-      ),
-    ))
-
-    yield* context.session.hook('context', event => Effect.gen(function* () {
-      const sessionID = sessionIDOf(event)
-      const tools = safeToolKeys(event)
-      const exposure = WORKFLOW_EXPOSURE_TOOLS.find(name => tools.includes(name))
-
-      yield* Effect.logDebug('workflow.instructions.context', { ...describeContextEvent(event), exposure })
-      if (exposure === undefined) {
-        yield* Effect.logDebug('workflow.instructions.skipped', { tools })
-        yield* releaseUnusedSession(sessionID, gatedSessions)
-        return
-      }
-
-      if (sessionID !== undefined) gatedSessions.add(sessionID)
-      if (!Array.isArray(event.system)) throw new Error('context event has no system array')
-
-      const block = formatWorkflowInstructions(instructions)
-      const stored = yield* (sessionID === undefined
-        ? Effect.succeed({ value: undefined as unknown, error: 'session id missing' })
-        : Effect.promise(() => readInstructionEntry(sessionID)))
-      if (stored.value === block) {
-        yield* Effect.logInfo('workflow.instructions.context.applied', {
-          sessionID, carrier: 'entry', exposure, blockBytes: utf8Bytes(block),
-        })
-        return
-      }
-
-      const isStripped = didStripWorkflowSystemBlocks(event.system)
-      event.system.push({ type: 'text', text: block })
-      yield* Effect.logInfo('workflow.instructions.injected', {
-        carrier: 'system',
-        reason: instructionReason(stored.error),
-        blockBytes: utf8Bytes(block),
-        tools,
-        exposure,
-        stripped: isStripped,
-      })
-    }).pipe(
-      // The hook contract is Effect<void, never>, so surface failures as a log
-      // line instead of a silent defect; the agent loop keeps running.
-      Effect.catchCause(cause =>
-        Effect.logError('workflow.instructions.error', { message: describeCause(Cause.squash(cause)) }),
-      ),
-    ))
+    yield* context.event.subscribe().pipe(
+      Stream.filter(isSessionCreated),
+      Stream.runForEach(event => handleSessionEvent(event, handlerOptions)),
+      Effect.forkScoped,
+    )
+    yield* context.event.subscribe().pipe(
+      Stream.filter(isSessionAgentSelected),
+      Stream.runForEach(event => handleSessionEvent(event, handlerOptions)),
+      Effect.forkScoped,
+    )
 
     yield* context.tool.transform((editor) => {
       editor.add({

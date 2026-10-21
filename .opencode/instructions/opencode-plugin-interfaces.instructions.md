@@ -162,6 +162,12 @@ Logs: `~/.local/share/opencode/log/opencode.log`. `--print-logs` writes to stder
 | Reproduce the event union from memory | The union is large and not exhaustively verified here; read `dist/effect/event.d.ts`. |
 | Edit a live plugin before typechecking | Hot reload applies the broken module to the running session. |
 
+## Naming and lint rules
+
+- A lint rule that rejects a name is a report about the design, not about the spelling: change the design or the rule configuration, and never distort a name to satisfy the rule.
+- A helper that both decides and acts must be split: a decision returns a boolean or a status, an action returns what it did.
+- `refactoring-patterns` names the second rule as the Decide-and-Act smell and carries the split fix.
+
 ## New plugin checklist
 
 1. Pick a stable, namespaced `id` (`opencode.<name>`).
