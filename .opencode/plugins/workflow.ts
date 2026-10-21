@@ -12,7 +12,8 @@ import path from 'node:path'
 import { Cause, Effect, Stream } from 'effect'
 import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
 import { harnessConfig } from './config/harness.config'
-import { listSteps, readStoredSteps } from './helpers/subtask-ls'
+import { listSteps, listSubtasksFromSessions, readStoredSteps } from './helpers/subtask-ls'
+import type { SessionsReader } from './helpers/subtask-ls'
 import { runStandaloneSubtask } from './helpers/subtask-run'
 import { recordTailOutput, tailOutputs } from './helpers/subtask-tail'
 import { createWorkflowClient } from './helpers/workflow-client-adapter'
@@ -189,9 +190,9 @@ export const handleSessionEvent = (
 // ADR-012: workflow tool retired. Standalone trio (subtask_ls, subtask_run,
 // subtask_tail) is the only execution surface; no script wrapper remains.
 const SUBTASK_LS_TOOL_DESCRIPTION = [
-  'List subtasks from the latest finished workflow run in this server process.',
+  'List child subtasks from the sessions reader for the current session.',
+  'Falls back to the latest finished workflow run snapshot in this server process.',
   'Returns an array of {description, durationMs, task_id, status}.',
-  'A restart clears the snapshot, so an empty array means no run yet.',
 ].join(' ')
 
 const SUBTASK_LS_INPUT = {
@@ -308,9 +309,14 @@ const plugin: Plugin = {
           name: SUBTASK_LS_TOOL_NAME,
           description: SUBTASK_LS_TOOL_DESCRIPTION,
           input: SUBTASK_LS_INPUT,
-          execute: input => Effect.gen(function* () {
+          execute: (input, toolContext) => Effect.gen(function* () {
             const arguments_ = input as SubtaskLsArguments
-            const entries = listSteps(readStoredSteps(), { count: arguments_.count, status: arguments_.status })
+            const options = { count: arguments_.count, status: arguments_.status }
+            const reader = context.session as unknown as SessionsReader
+            const fromSessions = yield* Effect.promise(
+              () => listSubtasksFromSessions(reader, toolContext.sessionID as unknown as string, options),
+            ).pipe(Effect.orElseSucceed(() => {}))
+            const entries = fromSessions ?? listSteps(readStoredSteps(), options)
             const content = JSON.stringify(entries)
             return { content, metadata: { title: `subtask_ls: ${entries.length} subtask(s)` } }
           }),
