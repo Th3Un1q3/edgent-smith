@@ -1,0 +1,1 @@
+HANDOVER_TOKEN=MEMO42X7 (written for a cross-session handover test; safe to delete)

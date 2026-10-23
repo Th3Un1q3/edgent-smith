@@ -15,6 +15,7 @@ An instruction is edit-time guidance that an agent loads automatically when it t
 - Not repo-wide or session-wide policy: that binds every task, not one file type.
 - Not a tutorial: the reader is mid-edit, not studying a subject.
 - Not a record: no provenance, history, dates, or changelog.
+- Not a description of a document: state the rule and name the pointer target; never say what kind of document this file or another file is.
 
 ## Where content goes
 

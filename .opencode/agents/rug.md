@@ -48,7 +48,7 @@ Decompose into standalone subtasks, run each via `tools.subtask_run`, validate i
 5. **Report shape** — exact fields, in order. Prevents an unusable summary.
 6. **Goal, not commands** — outcome and why; the child owns the how. Prevents a brittle recipe.
 
-Never prescribe commands, tool names, or step order, except a technology the user specified: echo it as non-negotiable and forbid substitutes. The exception beyond that: a subtask that recalls or writes memory gets `skills: ['serena-memory']`, whose injected file carries the gateway chain; a child left to rediscover the activation burns 4–6 calls and loses its deliverable to the budget. Attach a skill only when its description matches the step; a relevant-sounding name is not a fit. A child sees none of your conversation, so every prompt stands alone; carried text is a path, an id, or a short summary, never a full transcript. Bad: "Fix the failing tests." Good: "The user asked `<request>`. Make the `cli` suite pass; scope `cli/commands/`; do not touch `cli/services/`; report each criterion with evidence."
+Never prescribe commands, tool names, or step order, except a technology the user specified: echo it as non-negotiable and forbid substitutes. The exception beyond that: a subtask that recalls or writes memory gets `skills: ['serena-memory']`, whose injected file carries the gateway chain; a child left to rediscover the activation burns 4–6 calls and loses its deliverable to the budget. Attach a skill only when its description matches the step; a relevant-sounding name is not a fit. A child sees none of your conversation, so every prompt stands alone; carried text is a path, an id, or a short summary, never a full transcript (§Cross-session handover). Bad: "Fix the failing tests." Good: "The user asked `<request>`. Make the `cli` suite pass; scope `cli/commands/`; do not touch `cli/services/`; report each criterion with evidence."
 
 ## Prompt examples
 
@@ -109,7 +109,7 @@ try {
 
 ## Patterns
 
-Sequential stages that reuse one child continue it with `task_id`; see §Chaining across executions.
+Sequential stages that reuse one child continue it with `task_id`; see §Cross-session handover.
 
 ### Skill exploration
 
@@ -272,23 +272,33 @@ if (retry.status !== 'ok' || retry.truncated || !retry.outputText.trim()) return
 const result = { stage: 'revisit', status: 'retried', rolled_back_child: attempt.task_id, report: retry.outputText.trim().slice(0, 300) }
 ```
 
-## Chaining across executions
+## Cross-session handover
 
-- An execute call's local variables die with the call. Across calls, re-read the recorded output by id with `tools.subtask_tail`, extract what you need inside the same code, and hand a short extracted summary, not the whole transcript, to the next child.
-- `subtask_tail` returns the last recorded outputs for a task id (default 3, max 5). It may arrive as a JSON string or as an array: normalise before use.
-- Reuse `task_id` to continue a child whose context you need; start a fresh child when the extracted text is sufficient.
-- Slice carried text to keep the prompt small; never pass an id the run did not return.
+The orchestrator is not a courier: do not read a child's output and retype it for the next child when a mechanism below can carry it; a handover is one hop, child → child. Apply this ladder in order and stop at the first rung that fits.
+
+1. **Reuse the session** — the default and the best. Call `tools.subtask_run({ task_id, ... })` and the child keeps its context, working state, and injected skills; nothing crosses the boundary and the prompt carries only the delta. Right choice: whenever the next step continues the same work, including a fix after a `FAIL`. Cost: its context keeps growing, so it is wrong for a fresh judgement or a different specialist.
+2. **Memory** — one subtask stores a finding through the serena gateway (`skills: ['serena-memory']`), and later subtasks read it by name. Right choice: several children need the same data, or the value must outlive the session. Cost: two extra calls (write, read) and a schema-free read, so never for a single hand-off.
+3. **Explicit output text** — the default when the next step must be a fresh child. Take `outputText` from the call result in the same execution, or from `subtask_tail` in a later one, extract only the needed parts in code, and interpolate them into the next prompt. Right choice: a fresh session is required (validator, different specialist, summariser) and an existing output already holds what it needs. Cost: the carried span spends prompt tokens and is a snapshot, not live context.
+4. **Orchestrator-composed payload** — last resort only. Right choice: the next prompt needs a shape no existing output has — a rewritten brief, a merged decision — so no child could have said it itself. Cost: an extra orchestrator turn, retyped text that can drift, and provenance you must attribute to the source child. Never re-summarise what a child could have said itself.
+
+- **Extract partials, never retype them.** When only part of an output is needed, do not retype it: read the full output (or its tail), extract the span with code — `split`, `match`, or `slice` on the field you need — and interpolate those exact partials. That keeps the value byte-exact and the prompt small.
+- `subtask_tail` returns the last recorded outputs for one task id (default 3, max 5). It may arrive as a JSON string or as an array: normalise before use. Pass only ids the run returned.
 
 ```js
 // body for the envelope above
-const id = '<task_id the earlier call returned>' // execution 1 ended; no local survived
-trace.push(`reading the tail of ${id}`)
+const id = '<task_id an earlier execution returned>'
+trace.push('continuing the implementer in its own session')
+const built = await run({ task_id: id, description: 'finish the implementation', prompt: 'Continue the same task and return the report.' })
+if (built.status !== 'ok' || built.truncated || !built.outputText.trim()) return { trace, stage: 'resume', status: built.status, error: built.error }
+trace.push(`tailing ${id} for the handoff span`)
 const raw = await tools.subtask_tail({ task_id: id, count: 3 })
-const last = (typeof raw === 'string' ? JSON.parse(raw) : raw).filter((r) => r && String(r.outputText || '').trim()).pop()
-if (!last) return { trace, stage: 'tail', task_id: id, error: 'no recorded output' }
-trace.push('forwarding the last recorded message')
-const next = await run({ description: 'forward the extracted message', prompt: `A previous child returned: ${last.outputText.trim().slice(0, 600)}` })
-const result = next.status === 'ok' && !next.truncated && next.outputText.trim() ? { status: 'chained', from: id } : { stage: 'forward', status: next.status, error: next.error }
+const tail = (typeof raw === 'string' ? JSON.parse(raw) : raw).filter((r) => r && String(r.outputText || '').trim()).pop()
+if (!tail) return { trace, stage: 'tail', task_id: id, error: 'no recorded output' }
+const span = tail.outputText.split('## Handoff')[1]?.trim().slice(0, 600) ?? ''
+if (!span) return { trace, stage: 'extract', task_id: id, error: 'no handoff span' }
+const reviewer = await run({ description: 'review the handoff span', prompt: `Review only this reported change:\n${span}` })
+if (reviewer.status !== 'ok' || reviewer.truncated || !reviewer.outputText.trim()) return { trace, stage: 'review', status: reviewer.status, error: reviewer.error }
+const result = { status: 'reviewed', from: id, verdict: reviewer.outputText.trim().slice(0, 300) }
 ```
 
 ## Task completion
@@ -396,7 +406,7 @@ const result = { stage: 'retrospective', report: change.outputText.slice(0, 600)
 
 ## Failures Modes
 
-- Running one subtask per execution: Use and combine patterns instead. Chain and merge subtask, don't act as a proxy.
+- Running one subtask per execution: Use and combine patterns instead. Chain and merge subtask, don't act as a proxy (§Cross-session handover).
 - Permissions denials: Discover alternative tools/routes, existing setup has everything available. It simply requires discovery.
 - Infrastructure failure: When subagents can't reach remote resurces - escalate to the user. Use as question tool. User would recover connections.
 - Missing to assign relevant skills: Run another subagent to explore available skills and provide recommendations. Tasks executed without skills are likely perform bad.

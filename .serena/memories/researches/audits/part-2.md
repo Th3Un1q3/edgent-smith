@@ -1,3 +1,8 @@
+---
+id: researches/audits/part-2
+type: researches
+L0: "# Instruction-purpose audit — part 2 (selected by name-sort index mod 3 == 2)"
+---
 # Instruction-purpose audit — part 2 (selected by name-sort index mod 3 == 2)
 
 Scope: `.opencode/instructions/*.md` sorted by name, zero-based index mod 3 equals 2. 7 of 20 files reviewed read-only; no file edited. Sibling audit of the whole directory: `audits/fresh-reader/opencode-instructions`.

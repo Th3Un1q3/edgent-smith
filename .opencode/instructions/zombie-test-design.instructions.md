@@ -7,4 +7,4 @@ excludeAgents: "rug"
 
 # ZOMBIES: Incremental Test Design
 
-The ZOMBIES mnemonic, its ordering, and the case-by-case workflow are owned by the `test-driven-development` skill in `references/zombie-test-design.md`. Load that reference before designing a feature or bugfix test suite; this file adds no rules of its own.
+Load `references/zombie-test-design.md` from the `test-driven-development` skill before designing a feature or bugfix test suite; it carries the ZOMBIES mnemonic, its ordering, and the case-by-case workflow.

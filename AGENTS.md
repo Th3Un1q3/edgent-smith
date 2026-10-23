@@ -3,7 +3,7 @@
 **Generated:** 2026-06-20
 **Commit:** a7ce51d
 **Branch:** main
-**Last verified:** 2026-10-23
+**Last verified:** 2026-09-21
 
 ## World Model
 
@@ -26,7 +26,7 @@ flowchart TB
     subgraph platform["Platform & Extensibility"]
         DevContainer["Dev Container\nPython 3.13 + Ollama"]
         PluginSDK["Plugin SDK\n.opencode/plugins/helpers (TS)"]
-        Skills["Skill Marketplace\n.agents/skills (39 skills)"]
+        Skills["Skill Marketplace\n.agents/skills (40 skills)"]
     end
     Agent["Agent (you)"] -- executes via --> OpenCode
     Agent -- executes via --> DSH
@@ -44,7 +44,7 @@ flowchart TB
 
 ## OVERVIEW
 
-edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an issue-driven experiment loop and DevContainer-first development. It spans 10 distinct agent/workflow systems across 4 harness planes and 3 runtime planes. The architecture separates harness-free execution (System A) from harness-native orchestration (System B), with shared platform services (MCP, skills, plugins) mediating both.
+edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an issue-driven experiment loop and DevContainer-first development. It spans 10 distinct agent/workflow systems across 4 harness planes and 3 runtime planes — see Taxonomy and System Boundaries below for ownership. The architecture separates harness-free execution (System A) from harness-native orchestration (System B), with shared platform services (MCP, skills, plugins) mediating both.
 
 ## PROJECT STRUCTURE
 
@@ -54,8 +54,8 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 ├── .dsh/               # DeepSeek harness: agent-presets, child-runtime/cordis.yml, cordis.patch.yml, settings.yaml
 ├── .github/            # CI (DevContainer), Custom Agents (.github/agents/*.agent.md), Prompts, Instructions
 ├── .opencode/          # OpenCode RUG framework: agents/rug.md, plugins/helpers (TS SDK), instructions, skills-loader
-├── .agents/skills/     # Skill marketplace — 39 skills (pydantic-ai, testing, docker, etc.)
-├── .serena/memories/   # Serena persistent typed memories (gateway-mediated)
+├── .agents/skills/     # Skill marketplace — 40 skills (pydantic-ai, testing, docker, etc.)
+├── .serena/memories/   # Serena persistent typed memories — see CONVENTIONS (Serena Gateway)
 ├── mcp/catalog.yaml    # MCP Gateway catalog — 9 servers (tavily, serena, github, fetch, etc.)
 ├── agents/             # System A: Custom Pydantic Orchestrator — edge.py (harness-free)
 ├── config.py           # System A config — env + model settings (root)
@@ -65,7 +65,7 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 ├── experiments/        # State storage: index.json (CLI) + <issue>.state.json (script)
 ├── scripts/conductor/  # Conductor scaffold — Python workers (YAML planned)
 ├── tests/              # Comprehensive test suite covering CLI, agents, and evals
-├── justfile            # Root — global quality gates (cross-cutting, no domain deps) + mod imports
+├── justfile            # Root — global quality gates (cross-cutting, no domain deps) + mod imports — see CONVENTIONS
 ├── evals/justfile      # eval workflows (smoke/CI/baselines)
 ├── scripts/justfile    # experiment & DSH workflows
 ├── docs/justfile       # docs toolchain (lint/fix/deps/serve via bun)
@@ -88,7 +88,7 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 | Evaluation / Providers | `evals/runner.py` | Benchmarks, baselines, smoke tests |
 | Serena / MCP Gateway | `mcp/catalog.yaml`, `.serena/memories/` | 9 MCP servers; gateway-mediated memories |
 | Plugin SDK (TS Harness) | `.opencode/plugins/helpers/`, `*.ts` | Harness internals; not runtime code |
-| Skill Marketplace | `.agents/skills/` | 39 skills; modular capabilities |
+| Skill Marketplace | `.agents/skills/` | 40 skills; modular capabilities |
 
 ## CODE MAP (Core)
 
@@ -108,13 +108,13 @@ The system is architected around high-centrality components in the following mod
 
 - **Python 3.13**: Uses modern type annotations (`from __future__ import annotations`) and standard library features.
 - **Click Architecture**: Strict separation between command routing (`cli/main.py`), logic (`commands/*.py`), and services (`services/*.py`).
-- **Task Runner**: Run every task through a `just` recipe (`just <module>::<recipe>`), never a raw runner; root `justfile` holds only the 11 global gates plus `mod` imports. Best practices: `.opencode/instructions/justfiles.instructions.md`.
-- **Test Verification**: A unit test is hermetic — no service, network, model call, or env-gated skip; a live check is a delegated CLI/agent run with a real model and is never a test file (`*.live.test.ts` is forbidden). Reporting rules: `.opencode/instructions/live-verification.instructions.md`.
+- **Task Runner**: See `.opencode/instructions/justfiles.instructions.md`.
+- **Test Verification**: `.opencode/instructions/live-verification.instructions.md` defines unit versus live tests and their reporting rules.
 - **CI Fast Path**: `just ci` runs the 13-gate sequence; for docs-only changes use `just ci-fast` (~20s). Pins and escapes: `.opencode/instructions/threshold-policy.instructions.md`; CI job internals: `.opencode/instructions/github-actions-tech-guidance.instructions.md`.
 - **CI Workflow**: `.github/workflows/ci.yml` runs `prebuild-devcontainer` then `ci` inside the DevContainer. See `.opencode/instructions/github-actions-tech-guidance.instructions.md`.
-- **Pre-check Gate**: Run `just verify-agents` before editing a `justfile`, a scoped `justfile`, or `.github/workflows/*.yml`, and require `── verify-agents: PASS ──`. Details: `.opencode/instructions/justfiles.instructions.md`.
+- **Pre-check Gate**: See `.opencode/instructions/justfiles.instructions.md`.
 - **Environment Management**: Heavy reliance on DevContainers for consistent execution across local and CI environments.
-- **Serena Gateway**: Route every memory read and write through the gateway tools; never `read`/`ls` `.serena/memories/*` directly. The protocol is `.agents/skills/serena-memory/references/gateway-protocol.md` — apply it before every gateway call and cite it, never restate it. `.opencode/instructions/serena-gateway.instructions.md` applies only while editing `.agents/skills/serena-memory/**` or `.agents/skills/context-gathering/**`, where it blocks restating the protocol.
+- **Serena Gateway:** Memory access goes only through the gateway; never `read`, `ls`, or `grep` `.serena/memories/*` from the filesystem. Call protocol: `.agents/skills/serena-memory/references/gateway-protocol.md`.
 - **Permission Denials**: A denial is final for the denied action; never reproduce a denied effect through another mechanism, and never perform a gated write (`git add`/`commit`/`push` or any other write) without explicit user authorization in the current session. Canonical forms and detailed procedure: `.opencode/instructions/no-permission-workarounds.instructions.md`.
 
 ## ANTI-PATTERNS (THIS PROJECT)
@@ -126,7 +126,7 @@ The system is architected around high-centrality components in the following mod
 
 ## UNIQUE STYLES
 
-- **Instruction Files as Code**: Detailed development guidelines are codified in `.opencode/instructions/*.md` for strict compliance check by agents and contributors.
+- **Instruction Files as Code**: Before editing a file type, read its matching `.opencode/instructions/*.instructions.md` and follow it as binding, not advisory.
 - **Dual Experiment Registry**: Distinct handling of CLI-managed experiments (`experiments/index.json`) versus script-run state files (`experiments/<issue>.state.json`).
 
 ## COMMANDS
@@ -151,7 +151,7 @@ The system is architected around high-centrality components in the following mod
 - **Conductor Multi-Agent Workflows**: `scripts/conductor/`; scaffold — Python workers (YAML planned); human-in-the-loop gates.
 - **Serena / MCP Gateway Ecosystem**: `mcp/catalog.yaml` (9 servers), `.serena/memories/`; symbol search, gateway-mediated memory.
 - **OpenCode Plugin SDK**: `.opencode/plugins/helpers/`, `*.ts`; TypeScript harness internals; quality-gate enforcers, loaders.
-- **Skill Marketplace**: `.agents/skills/` (39 skills); modular capabilities.
+- **Skill Marketplace**: `.agents/skills/` (40 skills); modular capabilities; see SYSTEM BOUNDARIES & OWNERSHIP below.
 
 ## SYSTEM BOUNDARIES & OWNERSHIP
 
@@ -164,7 +164,7 @@ The system is architected around high-centrality components in the following mod
 | 5 | Conductor Workflows | Yes — Conductor | `scripts/conductor/` | `conductor` YAML + CLI | Do not bypass via direct `agents/` calls |
 | 6 | CLI Service Agents | No | `cli/` | `click` + `just` recipes | Do not duplicate logic; use `cli/services/` |
 | 7 | Evaluation / Provider | No | `evals/` | `evals/runner.py` | Do not mix with `agents/` runtime |
-| 8 | Serena / MCP Gateway | Yes — Gateway | `mcp/catalog.yaml`, `.serena/` | `gateway_mcp-*` tools | Never `read`/`ls` `.serena/memories/*` directly |
+| 8 | Serena / MCP Gateway | Yes — Gateway | `mcp/catalog.yaml`, `.serena/` | `gateway_mcp-*` tools | See CONVENTIONS — Serena Gateway |
 | 9 | OpenCode Plugin SDK | Yes — OpenCode | `.opencode/plugins/helpers/` | TypeScript plugin API | Do not import into Python runtime |
 | 10 | Skill Marketplace | No (shared) | `.agents/skills/` | `skill` loader | Do not create skill without `find-skills`; owner: `harness-management` |
 
@@ -178,15 +178,15 @@ The system is architected around high-centrality components in the following mod
 | **System A** | Custom Pydantic Orchestrator — harness-free; `agents/`, `pydantic-ai` in `pyproject.toml`. |
 | **System B** | DeepSeek Harness / Cordis RUG — harness-native; `.dsh/`, `cordis.patch.yml`. |
 | **Edge Agent** | System A runtime agent (`agents/edge.py`) with inline pydantic-ai tools. |
-| **Serena Memory** | Typed persistent memory in `.serena/memories/`; access only via `serena` MCP gateway. |
-| **Skill** | Modular capability in `.agents/skills/<name>/`; loaded via skill loader; not an agent. |
+| **Serena Memory** | Typed persistent memory in `.serena/memories/` — see CONVENTIONS (Serena Gateway). |
+| **Skill** | Capability in `.agents/skills/<name>/`; load it with the skill tool before doing the work it covers. |
 
 **Anti-confusion rules:**
 
 - Always qualify **RUG** — say `OpenCode RUG` vs `DSH RUG (Cordis)`; never bare "RUG".
 - Always qualify **System** — say `System A (harness-free)` vs `System B (harness-native)`; never bare "system".
 - Always qualify **Agent** — say `runtime agent` vs `harness agent` vs `Copilot agent`; never bare "agent" when ownership matters.
-- Never invent environment capabilities. State what a harness can do only when a repo file shows it; otherwise state the outcome plus a generic fallback. Only OpenCode and DSH load skills in this repo; never claim skill support for GitHub Copilot, Conductor, or System A.
+- Never invent environment capabilities. State what a harness can do only when a repo file shows it; otherwise state the outcome plus a generic fallback. Do not claim skill support for GitHub Copilot, Conductor, or System A.
 - Use canonical harness names: OpenCode, DSH (DeepSeek Harness), GitHub Copilot, Conductor. 'RUG' qualifies an orchestration pattern (OpenCode RUG, DSH RUG (Cordis)), not a harness. No composite or invented variants ('Copilot Agents', 'DSH/Cordis RUG'). System A is a harness-free runtime, never a harness.
 
 ## STORAGE SELECTION
@@ -210,7 +210,7 @@ An explicit repository convention overrides these defaults; nothing else does. T
 
 ## VALIDATION
 
-Verify AGENTS.md topology stays in sync with the repo. Run these grep gates from `/workspace`:
+Run these gates from `/workspace`:
 
 ```bash
 # 0. Thresholds (fail-closed pin) — pins defined in .opencode/instructions/threshold-policy.instructions.md
@@ -229,6 +229,6 @@ ls scripts/conductor/
 ls mcp/catalog.yaml && grep -c "  type:" mcp/catalog.yaml
 # 7. Skill marketplace count
 ls .agents/skills/ | wc -l
-# 8. Justfile boundary and working directories
+# 8. AGENTS topology sync + justfile boundary (see CONVENTIONS — Pre-check Gate)
 just verify-agents
 ```

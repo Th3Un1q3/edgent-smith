@@ -6,7 +6,7 @@ applyTo: "{.tmp/**/*,.serena/memories/**/*.md,.opencode/agents/**/*.md,.agents/s
 
 # Storage Selection
 
-The ordered store test and the memory topic table are owned by [`## STORAGE SELECTION`](../../AGENTS.md#storage-selection). Memory types, ADR frontmatter, and what may enter memory are owned by the `serena-memory` skill (`.agents/skills/serena-memory/references/frontmatter.md`).
+Apply the ordered store test and the memory topic table in [`## STORAGE SELECTION`](../../AGENTS.md#storage-selection). For memory types, ADR frontmatter, and what may enter memory, follow `.agents/skills/serena-memory/references/frontmatter.md`.
 
 - Experiment run state is a repository file under `experiments/`.
 - A report a reviewer reads, such as an audit attached to a pull request, is a repository file.

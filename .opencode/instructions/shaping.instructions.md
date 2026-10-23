@@ -6,6 +6,6 @@ applyTo: "{.agents/skills/**/SKILL.md,.agents/skills/**/workflows/**/*.md,.agent
 
 # Shaping Gate
 
-Skill shaping is owned by the `building-modular-skills` skill: budgets in `references/guidance-structure.md`, the audit command in `workflows/authoring-workflow.md`, and the completion gate in `workflows/shaping-checklist.md`. Load `SKILL.md` before editing a skill file.
+Load `building-modular-skills/SKILL.md` before editing a skill file, then apply its shaping budgets in `references/guidance-structure.md`, the audit command in `workflows/authoring-workflow.md`, and the completion gate in `workflows/shaping-checklist.md`.
 
 Edit-time boundary: every file you create, rename, or add under a skill directory must be routed from that skill's root `SKILL.md` Task Routing Table in the same edit.

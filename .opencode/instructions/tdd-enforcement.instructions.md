@@ -8,7 +8,7 @@ excludeAgents: "rug"
 
 # TDD Enforcement
 
-The Iron Law, the RED → GREEN → REFACTOR cycle, the rollback sequence, and the completion checklist are owned by the `test-driven-development` skill; load `SKILL.md` before editing implementation code. Debug-artifact cleanup is owned by that skill's `## Debug artifact cleanup` section.
+Load the `test-driven-development` skill's `SKILL.md` before editing implementation code; it carries the Iron Law, the RED → GREEN → REFACTOR cycle, the rollback sequence, the completion checklist, and the debug-artifact cleanup in its `## Debug artifact cleanup` section.
 
 Edit-time boundaries for an implementation file:
 

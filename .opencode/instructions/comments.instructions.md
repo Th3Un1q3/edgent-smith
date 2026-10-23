@@ -26,7 +26,7 @@ Question 1 is a veto. Question 2 decides whether a non-rendered comment survives
 - Restatement: prose that repeats the adjacent code, name, or type without adding a rule or reason.
 - Trap comment: a comment that names a hazard the code cannot express, such as a security, platform, or type-checker failure.
 - Documentation job: text a tool prints for a user, such as recipe descriptions, Click help, and fixture docstrings.
-- Cleanup rule: the deletion obligation for commented-out code and debug artifacts, owned by `test-driven-development`.
+- Cleanup rule: the deletion obligation for commented-out code and debug artifacts; apply the rule in `test-driven-development`.
 - Debug artifact: a temporary print or logging call left in the source.
 - Banner comment: fill characters or a numbered marker whose only content is the label of the section below it.
 - Meta-commentary: prose about the file's own comments or identity instead of its subject.

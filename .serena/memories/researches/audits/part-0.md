@@ -1,3 +1,8 @@
+---
+id: researches/audits/part-0
+type: researches
+L0: "# Instruction purpose audit — part 0"
+---
 # Instruction purpose audit — part 0
 
 Read-only audit of `.opencode/instructions/*.md` against the harness-management

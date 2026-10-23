@@ -7,6 +7,6 @@ excludeAgents: "rug"
 
 # TypeScript test design
 
-Test design criteria and the TypeScript conventions for mocking, assertions, and test structure are owned by the `test-design` skill: `SKILL.md` and `references/typescript-conventions.md`. Load both before editing a test file.
+Load `test-design/SKILL.md` and its `references/typescript-conventions.md` before editing a test file; they carry the test design criteria and the TypeScript conventions for mocking, assertions, and test structure.
 
 Edit-time boundary: test files in this tree import through the `@plugins/*` and `@tests/*` aliases declared in `.opencode/tsconfig.json`, never through relative paths out of the test tree.

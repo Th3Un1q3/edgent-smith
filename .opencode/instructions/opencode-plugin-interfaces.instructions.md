@@ -122,7 +122,7 @@ A unit test builds a fake `Context`, calls `Effect.runPromise(Effect.scoped(plug
 
 Green unit tests do not prove the plugin works in a live session. A detached client method loses `this` and throws, so call it as a member instead of storing the function. Unit fakes exercise neither the real client nor the real event stream nor load order.
 
-This file covers unit-level proof only; the delegated run in the section below is where a live check belongs (`.opencode/instructions/live-verification.instructions.md`).
+Prove unit behaviour here; the delegated run in the section below is where a live check belongs (`.opencode/instructions/live-verification.instructions.md`).
 
 ### Prove an injected context block
 
@@ -156,7 +156,7 @@ Logs: `~/.local/share/opencode/log/opencode.log`. `--print-logs` writes to stder
 
 ## Naming and lint rules
 
-The rule that a rejected name is a report about the design, and the Decide-and-Act split, are owned by the `refactoring-patterns` skill in `references/smell-catalog.md`; load it when a lint rule or a helper's shape is what you are changing.
+Load `references/smell-catalog.md` from the `refactoring-patterns` skill when changing a lint rule or a helper's shape; it carries the rule that a rejected name is a report about the design, and the Decide-and-Act split.
 
 ## New plugin checklist
 

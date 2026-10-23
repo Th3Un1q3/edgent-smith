@@ -42,6 +42,8 @@ Every sentence, heading, and code fence must teach the skill's subject. Author-p
 
 Documents state the rule, not its provenance: no dates, no session references, no observed-count anecdotes. A `Verified <date>` stamp or "seen in 3 sessions" line dates the file and claims standing the reader cannot check. Evidence belongs in the report or the commit that delivered the change.
 
+Documents state the rule and name the pointer target; they never describe what kind of document they or another document are ("is a guard that only routes", "is owned by X and must not be restated here", "this file covers only"). Name the target and stop.
+
 The reader pays tokens for every line. Content that describes how the skill was built teaches nothing about the task; content that describes the task teaches the task.
 
 **Audit method:** grep the skill tree for author-process machinery:
