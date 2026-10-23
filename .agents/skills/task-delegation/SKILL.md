@@ -5,68 +5,9 @@ description: >
 license: MIT
 compatibility: Requires OpenCode
 metadata:
-  version: "1.5.10"
+  version: "1.5.13"
   author: "Th3Un1qu3"
-  delta: >
-    1.5.10 — corrected "Child Budget Accounting" against the plugin source: the
-    ~24-call budget is per turn and an idled child's counter is cleared, so a
-    task_id resume opens a fresh window and is the cheapest path after idle;
-    24 triggers a stop-reminder rather than a hard block; recovery reads tail,
-    then resume, and relaunches only when the context itself is wrong.
-    1.5.9 — added "Child Budget Accounting": the ~24-call budget is per turn, so an
-    idled child's counter clears and a task_id resume opens a fresh window, while a
-    mid-turn child carries its count; subtask_tail costs no child budget, setup
-    ~4-6 calls so prompts pre-state discovered values or name one owning skill,
-    validators <=3 claims, output ~4000 chars; prompted by a ten-child run where
-    children spent ~5 calls on setup, a resume looked costly though the budget
-    does not carry across turns, a nine-claim validator died, and reports truncated.
-    1.5.8 — added "Delegation Granularity and Independent Validation":
-    one subtask_run is one unit of work while several runs share one execute
-    call, validators run in that same call without task_id or fork_from,
-    independence is the absence of producer identity rather than the absence of
-    write access, the closing PASS comes from a non-author, and a JSON-string
-    result is parsed rather than discarded; prompted by an orchestration that
-    serialized independent subtasks, made verifiers report-only across three
-    fix-verify rounds, dropped three completed reviews on a shape assumption,
-    and accepted budget-truncated producer reports as validation.
-    1.5.7 — the ground-truth section gained a write allowlist (user-owned
-    `.opencode/agents/rug.md` and `rug-swe.md` excluded from every write scope),
-    pre-checked verbatim edit anchors, and one winning criterion for conflicting or
-    unmeasurable acceptance criteria; prompted by a ponytail-review run where three of
-    six subtasks burned their budget on unverified anchors, one child damaged an
-    out-of-scope agent definition, and a docs dedup needed three rounds for an
-    undefined pointer bar.
-    1.5.6 — the exact-identifier example uses a feature-flag value
-    (`INSTRUCTION_INJECTION=synthetic`) instead of a retired live-probe env gate.
-    1.5.5 — step 8 points model-level live verification at the canonical
-    instruction set.
-    1.5.4 — added "Prompts Carry Ground Truth, Not Line Numbers" (API/type seams,
-    injection points, repo lint and file-size ceilings, exact identifiers) and a
-    gate-reserving call split in the budget-sizing rule; prompted by a 12-producer
-    run where six producers exhausted the 24-call budget mid-phase and two
-    refactored to satisfy lint caps discovered only at the gate.
-    1.5.3 — replaced the outbound permission-policy pointer with a self-contained
-    permission block for delegation: prompts must not instruct bypassing gates or
-    reproducing denied effects, gated writes need explicit authorization, and a
-    denial is final — the subagent reports it and continues with permitted work.
-    1.5.2 — permission policy prose in the delegation workflow reduced to a compact
-    standing rule; kept the prompt-design rule against unsanctioned fallback offers.
-    1.5.1 — compatibility value narrowed from Universal to Requires OpenCode; the label
-    itself was already documented under 1.5.
-    1.5 — added the documented compatibility label; stated the generic fallback for
-    delegation: where the environment cannot spawn subagents, a human performs the pass.
-    1.4 — routed method ownership (prompts state outcomes and acceptance criteria, not command recipes) into the delegation workflow, with a root pointer; prompted by auth-denied `gh`/git recipes.
-    1.3 — added the Size Bulk Edits to Fit Subagent Budgets rule; prompted by a
-    retrospective where one implementation subagent asked to edit 19 slide blocks plus
-    verify exhausted its budget, leaving verification undone.
-    1.2 — added the Parity and Porting Tasks Require a Surface Inventory mandate
-    (surface-mapping discovery before decomposition, no-silent-skips, enumerated
-    scope questions, mapping-checked validation); prompted by a session review where
-    an "as close as possible to opencode" port silently skipped plugins and MCP servers.
-    1.1 — routed task-delegation-workflow.md in the Well-Known Workflows table and added
-    budget-aware task sizing plus ground-truth smoke-test rules to that workflow; prompted
-    by recurring delegation failures (subagent budget exhaustion, config tasks passing
-    declarative introspection while failing at runtime).
+  delta: "1.5.13 — child budget is per turn; a resume resets it, and 24 calls is a stop-reminder, not a block."
 ---
 
 # Task Delegation Skill
@@ -108,7 +49,9 @@ When the request is a parity or porting task — "as close as possible to X", "m
 - Judgment work belongs in a design subagent beforehand — the implementer receives only mechanical edits and no decisions.
 - If verification stays with the implementer, plan for a resume: at the budget limit the implementer reports "edits done, verification pending" — resume the same session (`task_id`) to finish verification instead of re-doing edits.
 - A resume consumes less budget than a relaunch: context reuse beats re-discovery (see Subagent Failure Recovery).
+- **Doc sweeps: every occurrence, true count, stated metadata policy.** For a documentation sweep the prompt says every occurrence is in scope and gives the real file count, matching the list it names, plus whether a version, frontmatter, or metadata bump is required by repo policy, so the child does not guess. A per-file line cap collides with a replace-every-occurrence rule: say which one wins, and drop the cap when the sweep must touch every block.
 - **Reserve the gate calls in the prompt.** State the split: ~70% implementation and tests, ~20% gates, ~10% reporting. Pair each behavior's test with its implementation in the same pass so RED→GREEN completes inside the budget; an implementer that writes RED tests and stops spends its last calls on gates it never reaches. When test growth would push a test file toward the repo's max-lines cap, give test authoring its own subtask.
+- **Name the reserved gates, not a percentage.** A percentage buys nothing: reserve explicit calls and name the command — `just lint` or `just ci-fast` for docs, `validate_memory_frontmatter`, `validate_md_links`, and `audit_fences` for memories. A child told only "~20% gates" spends the budget on edits and reports the gate as unverified.
 
 ## Delegation Granularity and Independent Validation
 
@@ -117,6 +60,7 @@ When the request is a parity or porting task — "as close as possible to X", "m
 - **Independence is no producer identity, not no write access.** A verifier may be authorized to fix inside a declared whitelist; "report only" is a choice for checks where a fix would compound the error (a contested design call, a file outside the whitelist), never a requirement of independent validation. A report-only verifier that finds a defect costs another author-verify round.
 - **The final PASS comes from a non-author.** However the earlier rounds divide authoring and checking, the session that made the last edit does not issue the closing PASS; a fresh session does.
 - **Parse the result before judging it.** A subtask result may arrive as a JSON string; parse it, then read its fields. Never discard a completed result, or redo its work, on a shape assumption. A producer report truncated by budget exhaustion is not validation and not a PASS; it requires a validator or a resume.
+- **A shape assumption is never grounds to relaunch.** A result that looks failed but was never parsed is unread, not failed: call `subtask_tail({ task_id })` for the completed output, then resume that `task_id`. Relaunch only when the context itself is wrong.
 
 ## Prompts Carry Ground Truth, Not Line Numbers
 
@@ -129,12 +73,12 @@ A prompt that names a seam only as "file X line N" spends the subagent's budget 
 - **Write allowlist.** Name the files the subagent may modify and the files it must not. User-owned files (`.opencode/agents/rug.md`, `.opencode/agents/rug-swe.md`) stay outside every write scope, however narrow the task. A subagent blocked by a gate inside a narrow task edits a neighbouring file until the gate passes, and the validator finds the damage only after the pass.
 - **Pre-checked edit anchors.** Quote the exact text each replacement targets and confirm that text exists in the tree before dispatch. An anchor that is paraphrased, or labelled "verbatim" without the check, costs one failed edit per retry until the budget runs out.
 - **One winning criterion.** When acceptance criteria conflict — delete a function against forbid touching its file, keep one copy against delete the duplicate — the prompt states which one wins. Turn an unmeasurable bar into a concrete test ("a reader reaching the pointer needs no second lookup"), never an adjective. A subagent left to choose asks and stalls, or satisfies the criterion that damages the tree.
-
-State each fact as a constraint on the outcome; the subagent still owns the method. Facts the orchestrator does not have yet belong in a research subagent that returns them, not in a guess inside the implementation prompt.
+- **Scope the verification obligation to the report.** When the prompt asks a child to be careful about verification, say the obligation applies to the child report and not to the document body: a child told only to "mark what is unverified" writes provenance stamps into prose.
+  State each fact as a constraint on the outcome; the subagent still owns the method. Facts the orchestrator does not have yet belong in a research subagent that returns them, not in a guess inside the implementation prompt.
 
 ## Child Budget Accounting
 - **The ~24-call budget is per turn.** A child that idles (every completed subtask does) gets its counter cleared, so a `task_id` resume starts a fresh 24-call window; resume is therefore the cheapest path after idle, not a last resort. Only a child still mid-turn carries its count. 24 is the advertised `<task-budget>` and triggers a stop-reminder, not a hard block; a child told to stop may overrun, so treat >24 calls as overrun evidence, not a hard limit. `subtask_tail({ task_id })` reads completed output for one orchestrator call and no child budget: tail, then resume — the resume resets the budget; relaunch only when the context itself is wrong.
-- **Setup is charged before research.** Skill load, gateway discovery, code-mode activation, and page discovery consume ~4-6 calls. State the values setup would discover (page id, tab id, tool name, URL pattern, filter syntax) in the prompt, or name the one skill that owns them; never paste one recipe into several prompts, because each child re-derives it and invents its own workaround. Say the split too: ~6 setup, ~12 work, ~4 report, fields capped at 3-5.
+- **Setup is charged before research.** Skill load, gateway tool discovery, and page discovery consume ~4-6 calls. State the values setup would discover (page id, tab id, tool name, URL pattern, filter syntax) in the prompt, or name the one skill that owns them; never paste one recipe into several prompts, because each child re-derives it and invents its own workaround. Say the split too: ~6 setup, ~12 work, ~4 report, fields capped at 3-5.
 - **State the evidence bar and the verdict rule.** Define what counts as proof per criterion and what a missing value means (fails the criterion, or passes as "not found"); for a term with two readings, say which wins. Cap each validator at <=3 claims with pages pre-opened: a nine-claim validator dies mid-verification.
 - **Cap output length.** `outputText` holds ~4000 chars, so ask for one section and a word cap ("<=150 words, no tables"); an over-long report truncates silently.
 

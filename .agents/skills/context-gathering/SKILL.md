@@ -10,20 +10,20 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.25.3"
+  version: "1.26.0"
   author: Th3Un1qu3
-  delta: "1.25.3 — self-containment: inlined the gateway pre-flight (2 KB snapshot before every gateway_mcp-exec, empty/stderr predicate, zero-retry bash cat fallback) and the list_memories -> read_memory return ritual; removed every outbound instruction reference and the duplicated Minimal Workflow bullet. 1.25.0 — Routing: replaced the 13-row overlap with a 4-branch decision tree + concise routing table; researches/* owned by research-with-caching (transient), server-selection pointer."
+  delta: "1.26.0 — direct gateway tool calls; code mode no longer recommended."
   tools:
-    - gateway_mcp-find
-    - gateway_code-mode
-    - gateway_mcp-exec
+    - find_symbol
+    - list_memories
+    - tavily_search
 ---
 
 # Context Gathering
 
 Ground your responses, decisions, and code changes with external and internal context.
 
-> Every gateway tool follows the standard `gateway_` prefix—e.g., `gateway_mcp-find`, `gateway_code-mode`, `gateway_mcp-exec`—and Docker MCP gateway hosts them.
+> Gateway tools are flat names on the gateway namespace, already listed in the session: call `tools.gateway["tavily_search"]({query: "..."})` with a plain argument object — no discovery or activation step.
 
 ## When Not to Use This Skill
 
@@ -43,19 +43,19 @@ Do not use this skill for:
 
 ### Gateway pre-flight (MANDATORY)
 
-- **Snapshot before every `gateway_mcp-exec`:** cap each return to 2 KB (`s.length>2048? s.slice(0,2048)+"\n[...truncated]": s`). An empty/stderr return (`!raw || raw.trim() == ""`, `/Access denied/`, `content:[]`) is an infra flake, not a retry: fall back once to `bash cat .serena/memories/<id>.md` with 0 gateway retries, and complete recall only after `list_memories` -> `read_memory({memory_name: ids[0]})` returns the payload.
-- `gateway_mcp-find` finds SERVERS, not answers — pass server keywords (`serena`, `tavily`, `fetch`, `github`), never topic names; every `gateway_code-mode` needs both `name` and `servers`; chain steps inside one synchronous `gateway_mcp-exec`.
-- [Sandbox activation details](./workflows/setup.md) — sandbox activation template
+- **Snapshot every large return:** cap each return to 2 KB (`s.length>2048? s.slice(0,2048)+"\n[...truncated]": s`). An empty/stderr return (`!raw || raw.trim() == ""`, `/Access denied/`, `content:[]`) is an infra flake, not a retry: fall back once to `bash cat .serena/memories/<id>.md` with 0 gateway retries, and complete recall only after `list_memories` -> `read_memory({memory_name: ids[0]})` returns the payload.
+- The tools are already listed in the session under the gateway namespace — call one by name with real arguments, e.g. `tools.gateway["find_symbol"]({name_path_pattern: "edge_agent"})`; a name missing from the catalog may be hidden by a permission rule, so check the configured permissions before concluding the tool is unavailable.
+- [Direct call shape and setup](./workflows/setup.md) — copy-paste call examples
 - [Script rules and error handling](./workflows/scripting-workflow.md)
 
 ## Context Gathering Flows
 
-Three entry points share one preamble (`gateway_mcp-find` → server-selection → `gateway_code-mode`).
+Three entry points share one preamble (server-selection → call the chosen tool directly).
 
 ```mermaid
 flowchart TD
-    FindServers["gateway_mcp-find"] --> ReadSel["Read server-selection"]
-    ReadSel --> Activate["gateway_code-mode (name + servers)"]
+    FindServers["Tools listed under gateway"] --> ReadSel["Read server-selection"]
+    ReadSel --> Activate["Call tool by name, e.g. tools.gateway['tavily_search']"]
     Activate --> CheckCache["Check cache/{source}/..."]
     Activate --> SearchCode["Search codebase"]
     Activate --> CheckAccess["Publicly accessible?"]
@@ -79,8 +79,9 @@ flowchart TD
 ## Principles
 
 - **Delegate persistent memory to serena-memory:** for typed, gated, disclosure-budgeted writes, Call serena-memory via Skill tool on serena-memory/SKILL.md — do not store persistent memories via context-gathering.
-- **Find servers, not answers:** gateway_mcp-find discovers gateway servers/capabilities — serena, tavily, fetch, github, context7, deepwiki, devtools — never topics, libraries, or questions. Query server keywords; query the world inside gateway_mcp-exec.
-- **Minimize round trips**: Chain steps in one `gateway_mcp-exec` call; keep top-level calls synchronous.
+- **Persist findings, do not just report them:** end every research or inventory by storing its findings through serena-memory; a report carrying no `mem:` reference is incomplete. Acceptance is the memory name plus its read-back size in bytes.
+- **Call tools, not servers:** the gateway namespace already lists the tools — serena, tavily, fetch, github, context7, deepwiki, devtools — so call the specific tool with real arguments instead of searching for a server.
+- **Minimize round trips**: Batch independent tool calls in one `execute`; keep every call top-level and synchronous.
 - **Trust server authentication**: Servers are credentialed; only devtools may need a login-wall probe.
 - **Verify every write**: After any cache/file write read it back and confirm before reporting success.
 - **Start with the lightest server**: Pick the default per category; escalate only on documented failure.
@@ -94,11 +95,11 @@ flowchart TD
 ## Common Issues
 
 - **Never read Serena files directly**: route every memory through the gateway chain; the only permitted direct read is the zero-retry `bash cat .serena/memories/<id>.md` fallback when the gateway returns empty.
-- **Always set name and servers**: Every gateway_code-mode needs both.
-- **gateway_mcp-find finds servers, not answers:** query server keywords (`tavily`, `fetch`, `github`), never topic names (`react`, `pydantic-ai`). Query the world inside gateway_mcp-exec; activate with gateway_code-mode after find.
+- **No activation step**: the tools are already available on the gateway namespace; a name missing from the catalog may be hidden by a permission rule, so check the configured permissions before concluding the tool is unavailable.
+- **Call the tool, not a server:** pass the tool's real arguments (`tavily_search` takes a query, never a topic or a server name); a missing name may be hidden by a permission rule, so check the configured permissions before concluding the tool is unavailable.
 - **Top-level calls must be synchronous**: Async only inside devtools sandbox.
 - **Write plain DOM JS**: No require/process/Buffer in browser realm.
-- **Correct payload shape**: {"name":"<tool>","arguments":{"script":"<js>"}} — no flatten.
+- **Correct call shape**: `tools.gateway["<tool>"]({...args})` — a plain argument object, no `name`/`arguments` wrapper.
 
 ## Research decision tree
 
@@ -117,7 +118,7 @@ Every file appears here; pick the row that matches your task. The tree above dec
 |---|---|
 | Choose which MCP server to use | [references/server-selection.md](./references/server-selection.md) |
 | First time using the skill or need different MCP servers | [workflows/setup.md](./workflows/setup.md) |
-| Write code-mode scripts | [workflows/scripting-workflow.md](./workflows/scripting-workflow.md) |
+| Call the gateway tool directly (code mode still available, no longer recommended) | [workflows/scripting-workflow.md](./workflows/scripting-workflow.md) |
 | No ready-made recipe exists | [workflows/refinement-discovery.md](./workflows/refinement-discovery.md) |
 | Explore local codebase | [recipes/codebase-exploration.md](./recipes/codebase-exploration.md) |
 | Fetch & cache external content verbatim | [recipes/external-content-caching.md](./recipes/external-content-caching.md) |
@@ -134,9 +135,9 @@ Every file appears here; pick the row that matches your task. The tree above dec
 | Cache rulebook — budgets, key scheme, status lines | [references/caching-rules.md](./references/caching-rules.md) |
 | Store/recall persistent memory — typed, gated, disclosure | [serena-memory/SKILL.md](../serena-memory/SKILL.md) |
 
-## ADR-002 Invariants
+## Invariants
 
-- **Preserve invariants**: Single-source, domain/about, and verify-every-write extend to serena-memory — see serena-memory for typed-scope and gating details.
+- **Preserve invariants**: keep one authoritative home per fact, tag each memory with its typed scope before gating, and verify every write with the 9-check gate.
 ## Related Skills
 
 - `serena-memory` — typed, gated persistent memory; Call serena-memory via Skill tool on serena-memory/SKILL.md for typed/gated persistent writes.

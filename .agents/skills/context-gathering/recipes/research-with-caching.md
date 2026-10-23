@@ -10,7 +10,7 @@
 
 ## Why cache-first
 
-One `gateway_mcp-exec` loop per source batch: check `cache/{source}/...` → fetch only on MISS → write the FULL raw response to serena → synthesize a `researches/{topic}` memory with `mem:` refs → return ONLY a per-op status report. Caching is part of EVERY research by default: deterministic keys mean repeat queries hit; cached responses are revisitable via `list_memories` + `read_memory`; the model only ever sees status lines. Live-run proof: ONE cache-first research task cached 17 responses across deepwiki/github/fetch and produced `researches/connecting-chrome-dev-tools-from-devcontainer` with 17 `mem:` references, in a few `mcp-exec` batches, with zero raw dumps in context.
+One `gateway_mcp-exec` loop per source batch: check `cache/{source}/...` → fetch only on MISS → write the FULL raw response to serena → synthesize a `researches/{topic}` memory with `mem:` refs → return ONLY a per-op status report. Caching is part of EVERY research by default: deterministic keys mean repeat queries hit; cached responses are revisitable via `list_memories` + `read_memory`; the model only ever sees status lines.
 
 ## Prerequisites
 

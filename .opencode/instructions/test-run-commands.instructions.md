@@ -7,7 +7,7 @@ excludeAgents: "rug"
 
 # Canonical Runner Policy and Quality Gates
 
-> Quality gates trigger automatically on relevant file changes and report results in the chat; run them manually to check status.
+> Run the gates on the files you changed before reporting done.
 
 Use `just` targets instead of raw runners. Plugin recipes run from `.opencode/`:
 

@@ -3,11 +3,12 @@
 Recipes declare their server sets and tool formats (see [content-fetch-api.md](./content-fetch-api.md),
 [filesystem-server-api.md](./filesystem-server-api.md)). For routing, see [SKILL.md](../SKILL.md) Research decision tree and [serena-memory/SKILL.md](../../serena-memory/SKILL.md) Routing pre-step. For persistent typed memory see [serena-memory/SKILL.md](../../serena-memory/SKILL.md).
 
-**Vocabulary:** **server** — a gateway_mcp-find capability (serena, filesystem, github, deepwiki, context7, tavily, fetch, youtube-transcript, devtools); **world query** — a gateway_mcp-exec call that queries the outside world after sandbox activation.
+**Vocabulary:** **server** — a group of gateway tools (serena, filesystem, github, deepwiki, context7, tavily, fetch, youtube-transcript, devtools); **tool call** — `tools.gateway["<tool>"]({...args})`, which queries the outside world directly.
 
 This reference answers the question those files do not: which server to start with for a
 context-gathering need, in what order, and when to escalate. Selection is deliberate, not
-discovered per task; gateway_mcp-find selects servers; gateway_mcp-exec queries the world.
+discovered per task; the tools are already listed under the gateway namespace, so you pick one
+and call it.
 
 ## Start here
 
@@ -36,9 +37,10 @@ For ANY external gathering, in order:
 | youtube-transcript | get_video_info, get_transcript, get_timed_transcript | YouTube metadata and full paginated transcripts | rate limits and IP bans (plain-text error prefix); no transcripts for some videos | L3 network (rate-limit sensitive) | [external-content-caching](../recipes/external-content-caching.md), [content-fetch-api](./content-fetch-api.md) |
 | devtools | list_pages, new_page, evaluate_script, click, wait_for | drives the operator's host Chrome: JS-rendered and authenticated or private content via the operator session; SPA flows; extracted output is private by default (private/ namespace — see [caching-rules](./caching-rules.md) and [serena-memory disclosure](../../serena-memory/references/disclosure.md)) | heaviest; needs an authenticated session; slow; selector drift; never take_snapshot for extraction; bot-alert handling: STOP on alert signals, cache partials privately, never retry; use click-first navigation, paced | L4 heavyweight — last resort | [browser-automation-devtools](../workflows/browser-automation-devtools.md), [devtools-known-issues](./devtools-known-issues.md) |
 
-Activate sandboxes with the recipe's declared minimal server set, never all servers at once;
-adding servers later costs a re-activation ([setup](../workflows/setup.md),
-[scripting-workflow](../workflows/scripting-workflow.md)).
+Call only the recipe's declared minimal tool set, never every tool at once; each tool is gated
+by its own `gateway_<tool>` permission, and a wildcard deny removes it from the namespace
+([setup](../workflows/setup.md)). Adding servers to that set later costs a re-activation
+([setup](../workflows/setup.md), [scripting-workflow](../workflows/scripting-workflow.md)).
 
 ## Category heuristics
 
@@ -55,7 +57,7 @@ adding servers later costs a re-activation ([setup](../workflows/setup.md),
 | Local file access (workspace) | filesystem (list_allowed_directories first) | path denied | direct read and grep tools; code semantics → serena |
 | YouTube transcripts | youtube-transcript (get_video_info, then get_transcript) | rate limit or IP ban (plain-text error prefix) | back off and retry once, then tavily_search alternate source, then devtools (last resort) |
 | Research synthesis + caching | cache-first pipeline ([research-with-caching](../recipes/research-with-caching.md) or [external-content-caching](../recipes/external-content-caching.md)) | batch timeout -32001 | split by source; never return raw content to the model |
-| No ready-made recipe | refinement-discovery workflow, starting from the closest row above | — | map capabilities via gateway_mcp-find, test individually, capture a recipe |
+| No ready-made recipe | refinement-discovery workflow, starting from the closest row above | — | check the gateway namespace for a tool, test individually, capture a recipe |
 
 Rows 12–13 are pipeline and meta exceptions: their default is a workflow or pipeline rather than a single server. Rows 3–4 start with the cheapest probe (fetch) and move the second server into the escalation column.
 
@@ -76,7 +78,7 @@ IF/THEN escalation rules:
 
 - fetch returns "Failed to fetch robots.txt ... connection issue" → host unreachable → try tavily_extract, then devtools, else STOP and report.
 - fetch or tavily_extract returns a login wall, 403, or near-empty body → devtools — the only server carrying the operator's session.
-- wellfound.com returns 403 on plain `fetch` — devtools is the required path (operator-verified 2026-08-06).
+- wellfound.com returns 403 on plain `fetch` — devtools is the required path.
 - fetch or tavily_extract returns markup with an empty DOM (SPA) → devtools evaluate_script.
 - tavily_extract fails on a URL → fetch, then devtools.
 - context7 has no library or hits the call cap → tavily_search, then fetch. Example: `resolve-library-id({libraryName:'my-lib'})` miss or `query-docs` 3-call cap → `tavily_search({query:'my-lib docs <topic>'})` → `fetch({url})` → `DEEPWIKI-REPO-NOT-INDEXED` style status not cached.

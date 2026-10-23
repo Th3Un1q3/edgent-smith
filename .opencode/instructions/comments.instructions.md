@@ -26,7 +26,7 @@ Question 1 is a veto. Question 2 decides whether a non-rendered comment survives
 - Restatement: prose that repeats the adjacent code, name, or type without adding a rule or reason.
 - Trap comment: a comment that names a hazard the code cannot express, such as a security, platform, or type-checker failure.
 - Documentation job: text a tool prints for a user, such as recipe descriptions, Click help, and fixture docstrings.
-- Cleanup rule: the deletion obligation for commented-out code and debug artifacts, owned by `tdd-enforcement`.
+- Cleanup rule: the deletion obligation for commented-out code and debug artifacts, owned by `test-driven-development`.
 - Debug artifact: a temporary print or logging call left in the source.
 - Banner comment: fill characters or a numbered marker whose only content is the label of the section below it.
 - Meta-commentary: prose about the file's own comments or identity instead of its subject.
@@ -59,7 +59,7 @@ A legitimate comment that records why:
 # harness home IS a workdir directory: ...
 ```
 
-The quote is the opening of a longer comment in `.devcontainer/docker-compose.yml`, cut where its config list starts; the rest of the comment lists the tracked config and the gitignored machine state. Question 1 passes. Question 2 passes because it records a rejected alternative that a future editor would otherwise repeat. Question 3 answers no because no name or type can carry why a bind mount replaced a named volume. Question 4 does not apply. Keep it.
+Question 1 passes. Question 2 passes because it records a rejected alternative that a future editor would otherwise repeat. Question 3 answers no because no name or type can carry why a bind mount replaced a named volume. Question 4 does not apply. Keep it.
 
 ## Useless commentary
 
@@ -100,7 +100,7 @@ spec.loader.exec_module(mod)  # type: ignore
 * One `effect` closure, eight parts: config + lazy per-agent budget resolver,
 ```
 
-In `config.py`, a comment says the function returns `None` when the token is missing, but the function has no `None` branch and returns `OpenAIChatModel` unconditionally.
+A comment claims a return path the function does not have.
 
 **Why it is a problem.** Nothing validates the number, the next edit invalidates it, and a confident false claim is worse than no comment.
 
@@ -149,7 +149,7 @@ The live `agent-default-model` in `.dsh/settings.yaml` sets `provider: openroute
 
 **Why it is a problem.** Nothing records whether dead code is blocked or pending. A shadow key gives one setting two candidate values. A label adds no unit, allowed value, constraint, or state.
 
-**What to do instead.** Delete it; `tdd-enforcement` owns the cleanup rule for commented-out code and debug artifacts (temporary print or logging calls left in the source). For a pending decision, keep one line naming the blocker and the tracking issue. For a shadow key or a labeled key, keep only the live key plus any unit, allowed values, external constraint, or behavior-changing order.
+**What to do instead.** Delete it; `test-driven-development` owns the cleanup rule for commented-out code and debug artifacts (temporary print or logging calls left in the source). For a pending decision, keep one line naming the blocker and the tracking issue. For a shadow key or a labeled key, keep only the live key plus any unit, allowed values, external constraint, or behavior-changing order.
 
 ### 7. Task, placeholder, and bookkeeping markers
 
@@ -200,7 +200,7 @@ In `docs/index.html`, `<!-- Theme used for syntax highlighted code -->` sits abo
 # Create a mock config
 ```
 
-`tests/test_transcript_pagination_hardening.py` contains a `Covers: small/medium/large/very-large segments, max_chars warning,` block inside its docstring; the docstring opens with a TDD hardening line, and the `Covers:` block follows.
+A test docstring opens with a TDD hardening line and follows it with a `Covers:` block listing each case.
 
 **Why it is a problem.** The test name and body state the case, and step comments rot when the body changes.
 
@@ -249,7 +249,7 @@ A tool that prints a comment turns it into user-facing documentation. Keep these
 
 - Delete a docstring that restates the name or arguments. Keep units, raised exceptions, side effects, and return shape.
 - `# type: ignore` and `# noqa` name the rule and the reason, or they go.
-- Delete commented-out code; `tdd-enforcement` owns that cleanup rule.
+- Delete commented-out code; `test-driven-development` owns that cleanup rule.
 - Put a why above a non-obvious branch, not a narration of the branch.
 
 ### TypeScript and JavaScript
@@ -287,7 +287,7 @@ A tool that prints a comment turns it into user-facing documentation. Keep these
 
 | Pattern | Owner |
 |---|---|
-| Cleanup of commented-out code and debug artifacts | `tdd-enforcement` |
+| Cleanup of commented-out code and debug artifacts | `test-driven-development` |
 | Document-level voice, meta-commentary, and provenance in markdown | `writing-style` |
 | Required recipe comments and their `just --list` rendering | `justfiles` |
 | `eslint-disable` ban | `plugin-tests-imports` |
@@ -295,4 +295,4 @@ A tool that prints a comment turns it into user-facing documentation. Keep these
 
 - Recognize and classify dead code, shadow keys, or duplicated comments in the kinds above; the owner named in the table is responsible for cleanup.
 - Do not delete a rendered recipe `#` line; rewrite it for the person reading `just --list`.
-- This file names the linter rule code when a suppression is the problem. Formatting rules, comment-density targets, presenter-note content, and suppression policy belong to the files named in the ownership table.
+- Suppression policy, formatting rules, comment-density targets, and presenter-note content belong to the files named in the ownership table.

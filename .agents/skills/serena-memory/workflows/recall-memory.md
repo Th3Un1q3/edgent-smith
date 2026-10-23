@@ -1,7 +1,5 @@
 # Workflow: Recall Memory
 
-> Shaping exemption: canonical spec / snippet library — single source per Rule19/Rule24, split would duplicate truth. Flag threshold 250, not 120.
-
 Retrieve memories with progressive disclosure L0→L1→L2 via Serena gateway.
 
 When to load: when you list, search, or read persistent memories to answer or ground a task.
@@ -27,13 +25,13 @@ If you need the full store, call `list_memories({})` then sort and slice 32. Nev
 
 ## Prerequisites
 
-- Activate serena sandbox via gateway_mcp-find → gateway_code-mode.
+- Call `tools.gateway["list_memories"]({})` directly; no sandbox setup.
 - Load [references/frontmatter.md](../references/frontmatter.md) § Search Method for Q1/Q2/Q3 and budgets; [references/disclosure.md](../references/disclosure.md) for budgets; [references/typing.md](../references/typing.md) for scope filters.
 - Guard every gateway return: cap to 2 KB (`snapshot`) and treat an empty/stderr return (`!raw || raw.trim() == ""`, `/Access denied/`, `content:[]`) as an infra flake — fall back once to `bash cat .serena/memories/<id>.md`, zero gateway retries.
 
 ## Tools
 
-- gateway_mcp-find, gateway_code-mode, gateway_mcp-exec, serena list_memories/read_memory
+- gateway list_memories/read_memory
 
 ## Topic Prefix Semantics
 
@@ -44,7 +42,7 @@ If you need the full store, call `list_memories({})` then sort and slice 32. Nev
 ## Steps
 
 1. **List with L0 scan** — call list_memories, treat names as L0 256c summaries; do not read bodies yet. Done when: you have parsed .memories array and filtered by typed prefix or topic.
-2. **Rerank top-K at L1** — read_memory truncated to 4000c for candidates; score with hybrid 0.6*BM25+0.1*hotness (vector 0 when absent) and threshold 0.35. When BM25/hotness not returned by Serena, fallback to exact-name match or alphabetical and bypass 0.35 threshold for exact matches — see fallback below. Done when: ranked list of K≤5 candidates with final >0.35 or exact match.
+2. **Rerank top-K at L1** — read_memory truncated to 4000c for candidates; score with hybrid 0.6*BM25 + 0.3*vector + 0.1*hotness (vector 0 when absent) and threshold 0.35. When BM25/hotness not returned by Serena, fallback to exact-name match or alphabetical and bypass 0.35 threshold for exact matches — see fallback below. Done when: ranked list of K≤5 candidates with final >0.35 or exact match.
 3. **Fetch L2 for execution** — read full body only for top-K verified candidates; inject mem: refs into context. Done when: full bodies available for synthesis and cited.
 
 Gate: never fetch L2 for the entire store — cap L2 reads to top-K (default 3).

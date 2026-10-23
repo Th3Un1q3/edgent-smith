@@ -1,6 +1,6 @@
 # Reference: Caching Rules
 
-The skill's cache rulebook: cache-first default, context budgets, READ/WRITE checkpoints, one entry per fetched URL, key scheme, verification, and per-op status lines. Canonical home of every cache rule previously carried in the root SKILL.md.
+The skill's cache rulebook: cache-first default, context budgets, READ/WRITE checkpoints, one entry per fetched URL, key scheme, verification, and per-op status lines. Canonical home for every cache rule.
 
 **When to load:** whenever a research task fetches external content (deepwiki, github, fetch, tavily, youtube), checks `cache/{source}/...` for a HIT, writes cache entries, or returns per-op status reports — any time the cache-first pipeline, budgets, verification, or reporting rules apply.
 
@@ -47,7 +47,7 @@ Every research task → SYNTHESIZE `researches/about` first, then `researches/{t
 
 **Verify cache writes:** after each cache-write batch, read back 1–2 entries via `read_memory`, confirm the stored content is present and matches what was fetched, and report counts as 'N fetched → N cached → N verified'. Any entry failing verification = FAIL: delete it and redo. (Length expectations are source-specific — see the labeled YouTube example in [external-content-caching.md](../recipes/external-content-caching.md) for transcript-specific guidance.)
 
-**Per-source verify:** split tavily, fetch, deepwiki, github into separate `gateway_mcp-exec` calls. After each source's STORE, run `verifyAfterWrite([names], minChars)` and `snapshot()` (see [truncation-examples.md §B](./truncation-examples.md)) before the next source. Return `COUNT N fetched → N cached → N verified` plus per-op `OK/FAIL <name> chars=<n>` lines. All returns truncated in-script to ≤2 KB. Respect 2× retry cap per tool/target — never exceed 2 attempts on the same target.
+**Per-source verify:** verify one source at a time. After each source's STORE, run `verifyAfterWrite([names], minChars)` and `snapshot()` (see [truncation-examples.md §B](./truncation-examples.md)) before the next source. Return `COUNT N fetched → N cached → N verified` plus per-op `OK/FAIL <name> chars=<n>` lines. All returns truncated in-script to ≤2 KB. Respect 2× retry cap per tool/target — never exceed 2 attempts on the same target.
 
 General principle: SKILL.md Principles — "Verify every write".
 
@@ -69,6 +69,6 @@ Rules here are referenced from the root ([SKILL.md](../SKILL.md), one pointer li
 
 ## §12 Private cache layer
 
-Session-private devtools output goes to `private/{site}-research/*` and `private/cache/devtools/...` — never to public `cache/{source}/...`. `cache/` holds public verbatim fetches (tavily, fetch, deepwiki, github on public content) and is regenerable. `private/` is gitignored, session-derived, and must not be `mem:`-referenced from public `researches/*` or `cache/*`. Sources: `cache/` = public verbatim; `private/` = devtools authenticated output and PII.
+Session-private devtools output goes to `private/{site}-research/*` and `private/cache/devtools/...` — never to public `cache/{source}/...`. `cache/` holds public verbatim fetches (tavily, fetch, deepwiki, github on public content) and is regenerable. `private/` is session-derived and must not be `mem:`-referenced from public `researches/*` or `cache/*`. Sources: `cache/` = public verbatim; `private/` = devtools authenticated output and PII.
 
 For persistent memory disclosure see serena-memory/references/disclosure.md

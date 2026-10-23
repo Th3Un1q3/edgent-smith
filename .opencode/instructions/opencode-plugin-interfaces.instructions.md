@@ -1,13 +1,13 @@
 ---
 name: opencode-plugin-interfaces
 description: OpenCode v2 plugin interfaces for the Effect and promise APIs, where the type definitions live, how to validate a plugin, and what to avoid. Required when designing or editing an OpenCode plugin.
-applyTo: ".opencode/plugins/*.ts"
+applyTo: ".opencode/plugins/**/*.ts"
 excludeAgents: "rug"
 ---
 
 # OpenCode v2 plugin interfaces
 
-OpenCode v2 removed the v1 hook-object plugin API. A v2 plugin is a default-exported object with a stable `id` and one entry point, `effect(context)` or `setup(context)`, and it registers behavior by calling scoped methods on `context`. This file is a map of that API: where the interfaces live, the smallest working shape, how to prove a plugin works, and which v1 habits now fail. It is not an API reference. The installed `.d.ts` files are normative, and this file only points at them.
+OpenCode v2 removed the v1 hook-object plugin API. A v2 plugin is a default-exported object with a stable `id` and one entry point, `effect(context)` or `setup(context)`, and it registers behavior by calling scoped methods on `context`. This file is a map of that API: where the interfaces live, the smallest working shape, how to prove a plugin works, and which v1 habits now fail. The installed `.d.ts` files are normative, and this file only points at them.
 
 ## Sources of truth
 
@@ -107,8 +107,6 @@ The loader scans root `.opencode/plugins/*.ts` only. `helpers/`, `types/`, and `
 - Import `Effect`, `Stream`, and `Schema` from the single installed `effect` copy. A second copy under `@opencode/plugin/node_modules/effect` breaks `Effect.isEffect` and schema identity checks.
 - Keep the default export reachable. The package declares no `sideEffects`, so a bundler can drop an unused plugin object.
 
-`applyTo` matches only direct children of `.opencode/plugins/`. `helpers/*.ts` and `tests/*.ts` do not load this file (`instruction-indexer.ts:112-135`, `glob-match.ts:16`).
-
 ## Validate
 
 Run `just` targets only. They pass the Bun and istanbul flags this runtime needs. Never call `bun`, `tsc`, `vitest`, or `eslint` directly.
@@ -122,7 +120,7 @@ Run `just` targets only. They pass the Bun and istanbul flags this runtime needs
 
 A unit test builds a fake `Context`, calls `Effect.runPromise(Effect.scoped(plugin.effect(context)))`, then asserts the registrations. `.opencode/plugins/tests/workflow.test.ts` is the model.
 
-Green unit tests do not prove the plugin works in a live session. A Serena memory, `mem:cases/opencode/sdk_detached_method_this`, records the failure: a detached client method loses `this` and throws, so call it as a member instead of storing the function. Unit fakes exercise neither the real client nor the real event stream nor load order.
+Green unit tests do not prove the plugin works in a live session. A detached client method loses `this` and throws, so call it as a member instead of storing the function. Unit fakes exercise neither the real client nor the real event stream nor load order.
 
 This file covers unit-level proof only; the delegated run in the section below is where a live check belongs (`.opencode/instructions/live-verification.instructions.md`).
 
@@ -135,7 +133,7 @@ This file covers unit-level proof only; the delegated run in the section below i
 - `workflow.instructions.injected` is info and carries `blockBytes`, `tools`, `exposure`, and `stripped`, e.g. `blockBytes=9560 exposure=execute`. `workflow.instructions.context` and `workflow.instructions.skipped` are debug, and skipped carries only `tools`, so proving the hook did not fire requires debug logging. Correlate lines by log sink timestamp and agent. The payload carries no run id.
 - Auto-discovered plugins receive empty `options`, so repo config belongs in `harness.config.ts` under `plugins[id]`.
 
-Hot reload is active: `dist/source.node.js` appends `__opencode_reload=<generation>` to every local module it resolves, so a running server picks up a saved plugin. Assume hot reload for instruction files too: saving either kind of file can change live behavior immediately, and a broken save can break the agent loop before you run anything (`mem:cases/opencode/plugin_hot_reload_safe_development`, confidence 0.9). Develop in a staging directory outside loader roots, such as `/workspace/.tmp/` or a plugin subdirectory that is not a loader entry point; typecheck before saving; keep the plugin out of the loaded set until a live check passes.
+Hot reload is active: `dist/source.node.js` appends `__opencode_reload=<generation>` to every local module it resolves, so a running server picks up a saved plugin. Assume hot reload for instruction files too: saving either kind of file can change live behavior immediately, and a broken save can break the agent loop before you run anything. Develop in a staging directory outside loader roots, such as `/workspace/.tmp/` or a plugin subdirectory that is not a loader entry point; typecheck before saving; keep the plugin out of the loaded set until a live check passes.
 
 Logs: `~/.local/share/opencode/log/opencode.log`. `--print-logs` writes to stderr and needs `--standalone`.
 
@@ -158,9 +156,7 @@ Logs: `~/.local/share/opencode/log/opencode.log`. `--print-logs` writes to stder
 
 ## Naming and lint rules
 
-- A lint rule that rejects a name is a report about the design, not about the spelling: change the design or the rule configuration, and never distort a name to satisfy the rule.
-- A helper that both decides and acts must be split: a decision returns a boolean or a status, an action returns what it did.
-- `refactoring-patterns` names the second rule as the Decide-and-Act smell and carries the split fix.
+The rule that a rejected name is a report about the design, and the Decide-and-Act split, are owned by the `refactoring-patterns` skill in `references/smell-catalog.md`; load it when a lint rule or a helper's shape is what you are changing.
 
 ## New plugin checklist
 

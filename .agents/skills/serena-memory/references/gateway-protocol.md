@@ -8,9 +8,9 @@ Vocabulary: snapshot — 2 KB cap on every gateway return; empty return — blan
 
 ## Pre-flight
 
-1. `gateway_mcp-find query="serena"`.
-2. `gateway_code-mode {"name":"<unique>","servers":["serena"]}` — include both fields; a missing `name` fails silently.
-3. Chain every step inside one synchronous `gateway_mcp-exec`.
+1. `tools.gateway["list_memories"]({})` — no discovery or sandbox setup.
+2. `tools.gateway["read_memory"]({memory_name: "<id>"})` for the body.
+3. Every step is one ordinary tool call with a plain argument object.
 
 ## Snapshot — 2 KB Cap (MANDATORY)
 
@@ -36,20 +36,30 @@ On `gatewayEmpty(raw)`, stop gateway retries and fall back once to the filesyste
 bash cat .serena/memories/<id>.md
 ```
 
-Never re-invoke `gateway_code-mode` or `gateway_mcp-exec` for the same id. When the environment cannot reach the gateway at all, a human performs the store or recall and records the memory id. This fallback covers infrastructure flakiness only; permission rules are separate.
+Never re-invoke the failed call for the same id. When the environment cannot reach the gateway at all, stop and ask the operator to perform the store or recall and record the memory id. This fallback covers infrastructure flakiness only; permission rules are separate.
 
 ## Return Ritual
 
 Every `list_memories` must be followed by `read_memory({memory_name: ids[0]})` before you answer; never answer from names alone.
 
 ```javascript
-var listRaw = list_memories({topic:"entities"});
-if (gatewayEmpty(listRaw)) throw new Error("gateway empty - bash cat .serena/memories/<id>.md (0 retries)");
-var ids = JSON.parse(listRaw).memories || [];
-var bodyRaw = read_memory({memory_name: ids[0]}); // return ritual: read_memory before any answer
-snapshot(bodyRaw);
+var listRes = tools.gateway["list_memories"]({topic:"entities"});
+var listJson = typeof listRes === "string" ? listRes : listRes.result; // live shape: {result: "<json string>"}
+if (gatewayEmpty(listJson)) throw new Error("gateway empty - bash cat .serena/memories/<id>.md (0 retries)");
+var ids = JSON.parse(listJson).memories || [];
+var body = tools.gateway["read_memory"]({memory_name: ids[0]}); // return ritual: read_memory before any answer
+snapshot(typeof body === "string" ? body : JSON.stringify(body));
 // Implements: 2 KB cap + empty-return fallback + list_memories -> read_memory return ritual
 ```
+
+## Call Shape
+
+Call the flat gateway tools directly — one tool per call, with a plain argument object.
+
+- List: `tools.gateway["list_memories"]({})`. Read: `tools.gateway["read_memory"]({memory_name: "<id>"})`. Write: `tools.gateway["write_memory"]({memory_name: "<id>", content: "<body>"})`. Edit: `tools.gateway["edit_memory"]({memory_name: "<id>", needle: "<find>", repl: "<replace>"})`.
+- A return may be an object or a JSON string: inspect it before indexing, and `JSON.parse` only when it is a string. `list_memories` returns an object whose `result` field holds a JSON string; parse `result`, then read its `memories`.
+- The `gateway_code-mode` wrapper and `gateway_mcp-exec` still exist and still work, but normal use does not need them.
+- Each tool is gated by its own `gateway_<tool>` permission, so allowing the code-mode `execute` tool does not grant these tools. An absent tool is not proof of a permission rule — check the configured permissions before concluding one exists.
 
 ## Acceptance Criteria
 

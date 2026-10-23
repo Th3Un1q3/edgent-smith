@@ -159,7 +159,7 @@ def test_design_with_brief(tmp_path):
     with runner.isolated_filesystem(temp_dir=tmp_path):
         with patch("cli.services.copilot_session.CopilotSessionService.send_message") as mock_send:
             mock_send.return_value = MagicMock(stdout="Experiment created.")
-            result = runner.invoke(cli, ["autoresearch", "design", "--brief", "Test hypothesis"])
+            result = runner.invoke(cli, ["autoresearch", "design", "Test hypothesis"])
 
         assert result.exit_code == 0
         mock_send.assert_called_once()
@@ -193,23 +193,3 @@ def test_design_with_brief(tmp_path):
 4. **Test** via `tests/test_{name}.py` by mocking external calls (subprocess, file I/O, etc.).
 5. **Document** the service class and any required parameters in the docstring.
 6. **Avoid** command-specific logic in services; keep them generic.
-
-## Examples from the Codebase
-
-### Command: `autoresearch design`
-- **Routing:** `cli/main.py` defines `@autoresearch.command() def design(...)`
-- **Logic:** `cli/commands/design.py` exports `run_design()`
-- **Services:** Uses `CopilotSessionService` and `load_project_config()` via `build_command_context()`
-- **Testing:** `tests/test_cli_design.py` uses `CliRunner` to invoke the CLI; mocks the service via `patch()`
-
-### Command: `autoresearch experiment`
-- **Routing:** `cli/main.py` defines `@experiment.command()` subcommands (create, start, finish, list, show)
-- **Logic:** `cli/commands/experiment.py` exports `run_experiment_create()`, `run_experiment_start()`, etc.
-- **Services:** Uses local registry (JSON file); no external Copilot service
-- **Testing:** `tests/test_cli_experiment.py` uses `CliRunner` to invoke the CLI; mocks file I/O via `patch()`
-
----
-
-**Last updated:** May 13, 2026  
-**Scope:** CLI module organization and command placement  
-**Applies to:** All changes under `cli/`, `tests/test_cli_*.py`, and `tests/test_*_cli.py`

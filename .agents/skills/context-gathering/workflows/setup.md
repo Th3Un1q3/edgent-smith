@@ -1,28 +1,27 @@
 # Workflow: Setting Up Context-Gathering Tools
 
-Configure gateway servers before any research.
+Know which gateway tools to call before any research.
 
 ## Discovery Keywords
 
-- **Adopt server-keyword rule:** Query gateway_mcp-find with server/capability keywords — serena (cache/lookup), tavily (web search), fetch (URL fetch), github (issues), deepwiki, context7 (library docs), devtools. DO NOT query topic/library names like `react` or `pydantic-ai`; those belong inside gateway_mcp-exec. For typed persistent memory see serena-memory/SKILL.md.
+- **Adopt direct-call rule:** The tools are already listed in the session under the gateway namespace — call the one that matches the need by name, with its real arguments: serena (`find_symbol`, `list_memories`), tavily (`tavily_search`), fetch (`fetch`), github (`get_file_contents`), deepwiki (`ask_question`), context7 (`query-docs`), devtools (`evaluate_script`). A name missing from there is hidden by a permission rule. For typed persistent memory see serena-memory/SKILL.md.
 
-| Goal | gateway_mcp-find query (server capability keywords, not topic names) | Servers to activate |
+| Goal | Tool to call (by name, on the gateway namespace) | Server set |
 |---|---|---|
-| External research | "tavily fetch" then "deepwiki context7" | serena + tavily + fetch + context7 |
-| GitHub issues | "github" | serena + github + fetch |
-| Browser/DevTools | "devtools" | devtools + serena |
+| External research | `tavily_search`, then `fetch` or context7 `query-docs` | serena + tavily + fetch + context7 |
+| GitHub issues | `search_issues`, then `get_file_contents` | serena + github + fetch |
+| Browser/DevTools | `evaluate_script`, `click` | devtools + serena |
 | Persistent memory (typed/gated) | Delegate to serena-memory | serena-memory/SKILL.md |
 
 ## Gateway pre-flight (MANDATORY) — copy-paste skeleton
 
-> **Note:** The following are *gateway tool calls*, not shell commands. Execute via `gateway_mcp-find` → `gateway_code-mode` → `gateway_mcp-exec`, do NOT run in Bash.
+> **Note:** The following are *gateway tool calls*, not shell commands. Call each by name on the gateway namespace, do NOT run in Bash.
 
 ```javascript
-gateway_mcp-find query="serena"  // or "tavily", "fetch", "github" — finds SERVERS not answers
-gateway_code-mode '{"name":"<unique>","servers":["serena"]}' // BOTH name+servers same call
-// GOOD: '{"name":"serena-recall","servers":["serena"]}'
-// BAD: '{"servers":["serena"]}' // missing name → silent fail
-// BAD: gateway_mcp-find query="pydantic-ai docs" // topic not server
+await tools.gateway["list_memories"]({}) // serena — a plain argument object, no wrapper
+await tools.gateway["tavily_search"]({query: "pydantic-ai docs"}) // tavily — arguments carry the topic
+// A name missing from the gateway namespace is hidden by a permission rule
+// Allowing execute does NOT grant these tools — each has its own gateway_<tool> permission
 ```
 See SKILL.md § Gateway pre-flight for details — do not duplicate prose.
 
@@ -40,18 +39,18 @@ See SKILL.md § Gateway pre-flight for details — do not duplicate prose.
 ## Steps
 
 1. **Identify Needs**: Determine missing capability (web search, filesystem).
-2. **Discover servers:** see SKILL.md § Gateway pre-flight — run gateway_mcp-find with server keyword (e.g., `tavily`, `fetch`, `github`).
+2. **Discover tools:** see SKILL.md § Gateway pre-flight — the tools are already listed under the gateway namespace; a name missing from there is hidden by a permission rule.
 3. **Selection**: Review descriptions, pick lightest server that covers the need.
-4. **Activate**: see SKILL.md § Gateway pre-flight — call gateway_code-mode with BOTH name and servers in same call.
-5. **Verify**: List tools in sandbox — confirm required tool present before gateway_mcp-exec.
+4. **Call**: see SKILL.md § Gateway pre-flight — call the tool by name with a plain argument object, e.g. `tools.gateway["fetch"]({url})`.
+5. **Verify**: Read the return — an empty or access-denied result means a permission rule, not a retry.
 ## Examples
 
-> **Note:** The following are *gateway tool calls*, not shell commands. Execute via `gateway_mcp-find` → `gateway_code-mode` → `gateway_mcp-exec`, do NOT run in Bash.
+> **Note:** The following are *gateway tool calls*, not shell commands. Call each by name on the gateway namespace, do NOT run in Bash.
 
 ```javascript
-gateway_mcp-find({query: "tavily"}) // web — finds SERVERS not answers
-gateway_code-mode({name: "code-mode-research", servers: ["serena","tavily","fetch"]}) // BOTH name+servers
-// For persistent memory activation see serena-memory/workflows/store-memory.md — see SKILL.md § Gateway pre-flight
+await tools.gateway["tavily_search"]({query: "vector database benchmarks"}) // web search
+await tools.gateway["find_symbol"]({name_path_pattern: "edge_agent", relative_path: "agents", substring_matching: true}) // codebase symbol; matches build_edge_agent, run_edge_agent
+// For persistent memory recall see serena-memory/workflows/store-memory.md — see SKILL.md § Gateway pre-flight
 ```
 
-> World queries run inside gateway_mcp-exec after activation — find discovers the server, exec queries the world.
+> Every tool call is a direct call on the gateway namespace — there is no discovery or activation step.

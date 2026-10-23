@@ -49,13 +49,13 @@ Typed scopes (profile/\*, preferences/\*, entities/\*, events/\*, cases/\*, traj
 
 ## Inheritance
 
-Each */about aggregates child L0s into L0_table sorted alphabetically, cap 32; the global index is the derived union across About tables, cap 32 per scope; `pending * 0.10 >= 1` triggers parent review.
+Each */about aggregates child L0s into L0_table sorted alphabetically, cap 32; the global index is the derived union across About tables, cap 32 per scope; `pending_child_changes * 0.10 >= 1` triggers parent review.
 
 ## Search Method — Q1 / Q2 / Q3
 
 Q1 searches About tables first, Q2 summarizes L0 per scope, Q3 fetches L1s by topic prefix; prefix scan is the fallback. Canonical budgets: L0 256c, L1 4000c, excerpt 700c. Snippets live in workflows/recall-memory.md; `snapshot`/`gatewayEmpty` helpers in [gateway-protocol.md](./gateway-protocol.md).
 
-Hyphen prefix bug — `list_memories` prefix filter splits on `-`: `topic:"ci-failures"` returns `{}` (0) while `topic:"ci"` returns 1. Use `topic:"ci"` + client filter, or underscore ids `ci_failures`.
+Hyphen prefix bug — `list_memories` prefix filter splits on `-`: a hyphenated topic such as `ci-failures` matches nothing, while its first segment `ci` matches. Use the first segment plus a client filter, or underscore ids `ci_failures`.
 
 ## Templates
 

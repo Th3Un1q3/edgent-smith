@@ -6,60 +6,12 @@ excludePaths: "**/*.test.ts,tests/*.py"
 excludeAgents: "rug"
 ---
 
-# TDD Enforcement: The Iron Law
+# TDD Enforcement
 
-You must follow Test-Driven Development (TDD) for **every** code change; do not bypass it for "simple" fixes or "obvious" logic. The workflow, Iron Law, verification checklist, and rationalizations are in the `test-driven-development` skill — load it when carrying out a change.
+The Iron Law, the RED → GREEN → REFACTOR cycle, the rollback sequence, and the completion checklist are owned by the `test-driven-development` skill; load `SKILL.md` before editing implementation code. Debug-artifact cleanup is owned by that skill's `## Debug artifact cleanup` section.
 
-## Mandatory TDD Constraints
+Edit-time boundaries for an implementation file:
 
-These rules support the core TDD workflow above. Follow them in order, with the first rule as the highest priority.
-
-### Priority 1: Strict Sequence
-
-If you modify implementation code before writing a failing test:
-1. **STOP** immediately.
-2. **ROLLBACK** or discard the implementation changes and return to the last known good state.
-3. **WRITE** the failing test first.
-4. **PROCEED** only after the test fails when run.
-
-Example: If you find a bug, do not change the implementation before creating a focused test that reproduces the failure.
-
-### Constraint 2: Reliable Verification
-
-- Use the project's `just` targets, never raw runners such as `pytest`, `npm test`, `vitest`, `bun`, or `tsc` — see `.opencode/instructions/test-run-commands.instructions.md`.
-- If a change spans multiple files or modules, ensure tests cover the behavior across those boundaries.
-- Never assume a test will fail; run it and observe the failure directly.
-- Do not create or modify implementation files before a failing test, write tests only after implementation, or change implementation to make a test pass without a failing test — any of these requires the Priority 1 rollback.
-
-## Constraint 3: Debug Artifact Cleanup
-
-After completing a RED → GREEN → REFACTOR cycle, you MUST remove all debug artifacts before considering the work done. Debug artifacts are temporary code added during development that serve no purpose in the final implementation.
-
-### What to Remove
-
-| Artifact | How to Detect | Why It Must Go |
-|----------|--------------|----------------|
-| `console.log()` / `console.debug()` calls | `grep -rn "console\.\(log\|debug\|warn\)"` in changed files | Pollutes output, leaks implementation details |
-| Temporary debug test files | `ls *_debug*.test.ts`, `ls __debug*` | Adds noise to test suite, may fail in different environments |
-| Commented-out code | `grep -rn "//.*\(DEBUG\|TEMP\|HACK\|FIXME\)"` in changed files | Clutters codebase, hides intent |
-| Test-only mock spy logs | `vi.fn().mockImplementation((...args) => { console.log(...); return ... })` | Debug instrumentation that doesn't test behavior |
-
-### Cleanup as a Gate
-
-Before running the final quality gates (`just test`, `just lint`, `just typecheck`), run a self-check:
-
-```bash
-# Check for console.log in changed source files (not test files)
-grep -rn "console\.\(log\|debug\)" plugins/ --include="*.ts" --exclude="*.test.ts"
-
-# Check for debug test files
-ls plugins/tests/__debug* 2>/dev/null
-```
-
-If either check returns results, remove the artifacts before proceeding.
-
-### Anti-Patterns
-
-- Leaving `console.log` calls with `[DEBUG]` prefix "so I can find them later" — they will never be found later. Remove them now.
-- Creating `__debug*.test.ts` files to isolate a test scenario — extract the scenario into the real test file or remove the debug file.
-- Commenting out code "in case we need it" — version control remembers; delete it.
+- Do not change implementation code until a failing test exists; if you already did, discard the change and start from the test.
+- A change spanning modules needs a test that crosses the same boundary.
+- Run tests through `just` targets, never raw runners (`test-driven-development/references/running-tests-commands.md`).

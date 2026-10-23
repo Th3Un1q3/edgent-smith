@@ -29,9 +29,8 @@ Numbered import rules for test files:
 
 1. Vitest runtime imports (`vi`, `describe`, `expect`, `it`, `beforeEach`) — blank line after group
 2. Mock factories and synchronous helpers (comment to flag circular-dependency avoidance)
-3. `vi.mock()` calls at file top (vitest hoists these automatically)
-4. Stub imports for mocked modules (import after the corresponding `vi.mock()`)
-5. Remaining source imports via aliases
+3. `vi.mock()` calls, then stub imports for the mocked module: hoisting and stub order are owned by `.agents/skills/test-design/references/typescript-conventions.md`
+4. Remaining source imports via aliases
 
 ## Mocking
 
@@ -125,4 +124,4 @@ Rules relaxed for test files:
 - `@typescript-eslint/no-explicit-any` — `any` is often needed for mock types
 - `unicorn/no-null` — vitest assertions and mock APIs use `null`
 
-Do NOT use `eslint-disable` or `eslint-disable-next-line` comments. Fix the underlying issue. There is always a way to address linter error. Linter rules are made to produce better code, so let it push you.
+Do NOT use `eslint-disable` or `eslint-disable-next-line` comments. Fix the underlying issue.

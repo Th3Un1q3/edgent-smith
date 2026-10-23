@@ -14,7 +14,7 @@ Check every box before merging; see [recipes/consolidate.md](../recipes/consolid
 - [ ] Staleness heuristic — age>30d && hot<0.3, or status superseded/disputed — see [references/claims.md](./claims.md)
 - [ ] Sample 32 deterministically — sort then slice(0,32)
 - [ ] 10% child-change ratio — pending*0.10>=1 triggers parent review
-- [ ] 10% audit — audit 10% of merged memories for accuracy
+- [ ] 10% audit — re-check a 10% sample of merged memories against the evidence they cite
 - [ ] Human gate mandatory — never auto-merge
 
 ## TTL Table

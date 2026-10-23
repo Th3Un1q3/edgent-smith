@@ -8,7 +8,7 @@ Vocabulary: gate — the 9-check blocking gate that guards every persistent writ
 
 ## The Blocking Gate (9 checks)
 
-Run before any write_memory or edit_memory — every content write or edit including rewrites and appends. For a batch, run gate once on planned set, then verify set. rename_memory and delete_memory skip full gate: rename still passes Discoverable, delete leaves about consistent.
+Run before any write_memory or edit_memory — every content write or edit including rewrites and appends. For a batch, run gate once on planned set, then verify set. rename_memory and delete_memory skip the full gate: rename must still pass Discoverable, and delete must leave the parent about memory consistent.
 
 - [ ] **Standalone** — reader with no session context can use it. No "in this session...", "today we...". Fix: rewrite as knowledge with evidence.
 - [ ] **Verified** — every claim names source (docs, operator, observed output) or marked UNVERIFIED. Fix: check docs/operator/output or mark.
@@ -33,7 +33,7 @@ Run before any write_memory or edit_memory — every content write or edit inclu
 
 ## Examples
 
-Gate script inside gateway_mcp-exec (9 checks, copy-pasteable):
+Gate script (9 checks, copy-pasteable):
 
 ```javascript
 // gateway guard: 2 KB cap + empty/stderr detection (infra flake -> bash cat, 0 retries)
@@ -50,14 +50,14 @@ function gate(memory, fm){
     grounded: memory.indexOf("mem:")>=0 || memory.indexOf("provenance:")>=0,
     minimal: memory.length < 4000,
     fresh: true, // check via claims.md
-    disclosed: exempt || fm && fm.L0 && fm.L0.length<=256 || fm===null // inferred fallback for legacy; exempt skips
+    disclosed: exempt || !!(fm && fm.L0 && fm.L0.length<=256) // exempt scopes skip
   };
   var failed=Object.keys(checks).filter(function(k){return !checks[k];});
   if(failed.length>0) throw new Error("gate failed: "+failed.join(","));
   return "pass";
 }
 // gateway guard: stop on empty/stderr return; fall back once to the filesystem, 0 retries
-var raw = list_memories({ topic: "entities" });
+var raw = tools.gateway["list_memories"]({ topic: "entities" });
 if(gatewayEmpty(raw)) throw new Error("gateway empty - bash cat .serena/memories/<id>.md");
 snapshot(raw)
 // Implements: 9-check blocking gate with Disclosed quoted L0 or inferred fallback + snapshot 2KB cap
@@ -78,7 +78,7 @@ dedup(0.95, true) // skip — Implements: >0.9 skip
 
 ## Local Verification — 3-script gate
 
-Canonical scripts live in `agent_utils/scripts` only — skill copy `.agents/skills/serena-memory/scripts/validate_memory_frontmatter.py` deleted; run before declaring complete:
+Canonical scripts live in `agent_utils/scripts` only; run all three before declaring complete:
 
 ```bash
 python3 agent_utils/scripts/validate_memory_frontmatter.py --path .serena/memories

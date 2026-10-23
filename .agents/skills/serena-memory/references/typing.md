@@ -12,7 +12,7 @@ Vocabulary: type — one of 9 typed scopes that determines placement; domain —
 
 ## Frontmatter Keys
 
-See [frontmatter.md § What Belongs — Typed](./frontmatter.md) for canonical Typed FM keys (id, type, L0, hotness, ttl, version, freshness, directory, claim_ids, provenance, L0_table). Do not duplicate that table here.
+See [frontmatter.md § What Belongs — Typed](./frontmatter.md) for canonical Typed FM keys (id, type, L0, hotness, ttl, version, freshness, directory, claim_ids, provenance, L0_table).
 
 ## 3 Context Types → Serena
 
@@ -22,14 +22,14 @@ See [frontmatter.md § What Belongs — Typed](./frontmatter.md) for canonical T
 | Memory | profile/, preferences/, entities/, events/, claims/ | Persistent knowledge about user/world |
 | Skill | cases/, trajectories/, experiences/ | Procedural evolution, reusable patterns |
 
-Experiences aggregate 3 trajectories → hint describes experience content, not its topic prefix
+Experiences aggregate 3 trajectories; an experience summary describes its content, not a topic prefix.
 
 ## 9 Memory Types — Placement Rules
 
 | # | Type | Serena Path | Example Name | Notes |
 |---|---|---|---|---|
 | 1 | profile | profile/ | profile/user/background | Identity and soul are sub-paths: profile/identity/voice, profile/soul/values |
-| 2 | preferences | preferences/ | preferences/editor/theme | User choices, settings; profile subpaths only identity/soul — preferences/*flat vs profile/preferences/* nested (top-level preferences:0 empty, use profile/preferences) |
+| 2 | preferences | preferences/ | preferences/editor/theme | User choices, settings; profile subpaths only identity/soul — `preferences/` holds flat preferences; nested preferences live under `profile/preferences/` |
 | 3 | entities | entities/ | entities/person/alice | People, systems, orgs |
 | 4 | events | events/ | events/2026-05-01-meeting-notes | Time-stamped observations |
 | 5 | cases | cases/ | cases/bugfix/auth-timeout | Single failure + fix |

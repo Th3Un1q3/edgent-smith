@@ -78,7 +78,7 @@
             "curl *": "deny",
             "rtk curl *": "deny",
         },
-        "gateway_*": "deny",
+        "gateway_*": "allow",
         "gateway_mcp-find": "allow",
         "gateway_code-mode": "allow",
         "gateway_mcp-exec": "allow"

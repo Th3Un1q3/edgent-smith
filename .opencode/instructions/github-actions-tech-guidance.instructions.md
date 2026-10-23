@@ -31,7 +31,7 @@ Pin once and count: `grep -R "devcontainers/ci@" --include="*.yml" .github/` mus
 
 Apply to every `.github/workflows/*.yml` that uses `devcontainers/ci`:
 
-1. **Pin + timeouts:** `devcontainers/ci@v0.3.1900000450` + `timeout-minutes: 12` (prebuild) / `30` (ci, raised from 20 for mutation headroom) / `30` (experiment). Prevents `143`/`124` kills and drift.
+1. **Pin + timeouts:** `devcontainers/ci@v0.3.1900000450` + `timeout-minutes: 12` (prebuild) / `30` (ci, mutation headroom) / `30` (experiment). Prevents `143`/`124` kills and drift.
 2. **Env forwarding:** `devcontainers/ci` does NOT forward `env:` — use `with.env` block:
    ```yaml
    - uses: devcontainers/ci@v0.3.1900000450
@@ -126,7 +126,7 @@ Prefer the repository's `just` task runner inside the container.
 
 If your workflow needs to run a specific Python script, prefer repository `just` recipes; otherwise run `python` from the repo root inside the container.
 
-> Tip: If this repository uses a local environment file, create `.env` from `.env.example` before entering `devcontainers/ci`, not inside `runCmd`. The mounted workspace needs the file available when the container starts.
+> Tip: Create `.env` from `.env.example` before entering `devcontainers/ci`, not inside `runCmd`. The mounted workspace needs the file available when the container starts.
 >
 > Tip: Do not duplicate repository environment setup inside `devcontainers/ci` if the DevContainer image already includes the project environment. Run repo commands directly instead.
 
@@ -163,12 +163,12 @@ The CI container should already set this marker via the `.devcontainer/docker-co
 - Do not install tools twice; rely on the DevContainer image and features instead.
 - If a workflow step needs secrets, forward them explicitly via `with.env`.
 
-## Lessons / pitfalls
+## Pitfalls when editing these workflows
 
-- **`postCreateCommand` failures are infra, not code.** `devcontainers/ci` runs `bash .devcontainer/setup-dev.sh`; its hardlink handling has exited 1 while `prebuild-devcontainer` reported success. Treat a failing postCreate as environment setup, make `setup-dev.sh` idempotent, and confirm the log carries no hardlink warning.
-- **A green prebuild does not imply a green gate job.** The two jobs run in different containers on different runners; prebuild only proves the image builds. Setup and gate failures surface in the `ci` job.
+- **`postCreateCommand` failures are infra, not code.** `devcontainers/ci` runs `bash .devcontainer/setup-dev.sh`; a hardlink failure can surface while `prebuild-devcontainer` reports success. Treat a failing postCreate as environment setup, make `setup-dev.sh` idempotent, and confirm the log carries no hardlink warning.
+- **A green prebuild is not a green gate job.** The two jobs run in different containers on different runners; prebuild proves only that the image builds, and gate failures surface in the `ci` job.
 - **PR caches are ref-scoped.** A cache saved on a PR merge ref is not readable by `main`; `main`'s caches are readable by PRs. A PR can warm-fall-back to `main`'s cache, but `main` only benefits from caches it saved itself.
 - **Never let `restore-keys` cross a dependency or toolchain change.** The prefix repeats only the dependency/toolchain hash, so a lockfile or DevContainer toolchain change cannot restore stale mutation verdicts from an older environment.
-- **`hashFiles` cannot see an untracked or gitignored lockfile.** A lockfile that is not committed drops out of the cache key silently, so resolved-dependency drift reuses older mutant verdicts. Keep `.opencode/bun.lock` committed and tracked (it is no longer in `.opencode/.gitignore`) and install it with `bun install --frozen-lockfile`; otherwise the dependency hash is dead at key time.
+- **`hashFiles` cannot see an untracked or gitignored lockfile.** A lockfile that is not committed drops out of the cache key silently, so resolved-dependency drift reuses older mutant verdicts. Keep `.opencode/bun.lock` committed and tracked, and install it with `bun install --frozen-lockfile`; otherwise the dependency hash is dead at key time.
 - **Pin toolchains.** The bun feature is pinned (`"version": "1.4.2"`); `latest` drifts and changes Vitest/Stryker mutant semantics without invalidating the cache key.
 - **Normalize cached-file ownership across the uid boundary.** The host runner uid (1001) owns restored files; the container runs as `vscode` (1000). `chmod -R a+rwX .opencode/reports` before entering the container keeps the increment file writable.

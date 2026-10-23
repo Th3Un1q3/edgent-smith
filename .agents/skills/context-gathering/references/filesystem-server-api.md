@@ -45,7 +45,7 @@ Canonical tool list and return formats for scripting the **filesystem** MCP serv
 
 ## Allowed-directories model
 
-The server is configured with 9 allowed directories (relative to the container workspace root):
+The server is configured with these allowed directories (absolute container paths):
 
 ```
 /workspace/.opencode
@@ -59,7 +59,7 @@ The server is configured with 9 allowed directories (relative to the container w
 /workspace/tests
 ```
 
-> The 9-directory list above is a snapshot of this workspace's server catalog; re-verify it on catalog change — run `list_allowed_directories` at sandbox activation (the server may add or remove allowed dirs between releases).
+> The list above reflects this workspace's server catalog; run `list_allowed_directories` to confirm it (the server may add or remove allowed dirs between releases).
 
 - Subdirectories within any allowed directory are also accessible.
 - Paths are **canonicalized** server-side and must resolve under an allowed directory; symlinks that escape an allowed directory are denied. Enforcement is real, not advisory.

@@ -6,12 +6,12 @@ When to load: when you edit, reorganize, or clean up memories; when dedup table 
 
 ## Prerequisites
 
-- Activate serena sandbox; read [references/gating.md](../references/gating.md) for dedup table and [references/lifecycle.md](../references/lifecycle.md) for TTL.
+- Call `tools.gateway` directly; read [references/gating.md](../references/gating.md) for dedup table and [references/lifecycle.md](../references/lifecycle.md) for TTL.
 - Read [references/frontmatter.md](../references/frontmatter.md) for FM formatting, inferred fallback, and inheritance.
 
 ## Tools
 
-- gateway_mcp-find, gateway_code-mode, gateway_mcp-exec, serena read_memory/edit_memory/rename_memory/delete_memory/list_memories
+- gateway read_memory/edit_memory/rename_memory/delete_memory/list_memories
 
 ## Steps
 
@@ -46,7 +46,7 @@ renameInvariance("entities/person/alice-old","entities/person/alice","# Alice")
 Full-store scan before correction:
 
 ```javascript
-var all = JSON.parse(list_memories({}));
+var all = JSON.parse(tools.gateway["list_memories"]({}).result);
 var memories = all.memories || [];
 // scan all domains — do not scope to named domain
 var stale = memories.filter(function(m){ return m.indexOf("cache/fetch")===0; });
@@ -58,7 +58,7 @@ Dedup merge edit (adjacent example for merge threshold 0.6):
 ```javascript
 function mergeMemories(existing, incoming){
   var body = existing + "\n\n--- merged ---\n\n" + incoming;
-  edit_memory({ memory_name: "entities/person/alice", needle: existing.slice(0,20), repl: body, mode: "literal" });
+  edit_memory({ memory_name: "entities/person/alice", needle: existing.slice(0,20), repl: body });
 }
 // Implements: merge when 0.6 < similarity ≤ 0.9
 var sim = 0.75; if (sim > 0.6 && sim <= 0.9) "merge";

@@ -20,20 +20,20 @@ If any box fails, stop — do not call write_memory.
 
 ## Prerequisites
 
-- Discover serena via gateway_mcp-find; activate sandbox with gateway_code-mode (name + servers).
+- Call `tools.gateway["list_memories"]({})` directly; no discovery or sandbox setup.
 - Read [references/typing.md](../references/typing.md) to choose scope and [references/gating.md](../references/gating.md) to run gate.
 - Load disclosure budgets from [references/frontmatter.md](../references/frontmatter.md) § Search Method (L0 256c / L1 4000c / 700c excerpt) and [references/disclosure.md](../references/disclosure.md).
 
 ## Tools
 
-- gateway_mcp-find, gateway_code-mode, gateway_mcp-exec, serena list_memories/read_memory/write_memory
+- gateway list_memories/read_memory/write_memory
 
 ## Steps
 
-1. **Route through gateway** — chain gateway_mcp-find → gateway_code-mode → gateway_mcp-exec; never read .serena/memories on disk. Done when: sandbox active with serena server and script can call list_memories.
+1. **Route through gateway** — call `tools.gateway["list_memories"]` / `["read_memory"]` / `["write_memory"]` directly; never read .serena/memories on disk. Done when: `list_memories` returns the store.
 2. **Type before gating** — assign one of 9 typed scopes (profile/preferences/entities/events/cases/trajectories/experiences/claims/cache). Done when: memory name carries typed prefix and frontmatter type matches.
-3. **Run blocking gate** — verify all 9 checks in [references/gating.md](../references/gating.md) inside gateway_mcp-exec script; Disclosed check verifies quoted L0 per [frontmatter.md § Formatting](../references/frontmatter.md) or inferred fallback for legacy. Done when: every check passes or you skip the write and report DEDUP_SKIP.
-4. **Write and verify** — build FM via normalizeFM, include quoted L0 ≤256c, strip leading space, call write_memory, then read_memory to confirm echo. Guard every return with the snapshot + empty-return fallback in [references/gateway-protocol.md](../references/gateway-protocol.md). Done when: read-back content equals written content and L0 present.
+3. **Run blocking gate** — verify all 9 checks in [references/gating.md](../references/gating.md) with direct gateway calls; Disclosed check verifies quoted L0 per [frontmatter.md § Formatting](../references/frontmatter.md) or inferred fallback for legacy. Done when: every check passes or you skip the write and report DEDUP_SKIP.
+4. **Write and verify** — build FM with `normalizeFM` (defined in the example below), include quoted L0 ≤256c, strip leading space, call write_memory, then read_memory to confirm echo. Guard every return with the snapshot + empty-return fallback in [references/gateway-protocol.md](../references/gateway-protocol.md). Done when: read-back content equals written content and L0 present.
 5. **Verify 3-script gate locally** — run `python3 agent_utils/scripts/validate_memory_frontmatter.py --path .serena/memories`, `python3 agent_utils/scripts/validate_md_links.py .agents/skills/serena-memory .agents/skills/context-gathering .agents/skills/building-modular-skills`, `python3 agent_utils/scripts/audit_fences.py .agents/skills/serena-memory .agents/skills/context-gathering .agents/skills/building-modular-skills` or `just agent_utils::validate-memories`; declare complete only after all three exit 0.
 
 Gate: if any gate check fails, stop — do not call write_memory. If any script fails, stop — do not declare complete.
@@ -43,7 +43,7 @@ Gate: if any gate check fails, stop — do not call write_memory. If any script 
 Store a typed entity memory with normalizeFM and quoted L0:
 
 ```javascript
-// gateway_mcp-exec script — store with gate already passed
+// store helpers — gate already passed
 // gateway guard: 2 KB cap + empty/stderr detection (infra flake -> bash cat, 0 retries)
 function snapshot(s){ return s.length>2048? s.slice(0,2048)+"\n[...truncated]": s }
 function gatewayEmpty(raw){ return !raw || raw.trim() == "" || /Access denied|No such file/.test(raw) || raw.indexOf("content:[]")>=0; }

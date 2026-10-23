@@ -6,12 +6,12 @@ When to load: when you have multiple cases or trajectories sharing a pattern and
 
 ## Prerequisites
 
-- Activate serena sandbox via gateway_code-mode (name + servers) — the same activation used for store/recall; see [workflows/store-memory.md](./store-memory.md) for chain.
+- Call `tools.gateway["list_memories"]` directly — same call shape as store/recall; see [workflows/store-memory.md](./store-memory.md).
 - Load [references/claims.md](../references/claims.md) and [references/lifecycle.md](../references/lifecycle.md).
 
 ## Tools
 
-- gateway_mcp-find, gateway_code-mode, gateway_mcp-exec, serena list_memories/read_memory/write_memory
+- gateway list_memories/read_memory/write_memory
 
 ## Steps
 
@@ -22,16 +22,16 @@ When to load: when you have multiple cases or trajectories sharing a pattern and
 
 Gate: do not promote without human approval — automated promotion corrupts procedural knowledge.
 
-## Gateway activation note — verify evolve check
+## Gateway check — verify evolve
 
-If gateway returns no output for the evolution check, the sandbox was not activated correctly. Fix:
+If the gateway returns no output for the evolution check, do not retry; fall back once per [references/gateway-protocol.md](../references/gateway-protocol.md):
 
-- Call gateway_mcp-find to discover serena, then gateway_code-mode with BOTH name and servers in same call, then gateway_mcp-exec.
-- Verify counts via `JSON.parse(list_memories({topic:"cases"})).memories.length` or `list_memories({topic:"trajectories"})` inside the exec script.
+- Call `tools.gateway["list_memories"]({topic:"cases"})` directly; no discovery or sandbox step.
+- Verify counts via `JSON.parse(tools.gateway["list_memories"]({topic:"cases"}).result).memories.length` then repeat with `{topic:"trajectories"}`.
 
 ```javascript
-// Verify evolve threshold when outer gateway seemed empty — copy-pasteable
-var all = JSON.parse(list_memories({ topic: "cases" })).memories || [];
+// Verify evolve threshold when the gateway returned nothing — copy-pasteable
+var all = JSON.parse(tools.gateway["list_memories"]({ topic: "cases" }).result).memories || [];
 var grouped = {};
 for (var i=0;i<all.length;i++){ var k=all[i].split("/")[1]; grouped[k]=(grouped[k]||0)+1; }
 var ready = Object.keys(grouped).filter(function(k){ return grouped[k] >= 3; });
@@ -44,7 +44,7 @@ Promotion check with 3:1 ratio:
 
 ```javascript
 var PROMOTE = 3;
-var cases = JSON.parse(list_memories({ topic: "cases" })).memories || [];
+var cases = JSON.parse(tools.gateway["list_memories"]({ topic: "cases" }).result).memories || [];
 var grouped = {};
 for (var i=0;i<cases.length;i++){ var k=cases[i].split("/")[1]; grouped[k]=(grouped[k]||0)+1; }
 var ready = Object.keys(grouped).filter(function(k){ return grouped[k] >= PROMOTE; });

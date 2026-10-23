@@ -14,18 +14,8 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "4.0.0"
-  delta: |
-    4.0.0 — split the shaping rules by topic: references/guidance.md, references/guidance-rules-10-19.md, and references/guidance-rules-20-24.md become references/guidance-structure.md (Rules 1, 2, 7, 8, 9, 19 + the Vocabulary block), references/guidance-content.md (Rules 3, 4, 5, 6, 14, 15, 16, 21), and references/guidance-process.md (Rules 10, 11, 12, 13, 17, 18, 20, 22, 23, 24, 25 + the anti-patterns pointer + the example application); the unnumbered reference-direction rule is promoted to Rule 25; references/templates.md is renamed references/templates-root.md; references/portability-checklist.md is narrowed to environment-neutral evidence and its structural gates point to the Shaping Checklist; all citations retargeted.
-    3.9.0 — added a Related Skills pointer naming `harness-management` as owner of placement/routing; this skill owns how to shape the chosen artifact.
-    3.8.0 — added the reference-direction rule (skills stay self-contained; instruction → skill is the preferred direction; instruction/harness/skill-authoring skills are the exception) to references/guidance-rules-20-24.md and a root principle pointing to it.
-    3.7.1 — mandate line realigned in references/anti-patterns.md (no label change).
-    3.7.0 (harness-neutral mechanisms): added references/divergence-and-gates.md (diverge-then-converge, blind critique, machine gate) and references/portability-checklist.md; added root principles "State the outcome, then a generic fallback" and "Diverge, then gate"; restored `compatibility: Universal`; blind critique and machine gate state the outcome plus a generic fallback, and only the repo's `just agent_utils::validate-skill` realization is named. Bumps from 3.6.0.
-    3.6.0 (deduplicate audit tooling): Remove per-skill audit scripts; single source agent_utils/scripts/audit_fences.py + validate_md_links.py per Rule 24; Rule 8 exception documented; Rules 15/19, authoring-workflow step 9, shaping-checklist check 15 updated to shared path.
-    3.5.0 — audit-consistency pass plus research applied (mattpocock/skills): Rule 14 audit narrowed to target author-process machinery (## Completion Gate and ## Source anchors headings, marker strings) with a documented concept-usage exception; Rule 15 fence audit moved to scripts/audit_fences.py; check 21 exempts structural "When Not to Use" sections and quoted reframe examples; rules 17-24 added (failure-mode-driven design, description dialects, progressive disclosure with reference budgets, executable instructions with completion criteria, positive prompting with no-op pruning, explicit skill-tool composition, never-invent verification, single source of truth); references/anti-patterns.md maps 9 anti-patterns to preventing rules; Rule 14 audit extended with "the table is the completeness contract"; fence audit covers ~~~~ fences; writing-style pointers pinned to the canonical .opencode copy; root reader-path prose stripped of readership and design commentary — this meta-skill's gate-exception rationale moved here; 16:16 → 24:24.
-    3.4.0 — added scripts/validate_md_links.py: cross-skill Markdown link validator
-    3.3.0 — compacted prose: dropped mapping table, checklist now points to rules, collapsed vocabulary
-    3.2.0 — reader-benefit hardening: rules 14-16 added (reader-benefit, fence validity, examples match facts); check 6 amended to positional wiring; Completion Gate removed from the root template; 13→16 counts updated; author-process records confined to frontmatter metadata.
+  version: "4.0.2"
+  delta: "4.0.2 — author a skill, then route every workflow and reference file from the root index and run the completion gate before declaring it done."
   author: Th3Un1qu3
 ---
 

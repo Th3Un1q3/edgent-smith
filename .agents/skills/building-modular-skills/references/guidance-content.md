@@ -40,6 +40,8 @@ A rule without an example leaves the model to invent code; invented code drifts 
 
 Every sentence, heading, and code fence must teach the skill's subject. Author-process machinery is prohibited in body prose: meta-commentary labels ("Implements:", "Example fragment:", "Notes on the example", "Steps:"), provenance markers ("(verify against …)", "verified against …"), "## Source anchors" sections, self-referential prose about a file's own construction ("This file parses as JSON…", "Recipes point here…", "the table is the completeness contract"), and "## Completion Gate" headings that tell the author to run a checklist. Concept usage that names a gate or label to teach it — "run the completion gate", "completion gate" as a term — is allowed; the audit targets the machinery, not the concept. Navigation is allowed and required: When to load lines, routing tables, cross-file pointers, and subject-naming headings ("## Examples", "## Steps"). Author-process history — version, delta notes, origin records — lives in frontmatter metadata, never in body prose.
 
+Documents state the rule, not its provenance: no dates, no session references, no observed-count anecdotes. A `Verified <date>` stamp or "seen in 3 sessions" line dates the file and claims standing the reader cannot check. Evidence belongs in the report or the commit that delivered the change.
+
 The reader pays tokens for every line. Content that describes how the skill was built teaches nothing about the task; content that describes the task teaches the task.
 
 **Audit method:** grep the skill tree for author-process machinery:

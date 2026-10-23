@@ -5,8 +5,8 @@ description: >
 license: MIT
 compatibility: Requires OpenCode
 metadata:
-  version: "2.1.1"
-  delta: "2.1.1 — replaced the AP-number anti-pattern split with two cause files (testing-anti-patterns-mocks.md, testing-anti-patterns-lifecycle.md); moved red flags and destination content out of the deleted -closing grab-bag and refactor-and-red-flags.md; added the REFACTOR phase to red-green-refactor.md; added cycle-red-flags-and-checklist.md and handling-common-problems.md; all files routed."
+  version: "2.2.0"
+  delta: "2.2.0 — added the Debug artifact cleanup section (artifact table, self-check commands, anti-patterns) moved from the tdd-enforcement instruction, so cleanup has a skill home."
 ---
 
 # Test-Driven Development (TDD)
@@ -92,3 +92,23 @@ All of these = delete. Start over. No exceptions without your human partner's pe
 ## Debugging Integration
 
 Found a bug? Write a failing test reproducing it first. Follow TDD cycle. The test proves the fix and prevents regression. Never fix bugs without a test.
+
+## Debug artifact cleanup
+
+Remove temporary development code after RED → GREEN → REFACTOR, before the final gates. Debug artifacts serve no purpose in the finished implementation.
+
+| Artifact | Detect | Why it must go |
+|---|---|---|
+| `console.log` / `console.debug` / `console.warn` | `grep -rn "console\.\(log\|debug\|warn\)"` over changed files | Pollutes output, leaks implementation details |
+| Debug test files (`*_debug*.test.ts`, `__debug*`) | `ls` those patterns under the test tree | Adds noise; may fail in another environment |
+| Commented-out code | `grep -rn "//.*\(DEBUG\|TEMP\|HACK\|FIXME\)"` over changed files | Clutters the file, hides intent |
+| Mock spy logging | `vi.fn().mockImplementation((...args) => { console.log(...); return ... })` | Debug instrumentation that tests no behavior |
+
+Self-check before `just test`, `just lint`, and `just typecheck`:
+
+```bash
+grep -rn "console\.\(log\|debug\)" plugins/ --include="*.ts" --exclude="*.test.ts"
+ls plugins/tests/__debug* 2>/dev/null
+```
+
+Either check returning results blocks the final gates. Leaving `[DEBUG]` output "to find later", creating `__debug*.test.ts` to isolate a scenario, or commenting out code "in case we need it" is rationalization: delete it, because version control remembers.

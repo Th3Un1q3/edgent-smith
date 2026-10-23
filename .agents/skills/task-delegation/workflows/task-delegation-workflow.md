@@ -5,38 +5,9 @@ description: >
 license: MIT
 compatibility: Requires OpenCode
 metadata:
-  version: "1.9"
+  version: "1.8"
   author: "edgent-smith team"
-  delta: >
-    1.9 — added "Scope Attribution Needs a Baseline" to Step 4: snapshot the dirty
-    tree at dispatch and hand it to the validator, so pre-existing working-tree
-    changes are not reported as producer scope violations; prompted by a validator
-    FAIL caused by two harness files staged before the plugin work.
-    1.8 — made the Permission Gate in Step 3 and the prompt template self-contained:
-    prompts must not instruct bypassing gates or reproducing denied effects, gated
-    writes require explicit authorization, and a denial is final — the subagent
-    reports it and continues with permitted work.
-    1.7 — migrated the timeout unit to `timeout_minutes` (per ADR-004) and added the
-    asymmetric-validation rule to Step 4 so the skill owns the full delegation
-    methodology; 1.6 replaced the Permission Gate policy restatement in Step 3 and the
-    prompt template with a compact standing rule; trimmed the
-    1.4 changelog note to a neutral pointer.
-    1.5 — stated a generic fallback in Step 4 (Validate the Work): where the environment
-    cannot spawn a separate reviewer, a human performs the pass; no per-environment
-    capability list.
-    1.4 — added the Permission Gate rule to Step 3, pointing at the permission policy
-    instruction; corrected the subagent-budget number to its real mechanism
-    (per-agent `floor(steps * 0.8)`).
-    1.3 — taught method ownership in Step 3 (Construct the Subagent Prompt): every prompt
-    states the outcome, not command recipes, and the prompt template asks for the outcome
-    to achieve; the subagent owns the method via its loaded skills.
-    1.2 — hardened task sizing into a MANDATORY split gate in Step 1 (Decompose the
-    Request) and scoped resume (task_id) to finishing near-complete tasks only; prompted
-    by 4+ recurrences of task rightsizing failures (subagent budget burned on
-    investigation, resume used as the primary strategy for work that should have been split).
-    1.1 — added budget-aware task sizing and ground-truth smoke-test rules to Step 1
-    (Decompose the Request); prompted by recurring delegation failures (subagent budget
-    exhaustion, config tasks passing declarative introspection while failing at runtime).
+  delta: "states current behaviour only; provenance lives in the report or commit message."
 ---
 
 # Task Delegation Workflow

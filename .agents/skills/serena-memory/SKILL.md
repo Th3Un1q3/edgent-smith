@@ -5,8 +5,8 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.4.10"
-  delta: "1.4.10 — replaced the When-Not-to-Use store enumeration with an AGENTS.md STORAGE SELECTION pointer; 1.4.9 — reduced the promote-rather-than-duplicate principle to a pointer at AGENTS.md STORAGE SELECTION, so the one-authoritative-copy rule has one home; 1.4.8 — fenced memory to durable, provenance-bearing knowledge: added a When-Not-to-Use bullet routing scratch and deliverables to .tmp/ or a repository file, and a Principles bullet requiring promotion over duplication; 1.4.7 — consolidated the gateway guard into one intra-skill reference (references/gateway-protocol.md: 2 KB snapshot, empty-return predicate, zero-retry bash cat fallback, list_memories -> read_memory return ritual) and pointed SKILL.md, disclosure.md, gating.md, store-memory.md, recall-memory.md, and frontmatter.md at it; trimmed frontmatter.md from 230 to 107 lines and de-duplicated the Q1/Q2/Q3 snippets into recall-memory.md."
+  version: "1.4.12"
+  delta: "1.4.12 — direct list_memories/read_memory pre-flight; code mode no longer recommended."
   author: Th3Un1qu3
 ---
 
@@ -33,20 +33,20 @@ Do not use this skill for:
 ## Principles
 
 Gateway pre-flight (MANDATORY):
-1. gateway_mcp-find query="serena"  // or "tavily", "fetch", "github" — finds SERVERS not answers
-2. gateway_code-mode '{"name":"<unique>","servers":["serena"]}' // BOTH name+servers same call
-// GOOD: '{"name":"serena-recall","servers":["serena"]}'
-// BAD: '{"servers":["serena"]}' // missing name → silent fail
-// BAD: gateway_mcp-find query="pydantic-ai docs" // topic not server
+1. `tools.gateway["list_memories"]({})` — call the tool, do not build a script
+2. `tools.gateway["read_memory"]({memory_name: "<id>"})`  // before any answer
+// GOOD: `tools.gateway["read_memory"]({memory_name: "entities/person/alice"})`
+// BAD: answering from list_memories names alone
+// BAD: a code-mode or mcp-exec script for a single call
 
-- **Route every memory through gateway:** chain gateway_mcp-find → gateway_code-mode → gateway_mcp-exec; never read .serena/memories directly.
+- **Route every memory through gateway:** call `tools.gateway["list_memories"]`, `["read_memory"]`, or `["write_memory"]` directly; never read .serena/memories directly.
 - **Type every memory before gating:** assign one of 9 typed scopes via references/typing.md before you gate.
 - **Promote rather than duplicate:** follow AGENTS.md STORAGE SELECTION for what to keep, where, and which copy is authoritative.
-- **Apply disclosure budgets before gating:** load L0 256c / L1 4000c / 700c excerpt via references/disclosure.md; Disclosed check verifies quoted L0.
+- **Apply disclosure budgets before gating:** load L0 256c / L1 4000c / 700c excerpt via references/disclosure.md; quote L0 only from a `read_memory` return, never reconstituted.
 - **Gate every write with 9 checks:** run blocking gate in references/gating.md; stop when any check fails; declare complete only after gate passes (all three scripts exit 0) — `validate_memory_frontmatter`, `validate_md_links`, `audit_fences` via `agent_utils/scripts` or `just agent_utils::validate-memories`.
 - **Verify staleness before consolidating:** check confidence, hotness, and claim status via references/claims.md and references/lifecycle.md; merge only with human trigger.
 - **Evolve claims into typed memories:** promote 3 cases → 1 trajectory → 1 experience with score ≥3 and human gate via workflows/evolve-memory.md.
-- **Handle truncation:** list_memories truncates silently — always prefix filter topic:"<domain>" + slice(0,32) + sort; see workflows/recall-memory.md.
+- **Handle truncation:** list_memories truncates silently — filter with `topic:"<domain>"`, then slice the returned `memories` array to 32 and sort; see workflows/recall-memory.md.
 - **Guard every gateway call:** snapshot returns to 2 KB, treat an empty/stderr return as an infra flake and fall back once to `bash cat .serena/memories/<id>.md` (0 retries), and complete recall with the `read_memory` return ritual — see references/gateway-protocol.md.
 - **Never record a bypass recipe:** a memory must not tell an agent how to work around a gated action. Record the denial and the mechanism; ask the user when the gated action is essential.
 

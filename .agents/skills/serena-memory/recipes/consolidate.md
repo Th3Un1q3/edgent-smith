@@ -43,7 +43,7 @@ var bodies = sources.map(function(s){ return read_memory({ memory_name: s }); })
 var frontmatter = "---\n" + "id: entities/person/alice#2026-05-01\n" + "type: entities\n" + "hotness: 0.72\n" + "claim_ids: [claims/alice-role, claims/alice-team]\n" + "provenance: "+sources.join(",")+"\n" + "L0: \"Alice — backend eng, team X; 3 events merged (256c)\"\n" + "---\n";
 var merged = frontmatter + "# Alice — consolidated\n" + bodies.map(function(b){ return b.slice(0,500); }).join("\n---\n");
 // Human gate check before write
-var approved = true; // operator sets true
+var approved = false; // set true only after the operator approves
 if(!approved) throw new Error("human gate not approved");
 write_memory({ memory_name: "entities/person/alice", content: merged });
 var echo = read_memory({ memory_name: "entities/person/alice" });

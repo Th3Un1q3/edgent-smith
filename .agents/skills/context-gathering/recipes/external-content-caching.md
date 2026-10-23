@@ -12,7 +12,7 @@
 
 ## Why this pattern
 
-One `gateway_mcp-exec` call runs the entire pipeline: harvest candidate targets, verify them, fetch FULL content with pagination, write `cache/about` plus per-item `cache/{source}/{scope}/{descriptor}` memories, and return ONLY a tiny per-operation status report. Raw content never enters the model context — the script is the only thing that sees it. Every fetched part is stored and is revisitable via `list_memories` + `read_memory`. Live-run proof: ONE `gateway_mcp-exec` call drove ~121 MCP tool calls end-to-end (harvest → verify → 9-page paginated transcript fetch → ~dozens of memory writes) and returned only per-item `OK/FAIL <name> chars=<n> pages=<n>` lines. The model saw zero raw content; follow-up reads pulled specific cached items on demand.
+One `gateway_mcp-exec` call runs the entire pipeline: harvest candidate targets, verify them, fetch FULL content with pagination, write `cache/about` plus per-item `cache/{source}/{scope}/{descriptor}` memories, and return ONLY a tiny per-operation status report. Raw content never enters the model context — the script is the only thing that sees it. Every fetched part is stored and is revisitable via `list_memories` + `read_memory`.
 
 ## Prerequisites
 
@@ -272,7 +272,7 @@ return lines.join(NL);
 
 ### Stage 7 — Return the status report
 
-`per-op lines only: OK/FAIL <name> chars=<n> pages=<n>; never return content. **Label status/checkpoint sections with the ACTUAL run identity** (e.g., 'Run 4 — ses_<session-id>, YYYY-MM-DD'). Never reuse a prior run's label (e.g., writing 'Run 2' when this is Run 3+) — stale labels corrupt provenance.`
+`per-op lines only: OK/FAIL <name> chars=<n> pages=<n>; never return content. **Label status/checkpoint sections with the ACTUAL run identity** (e.g., 'Run 4 — ses_<session-id>, YYYY-MM-DD').`
 
 ```javascript
 // The ONLY thing returned to the model is the per-operation status report.
@@ -333,11 +333,11 @@ try {
 return report.join(NL);
 ```
 
-**Verbatim-cache contrast** — BAD: a hand-crafted summary (e.g., "Key points:" bullets) passed off as the cache entry body — the youtube-research postmortem failure; it fabricates content absent from the raw fetch and defeats re-reads. GOOD: verbatim raw transcript/content plus a minimal header (title, url, date, channel, source).
+**Verbatim-cache contrast** — BAD: a hand-crafted summary (e.g., "Key points:" bullets) passed off as the cache entry body; it fabricates content absent from the raw fetch and defeats re-reads. GOOD: verbatim raw transcript/content plus a minimal header (title, url, date, channel, source).
 
 ## Best practices
 
-- **Adopt private-path**: Verify authenticated/devtools excerpts go to `private/cache/{source}/...` via `gateway_code-mode`, never `cache/`; public `mem:` refs never link into `private/cache` per `references/caching-rules.md` §12 and `references/okf-sidecar-and-uri.md`.
+- **Adopt private-path**: Verify authenticated/devtools excerpts go to `private/cache/{source}/...`, never `cache/`; public `mem:` refs never link into `private/cache` per [caching-rules.md §12](../references/caching-rules.md).
 
 - This pipeline handles public sources only (tavily search, fetch, GitHub, YouTube transcripts) — content stays in the public cache/ namespaces. Authenticated-session extraction (devtools) is the only private path: its output goes to `private/` per the browser-automation workflow.
 - Per-source exec — tavily_search alone → `snapshot()` → `write_memory cache/tavily/...` → `verifyAfterWrite([name], minChars)` → fetch alone → same. One source per `gateway_mcp-exec`; never combine tavily+fetch+write. Each return truncated to ≤2 KB, 2× retry cap, COUNT line after each verify. Batch gate ≤2 entities per checkpoint.

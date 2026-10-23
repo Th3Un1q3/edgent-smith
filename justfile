@@ -66,7 +66,7 @@ oc-log:
 oc *ARGS:
     opencode {{ ARGS }}
 
-# Verify AGENTS.md 8 grep gates stay in sync with repo topology (AGENTS.md:190-220) + justfile boundary
+# Verify AGENTS.md topology gates stay in sync with the repo, the justfile boundary, and citation wording
 verify-agents:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -87,6 +87,9 @@ verify-agents:
     ls mcp/catalog.yaml && grep -c "  type:" mcp/catalog.yaml && echo "mcp catalog OK"
     echo "#7 Skill marketplace"
     count=$(ls .agents/skills/ | wc -l); echo "skills: $count"; test "$count" -ge 1
+    # every "N skills" line must match, not just the first
+    stated=$(awk -v c="$count" '{ rest=$0; bad=0; while (match(rest, /[0-9]+ skills/)) { if (substr(rest, RSTART, RLENGTH)+0 != c) bad=1; rest=substr(rest, RSTART+RLENGTH) } if (bad) print FILENAME":"FNR": "$0 }' AGENTS.md)
+    test -z "$stated" || { echo "$stated"; echo "FAIL: AGENTS.md 'N skills' lines above do not match .agents/skills ($count) — correct every 'N skills' line in AGENTS.md"; exit 1; }
     echo "#8 Justfile boundary (root is 11 globals + mods only)"
     allowed="test lint typecheck ci ci-fast format format-check clean verify-agents oc oc-log"
     allowed_count=$(echo "$allowed" | wc -w)
@@ -115,4 +118,19 @@ verify-agents:
     echo "  working-directory OK (7 scoped justfiles)"
     ! grep -Rq "[c]d .*&&" --include="justfile" . 2>/dev/null || { echo "FAIL: found workdir violation (c[d] &&) in justfile, use workdir param instead"; exit 1; }
     echo "  no workdir violations in justfiles OK"
+    echo "#10 AGENTS.md bullets state rules, not file roles"
+    banned='is a (guard|pointer|router|shim|wrapper|single source|thin)\b|this (document|file|doc)\b|lives in|(document|file)[^.]{0,40}provenance'
+    hits=$(grep -nEi "$banned" AGENTS.md || true)
+    if [ -n "$hits" ]; then
+      while IFS= read -r hit; do
+        lineno=${hit%%:*}
+        text=${hit#*:}
+        phrase=$(printf '%s' "$text" | grep -oEi "$banned" | head -1 || true)
+        echo "FAIL: AGENTS.md:$lineno role/provenance narration: '$phrase'"
+        echo "  line: $text"
+        echo "  write instead: the action the reader takes or a checkable fact; a file path may follow the rule, never replace it."
+      done <<< "$hits"
+      exit 1
+    fi
+    echo "  AGENTS.md wording OK"
     echo "── verify-agents: PASS ──"

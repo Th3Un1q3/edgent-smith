@@ -17,3 +17,8 @@ scope: RUG orchestrators consuming subtask_run results in this harness.
 evidence: workflow.ts serializes the envelope; observed orchestration run reported a completed child as failed until the payload was JSON.parse'd.
 rule: JSON.parse the returned string first, then read .status and .outputText.
 Source: observed subtask_run output, 2026-10-22; .opencode/plugins/helpers workflow.ts.
+## Recurrence 2026-10-23
+
+Judging results before parsing reported three completed inventories as failures: a guard read `result.status` off the raw string, saw `undefined`, and flagged all three as failed. The outputs survived only because they were recovered with `subtask_tail` — about three calls, and a relaunch was nearly issued.
+
+Extended rule: parse first, then read `status` and `outputText`. A completed result is never re-derived from the raw envelope, and a shape assumption is never grounds to relaunch work that already finished.

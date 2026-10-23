@@ -7,4 +7,4 @@ excludeAgents: "rug"
 
 # ZOMBIES: Incremental Test Design
 
-When starting a new feature or fixing a bug, design test cases incrementally from the simplest case upward. The ZOMBIES mnemonic — Zero, One, Many, Boundary, Interface, Exceptional, Simple — and its ordering are documented in the `test-driven-development` skill's `references/zombie-test-design.md`; load that reference for the full guidance.
+The ZOMBIES mnemonic, its ordering, and the case-by-case workflow are owned by the `test-driven-development` skill in `references/zombie-test-design.md`. Load that reference before designing a feature or bugfix test suite; this file adds no rules of its own.

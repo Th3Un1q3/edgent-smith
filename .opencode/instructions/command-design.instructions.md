@@ -191,6 +191,5 @@ When creating or modifying a command:
 
 ---
 
-**Last updated:** July 2026
 **Scope:** OpenCode command file design and supporting justfile recipes
 **Applies to:** All `.md` files under `.opencode/commands/`

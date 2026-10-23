@@ -1,29 +1,14 @@
 ---
 name: storage-selection
-description: "Repository-specific storage mapping for this project."
+description: "Store choice while editing agent definitions, gateway skills, memories, .tmp, or AGENTS.md."
 applyTo: "{.tmp/**/*,.serena/memories/**/*.md,.opencode/agents/**/*.md,.agents/skills/serena-memory/**/*.md,AGENTS.md}"
 ---
 
 # Storage Selection
 
-`AGENTS.md` -> [`## STORAGE SELECTION`](../../AGENTS.md#storage-selection) is the canonical rule.
+The ordered store test and the memory topic table are owned by [`## STORAGE SELECTION`](../../AGENTS.md#storage-selection). Memory types, ADR frontmatter, and what may enter memory are owned by the `serena-memory` skill (`.agents/skills/serena-memory/references/frontmatter.md`).
 
-## Store mapping
-
-| Content | Store | Location |
-|---|---|---|
-| Decisions and rationale, including ADRs | memory | `architecture/adr` |
-| Verified research and provenance | memory | `researches/<topic>` |
-| Product docs, code, tests and config | repository file | normal paths |
-| Experiment run state | repository file | `experiments/` |
-| Drafts, intermediates and regenerable output | scratch | `/workspace/.tmp/` |
-
-## Examples
-
-- A new ADR goes to memory under `architecture/adr`, matching the ADR records already stored there and the ADR rules kept with them.
-- An audit report attached to a pull request is a repository file because a reviewer reads it.
-- A one-off analysis script is `.tmp/` and is deleted when done.
-
-## Anti-patterns
-
-- Writing unverified research into memory.
+- Experiment run state is a repository file under `experiments/`.
+- A report a reviewer reads, such as an audit attached to a pull request, is a repository file.
+- A one-off analysis script is `/workspace/.tmp/` and is deleted when done.
+- Unverified research never enters memory; verification precedes the store choice.

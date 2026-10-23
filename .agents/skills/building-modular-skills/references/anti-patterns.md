@@ -1,6 +1,6 @@
 # Reference: Anti-patterns to Avoid
 
-The eleven failure patterns this skill guards against, each with the positive practice that replaces it. These patterns come from analyzing the most-adopted public skill libraries; a skill that exhibits one fails its users. The rules in [guidance-structure.md](./guidance-structure.md), [guidance-content.md](./guidance-content.md), and [guidance-process.md](./guidance-process.md) and the protocols in [divergence-and-gates.md](./divergence-and-gates.md) prevent them; run the [Shaping Checklist](../workflows/shaping-checklist.md) to verify a skill carries none.
+The eleven failure patterns this skill guards against, each with the positive practice that replaces it. A skill that exhibits one fails its users. The rules in [guidance-structure.md](./guidance-structure.md), [guidance-content.md](./guidance-content.md), and [guidance-process.md](./guidance-process.md) and the protocols in [divergence-and-gates.md](./divergence-and-gates.md) prevent them; run the [Shaping Checklist](../workflows/shaping-checklist.md) to verify a skill carries none.
 
 **When to load:** when you review a skill for failure patterns; when a review flags a pattern below; when you want the failure-mode map behind Rules 17-24 and the divergence protocols.
 

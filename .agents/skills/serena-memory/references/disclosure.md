@@ -18,7 +18,7 @@ See [frontmatter.md § Search Method](./frontmatter.md) for canonical budgets.
 
 L0 example: `"Alice — backend engineer, owns auth"` — 33c, quoted ≤256c.
 
-Legacy noFM (491 files): L0 inferred as first body line slice(0,256) — see [frontmatter.md § FM vs Inferred](./frontmatter.md) `inferredL0()`.
+Legacy noFM: L0 inferred as first body line slice(0,256) — see [frontmatter.md § FM vs Inferred](./frontmatter.md) `inferredL0()`.
 
 ## Mapping to Serena Budgets
 
@@ -31,7 +31,7 @@ Legacy noFM (491 files): L0 inferred as first body line slice(0,256) — see [fr
 L0 budget scan (256c per memory):
 
 ```javascript
-var raw = list_memories({ topic: "entities" });
+var raw = tools.gateway["list_memories"]({ topic: "entities" });
 var names = JSON.parse(raw).memories || [];
 var l0 = names.map(function(n){ return n.slice(0,256); }); // Implements: 256c L0
 l0.slice(0,32).join("\n"); // sample 32

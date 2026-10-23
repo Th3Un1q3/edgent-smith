@@ -33,7 +33,6 @@ function snapshot(s, opts) {
 // ponytail minimal — 2KB cap without keyword window (use when window not needed):
 // function snapshot(s){ return s.length>2048? s.slice(0,2048)+"\n[...truncated]": s }
 // empty-return guard: gateway '' or content:[] or Access denied -> infra flake; bash cat fallback once, 0 retries
-}
 
 Minimal 2KB cap — gateway template (copy-pasteable):
 
