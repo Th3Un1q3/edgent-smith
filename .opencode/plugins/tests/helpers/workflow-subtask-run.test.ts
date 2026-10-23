@@ -49,7 +49,7 @@ describe('subtask_run standalone helper', () => {
       { prompt: 'forked work', description: 'forked work', fork_from: 'ses_source' },
     )
 
-    expect(fork).toHaveBeenCalledWith({ path: { id: 'ses_source' } })
+    expect(fork).toHaveBeenCalledWith({ sessionID: 'ses_source' })
     expect(result.task_id).toBe('ses_fork')
     expect(result.forked_from).toBe('ses_source')
   })

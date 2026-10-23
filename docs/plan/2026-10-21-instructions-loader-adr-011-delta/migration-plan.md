@@ -93,7 +93,8 @@ Files touched, in total:
 | `tests/instruction-entry-client.test.ts`, `tests/instructions-loader.test.ts` | new cases; synthetic cases retired in step 7 |
 | `tests/helpers/service-client.test.ts` | header and cache-key cases (file exists today) |
 | `tests/helpers/instruction-context-helper.test.ts` | rewrite the `it(...)` case titled at `:52`, which names `idempotencyKey` |
-| `tests/instruction-entry-client.live.test.ts` | new, gated by `E2E_PROBE_ENABLED=1` |
+| Live verification | Delegated CLI/agent run; no test file is created and nothing is collected. |
+| Superseded 2026-10-22 | The environment-gated live-suite row is superseded: live verification is a delegated CLI/agent run with a real agent/model, and the unit suite ships no environment-gated or skipped tests. |
 | `docs/plan/2026-10-21-instructions-loader-adr-011-delta/bridge-evidence.md` | new evidence file created in step 6 |
 | `docs/plan/2026-10-20-adr-011-instruction-entries/migration-plan.md` | step 8 amendment: key family, delete contract, R-84 status |
 
@@ -145,7 +146,7 @@ Alternatives rejected. Keeping the envelope inside the entry is redundant and in
 
 ### D-6. Boundary timing: a write informs the next request, not the current one
 
-Decision. Accept that a `put` issued in `execute.before` is observed at the next request boundary. The loader does not try to make the current turn see its own write. The live test asserts the block on the following request, or records that it cannot observe the sequence (section 8). The plan documents the consequence for users: the first edit or read of a file informs the model from the next turn onward, not in the turn that touched the file.
+Decision. Accept that a `put` issued in `execute.before` is observed at the next request boundary. The loader does not try to make the current turn see its own write. The delegated live check asserts the block on the following request, or records that it cannot observe the sequence (section 8). The plan documents the consequence for users: the first edit or read of a file informs the model from the next turn onward, not in the turn that touched the file.
 
 Rationale. ADR-011 states the write is boundary-deferred and does not interrupt a running step, and it only verified same-turn visibility for the `prompt` hook, not for tool hooks. The current carrier has the same latency class: the stash is written in `execute.before` and consumed by the `context` hook when the next request is assembled. In practice the guidance still arrives before the model next acts on that file, because the touch that triggers it has already happened.
 
@@ -223,7 +224,7 @@ Value shape and size.
 
 `text` is the per-file block, without the steering wrapper (D-5). `source` is the repo-relative path, which the sweep uses. `priority` is `1` for a full body and `0` for a reference. The cap applies to the whole value: `entryValueBytes(value) = Buffer.byteLength(JSON.stringify(value), 'utf8')` must be `<= MAX_ENTRY_VALUE_BYTES` (262144). An over-cap value is not written and not rewritten into a smaller shape: the loader skips that file, logs one error with the key and measured size, and continues with the rest of the touch. The client's guard at `:43-45` throws before its `try`, so the loader measures first and never relies on catching it.
 
-Rendering consequence. Because the value is an object, the runtime renders `JSON.stringify(value, null, 2)`, so newlines inside `text` arrive escaped. That is the cost of carrying `source` and `priority` in the value; the live test records the per-entry byte cost before the default flips.
+Rendering consequence. Because the value is an object, the runtime renders `JSON.stringify(value, null, 2)`, so newlines inside `text` arrive escaped. That is the cost of carrying `source` and `priority` in the value; the delegated live check records the per-entry byte cost before the default flips.
 
 ## 7. Implementation steps
 
@@ -235,11 +236,11 @@ Each step leaves the tree green and is reviewable on its own. The flag defaults 
 
 3. Native branch that cannot misbehave. Files: `instructions-loader.ts`, `tests/instructions-loader.test.ts`. Adds the flag read per invocation, the native branch after `:90`, the budget, the oversize skip, the carrier switch and latch, the `carrier/` marker, and the one-time cleanup of `pending/` and `idempotency/` for a session that already has native entries. Acceptance: with `native`, a targeted call writes one entry per matching file and the fake `session.prompt` receives zero calls; the sixth file gets `priority: 0`; an over-cap file is skipped with one error and no reference write; a `listEntries` rejection deletes the session's `instr-` keys, publishes synthetically once, writes the marker, and issues no second list on the next touch. The loader test mocks `@plugins/helpers/instruction-entry-client` with `vi.mock`, the same seam `tests/workflow.test.ts` uses; the fake context at `tests/instructions-loader.test.ts:43-63` has no client, so unmocked calls would hit `no service`.
 
-4. Sweep. Files: `instructions-loader.ts`, `tests/instructions-loader.test.ts`, `tests/instruction-entry-client.live.test.ts`. Acceptance (mock): an entry whose source is gone is deleted on the first touch and only once; an entry keyed for a file this agent excludes is deleted; a `workflow.instructions` entry and any non-`instr-` key survive; an entry with a non-string `source` produces one warning and no delete. Acceptance (live): the delete produces the runtime's "no longer applies" narration once.
+4. Sweep. Files: `instructions-loader.ts`, `tests/instructions-loader.test.ts`. Acceptance (mock): an entry whose source is gone is deleted on the first touch and only once; an entry keyed for a file this agent excludes is deleted; a `workflow.instructions` entry and any non-`instr-` key survive; an entry with a non-string `source` produces one warning and no delete. Live verification: delegated live run; no test file.
 
 5. Dead field removal. Files: `types/instructions.ts`, `helpers/instruction-context-helper.ts`, and `tests/helpers/instruction-context-helper.test.ts`, where the `it(...)` case titled at `:52` names `idempotencyKey`; rewrite that case so it asserts the resolved fields without the dead one. Acceptance: `idempotencyKey` has no occurrence under `.opencode/plugins`; typecheck passes and the rewritten case is green.
 
-6. Live evidence and the dual-run record. Files: the live test introduced in step 4 (`tests/instruction-entry-client.live.test.ts`, which creates the `E2E_PROBE_ENABLED` gate that has zero occurrences today), and a new evidence file this step creates: `docs/plan/2026-10-21-instructions-loader-adr-011-delta/bridge-evidence.md`. Acceptance: with the flag at `native`, a touch produces a `<context key="instr-…">` block, the next request carries it once, no `{ type: 'user' }` message contains `<instruction` or the key, a changed body produces one change narration, a deleted key produces one removal narration, and the per-entry byte cost is recorded in `bridge-evidence.md`. For the dual-run, run one payload twice in separate sessions, once per carrier, and record in the same file which carrier's guidance the model followed. Observation, in order of preference. First, `session.hook('model.request')`: step 6 starts by checking whether its payload exposes the assembled instruction sequence, because no repo code reads it today. If it does, capture the serialized request and assert position and count directly. If it does not, the accepted fallback evidence is: (a) `GET .../entries` returns exactly one matching `instr-` key, which proves storage-level exactly-once; (b) `session.messages`, the channel `workflow-subtask.ts:405` already reads, contains no `<instruction` and no key, which proves no user-turn carrier; (c) a behavioral probe over one instruction file with a unique marker, run once per carrier, which proves the guidance reached the model and supplies the dual-run comparison; and (d) position is taken from ADR-011's "entries load last" statement and recorded in `bridge-evidence.md` as not locally observed. A reviewer accepts (a) through (d) as the proof; the step does not leave the assertion open without an artifact.
+6. Live evidence and the dual-run record. Files: a new evidence file this step creates, `docs/plan/2026-10-21-instructions-loader-adr-011-delta/bridge-evidence.md`. Live verification: delegated live run; no test file. Acceptance: with the flag at `native`, a touch produces a `<context key="instr-…">` block, the next request carries it once, no `{ type: 'user' }` message contains `<instruction` or the key, a changed body produces one change narration, a deleted key produces one removal narration, and the per-entry byte cost is recorded in `bridge-evidence.md`. For the dual-run, run one payload twice in separate sessions, once per carrier, and record in the same file which carrier's guidance the model followed. Observation, in order of preference. First, `session.hook('model.request')`: step 6 starts by checking whether its payload exposes the assembled instruction sequence, because no repo code reads it today. If it does, capture the serialized request and assert position and count directly. If it does not, the accepted fallback evidence is: (a) `GET .../entries` returns exactly one matching `instr-` key, which proves storage-level exactly-once; (b) `session.messages`, the channel `workflow-subtask.ts:405` already reads, contains no `<instruction` and no key, which proves no user-turn carrier; (c) a behavioral probe over one instruction file with a unique marker, run once per carrier, which proves the guidance reached the model and supplies the dual-run comparison; and (d) position is taken from ADR-011's "entries load last" statement and recorded in `bridge-evidence.md` as not locally observed. A reviewer accepts (a) through (d) as the proof; the step does not leave the assertion open without an artifact.
 
 7. Retire the synthetic path in the loader. Files: `instructions-loader.ts`, `tests/instructions-loader.test.ts`. Deletions: `session.prompt` (`:114`), the `pending/` stash (`:115`), the token map (`:17`, `:93-121`), `FULL_SLOT_BUDGET`'s token-derived count (`:104-105`), the `session.hook('context')` registration (`:124-129`), `buildSteeringMessage` (`:55-56`), `tokenKey`/`pendingKey` (`:17-18`), the flag read and its branch, the carrier switch and latch, the sweep marker key, and the synthetic test cases at `tests/instructions-loader.test.ts:87,97,107,140`. After this step a failure logs one error and skips; the tests for the gate and agent filter (`:122`, `:131`) stay. Gate: all four flip criteria in section 9 are met, including the recorded dual-run.
 
@@ -254,7 +255,9 @@ Each step leaves the tree green and is reviewable on its own. The flag defaults 
 
 Existing files to extend: `.opencode/plugins/tests/instruction-entry-client.test.ts`, `.opencode/plugins/tests/instructions-loader.test.ts`, `.opencode/plugins/tests/helpers/service-client.test.ts`, `.opencode/plugins/tests/helpers/instruction-context-helper.test.ts`, and `.opencode/plugins/tests/workflow-instructions.test.ts` as a regression guard that the workflow entry keeps its string value. All exist today.
 
-New file: `.opencode/plugins/tests/instruction-entry-client.live.test.ts`, skipped unless `E2E_PROBE_ENABLED=1`. It defines that flag itself; nothing in the repo reads it today. It is the only test that can prove the HTTP route, the auth, the render, the narrations, and the absence of a user turn.
+Live verification: delegated live run; no test file. That delegated run is the only check that can prove the HTTP route, the auth, the render, the narrations, and the absence of a user turn.
+
+**Superseded 2026-10-22:** the `*.live.test.ts` file described in earlier drafts, including its `E2E_PROBE_ENABLED=1` skip, is superseded: live verification is a delegated check with a real agent/model, and the unit suite ships no env-gated or skipped tests.
 
 Loader test seam. `tests/instructions-loader.test.ts:43-63` builds a fake context with `session.prompt`, `storage`, and hooks and no client, so the native branch's `listEntries` would reach `getClient()` and throw `no service`. The file must add `vi.mock('@plugins/helpers/instruction-entry-client')` and drive `listEntries`, `writeEntryIfChanged`, and `removeEntry` from a stub, the same pattern `tests/workflow.test.ts` already uses for this client. Without that seam no native case can run.
 
@@ -262,7 +265,7 @@ Unit cases: key builder (lowercase, suffix strip, out-of-set mapping, repeat col
 
 Loader cases, native: one entry per matching file; unchanged entry not re-put; only the changed file written when one body changes; fifth and sixth file split by `priority`; oversize skip with no put and no prompt; discovery failure switching the carrier once and deleting `instr-` keys; sweep deleting a vanished source, an agent-excluded source, and sparing `workflow.instructions`; non-targeted tool performing no list and no put.
 
-End-to-end assertion in the live file: the block appears once and after the last instruction block (via the `model.request` channel if it exposes the sequence), no user message contains `<instruction` or the key, one change narration, one removal narration, and the byte cost per entry. The absence assertion is on `<instruction`, not `<steering`, because D-5 removes the wrapper and a duplicated native block would not contain it.
+End-to-end assertion in the delegated live run: the block appears once and after the last instruction block (via the `model.request` channel if it exposes the sequence), no user message contains `<instruction` or the key, one change narration, one removal narration, and the byte cost per entry. The absence assertion is on `<instruction`, not `<steering`, because D-5 removes the wrapper and a duplicated native block would not contain it.
 
 ## 9. Rollout and rollback
 
@@ -270,7 +273,7 @@ End-to-end assertion in the live file: the block appears once and after the last
 
 Flip criteria, all four required, and step 7 waits for all four:
 
-1. The live test passes against a real server and records the render, the count, the narrations, and the absent user turn.
+1. The delegated live run completes against a real server and records the render, the count, the narrations, and the absent user turn.
 2. One release runs with `INSTRUCTION_INJECTION=native` set explicitly in the operator environment with no carrier-switch warning in the log.
 3. The recorded per-entry byte cost keeps a typical five-entry session within the loader's context budget.
 4. A dual-run record exists: one payload, both carriers, and a statement of which one the model followed. ADR-011 requires this comparison before the synthetic path is retired, and step 7 asserts its presence.
@@ -299,9 +302,9 @@ Agent switch. Keys carry no agent segment, so an entry written under one agent c
 
 Key collisions. Two basenames that sanitize alike silently overwrite each other, because the server flat-namespaces keys and `put` has no owner check. Mitigation: the index-wide guard throws with both paths during `createIndex`.
 
-Boundary lag. A touch in turn N informs turn N+1. Mitigation: accepted in D-6; the live test asserts the following request rather than the current one.
+Boundary lag. A touch in turn N informs turn N+1. Mitigation: accepted in D-6; the delegated live run checks the following request rather than the current one.
 
-Experimental route churn. Every call sits under `/api/experimental/`, and the contract may move. Mitigation: all calls stay in `instruction-entry-client.ts`, so a route change is one file, and the live test is the canary.
+Experimental route churn. Every call sits under `/api/experimental/`, and the contract may move. Mitigation: all calls stay in `instruction-entry-client.ts`, so a route change is one file, and the delegated live run is the canary.
 
 No atomicity. There is no CAS, ETag, or version on `put`, and `list` ordering is undocumented. Mitigation: keys are per file, never an aggregate, so concurrent touches of different files cannot lose each other; same-key races are last-write-wins and an identical content race is a no-op.
 
@@ -317,7 +320,9 @@ Run from `/workspace`; a reviewer should see the stated outcome for each.
 4. `just opencode::test -- plugins/tests/instructions-loader.test.ts` passes; native cases make no `session.prompt` call, and the fallback case leaves no `instr-` key.
 5. `just opencode::test -- plugins/tests/workflow-instructions.test.ts` passes unchanged, proving the workflow entry still uses its string value.
 6. `just opencode::test` passes.
-7. `E2E_PROBE_ENABLED=1 just opencode::test -- plugins/tests/instruction-entry-client.live.test.ts` passes where a server is available; skipped by default in CI.
+7. Live verification: delegated live run; no test file.
+   **Superseded 2026-10-22:** the env-gated live-suite step described in earlier drafts is superseded: live verification is a delegated check with a real agent/model, and the unit suite ships no env-gated or skipped tests.
+
 8. `grep -rn "instruction_load:\|pending/\|idempotency/" .opencode/plugins/*.ts` returns nothing after step 7, and before step 7 returns hits only inside the loader's synthetic branch.
 9. `grep -rn "INSTRUCTION_INJECTION" .opencode/` returns the flag read and the loader test before step 7, and nothing after.
 10. `grep -rn "buildSteeringMessage\|session.hook('context')\|steering" .opencode/plugins/instructions-loader.ts` returns nothing after step 7.
@@ -329,9 +334,9 @@ Run from `/workspace`; a reviewer should see the stated outcome for each.
 ## 12. Open questions
 
 1. Does deleting a session delete its entry rows? Recommendation: assume rows persist and rely on the sweep plus session-scoped routes; do not add end-of-session cleanup without evidence.
-2. Does `entry.list` return bare keys or `api/`-prefixed keys? Recommendation: normalize on read by stripping a leading `api/`, and record the observed form in the live test so the assumption stops being one.
+2. Does `entry.list` return bare keys or `api/`-prefixed keys? Recommendation: normalize on read by stripping a leading `api/`, and record the observed form in the delegated live run so the assumption stops being one.
 3. In what order do multiple entries render? Recommendation: rely on none. The loader cannot guarantee cross-file order, and the specificity sort only decides which files get full bodies.
-4. Is a write from `execute.before` visible on the next request reliably, or can it lag two? Recommendation: assert exactly one boundary in the live test; if it lags, the user-visible effect is a slower first application, not a correctness break.
+4. Is a write from `execute.before` visible on the next request reliably, or can it lag two? Recommendation: assert exactly one boundary in the delegated live run; if it lags, the user-visible effect is a slower first application, not a correctness break.
 5. Does the runtime interpret `priority`? Recommendation: treat it as opaque and keep it as a loader convention, as D-4 assumes.
 6. Does `session.hook('model.request')` expose the assembled instruction sequence? Recommendation: check it first at step 6, and if it does not, use the fallback evidence set (a) to (d) in that step and record the result in `bridge-evidence.md`. The step never ends without an artifact; position is the only item taken from ADR-011 rather than observed.
 7. Is `context.location.directory` the value the server expects in `x-opencode-directory` for sessions in a worktree? Recommendation: send it, and confirm with a live write from a second directory before the default flip.

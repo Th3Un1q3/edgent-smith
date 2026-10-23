@@ -11,10 +11,15 @@
  *     runner's model-inheritance reads.
  *   - the inherited parent model is applied through switchModel, mapping the
  *     runner's { providerID, modelID } onto V2 Model.Ref { id, providerID }.
- *   - abort -> interrupt; fork is unavailable in V2, so it is omitted.
+ *   - abort -> interrupt.
+ *   - fork is absent from the plugin session domain, so it resolves the service
+ *     client lazily and calls the v2 `session.fork({ sessionID })`. With no
+ *     boundary the server forks at the source session's latest message. Lazy
+ *     resolution keeps a fork failure from breaking the non-fork paths.
  */
 import { Effect } from 'effect'
 import type { Context } from '@opencode/plugin/effect/plugin'
+import { getClient } from './service-client'
 import type { WorkflowSdkClient } from './workflow-types'
 
 type Session = Context['session']
@@ -46,8 +51,13 @@ const assistantTextParts = (messages: ReadonlyArray<unknown>): Array<{ type: str
     .filter((part): part is { type: string, text: string } => part.type === 'text' && typeof part.text === 'string')
     .map(part => ({ type: part.type, text: part.text }))
 
-export const createWorkflowClient = (session: Session): WorkflowSdkClient => ({
+export const createWorkflowClient = (session: Session, directory?: string): WorkflowSdkClient => ({
   session: {
+    fork: async (input) => {
+      const service = await getClient(undefined, directory)
+      const info = await service.session.fork({ sessionID: input.sessionID })
+      return { data: { id: info.id } }
+    },
     create: async ({ body }) => {
       const info = await run(session.create({ title: body.title, parentID: body.parentID as never }))
       const id = (info as { id?: string } | undefined)?.id ?? ''

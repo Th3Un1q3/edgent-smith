@@ -45,6 +45,8 @@ import { handleSessionEvent, loadWorkflowInstructions, WORKFLOW_INSTRUCTIONS_SEN
 
 import plugin from '@plugins/workflow'
 
+import { REPO_ROOT } from '@tests/helpers/repo-root'
+
 const CONFIGURED_INSTRUCTIONS = '.agents/skills/task-delegation/SKILL.md'
 
 interface Harness {
@@ -146,9 +148,9 @@ describe('workflow instructions', () => {
     })
 
     it('loads the task-delegation skill configured for the repository', () => {
-      const expected = readFileSync(path.join('/workspace', CONFIGURED_INSTRUCTIONS), 'utf8')
+      const expected = readFileSync(path.join(REPO_ROOT, CONFIGURED_INSTRUCTIONS), 'utf8')
 
-      const { content } = loadWorkflowInstructions('/workspace')
+      const { content } = loadWorkflowInstructions(REPO_ROOT)
 
       expect(content).toBe(expected)
       expect(content).toContain('# Task Delegation Skill')
@@ -267,7 +269,7 @@ describe('workflow instructions', () => {
 
   describe('session event entry', () => {
     const body = '# Workflow Instructions\n\nDELEGATION-BODY\n'
-    const entryValue = `${WORKFLOW_INSTRUCTIONS_SENTINEL} source="/workspace/.agents/skills/task-delegation/SKILL.md" version="1">\n${body}\n</workflow_instructions>`
+    const entryValue = `${WORKFLOW_INSTRUCTIONS_SENTINEL} source="${REPO_ROOT}/.agents/skills/task-delegation/SKILL.md" version="1">\n${body}\n</workflow_instructions>`
 
     const setup = async (): Promise<Harness> => {
       const directory = makeDirectory()

@@ -380,6 +380,47 @@ describe('getClient', () => {
     expect(second).not.toBe(first)
     expect(sdk.make).toHaveBeenCalledTimes(2)
   })
+
+  it('sends x-opencode-directory when a directory is supplied', async () => {
+    const shared = dependencies({}, {
+      env: { OPENCODE_SERVER_URL: 'http://127.0.0.1:4900', OPENCODE_SERVER_PASSWORD: 'pw' },
+    })
+
+    await getClient(shared, '/workspace/project')
+
+    expect(sdk.make).toHaveBeenCalledWith({
+      baseUrl: 'http://127.0.0.1:4900',
+      headers: {
+        'authorization': `Basic ${Buffer.from('opencode:pw').toString('base64')}`,
+        'x-opencode-directory': '/workspace/project',
+      },
+    })
+  })
+
+  it('sends no directory header without a directory', async () => {
+    const shared = dependencies({}, {
+      env: { OPENCODE_SERVER_URL: 'http://127.0.0.1:4901', OPENCODE_SERVER_PASSWORD: 'pw' },
+    })
+
+    await getClient(shared)
+
+    expect(sdk.make).toHaveBeenCalledWith({
+      baseUrl: 'http://127.0.0.1:4901',
+      headers: { authorization: `Basic ${Buffer.from('opencode:pw').toString('base64')}` },
+    })
+  })
+
+  it('the client cache separates two directories', async () => {
+    const shared = dependencies({}, {
+      env: { OPENCODE_SERVER_URL: 'http://127.0.0.1:4902', OPENCODE_SERVER_PASSWORD: 'pw' },
+    })
+
+    const first = await getClient(shared, '/workspace/one')
+    const second = await getClient(shared, '/workspace/two')
+
+    expect(second).not.toBe(first)
+    expect(sdk.make).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('resolution hardening', () => {

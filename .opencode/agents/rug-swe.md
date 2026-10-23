@@ -1,6 +1,5 @@
 ---
 name: rug-swe
-mode: subagent
 steps: 30
 permission:
   task: deny

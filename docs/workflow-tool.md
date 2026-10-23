@@ -63,7 +63,7 @@ Object fields:
 | `agent` | No | `rug-swe` | Agent that handles the child prompt. Child tool access follows that agent's permission scopes. |
 | `skills` | No | none | Skill names to load from `.agents/skills/<name>/SKILL.md` into the child prompt. Unknown names are skipped and logged. |
 | `task_id` | No | none | Resume an existing child session instead of creating or forking one. Mutually exclusive with `fork_from`. |
-| `fork_from` | No | none | Fork this session id, copy its conversation history up to the latest message, and deliver this subtask's prompt as the followup on the fork. The result's `task_id` is the new fork id. Surrounding whitespace is trimmed and a whitespace-only value is treated as absent. Mutually exclusive with `task_id`. |
+| `fork_from` | No | none | Fork this session id, copy its conversation history up to the latest message, and deliver this subtask's prompt as the followup on the fork. The result's `task_id` is the new fork id. Surrounding whitespace is trimmed, and a blank or whitespace-only value is rejected: the subtask returns `status: 'error'` with an error naming a non-empty session id. Mutually exclusive with `task_id`. |
 | `timeout_minutes` | No | `15` | Per-subtask timeout in minutes. On expiry the subtask returns `status: 'timeout'` and an `error` naming the limit in minutes. |
 | `schema` | No | none | JSON Schema object requesting structured output. See Structured output. |
 
@@ -71,7 +71,9 @@ Object fields:
 
 `task_id` and `fork_from` are mutually exclusive. Pass at most one, because either alone selects the mode: `task_id` resumes, `fork_from` forks. Supplying both returns a subtask with `status: 'error'` and an `error` naming the conflict; the runtime rejects the ambiguity before it touches either session.
 
-`fork_from` branches instead of appending. The runtime forks the named session, copying its history up to the latest message, then sends this subtask's prompt as the followup on the fork. The result's `task_id` is the fork id, and `forked_from` repeats the source id. The runtime trims surrounding whitespace from `fork_from` and treats a whitespace-only value as absent. The fork is independent of the source, so later turns on the fork leave the source session alone. Omit `fork_from` and the subtask creates a fresh child exactly as before. Pass a returned `task_id` to a later `subtask({ task_id })` turn to continue that fork or fresh child.
+`fork_from` branches instead of appending. The runtime forks the named session, copying its history up to the latest message, then sends this subtask's prompt as the followup on the fork. The result's `task_id` is the fork id, and `forked_from` repeats the source id. The runtime trims surrounding whitespace from `fork_from` and rejects a blank or whitespace-only value with `status: 'error'`, rather than falling back to a fresh session or the source. The fork is independent of the source, so later turns on the fork leave the source session alone. Omit `fork_from` and the subtask creates a fresh child exactly as before. Pass a returned `task_id` to a later `subtask({ task_id })` turn to continue that fork or fresh child.
+
+A fork is not a `parentID` child, so `subtask_ls` finds it through the fork's recorded source id: it lists a fork whose source is the calling session or one of that session's children, and leaves unrelated forks out. The returned `task_id` still names the fork directly. Forking also needs a reachable OpenCode service client, which the runtime resolves lazily from the running server. If it cannot resolve or the fork call fails, the subtask returns `status: 'error'` and there is no fallback to resuming the source session.
 
 Result object:
 
@@ -364,7 +366,7 @@ Subtask statuses, seen per step and in `stats`:
 | Status | Meaning | What to do |
 |---|---|---|
 | `ok` | Child returned text. | Use `outputText`. |
-| `error` | Child reported an error, the call failed, or a schema reply stayed unusable after the follow-up. | Read `error`, decide whether to retry or fall back. |
+| `error` | Child reported an error, the call failed, the subtask input was invalid, or a schema reply stayed unusable after the follow-up. | Read `error`, decide whether to retry or fall back. |
 | `empty` | Child returned no text. | Retry with a clearer prompt or treat as a miss. |
 | `timeout` | Child exceeded `timeout_minutes`; `error` names the limit in minutes. | Retry with more time or a smaller prompt. |
 | `aborted` | The run was cancelled. | Stop; the envelope is already winding down. |

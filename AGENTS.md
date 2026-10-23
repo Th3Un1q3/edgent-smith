@@ -109,6 +109,7 @@ The system is architected around high-centrality components in the following mod
 - **Python 3.13**: Uses modern type annotations (`from __future__ import annotations`) and standard library features.
 - **Click Architecture**: Strict separation between command routing (`cli/main.py`), logic (`commands/*.py`), and services (`services/*.py`).
 - **Task Runner**: See `.opencode/instructions/justfiles.instructions.md`.
+- **Test Verification**: `.opencode/instructions/live-verification.instructions.md` defines unit versus live tests and their reporting rules.
 - **CI Fast Path**: `just ci` runs the 13-gate sequence; for docs-only changes use `just ci-fast` (~20s). Pins and escapes: `.opencode/instructions/threshold-policy.instructions.md`; CI job internals: `.opencode/instructions/github-actions-tech-guidance.instructions.md`.
 - **CI Workflow**: `.github/workflows/ci.yml` runs `prebuild-devcontainer` then `ci` inside the DevContainer. See `.opencode/instructions/github-actions-tech-guidance.instructions.md`.
 - **Pre-check Gate**: See `.opencode/instructions/justfiles.instructions.md`.

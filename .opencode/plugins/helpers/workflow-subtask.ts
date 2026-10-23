@@ -83,10 +83,12 @@ const validateSchema = (schema: unknown): void => {
   }
 }
 
-// A missing id is absent; an empty or whitespace-only string is absent too, so a
-// blank value never triggers a bogus resume/fork. Any other present value must
-// be a string — a number or object is a caller bug, not "absent" — and a present
-// id is trimmed so surrounding whitespace never reaches the SDK.
+// A missing id is absent. A blank `task_id` is absent too, so it never resumes
+// an unrelated session. A blank `fork_from` is a caller bug instead: silently
+// ignoring it would run the child in a fresh session while the caller believes
+// it continues one. Any other present value must be a string — a number or
+// object is a caller bug, not "absent" — and a present id is trimmed so
+// surrounding whitespace never reaches the SDK.
 const normalizeSessionId = (
   value: unknown,
   option: 'task_id' | 'fork_from',
@@ -98,13 +100,19 @@ const normalizeSessionId = (
     throw new TypeError(`subtask ${option} must be a string`)
   }
   const trimmed = value.trim()
-  return trimmed === '' ? undefined : trimmed
+  if (trimmed === '') {
+    if (option === 'fork_from') {
+      throw new TypeError('subtask fork_from must be a non-empty session id')
+    }
+    return
+  }
+  return trimmed
 }
 
 // Both fields name the source session for the turn; resuming one session while
 // forking another is contradictory, so reject the pair instead of silently
-// preferring task_id. The comparison runs on normalized ids, so whitespace-only
-// values count as absent for both fields.
+// preferring task_id. The comparison runs on normalized ids, so a
+// whitespace-only task_id counts as absent.
 const assertSourceUnambiguous = (forkFrom: string | undefined, taskId: string | undefined): void => {
   if (forkFrom !== undefined && taskId !== undefined) {
     throw new TypeError('subtask task_id and fork_from are mutually exclusive; pass only one')
@@ -680,11 +688,12 @@ interface ResolvedSession {
 // method relies on `this`, so extracting it into a bare const detaches the
 // receiver and throws. The unsupported check narrows the optional method.
 //
-// The call argument is exactly `{ path: { id: sourceID } }`. The SDK's
-// `SessionForkData.body.messageID` is optional; with no message id the server
-// forks at the session's latest message, which is the "continue this
-// conversation" semantics a subtask wants, and the caller only ever has a
-// session id. This exact argument object is pinned by the fork test.
+// The call argument is exactly `{ sessionID: sourceID }`, the v2
+// `SessionForkInput` from `@opencode/client` (`{ sessionID, before? }`) minus
+// the optional boundary. With no `before` the server forks at the session's
+// latest message, which is the "continue this conversation" semantics a subtask
+// wants, and the caller only ever has a session id. This exact argument object
+// is pinned by the fork tests.
 const callFork = async (
   client: WorkflowSdkClient,
   sourceID: string,
@@ -693,7 +702,7 @@ const callFork = async (
     throw new Error(`failed to fork subtask session ${sourceID}: session.fork is unsupported`)
   }
   try {
-    return await client.session.fork({ path: { id: sourceID } })
+    return await client.session.fork({ sessionID: sourceID })
   }
   catch (error) {
     throw new Error(`failed to fork subtask session ${sourceID}: ${toErrorMessage(error)}`)

@@ -90,7 +90,11 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
     all: [],
   }
 
+  const allPaths = new Set<string>()
+
   for await (const filePath of instructionsGlob.scan({ cwd: options.currentWorkingDirectory, dot: true, absolute: true })) {
+    allPaths.add(filePath)
+
     const file = Bun.file(filePath)
     const content = await file.text()
 
@@ -142,6 +146,7 @@ const createIndex = async <T extends CustomInstructionFrontMatter>(options: Inde
   return {
     forFiles,
     loadBody: loadBody.bind(undefined),
+    allPaths: [...allPaths],
   }
 }
 

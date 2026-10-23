@@ -241,14 +241,20 @@ export const getConnection = async (dependencies: ResolutionDependencies = DEFAU
   return resolved
 }
 
-export const getClient = async (dependencies: ResolutionDependencies = DEFAULT_DEPS): Promise<OpenCodeClient> => {
+export const getClient = async (
+  dependencies: ResolutionDependencies = DEFAULT_DEPS,
+  directory?: string,
+): Promise<OpenCodeClient> => {
   const cache = cacheFor(dependencies)
   const connection = await getConnection(dependencies)
-  const key = `${connection.url}\n${connection.password}`
+  const key = `${connection.url}\n${connection.password}\n${directory ?? ''}`
   if (cache.client !== undefined && cache.clientKey === key) return cache.client
   const client = OpenCode.make({
     baseUrl: connection.url,
-    headers: { authorization: authorization(connection.password) },
+    headers: {
+      authorization: authorization(connection.password),
+      ...(directory && { 'x-opencode-directory': directory }),
+    },
   })
   cache.client = client
   cache.clientKey = key

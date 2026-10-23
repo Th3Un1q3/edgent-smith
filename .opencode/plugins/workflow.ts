@@ -190,7 +190,7 @@ export const handleSessionEvent = (
 // ADR-012: workflow tool retired. Standalone trio (subtask_ls, subtask_run,
 // subtask_tail) is the only execution surface; no script wrapper remains.
 const SUBTASK_LS_TOOL_DESCRIPTION = [
-  'List child subtasks from the sessions reader for the current session.',
+  'List child subtasks and their forks from the sessions reader for the current session.',
   'Falls back to the latest finished workflow run snapshot in this server process.',
   'Returns an array of {description, durationMs, task_id, status}.',
 ].join(' ')
@@ -224,7 +224,7 @@ const SUBTASK_RUN_INPUT = {
     agent: { type: 'string', description: 'Override the child agent (default rug-swe).' },
     skills: { type: 'array', items: { type: 'string' }, description: 'Skill names loaded into the child prompt.' },
     task_id: { type: 'string', description: 'Continue/resume an existing child session.' },
-    fork_from: { type: 'string', description: 'Fork a session and run the child there.' },
+    fork_from: { type: 'string', description: 'Fork a session at its latest message and run the child there.' },
     timeout_minutes: { type: 'number', description: 'Per-subtask timeout in minutes (default 15).' },
     schema: { type: 'object', description: 'JSON Schema for a structured <result_json> reply.' },
   },
@@ -329,7 +329,7 @@ const plugin: Plugin = {
             const arguments_ = input as SubtaskRunArguments
             const result = yield* Effect.promise(() => runStandaloneSubtask(
               {
-                client: createWorkflowClient(context.session),
+                client: createWorkflowClient(context.session, context.location.directory as unknown as string),
                 parentSessionID: toolContext.sessionID as unknown as string,
                 directory: context.location.directory as unknown as string,
               },
@@ -345,7 +345,15 @@ const plugin: Plugin = {
               },
             ))
             recordTailOutput(result)
-            return { content: JSON.stringify(result), metadata: { title: `subtask_run: ${result.status}` } }
+            return {
+              content: JSON.stringify(result),
+              metadata: {
+                title: `subtask_run: ${result.status}`,
+                status: result.status,
+                task_id: result.task_id,
+                truncated: result.truncated,
+              },
+            }
           }),
         })
         editor.add({

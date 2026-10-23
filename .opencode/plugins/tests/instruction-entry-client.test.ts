@@ -13,6 +13,7 @@ import {
   entryValueBytes,
   findEntry,
   isEntryValueCurrent,
+  listEntries,
 } from '@plugins/helpers/instruction-entry-client'
 
 interface Store {
@@ -54,6 +55,22 @@ describe('instruction entry client', () => {
 
       await expect(findEntry('ses_1', 'a')).rejects.toThrow('no service')
     })
+
+    it('finds an entry returned with either key spelling', async () => {
+      store.entries = [{ key: 'api/a', value: 'x' }]
+      await expect(findEntry('ses_1', 'a')).resolves.toEqual({ key: 'a', value: 'x' })
+
+      store.entries = [{ key: 'a', value: 'x' }]
+      await expect(findEntry('ses_1', 'api/a')).resolves.toEqual({ key: 'a', value: 'x' })
+    })
+  })
+
+  describe('listEntries', () => {
+    it('lists an entry returned with the api/ prefix', async () => {
+      store.entries = [{ key: 'api/a', value: 'x' }]
+
+      await expect(listEntries('ses_1')).resolves.toEqual([{ key: 'a', value: 'x' }])
+    })
   })
 
   describe('isEntryValueCurrent', () => {
@@ -70,6 +87,21 @@ describe('instruction entry client', () => {
     it('is false when there is no entry', () => {
       expect(isEntryValueCurrent(undefined, 'BLOCK')).toBe(false)
       expect(getClient).not.toHaveBeenCalled()
+    })
+
+    it('keeps workflow.ts string values comparing by identity', () => {
+      const block = '<workflow_instructions>body</workflow_instructions>'
+
+      expect(isEntryValueCurrent({ key: 'k', value: block }, block)).toBe(true)
+      expect(isEntryValueCurrent({ key: 'k', value: 'other' }, block)).toBe(false)
+      expect(isEntryValueCurrent({ key: 'k', value: { n: 1 } }, { text: 't', source: 's', priority: 0 })).toBe(false)
+    })
+
+    it('compares object values field-wise instead of by identity', () => {
+      const value = { text: 'BLOCK', source: '/a.md', priority: 0 } as const
+
+      expect(isEntryValueCurrent({ key: 'k', value: { ...value } }, value)).toBe(true)
+      expect(isEntryValueCurrent({ key: 'k', value: { ...value, priority: 1 } }, value)).toBe(false)
     })
   })
 
@@ -93,18 +125,62 @@ describe('instruction entry client', () => {
       expect(store.put).toHaveBeenCalledTimes(1)
     })
 
-    it('returns failed with the error message when the transport put throws', async () => {
+    it('returns failed with the error and cause when the transport put throws', async () => {
       store.put.mockRejectedValue(new Error('put failed'))
 
-      await expect(writeEntry('ses_1', 'k', 'NEW')).resolves.toStrictEqual({ status: 'failed', error: 'put failed' })
+      const result = await writeEntry('ses_1', 'k', 'NEW')
+
+      expect(result).toMatchObject({ status: 'failed', error: 'put failed' })
+      expect(result.reason).toBeUndefined()
+      expect(result.cause).toBeInstanceOf(Error)
     })
 
-    it('throws when the value exceeds the size limit', async () => {
-      const oversized = 'a'.repeat(MAX_ENTRY_VALUE_BYTES)
+    it('writes an object value once and reports unchanged on an identical re-put', async () => {
+      store.put.mockImplementation(async ({ key, value }) => {
+        store.entries = [...store.entries.filter(entry => entry.key !== key), { key, value }]
+      })
 
-      await expect(writeEntry('ses_1', 'k', oversized)).rejects.toThrow(`entry k exceeds ${MAX_ENTRY_VALUE_BYTES} bytes`)
+      const value = { text: 'BLOCK', source: '/a.md', priority: 0 } as const
+
+      await expect(writeEntry('ses_1', 'k', value)).resolves.toEqual({ status: 'written' })
+      await expect(writeEntry('ses_1', 'k', { ...value })).resolves.toEqual({ status: 'unchanged' })
+      expect(store.put).toHaveBeenCalledTimes(1)
+    })
+
+    it('re-puts when only priority changes', async () => {
+      store.put.mockImplementation(async ({ key, value }) => {
+        store.entries = [...store.entries.filter(entry => entry.key !== key), { key, value }]
+      })
+
+      const value = { text: 'BLOCK', source: '/a.md', priority: 0 } as const
+
+      await expect(writeEntry('ses_1', 'k', value)).resolves.toEqual({ status: 'written' })
+      await expect(writeEntry('ses_1', 'k', { ...value, priority: 1 })).resolves.toEqual({ status: 'written' })
+      expect(store.put).toHaveBeenCalledTimes(2)
+    })
+
+    it('returns oversize in the result without putting or throwing', async () => {
+      const oversized = { text: 'a'.repeat(MAX_ENTRY_VALUE_BYTES), source: '/a.md', priority: 0 } as const
+
+      await expect(writeEntry('ses_1', 'k', oversized)).resolves.toStrictEqual({ status: 'failed', reason: 'oversize' })
       expect(getClient).not.toHaveBeenCalled()
       expect(store.put).not.toHaveBeenCalled()
+    })
+
+    it('one list backs N writes', async () => {
+      const snapshot = await listEntries('ses_1')
+
+      await expect(writeEntry('ses_1', 'a', 'A', snapshot)).resolves.toEqual({ status: 'written' })
+      await expect(writeEntry('ses_1', 'b', 'B', snapshot)).resolves.toEqual({ status: 'written' })
+      await expect(writeEntry('ses_1', 'c', 'C', snapshot)).resolves.toEqual({ status: 'written' })
+
+      expect(store.list).toHaveBeenCalledTimes(1)
+      expect(store.put).toHaveBeenCalledTimes(3)
+    })
+
+    it('strips the api/ prefix before put', async () => {
+      await expect(writeEntry('ses_1', 'api/k', 'NEW')).resolves.toEqual({ status: 'written' })
+      expect(store.put).toHaveBeenCalledWith({ sessionID: 'ses_1', key: 'k', value: 'NEW' })
     })
   })
 
@@ -121,11 +197,33 @@ describe('instruction entry client', () => {
       expect(store.remove).not.toHaveBeenCalled()
     })
 
-    it('returns failed with the error message when the transport remove throws', async () => {
+    it('returns failed with the error and cause when the transport remove throws', async () => {
       store.entries = [{ key: 'k', value: 'x' }]
       store.remove.mockRejectedValue(new Error('remove failed'))
 
-      await expect(removeEntry('ses_1', 'k')).resolves.toStrictEqual({ status: 'failed', error: 'remove failed' })
+      const result = await removeEntry('ses_1', 'k')
+
+      expect(result).toMatchObject({ status: 'failed', error: 'remove failed' })
+      expect(result.reason).toBeUndefined()
+      expect(result.cause).toBeInstanceOf(Error)
+    })
+
+    it('strips the api/ prefix before remove', async () => {
+      store.entries = [{ key: 'k', value: 'x' }]
+
+      await expect(removeEntry('ses_1', 'api/k')).resolves.toEqual({ status: 'removed' })
+      expect(store.remove).toHaveBeenCalledWith({ sessionID: 'ses_1', key: 'k' })
+    })
+
+    it('drops the key from a supplied snapshot so a later call sees the removal', async () => {
+      store.entries = [{ key: 'k', value: 'x' }, { key: 'other', value: 'y' }]
+
+      const snapshot = await listEntries('ses_1')
+
+      await expect(removeEntry('ses_1', 'k', snapshot)).resolves.toEqual({ status: 'removed' })
+      await expect(removeEntry('ses_1', 'k', snapshot)).resolves.toEqual({ status: 'absent' })
+      expect(store.list).toHaveBeenCalledTimes(1)
+      expect(store.remove).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -140,13 +238,13 @@ describe('instruction entry client', () => {
       expect(entryValueBytes(value)).toBe(expected)
     })
 
-    it('accepts a value exactly at the size limit and rejects one byte more', async () => {
+    it('accepts a value exactly at the size limit and reports oversize one byte more', async () => {
       const atLimit = 'a'.repeat(MAX_ENTRY_VALUE_BYTES - 2)
 
       expect(entryValueBytes(atLimit)).toBe(MAX_ENTRY_VALUE_BYTES)
       await expect(writeEntry('ses_1', 'k', atLimit)).resolves.toEqual({ status: 'written' })
 
-      await expect(writeEntry('ses_1', 'k2', `${atLimit}a`)).rejects.toThrow(`entry k2 exceeds ${MAX_ENTRY_VALUE_BYTES} bytes`)
+      await expect(writeEntry('ses_1', 'k2', `${atLimit}a`)).resolves.toStrictEqual({ status: 'failed', reason: 'oversize' })
     })
   })
 })

@@ -1,6 +1,9 @@
+import path from 'node:path'
+
 import { describe, it, expect, beforeEach } from 'vitest'
 
 import { createIndex } from '@plugins/helpers/instruction-indexer'
+import { REPO_ROOT } from '@tests/helpers/repo-root'
 
 describe('createIndex().forFiles', () => {
   const INSTRUCTIONS_FIXTURE_PATTERN = '.opencode/plugins/tests/fixtures/copilot-instructions/*.instructions.md'
@@ -12,13 +15,13 @@ describe('createIndex().forFiles', () => {
       type: 'copilot',
       instructionsGlob: INSTRUCTIONS_FIXTURE_PATTERN,
       agent: 'build',
-      currentWorkingDirectory: '/workspace',
+      currentWorkingDirectory: REPO_ROOT,
     })
   })
 
   it('does not return any instructions for non existing files', async () => {
     const result = await subject.forFiles([
-      '/workspace/non-existing-file.none',
+      path.join(REPO_ROOT, 'non-existing-file.none'),
     ])
 
     expect(result.length).toBe(0)
@@ -34,7 +37,7 @@ describe('createIndex().forFiles', () => {
     expect(subjectInstruction).toBeDefined()
     expect(subjectInstruction.description).toEqual(defaultInstructionDescription)
     expect(subjectInstruction.applyTo).toEqual('**/*.{ts,js}')
-    expect(subjectInstruction.path).toEqual('/workspace/.opencode/plugins/tests/fixtures/copilot-instructions/multiple-glob-patterns.instructions.md')
+    expect(subjectInstruction.path).toEqual(path.join(REPO_ROOT, '.opencode/plugins/tests/fixtures/copilot-instructions/multiple-glob-patterns.instructions.md'))
   })
 
   it('does not return instructions that dedicated for specific agents (appliesToAgents property)', async () => {
@@ -129,7 +132,7 @@ describe('createIndex().forFiles', () => {
         type: 'copilot',
         instructionsGlob: INSTRUCTIONS_FIXTURE_PATTERN,
         agent: 'agent1',
-        currentWorkingDirectory: '/workspace',
+        currentWorkingDirectory: REPO_ROOT,
       })
     })
 
@@ -151,7 +154,7 @@ describe('createIndex().forFiles', () => {
           type: 'copilot',
           instructionsGlob: INSTRUCTIONS_FIXTURE_PATTERN,
           agent: 'team-excluded-member',
-          currentWorkingDirectory: '/workspace',
+          currentWorkingDirectory: REPO_ROOT,
         })
       })
 
@@ -179,13 +182,13 @@ describe('createIndex().forFiles', () => {
     })
 
     it('returns the body content for a file with frontmatter', async () => {
-      const result = await subject.loadBody('/workspace/.opencode/plugins/tests/fixtures/copilot-instructions/multiple-glob-patterns.instructions.md')
+      const result = await subject.loadBody(path.join(REPO_ROOT, '.opencode/plugins/tests/fixtures/copilot-instructions/multiple-glob-patterns.instructions.md'))
 
       expect(result).toBe('An instruction that applies to all TypeScript and JavaScript files in the project.')
     })
 
     it('returns empty string for a file without frontmatter', async () => {
-      const result = await subject.loadBody('/workspace/.opencode/plugins/tests/fixtures/copilot-instructions/global-instruction-smpl.instructions.md')
+      const result = await subject.loadBody(path.join(REPO_ROOT, '.opencode/plugins/tests/fixtures/copilot-instructions/global-instruction-smpl.instructions.md'))
 
       expect(result).toBe('')
     })
@@ -225,5 +228,23 @@ describe('createIndex().forFiles', () => {
     expect(result).toEqual(
       expect.not.arrayContaining([instructionMatcher]),
     )
+  })
+
+  describe('path listings', () => {
+    it('allPaths lists each instruction file once', () => {
+      const matching = subject.allPaths.filter(filePath => filePath.includes('multiple-glob-patterns.instructions.md'))
+
+      expect(matching.length).toBe(1)
+      expect(subject.allPaths).toEqual([...new Set(subject.allPaths)])
+      expect(subject.allPaths.every(filePath => filePath.startsWith(`${REPO_ROOT}/`))).toBe(true)
+    })
+
+    it('allPaths keeps a global instruction file', () => {
+      const globalFrontmatter = subject.allPaths.find(filePath => filePath.includes('global-frontmatter.instructions.md'))
+      const withoutFrontmatter = subject.allPaths.find(filePath => filePath.includes('global-instruction-smpl.instructions.md'))
+
+      expect(globalFrontmatter).toBeDefined()
+      expect(withoutFrontmatter).toBeDefined()
+    })
   })
 })

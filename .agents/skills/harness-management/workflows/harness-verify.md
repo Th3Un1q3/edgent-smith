@@ -17,6 +17,8 @@ Use this workflow when any change touches DSH harness files (`.dsh/**/*`, `**/co
 
 Run from `/workspace` and record outputs before any doc or patch write. Abort if any check fails. Prefer `just verify-agents` for topology.
 
+These are shell/CLI checks. A model-level live test, a real agent/model round-trip, is a different thing and is not part of this ledger.
+
 ```bash
 # 1. Binary surface — 0.1.1-rc.2 only exposes web/plugin, requires --profile
 dsh --help 2>&1 | head -n 20

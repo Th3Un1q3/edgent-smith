@@ -20,9 +20,11 @@ export interface WorkflowSessionMessage {
 export interface WorkflowSdkClient {
   session: {
     create(input: { body: { title: string, parentID?: string } }): Promise<{ data?: { id: string } }>
+    // v2 SDK shape: the source session id is `sessionID` and the optional
+    // boundary is `before`. Omitting `before` forks at the latest message.
     fork?(input: {
-      path: { id: string }
-      body?: { messageID?: string }
+      sessionID: string
+      before?: string
     }): Promise<{ data?: { id?: string } }>
     prompt(input: {
       path: { id: string }

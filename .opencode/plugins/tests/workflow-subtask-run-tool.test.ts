@@ -37,11 +37,13 @@ vi.mock('@plugins/helpers/instruction-entry-client', () => ({
 
 import plugin from '@plugins/workflow'
 
+import { REPO_ROOT } from '@tests/helpers/repo-root'
+
 const makeHarness = () => {
   const tools: Array<Record<string, unknown>> = []
   const context = {
     options: {},
-    location: { directory: '/workspace' },
+    location: { directory: REPO_ROOT },
     event: { subscribe: () => Stream.empty },
     tool: {
       transform: (callback: (editor: unknown) => void) => {
@@ -111,5 +113,31 @@ describe('standalone trio tool registration', () => {
     expect(runMock.runStandaloneSubtask).toHaveBeenCalledTimes(1)
     expect(String(result.content)).toContain('"status":"ok"')
     expect((result.metadata as { title: string }).title).toContain('subtask_run')
+  })
+
+  it('exposes the subtask status in metadata without changing the content string', async () => {
+    const h = makeHarness()
+
+    await register(h)
+
+    const tool = h.tools.find(candidate => candidate.name === 'subtask_run')
+    if (tool === undefined) throw new Error('subtask_run not registered')
+    const execute = tool.execute as (value: unknown, context_: unknown) => Effect.Effect<unknown>
+
+    const result = await Effect.runPromise(
+      execute(
+        { prompt: 'do work', description: 'do work' },
+        { sessionID: 'ses_parent', agent: 'build', messageID: 'msg_1', id: 'call_1', progress: () => Effect.void },
+      ),
+    ) as unknown as Record<string, unknown>
+
+    expect(result.content).toBe(JSON.stringify({
+      outputText: 'OUT',
+      task_id: 'ses_child',
+      status: 'ok',
+      durationMs: 10,
+      truncated: false,
+    }))
+    expect(result.metadata).toMatchObject({ status: 'ok', task_id: 'ses_child', truncated: false })
   })
 })

@@ -1,5 +1,7 @@
 import { vi } from 'vitest'
 
+import { REPO_ROOT } from '@tests/helpers/repo-root'
+
 // ── Type definitions for client mock ────────────────────────────────────────
 
 export interface ClientMock {
@@ -125,7 +127,7 @@ Default options used by createIndex fixture helper.
 const DEFAULT_CREATE_INDEX_OPTS = {
   type: 'copilot' as const,
   instructionsGlob: '.opencode/plugins/tests/fixtures/copilot-instructions/*.instructions.md',
-  currentWorkingDirectory: '/workspace',
+  currentWorkingDirectory: REPO_ROOT,
 }
 
 /**

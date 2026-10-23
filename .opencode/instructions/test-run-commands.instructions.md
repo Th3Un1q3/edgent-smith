@@ -44,3 +44,9 @@ When a quality gate (lint, test, typecheck) reports failures in a `<steering>` b
 2. **Fix in-scope failures** — if the failures are in files you've modified or are related to your changes, fix them before declaring the task complete.
 3. **Document out-of-scope failures** — if the failures are pre-existing or in files outside your task scope, explicitly acknowledge them in your response and explain why they're not being fixed (e.g., "The 2 ESLint errors in session-helpers.ts and quality-gate-enforcer.ts are pre-existing and outside the scope of this fix.").
 4. **Never silently ignore** — always acknowledge quality gate failures. A silent disposition lets technical debt accumulate across sessions without visibility.
+
+### Long Gate Runs
+
+Run a long gate (`just ci`, `just mutation`, the full test suite) to completion in the foreground and return its result. Backgrounding it and returning early hands the caller no verdict, and the run must be re-collected with extra calls. When the harness moves a command to the background on its own, wait for it before reporting.
+
+Report each gate's exit status with the line that proves it. A gate that prints nothing (`typecheck`) is decisive by exit status; a gate that prints only progress (`test`) is decisive by its pass/fail summary.

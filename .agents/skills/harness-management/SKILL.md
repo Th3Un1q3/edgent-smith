@@ -12,8 +12,9 @@ description: >-
 license: MIT
 compatibility: Requires OpenCode + DSH + GitHub Copilot
 metadata:
-  version: "1.4.3"
+  version: "1.4.4"
   delta: |
+    1.4.4 — live-verification guidance consolidated into the canonical instruction set (self-injecting); the shell verification ledger stays distinct.
     1.4.3 — passive-hooks.md: repointed the live hook entry-point list to the four current live plugins (quality-gate-enforcer, instructions-loader, goal-continuation, workflow); dropped the quarantined todo-enforcer, skills-loader, and session-tracker names.
     1.4.2 — replaced stale "ask for an opencode restart" claims with OpenCode v2 hot-reload facts across SKILL.md, references/placement-rules.md, and the workflow files.
     1.4.1 — repointed manage-skill.md link validation from the removed per-skill building-modular-skills/scripts path to the shared agent_utils/scripts tooling and `just agent_utils::validate-skill`.
@@ -127,7 +128,7 @@ For a recurring failure, the harness change belongs in the SKILL that governs th
 
 ### OpenCode-specific (step 4)
 
-4. No manual restart needed — OpenCode v2 hot-reloads these changes: instructions, commands, config, and plugins reload automatically, and agent and skill edits follow the same hot-reload path. Restart only for unwatched local plugin dependencies, and start a new session after editing a nested `AGENTS.md` (not auto-detected after load).
+4. No manual restart needed — OpenCode v2 hot-reloads these changes: instructions, commands, config, and plugins reload automatically, and agent and skill edits follow the same hot-reload path. Restart only for unwatched local plugin dependencies, and start a new session after editing a nested `AGENTS.md` (not auto-detected after load). Model-level live tests are not the shell ledger above; they are delegated runs with a real agent and model.
 
 ### DeepSeek-specific
 

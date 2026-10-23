@@ -117,7 +117,7 @@ describe('fork fanout through the subtask seam', () => {
     // Every branch forked the SOURCE session and never created a fresh one.
     expect(harness.fork).toHaveBeenCalledTimes(branches.length)
     for (const [input] of harness.fork.mock.calls as unknown as Array<[unknown]>) {
-      expect(input).toEqual({ path: { id: read.task_id } })
+      expect(input).toEqual({ sessionID: read.task_id })
     }
     expect(harness.create).toHaveBeenCalledTimes(1)
 
@@ -247,7 +247,7 @@ describe('fork fanout through runWorkflow', () => {
     // (a) every fork forked the source session id the read subtask returned.
     expect(runner.fork).toHaveBeenCalledTimes(4)
     for (const [input] of runner.fork.mock.calls as unknown as Array<[unknown]>) {
-      expect(input).toEqual({ path: { id: 'ses_read' } })
+      expect(input).toEqual({ sessionID: 'ses_read' })
     }
     expect(runner.create).toHaveBeenCalledTimes(1)
 

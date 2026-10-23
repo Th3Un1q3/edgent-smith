@@ -504,6 +504,62 @@ describe('tool-limit-reminder (v2)', () => {
     })
   })
 
+  describe('prompt reset', () => {
+    it('restarts the attempt count when a new prompt arrives in the same session', async () => {
+      const h = makeHarness()
+
+      await register(h)
+
+      const first = { sessionID: 'ses_1', prompt: { text: 'hello' } }
+
+      await h.prompt(first)
+
+      // Four attempts leave `ses_1` one call short of the limit.
+      for (let index = 0; index < 4; index += 1) {
+        expect(Exit.isSuccess(await attempt(h))).toBe(true)
+      }
+
+      expect(reminderSynthetics(h)).toHaveLength(0)
+
+      const second = { sessionID: 'ses_1', prompt: { text: 'again' } }
+
+      await h.prompt(second)
+
+      expect(second.prompt.text).toBe('again')
+      expect(Exit.isSuccess(await attempt(h))).toBe(true)
+      expect(reminderSynthetics(h)).toHaveLength(0)
+
+      for (let index = 0; index < 4; index += 1) {
+        expect(Exit.isSuccess(await attempt(h))).toBe(true)
+      }
+
+      expect(reminderSynthetics(h)).toHaveLength(1)
+    })
+
+    it('keeps the count of another session when a prompt arrives for a different session', async () => {
+      const h = makeHarness()
+
+      h.sessions.set('ses_2', { agent: 'build', metadata: {} })
+      await register(h)
+
+      await h.prompt({ sessionID: 'ses_1', prompt: { text: 'hello' } })
+
+      // Four attempts leave `ses_1` one call short of the limit.
+      for (let index = 0; index < 4; index += 1) {
+        expect(Exit.isSuccess(await attempt(h))).toBe(true)
+      }
+
+      const other = { sessionID: 'ses_2', prompt: { text: 'hi' } }
+
+      await h.prompt(other)
+
+      expect(other.prompt.text).toBe('<task-budget tool-calls="4" />\nhi')
+      expect(Exit.isSuccess(await attempt(h))).toBe(true)
+      expect(reminderSynthetics(h)).toHaveLength(1)
+      expect(reminderSynthetics(h)[0].sessionID).toBe('ses_1')
+    })
+  })
+
   describe('budget resolution', () => {
     it('resolves an agent budget once and reuses the cache', async () => {
       const h = makeHarness()

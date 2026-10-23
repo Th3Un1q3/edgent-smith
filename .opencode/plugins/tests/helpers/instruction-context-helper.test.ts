@@ -167,4 +167,20 @@ describe('InstructionContextHelper', () => {
       expect(result[1].description).toBe('zebra-a-b-slash')
     })
   })
+
+  describe('index path exposure', () => {
+    it('copies allPaths from the indexer result', async () => {
+      const helper = new InstructionContextHelper({
+        indexerFactory: async () => ({
+          forFiles: async () => [],
+          loadBody: async () => '',
+          allPaths: ['/a.instructions.md', '/b.instructions.md'],
+        }),
+      })
+
+      await helper.resolveInstructions(['src/dir/file.ts'])
+
+      expect(helper.allPaths).toEqual(['/a.instructions.md', '/b.instructions.md'])
+    })
+  })
 })

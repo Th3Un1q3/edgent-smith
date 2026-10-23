@@ -5,9 +5,13 @@ description: >
 license: MIT
 compatibility: Requires OpenCode
 metadata:
-  version: "1.8"
+  version: "1.9"
   author: "edgent-smith team"
   delta: >
+    1.9 — added "Scope Attribution Needs a Baseline" to Step 4: snapshot the dirty
+    tree at dispatch and hand it to the validator, so pre-existing working-tree
+    changes are not reported as producer scope violations; prompted by a validator
+    FAIL caused by two harness files staged before the plugin work.
     1.8 — made the Permission Gate in Step 3 and the prompt template self-contained:
     prompts must not instruct bypassing gates or reproducing denied effects, gated
     writes require explicit authorization, and a denial is final — the subagent
@@ -183,6 +187,14 @@ WHEN DONE: Report back with:
 After a subagent reports completion, launch a **separate validation subagent** to verify against the original acceptance criteria. Never trust self-assessment. Where the environment cannot spawn a separate reviewer, a human performs the pass.
 
 Validation must be asymmetric: the validator challenges the work AND the criteria, not merely certifying that instructions were followed. Give it the task's intent and the target medium/consumer, and never hand it the expected verdict. An element that served only the source medium's consumers, with no equivalent consumer in the target medium, fails validation regardless of fidelity.
+
+### Scope Attribution Needs a Baseline
+
+A working tree is usually dirty before the producer starts, so a diff alone cannot say who changed what. Snapshot at dispatch and give the snapshot to the validator.
+
+- Record the files already modified or untracked before the first subtask launches (`git status --porcelain`, `git diff --numstat`).
+- Hand that list to the validator as "pre-existing at t0". Only files and hunks absent from the baseline are producer edits; a pre-existing dirty file is not a scope violation, whatever its subject.
+- A scope FAIL names its baseline delta. When no baseline was taken, the validator reads the hunks and their subject before calling them out of scope, and the orchestrator reports the ambiguity instead of accepting the FAIL or fixing files it did not change.
 
 ### Validation Checklist
 

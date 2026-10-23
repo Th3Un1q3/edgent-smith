@@ -354,6 +354,9 @@ const plugin: Plugin = {
     */
     yield* context.session.hook('prompt', event => Effect.gen(function* () {
       const sessionID = event.sessionID as unknown as string
+      // A prompt starts a new turn, so the previous turn's counts must not carry over.
+      yield* Ref.update(callsBefore, map => dropKey(map, sessionID))
+      yield* Ref.update(callsCompleted, map => dropKey(map, sessionID))
       if ((yield* Ref.get(tagged)).has(sessionID)) return
       const session = yield* readSession(sessionID)
       const agentID = session?.agent

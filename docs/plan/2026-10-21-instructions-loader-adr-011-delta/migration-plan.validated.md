@@ -20,7 +20,7 @@ This is an independently validated delta plan for migrating `.opencode/plugins/i
 | Rollout and default flip (D7) | §6.5 (line 518) | Behaviour implemented in Δ2 under the approval in §7; §6.5 records the default change in `resolveInjectionCarrier(env, agent)` |
 | Synthetic retirement | §6.6 (line 532) | **Untouched.** No phase here deletes the synthetic arm |
 | Removal gates | §8.3 (line 703) | Precondition for §6.6 only; the delta never closes them |
-| Live suite / probe | §7.4 (line 672) | Δ4 adds the loader's probe case to the program-owned live suite |
+| Live suite / probe | §7.4 (line 672) | Δ4 runs the loader's probe as a delegated live check; no test file and nothing collected (`.opencode/instructions/live-verification.instructions.md`) |
 | Transport and fallback | §5.6 (line 364) | Δ1 carries the taxonomy in D-06; Δ2 applies its actions |
 | Index path contract | §6.2 (lines 484-487) | Δ1 and Δ2 use the program names `indexedPaths` and `allPaths` |
 | Operator prefixes | D27 (line 792) | Amended in §7 for the fourth key family |
@@ -66,7 +66,7 @@ Target:
 | 6 | Legacy tests | D-02: pin `instructions-loader.test.ts:87-151` to `synthetic`; native describe asserts unset→native | `unset INSTRUCTION_INJECTION resolves to native` (Δ2) |
 | 7 | Program adopt/amend status | §7 table, one owner per amendment | Review gate, no runtime test |
 | 8 | Stale sweep | D-09: per-touch, `indexedPaths ∪ allPaths` live set, foreign-family exclusion, freshness rebuild | `a deleted source file is swept on the next touch`; `keeps a key whose file is in allPaths but not indexedPaths`; `when both keys exist for an untouched identity the full-body key stays live` (Δ3) |
-| 9 | Rendered `<context>` unobservable | D-12: token-channel probe + list-based removal | program live suite (§7.4) (Δ4) |
+| 9 | Rendered `<context>` unobservable | D-12: token-channel probe + list-based removal | delegated live check (§7.4) (Δ4); no test file, nothing collected; `.opencode/instructions/live-verification.instructions.md` |
 | 10 | Program refs resolve | §2 anchors 6.1–6.6, §8.3, §5.6, §7.4 | Review gate |
 | 11 | Vocabulary collision | D-13: disjoint unions, one outcome per touch | `loader outcomes and entry statuses do not overlap` (Δ4); `assigns one loader outcome per touch` (Δ2) |
 | 12 | Directory scope | D-01/D-05: `getClient(directory)` sends `x-opencode-directory`; loader passes `context.location.directory` | `sends x-opencode-directory when a directory is supplied`; `sends no directory header without a directory` (Δ1) |
@@ -312,12 +312,14 @@ Coverage gate: both new modules live under `plugins/helpers/`, so `coverage.incl
 
 ### Δ4 — Observability, switch safety and the type guard (program §6.4/§7.4)
 
-- **Files:** `plugins/tests/instructions-loader.test.ts`, `plugins/tests/helpers/instruction-carrier.test.ts`, program-owned `plugins/tests/instruction-entry-client.live.test.ts` (created by program §6.4, `migration-plan.md:510`).
-- **Change:** add the D-12 probe case to the live suite; add `loader outcomes and entry statuses do not overlap` to `plugins/tests/helpers/instruction-carrier.test.ts`, which hosts it because that module declares `LoaderOutcome` (Δ2) and imports `EntryStatus` (Δ1) — the guard is type-level, so `just opencode::typecheck` fails when the unions overlap even though the case body is an empty `expect`; assert the seeding direction in both switch orders; add the amended §6.4 payload-shape case (`value.text` equals the block); record in the plugin header that native delivery is one turn deferred.
+- **Files:** `plugins/tests/instructions-loader.test.ts`, `plugins/tests/helpers/instruction-carrier.test.ts`.
+- **Change:** run the D-12 probe as a delegated live check (`.opencode/instructions/live-verification.instructions.md`) — no test file is created and nothing is collected; add `loader outcomes and entry statuses do not overlap` to `plugins/tests/helpers/instruction-carrier.test.ts`, which hosts it because that module declares `LoaderOutcome` (Δ2) and imports `EntryStatus` (Δ1) — the guard is type-level, so `just opencode::typecheck` fails when the unions overlap even though the case body is an empty `expect`; assert the seeding direction in both switch orders; add the amended §6.4 payload-shape case (`value.text` equals the block); record in the plugin header that native delivery is one turn deferred.
 - **Path rule:** test collection covers `plugins/**` only. `.opencode/tsconfig.json` includes `plugins/**/*.ts` and `plugins/tests/**/*.ts` (`:29-33`), and vitest collects the same directory with `plugins/tests/**` as the coverage exclusion (`vitest.config.ts:22,35-39`). A file under `.opencode/tests/` typechecks nowhere and runs nowhere, so every path in this plan stays under `plugins/`.
-- **Tests:** `a fresh token in value.text reaches the model reply with tools disabled`; `removal is visible in the entry list`; `loader outcomes and entry statuses do not overlap`; `native to synthetic keeps the entry list intact`; `synthetic to native duplicates a block at most once and deletes nothing`; `an entry value's text equals the steering block for that file`.
-- **Acceptance:** the live case passes with the probe enabled and is skipped otherwise; no test asserts a rendered `<context key>` string; the type guard fails to compile if the unions overlap; the payload-shape case asserts the block against `value.text`, never against the serialised object.
-- **Rollback:** delete the live case; it writes only a dedicated probe key that the sweep owns.
+- **Tests:** `removal is visible in the entry list`; `loader outcomes and entry statuses do not overlap`; `native to synthetic keeps the entry list intact`; `synthetic to native duplicates a block at most once and deletes nothing`; `an entry value's text equals the steering block for that file`.
+- **Acceptance:** no test asserts a rendered `<context key>` string; the type guard fails to compile if the unions overlap; the payload-shape case asserts the block against `value.text`, never against the serialised object.
+- **Rollback:** remove the dedicated probe key; the sweep owns it.
+
+**Amendment 2026-10-22 — the D-12 probe is a delegated live check.** No probe test file exists in this delta and nothing is collected; the earlier acceptance line that required a gated probe case is replaced by the delegated run. Rules, execution and reporting: `.opencode/instructions/live-verification.instructions.md`.
 
 **Program D7 and §6.6, stated once:** the default flip (unset → `native`) is a deviation from program D7's staged default and requires program-maintainer approval before **Δ2** implements it; ADR-011:151 and :162 require verification first, which this delta cannot supply. Δ2 owns the code, the program maintainer owns the approval, and §6.5 records the change rather than flipping it (§7 row D7). The synthetic arm is removed by **program §6.6 (Phase 6)** only; no phase in this delta deletes it, and §8.3's gates remain the precondition.
 
@@ -333,7 +335,7 @@ Coverage gate: both new modules live under `plugins/helpers/`, so `coverage.incl
 | D7 | **amend, approval-gated** | Unset → `native` is implemented in Δ2, ahead of program D7's Phase 5 staging. ADR-011:151 and :162 require verification before the default; this delta has none, so the flip needs program-maintainer approval and program §6.5 records the default change of `resolveInjectionCarrier(env, agent)`, with no rename and no second selector. The carrier cases live in `plugins/tests/helpers/instruction-carrier.test.ts`, created in Δ2. The delta departs from §5.6:375 on one point beyond the default: an unknown `INSTRUCTION_INJECTION` value resolves to `native` rather than to the current default, which is `synthetic` through the program's Phase 4, so a typo cannot downgrade delivery; the warning latch itself follows §5.6:375 and names each distinct value once per process. The rollback is `INSTRUCTION_INJECTION=synthetic` (program D6). Owner: program maintainer (approval), Δ2 (implementation and carrier cases). |
 | D19 | **adopt** | `helpers/instruction-payload.ts` is created in Δ1 with byte-identical output; no signature change. Owner: Δ1. |
 | D20 | **amend** | Key builders take `{path?, description?}` as decided, and the path-less case uses a **new** `instr-desc-` family so the sweep can scope it. Owner: Δ1. |
-| D24 | **adopt** | Probe via the model's reply and list-based removal; the live case is created in Δ4. No rendered-context assertion. Owner: Δ4. |
+| D24 | **adopt** | Probe via the model's reply and list-based removal. No rendered-context assertion. Owner: Δ4. |
 | D25 | **amend** | Bare key is canonical, and normalization also applies on write/remove. The both-spellings case is program D25's Phase 1 unit case (`migration-plan.md:790`), so Δ1 adopts it unchanged; Phase 4 only records the key form the server returns. Owner: Δ1 (case), Δ4 (measurement). |
 | D26 | **amend** | The program's catch-all is adopted unchanged: an unclassifiable error is logged once, skips the turn and does not fall back. The delta adds `method-absent` (program §5.6:383) and `discovery` (`service-client.ts:203-205`) as reasons so a missing method or service still falls back; `UnexpectedStatus` stays `transport`, and `message` is never parsed. Owner: Δ1 (mapping), Δ2 (action). |
 | D27 | **amend, blocked on program Phase 1** | Program D27 accepts exactly three prefixes: `instr-`, `instr-ref-`, `instr-task-skills-` (792). The loader's fourth family `instr-desc-` must be accepted or rollback leaves those keys behind, so the accepted set becomes four, and `--prefix instr-` must not match `instr-ref-`, `instr-desc-` or `instr-task-skills-`. The tool that carries this, `scripts/instruction-entries.ts`, is not in the tree; it is a program Phase 1 deliverable. Owner: program (Phase 1 tool), not this delta. **Dependency:** until that tool ships, no prefix-scoped removal of `instr-desc-` keys exists — see §9 and §10. |
@@ -360,7 +362,7 @@ Conflict to flag for the program owner: R-74 publishes an oversize file as a ref
 
 - **Native default before the live evidence.** Mitigation: the §7 D7 row gates the flip on program-maintainer approval; `INSTRUCTION_INJECTION=synthetic` restores the old carrier for the session.
 - **One duplicate across the synthetic → native switch.** Mitigation: the switch is one-way within a process, the duplicate is bounded to one entry per block, and the mode-switch test asserts no deletion; the synthetic → native direction is not claimed to dedupe.
-- **Wrong directory header.** A request carrying a directory outside the session's scope answers `SessionNotFoundError` (D-06 row 5), which falls back without deleting anything; the loader always passes `context.location.directory`, and the live suite asserts the header value.
+- **Wrong directory header.** A request carrying a directory outside the session's scope answers `SessionNotFoundError` (D-06 row 5), which falls back without deleting anything; the loader always passes `context.location.directory`, and the delegated live check asserts the header value.
 - **Double delivery during a fallback.** Mitigation: D-08 seeds from `value.source`, which is the same identity the synthetic arm reads at `:99`; a mode switch is tested in both directions; the native arm is the only path that writes while the flag is `native`.
 - **Server key validation differs from the `.d.ts`.** Mitigation: local pattern test plus Δ4 recording the key form the server actually returns; a rejection surfaces as `unknown`, logs once and skips the turn (program D26), so the failure never becomes a second delivery channel.
 - **Non-atomic put.** Mitigation: one writer per family; per-identity keys; lost updates limited to same-key re-renders.
@@ -368,7 +370,7 @@ Conflict to flag for the program owner: R-74 publishes an oversize file as a ref
 - **A description-only entry is never swept.** `instr-desc-` keys are not index-derived, so D-09 never removes one: an instruction that stops matching keeps its key for the session. Mitigation is **blocked**: the only removal path is `--prefix instr-desc-` on `scripts/instruction-entries.ts`, which is absent from the tree and owed by program Phase 1 (§7 D27). Until it ships, the bound is one small key per description, rewritten in place; record the gap rather than claiming a remedy.
 - **Prefix churn.** Mitigation: `instr-desc-` and `instr-ref-` are separate families, so a budget demotion writes a new key and the old one is swept in the same touch.
 - **Ledger grows without bound.** Mitigation: D-14 caps it at 16 entries / 96 KiB with oldest-first eviction and drops an entry the ledger cannot hold; the republish pass deletes every entry it lands.
-- **The probe is model-dependent.** Mitigation: it is a live, opt-in case and gates nothing in this delta.
+- **The probe is model-dependent.** Mitigation: it is a delegated live check and gates nothing in this delta.
 
 ## 10. Open questions
 
@@ -392,8 +394,8 @@ Conflict to flag for the program owner: R-74 publishes an oversize file as a ref
 
 ## 12. Verification entry points (by name only)
 
-`just opencode::test`, `just opencode::typecheck`, `just opencode::lint`; `plugins/tests/instructions-loader.test.ts`, `plugins/tests/instruction-entry-client.test.ts`, `plugins/tests/helpers/instruction-carrier-classification.test.ts` (created in Δ1), `plugins/tests/helpers/instruction-carrier.test.ts` (created in Δ2), `plugins/tests/helpers/instruction-indexer.test.ts`, `plugins/tests/helpers/instruction-context-helper.test.ts`, `plugins/tests/helpers/service-client.test.ts`, `plugins/tests/workflow.test.ts`, `plugins/tests/instruction-entry-client.live.test.ts` (created by program §6.4, `migration-plan.md:510`).
+`just opencode::test`, `just opencode::typecheck`, `just opencode::lint`; `plugins/tests/instructions-loader.test.ts`, `plugins/tests/instruction-entry-client.test.ts`, `plugins/tests/helpers/instruction-carrier-classification.test.ts` (created in Δ1), `plugins/tests/helpers/instruction-carrier.test.ts` (created in Δ2), `plugins/tests/helpers/instruction-indexer.test.ts`, `plugins/tests/helpers/instruction-context-helper.test.ts`, `plugins/tests/helpers/service-client.test.ts`, `plugins/tests/workflow.test.ts`.
 
 Memory anchors: `architecture/adr/ADR-011-native-session-scoped-instruction-entries`, `architecture/adr/ADR-011-implementation-plan`, `architecture/adr/ADR-010-workflow-tool-instruction-injection`, `skills/general/instruction-loading-mechanics`.
 
-Every path above is collected by `.opencode/tsconfig.json` (`plugins/**`) and `.opencode/vitest.config.ts` (`plugins/tests/**`); no test file in this plan lives outside `plugins/`.
+Every unit-test path above is collected by `.opencode/tsconfig.json` (`plugins/**`) and `.opencode/vitest.config.ts` (`plugins/tests/**`); no test file in this plan lives outside `plugins/`. Live verification: delegated live check, no test file (`.opencode/instructions/live-verification.instructions.md`).

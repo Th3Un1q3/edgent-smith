@@ -116,13 +116,10 @@ const sessionToEntry = (session: Record<string, unknown>, now: number): LsEntry 
   }
 }
 
-export const listSubtasksFromSessions = async (
+const listChildSessions = async (
   reader: SessionsReader,
   parentSessionID: string,
-  options: ListStepsOptions,
-): Promise<LsEntry[]> => {
-  const wanted = resolveCount(options.count)
-  const now = Date.now()
+): Promise<Array<Record<string, unknown>>> => {
   let sessions: Array<Record<string, unknown>> | undefined
   if (typeof reader.list === 'function') {
     try {
@@ -138,7 +135,63 @@ export const listSubtasksFromSessions = async (
     const fetched = await resolveEffectValue(reader.get({ sessionID: parentSessionID }))
     sessions = toSessionArray(fetched)
   }
-  const entries = sessions.map(session => sessionToEntry(session, now))
+  return sessions
+}
+
+// A forked session records its source in `Session.Info.fork`, which is the only
+// lineage the server exposes; `fork` has no parent override. The scan is
+// additive, so a reader that cannot list without a parent yields no forks
+// instead of failing the child listing.
+const forkSourceID = (session: Record<string, unknown>): string | undefined => {
+  const fork = session.fork
+  if (fork === null || typeof fork !== 'object') return undefined
+  const source = (fork as { sessionID?: unknown }).sessionID
+  return typeof source === 'string' && source !== '' ? source : undefined
+}
+
+const listEverySession = async (reader: SessionsReader): Promise<Array<Record<string, unknown>>> => {
+  if (typeof reader.list !== 'function') return []
+  try {
+    return toSessionArray(await resolveEffectValue(reader.list()))
+  }
+  catch {
+    return []
+  }
+}
+
+const dedupeByID = (sessions: Array<Record<string, unknown>>): Array<Record<string, unknown>> => {
+  const seen = new Set<string>()
+  const unique: Array<Record<string, unknown>> = []
+  for (const session of sessions) {
+    const id = typeof session.id === 'string' ? session.id : ''
+    if (id !== '') {
+      if (seen.has(id)) continue
+      seen.add(id)
+    }
+    unique.push(session)
+  }
+  return unique
+}
+
+export const listSubtasksFromSessions = async (
+  reader: SessionsReader,
+  parentSessionID: string,
+  options: ListStepsOptions,
+): Promise<LsEntry[]> => {
+  const wanted = resolveCount(options.count)
+  const now = Date.now()
+  const children = await listChildSessions(reader, parentSessionID)
+  const childIDs = new Set(
+    children.map(session => (typeof session.id === 'string' ? session.id : '')).filter(id => id !== ''),
+  )
+  // `fork.sessionID` names the source; count a fork as this session's work when
+  // the source is the caller or one of the caller's children.
+  const allSessions = await listEverySession(reader)
+  const forks = allSessions.filter((session) => {
+    const source = forkSourceID(session)
+    return source !== undefined && (source === parentSessionID || childIDs.has(source))
+  })
+  const entries = dedupeByID([...children, ...forks]).map(session => sessionToEntry(session, now))
   const filtered = options.status === undefined ? entries : entries.filter(entry => entry.status === options.status)
   return filtered.slice(0, wanted)
 }

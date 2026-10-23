@@ -49,6 +49,8 @@ import plugin, { handleSessionEvent, isWorkflowSessionEvent, loadWorkflowInstruc
 
 import type { WorkflowSessionHandlerOptions } from '@plugins/workflow'
 
+import { REPO_ROOT } from '@tests/helpers/repo-root'
+
 interface SessionEventPayload {
   type: string
   data: { sessionID: string, agent?: string }
@@ -72,7 +74,7 @@ const makeHarness = (events: SessionEventPayload[] = []): Harness => {
   let subscriptions = 0
   const context = {
     options: {},
-    location: { directory: '/workspace' },
+    location: { directory: REPO_ROOT },
     event: {
       subscribe: () => {
         subscriptions += 1
@@ -360,7 +362,7 @@ describe('workflow instructions registration log', () => {
 
     const details = loaded[0][1] as { path: string, resolvedPath: string, contentBytes: number, agents: string[] }
 
-    expect(details.resolvedPath).toBe(path.resolve('/workspace', details.path))
+    expect(details.resolvedPath).toBe(path.resolve(REPO_ROOT, details.path))
     expect(details.contentBytes).toBe(Buffer.byteLength(readFileSync(details.resolvedPath, 'utf8'), 'utf8'))
     expect(details.agents).toEqual(['rug', 'rug-workflow'])
   })
@@ -374,19 +376,19 @@ describe('workflow instruction config validation', () => {
   it('rejects a whitespace-only instructions path', () => {
     harness.set({ instructions: ' '.repeat(3) })
 
-    expect(() => loadWorkflowInstructions('/workspace')).toThrow(/plugins\["workflow"\]\.instructions: missing or not a non-empty string/)
+    expect(() => loadWorkflowInstructions(REPO_ROOT)).toThrow(/plugins\["workflow"\]\.instructions: missing or not a non-empty string/)
   })
 
   it('names the instructions config key when the path is empty', () => {
     harness.set({ instructions: '' })
 
-    expect(() => loadWorkflowInstructions('/workspace')).toThrow(/plugins\["workflow"\]\.instructions/)
+    expect(() => loadWorkflowInstructions(REPO_ROOT)).toThrow(/plugins\["workflow"\]\.instructions/)
   })
 
   it('treats a path reading "Stryker was here!" as an ordinary path', () => {
     harness.set({ instructions: 'Stryker was here!' })
 
-    expect(() => loadWorkflowInstructions('/workspace')).toThrow(/cannot read/)
+    expect(() => loadWorkflowInstructions(REPO_ROOT)).toThrow(/cannot read/)
   })
 
   it('rejects a non-string project directory', () => {
@@ -401,7 +403,7 @@ describe('workflow instruction config validation', () => {
     harness.set({ instructions: file })
 
     try {
-      expect(() => loadWorkflowInstructions('/workspace')).toThrow(/file is empty or whitespace/)
+      expect(() => loadWorkflowInstructions(REPO_ROOT)).toThrow(/file is empty or whitespace/)
     }
     finally {
       rmSync(directory, { recursive: true, force: true })

@@ -1,15 +1,16 @@
 import { InstructionMeta, ResolvedInstruction } from '../types/instructions'
 
-// Re-export for convenience (tests import these from this module)
+interface InstructionIndexer {
+  forFiles(filePaths: string[]): Promise<InstructionMeta[]>
+  loadBody(path: string): Promise<string>
+  allPaths?: readonly string[]
+}
 
 /**
 Options passed to the helper constructor.
 */
 export interface InstructionContextHelperOptions {
-  indexerFactory: () => Promise<{
-    forFiles(filePaths: string[]): Promise<InstructionMeta[]>
-    loadBody(path: string): Promise<string>
-  }>
+  indexerFactory: () => Promise<InstructionIndexer>
 }
 
 /**
@@ -23,10 +24,9 @@ function calcSpecificity(applyTo: string): number {
 }
 
 export class InstructionContextHelper {
-  private indexerFactory: () => Promise<{
-    forFiles(filePaths: string[]): Promise<InstructionMeta[]>
-    loadBody(path: string): Promise<string>
-  }>
+  private indexerFactory: () => Promise<InstructionIndexer>
+
+  allPaths: readonly string[] = []
 
   constructor(options: InstructionContextHelperOptions) {
     this.indexerFactory = options.indexerFactory
@@ -39,6 +39,7 @@ export class InstructionContextHelper {
     if (filePaths.length === 0) return []
 
     const indexer = await this.indexerFactory()
+    this.allPaths = indexer.allPaths ?? []
     const metas = await indexer.forFiles(filePaths)
     if (metas.length === 0) return []
 

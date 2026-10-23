@@ -5,9 +5,13 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.0.1"
+  version: "1.1.0"
   author: edgent-smith team
   delta: >
+    1.1.0 — added "Extend the Existing Suite Before Building a Harness": reuse the
+    suite's fixtures, drive the real module, justify a new harness, and run through
+    the canonical target; prompted by a subtask that wrote a hand-rolled harness for
+    a new test file and could not trust its own counter evidence.
     1.0.1 — made the quality-gate rule in references/typescript-conventions.md
     self-contained; it now states inline that checks run through the project's
     canonical task-runner targets.
@@ -36,6 +40,15 @@ Do not use this skill for:
 
 All rules live in [references/general-principles.md](./references/general-principles.md). Read that file first — it defines every principle including the core pattern: **configure mock behavior in shared hooks (`beforeEach` for vitest / `@patch` decorators or fixtures for pytest), then override per-scenario via nested contexts** (nested describe blocks with their own `beforeEach` for TypeScript, class inheritance or scenario fixtures for Python). Then pick the language-specific example file that matches your project.
 
+## Extend the Existing Suite Before Building a Harness
+
+Find the suite that already covers the module before writing a test file.
+
+- **Reuse the suite's fixtures.** When a test file for the module exists, add cases to it and use its hooks and shared helpers. A second harness duplicates the wiring, drifts from the production path, and its output is unverifiable.
+- **Drive the real module.** Import and exercise the production function or plugin. A deterministic re-implementation of the logic under test measures the re-implementation, so a RED or GREEN from it proves nothing about the code.
+- **A new harness is a decision, not a shortcut.** Build one only when the existing suite cannot express the case, state in the report which helper could not be reused and why, and put shared fixtures in the suite's helpers module.
+- **Run through the canonical target.** The project's test target collects and executes the file; a harness invoked outside it has not run as a test.
+
 ## Task Routing Table
 
 Load only the files relevant to the current task.
@@ -56,6 +69,7 @@ Load only the files relevant to the current task.
 - [ ] Test follows the language-specific conventions for the project (e.g., TypeScript or Python)
 - [ ] Test passes, and any failures are reproducible and clearly indicate the cause of failure
 - [ ] Test file has no linter or type errors, and adheres to the project's coding standards
+- [ ] New cases extend the module's existing suite and fixtures, and exercise the real module rather than a local re-implementation of it
 - [ ] Test covers all the code branches and edge cases for the module under test, including error handling and boundary conditions for module under test
 
 When to apply this checklist:

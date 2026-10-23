@@ -172,4 +172,57 @@ describe('listSubtasksFromSessions', () => {
 
     expect(entries.map(entry => entry.task_id)).toEqual(['ses_direct'])
   })
+
+  it('lists a fork whose fork source is a child of the calling session', async () => {
+    const child = session({ id: 'ses_child', title: 'producer' })
+    const fork = session({
+      id: 'ses_fork',
+      title: 'fork work',
+      fork: { sessionID: 'ses_child', boundary: { type: 'through', messageID: 'msg_1' } },
+    })
+    const reader = {
+      list: vi.fn(async (input?: unknown) => ((input as { parentID?: string } | undefined)?.parentID === parentID ? [child] : [child, fork])),
+      get: vi.fn(),
+    }
+
+    const entries = await listSubtasksFromSessions(reader, parentID, {})
+
+    expect(entries.map(entry => entry.task_id)).toEqual(['ses_child', 'ses_fork'])
+  })
+
+  it('lists a fork of the calling session itself', async () => {
+    const fork = session({ id: 'ses_self_fork', title: 'ask a question', fork: { sessionID: parentID } })
+    const reader = {
+      list: vi.fn(async (input?: unknown) => ((input as { parentID?: string } | undefined)?.parentID === parentID ? [] : [fork])),
+      get: vi.fn(),
+    }
+
+    const entries = await listSubtasksFromSessions(reader, parentID, {})
+
+    expect(entries.map(entry => entry.task_id)).toEqual(['ses_self_fork'])
+  })
+
+  it('does not list a fork of an unrelated session', async () => {
+    const unrelated = session({ id: 'ses_unrelated', fork: { sessionID: 'ses_stranger' } })
+    const reader = {
+      list: vi.fn(async (input?: unknown) => ((input as { parentID?: string } | undefined)?.parentID === parentID ? [] : [unrelated])),
+      get: vi.fn(),
+    }
+
+    const entries = await listSubtasksFromSessions(reader, parentID, {})
+
+    expect(entries).toEqual([])
+  })
+
+  it('does not list the same forked child twice', async () => {
+    const fork = session({ id: 'ses_same', fork: { sessionID: parentID } })
+    const reader = {
+      list: vi.fn(async (input?: unknown) => ((input as { parentID?: string } | undefined)?.parentID === parentID ? [fork] : [fork])),
+      get: vi.fn(),
+    }
+
+    const entries = await listSubtasksFromSessions(reader, parentID, {})
+
+    expect(entries.map(entry => entry.task_id)).toEqual(['ses_same'])
+  })
 })

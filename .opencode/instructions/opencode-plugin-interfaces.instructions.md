@@ -124,13 +124,7 @@ A unit test builds a fake `Context`, calls `Effect.runPromise(Effect.scoped(plug
 
 Green unit tests do not prove the plugin works in a live session. A Serena memory, `mem:cases/opencode/sdk_detached_method_this`, records the failure: a detached client method loses `this` and throws, so call it as a member instead of storing the function. Unit fakes exercise neither the real client nor the real event stream nor load order.
 
-Live smoke, optional and not CI-wired. Treat it as PLAUSIBLE; no repo script runs it.
-
-```bash
-opencode run --format json --standalone "<prompt that triggers the plugin>"
-```
-
-Run it from `/workspace`. Success is a valid JSON event stream on stdout that shows the expected tool or behavior, with exit 0. Absence of errors in the log is not success. `--standalone` keeps a bad edit away from a shared server.
+This file covers unit-level proof only; the delegated run in the section below is where a live check belongs (`.opencode/instructions/live-verification.instructions.md`).
 
 ### Prove an injected context block
 

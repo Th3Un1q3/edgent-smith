@@ -75,8 +75,9 @@ describe('normalizeParameters fork_from edge cases', () => {
   it.each([
     ['empty', ''],
     ['whitespace', ' '.repeat(3)],
-  ])('treats a %s fork_from as absent', (_label, forkFrom) => {
-    expect(normalizeParameters({ prompt: 'p', description: 'd', fork_from: forkFrom }).fork_from).toBeUndefined()
+  ])('rejects a %s fork_from instead of silently resuming', (_label, forkFrom) => {
+    expect(() => normalizeParameters({ prompt: 'p', description: 'd', fork_from: forkFrom }))
+      .toThrow(/fork_from/)
   })
 
   it('treats an undefined fork_from as absent', () => {
@@ -111,7 +112,7 @@ describe('createSubtask fork_from', () => {
       fork_from: 'ses_source',
     })
 
-    expect(fork).toHaveBeenCalledWith({ path: { id: 'ses_source' } })
+    expect(fork).toHaveBeenCalledWith({ sessionID: 'ses_source' })
     expect(client.session.create).not.toHaveBeenCalled()
     expect(result.status).toBe('ok')
     expect(result.task_id).toBe('ses_fork_bound')
@@ -175,7 +176,7 @@ describe('createSubtask fork_from', () => {
     expect(result.error).toContain('ses_source')
   })
 
-  it('ignores an empty fork_from and creates a normal session', async () => {
+  it('rejects a blank fork_from instead of falling back to a fresh session', async () => {
     const fork = vi.fn()
     const client = createClient({ fork })
 
@@ -186,9 +187,9 @@ describe('createSubtask fork_from', () => {
     })
 
     expect(fork).not.toHaveBeenCalled()
-    expect(client.session.create).toHaveBeenCalledTimes(1)
-    expect(result.status).toBe('ok')
-    expect(result.forked_from).toBeUndefined()
+    expect(client.session.create).not.toHaveBeenCalled()
+    expect(result.status).toBe('error')
+    expect(result.error).toMatch(/fork_from/)
   })
 
   it('forks the trimmed source id when fork_from is padded', async () => {
@@ -201,7 +202,7 @@ describe('createSubtask fork_from', () => {
       fork_from: '  ses_source  ',
     })
 
-    expect(fork).toHaveBeenCalledWith({ path: { id: 'ses_source' } })
+    expect(fork).toHaveBeenCalledWith({ sessionID: 'ses_source' })
     expect(result.forked_from).toBe('ses_source')
   })
 
@@ -308,7 +309,7 @@ describe('createSubtask fork_from', () => {
     expect(client.session.create).not.toHaveBeenCalled()
   })
 
-  it('forks with exactly the path argument (no messageID body)', async () => {
+  it('forks with exactly the v2 input (no boundary)', async () => {
     const fork = vi.fn(async () => ({ data: { id: 'ses_fork' } }))
     const client = createClient({ fork })
 
@@ -319,7 +320,7 @@ describe('createSubtask fork_from', () => {
     })
 
     expect(fork).toHaveBeenCalledTimes(1)
-    expect(fork).toHaveBeenCalledWith({ path: { id: 'ses_source' } })
+    expect(fork).toHaveBeenCalledWith({ sessionID: 'ses_source' })
   })
 
   it('titles the forked child running then terminal, never the source title', async () => {

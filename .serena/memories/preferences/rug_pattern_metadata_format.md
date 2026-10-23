@@ -1,0 +1,5 @@
+Convention (2026-10-22): every pattern in .opencode/agents/rug.md §Patterns carries the same three-part metadata block directly under its heading:
+> <one-sentence summary of the pattern>
+**When to use**: <checkable trigger describing the shape of the work, not a paraphrase of the summary>
+**Combine with**: <one to three patterns that exist in this file, each with what the combination buys>
+Format rules: the summary is the only line prefixed with '> '; the two bold labels follow with no blank line between and no blockquote prefix; one blank line separates the block from the code fence. Content rules learned from validation: a 'Combine with' entry must name a combination the other pattern's body actually supports (a probe step cannot be claimed for the while loop, whose body has none), triggers must be pairwise distinguishable (fresh judge vs while loop hinge on whether repetition until PASS is needed), and the user's Skill exploration block is the exemplar and is not rewritten by agents. A single prose line points sequential stage reuse at §Chaining across executions; do not restore the old bullet selection list.
