@@ -5,9 +5,9 @@ description: >
 license: MIT
 compatibility: Requires OpenCode
 metadata:
-  version: "1.5.13"
+  version: "1.5.14"
   author: "Th3Un1qu3"
-  delta: "1.5.13 — child budget is per turn; a resume resets it, and 24 calls is a stop-reminder, not a block."
+  delta: "1.5.14 — delegated reports close with a sentinel and a count, verdicts are never sliced, enumeration prompts fix the counting unit, and an empty outputText is tailed before relaunch."
 ---
 
 # Task Delegation Skill
@@ -24,6 +24,17 @@ Teaches the RUG (Repeat Until Good) orchestrator pattern for decomposing user re
 6. Track progress against the task list and confirm that each subagent completes its task successfully.
 7. Use the `question` tool to ask for clarification or additional information from the user as needed.
 8. Validate the results of each subagent's work independently, and iterate until the overall task is completed successfully. Model-level live verification follows `.opencode/instructions/live-verification.instructions.md`.
+
+## Report Completeness and Verdict Integrity
+
+These six rules bind every prompt the orchestrator writes and every result it accepts.
+
+- **Close every report with a sentinel and a count.** A delegated report, ledger, or enumeration ends with one final line naming the deliverable and its total, for example `END ledger — 42 statements`. A report without that line is truncated, never complete: the orchestrator reports the missing tail and re-requests the remainder rather than passing the body downstream. A word cap compresses prose, never the sentinel or the count.
+- **Never slice a verdict.** Pass a child's report whole, or pass a pointer plus the one section the next child needs. A character slice removes the tail, where the sentinel, the totals, and the last rows live; a sliced ledger reads as complete and silently under-feeds the child that receives it.
+- **State the counting granularity.** A statement-by-statement, audit, or enumeration prompt defines the unit before the child starts: sentence, semicolon-joined clause, table row, table row with its header, code-fence delimiter, template field, or tripwire. Two children given no unit return incompatible ledgers that a third child must merge by hand.
+- **Recover `status: ok` with empty `outputText` by tailing.** An empty `outputText` on a successful status is an unread result, not a failure: call `subtask_tail({ task_id })` and read the transcript. Relaunch only when the transcript lacks the answer.
+- **Resolve numeric contradictions before dispatch.** When a fixed number (`steps: 30`, 24 calls) meets a budget-agnostic rule (a reserve, a per-turn reset) or a config key that must stay, the prompt names which wins and what the number measures. A child given both reads one as a violation of the other and spends its budget reconciling them.
+- **Give the child a truncated-input instruction.** Say what it does when its input is incomplete or contradicts the rules: report the defect with the missing span and stop, rather than applying a partial ledger that looks whole.
 
 ## Parity and Porting Tasks Require a Surface Inventory
 

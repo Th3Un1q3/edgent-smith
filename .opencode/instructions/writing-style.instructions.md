@@ -7,7 +7,7 @@ excludeAgents: "rug"
 
 # Communication Style Instructions
 
-Prose mechanics (filler, abstract nouns, passive voice, synonym cycling, punctuation tells): pipeline them through the `unslop` skill, `.agents/skills/unslop/SKILL.md`. It owns the rules.
+Prose mechanics (filler, abstract nouns, passive voice, synonym cycling, punctuation tells) belong to the `unslop` skill at `.agents/skills/unslop/SKILL.md`; load it before drafting and follow it.
 
 ## Markdown editing boundary
 
