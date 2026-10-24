@@ -18,16 +18,16 @@
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/js-yaml": "4.0.9",
-    "@types/node": "^26.1.0",
-    "@typescript-eslint/eslint-plugin": "8.70.0",
-    "@typescript-eslint/parser": "8.70.0",
-    "@vitest/coverage-istanbul": "^4.1.11",
+    "@types/node": "^26.6.5",
+    "@typescript-eslint/eslint-plugin": "8.71.2",
+    "@typescript-eslint/parser": "8.71.2",
+    "@vitest/coverage-istanbul": "^4.1.12",
     "@vitest/eslint-plugin": "1.6.27",
-    "eslint": "10.11.0",
-    "eslint-plugin-unicorn": "^75.0.0",
-    "tsup": "^8.5.1",
+    "eslint": "10.13.0",
+    "eslint-plugin-unicorn": "^78.0.0",
+    "tsup": "^9.0.0",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.70.0",
-    "vitest": "4.1.11"
+    "typescript-eslint": "^8.71.2",
+    "vitest": "4.1.12"
   }
 }
