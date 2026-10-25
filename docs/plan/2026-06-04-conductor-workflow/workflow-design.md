@@ -241,6 +241,8 @@ This section maps stages to likely Conductor workflow definitions while preservi
 
 ### Proposed Conductor workflow files (planning)
 
+Path drift: the workflow file that exists is `workflows/skill_eval_workflow.yaml`. The files below were planned under `conductor/workflows/`; the directory is `workflows/` and none of these stage files exist yet.
+
 1. conductor/workflows/auto_research_orchestrator.yaml
 - Parent workflow.
 - Handles mode selection (one_shot vs continuous), cycle boundaries, and global stop conditions.

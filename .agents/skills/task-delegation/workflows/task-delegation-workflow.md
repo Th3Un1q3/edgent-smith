@@ -67,9 +67,7 @@ Run this gate before launching ANY subagent — task sizing is mandatory, not ad
   (a) a research/decide subagent that returns a concrete plan, and
   (b) a write+verify subagent that executes that plan
 - A task estimated at more than ~20 tool calls MUST be split the same way
-- Resume (`task_id`) is ONLY for finishing a near-complete task — e.g. recovering a silent
-  failure via a status-report resume ("report what you did and what remains") — never the
-  primary strategy for work that should have been split
+- Resume (`task_id`) is the default for any follow-up to a child that produced work; split a task when it is too large, then resume each part. Relaunch only after a failed resume or when the context is wrong.
 - If a task burned its budget on investigation, resuming to finish is acceptable — the split
   rule is what prevents the burn
 
@@ -261,6 +259,6 @@ The RUG workflow is simple but strict: **decompose → route → prompt → vali
 2. Route each task to the agent whose specialization matches the task type
 3. Construct prompts with context, scope, acceptance criteria, constraints, output expectations, and method ownership
 4. Validate every result with a separate subagent — never trust self-assessment
-5. Iterate failures by relaunching focused tasks with fresh instructions
+5. Iterate failures by resuming the same task_id; relaunch only when the context is wrong.
 
 Apply these principles consistently. The quality of delegation determines the quality of outcomes.

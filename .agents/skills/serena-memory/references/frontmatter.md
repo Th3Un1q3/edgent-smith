@@ -49,7 +49,7 @@ Typed scopes (profile/\*, preferences/\*, entities/\*, events/\*, cases/\*, traj
 
 ## Inheritance
 
-Each */about aggregates child L0s into L0_table sorted alphabetically, cap 32; the global index is the derived union across About tables, cap 32 per scope; `pending_child_changes * 0.10 >= 1` triggers parent review.
+Each */about aggregates child L0s into L0_table sorted alphabetically, cap 32; the global index is the derived union across About tables, cap 32 per scope; `pending_child_changes * 0.10 >= 1` triggers parent review. Every scope with children (including exempt scopes such as `serena/*`, `cache/*`, `researches/*`, `private/*`, `browser-automation/*`) carries an `*/about` so prefix navigation works. When a scope exceeds 32 children, shard into sub-scope abouts (e.g. `entities/person/about`, `entities/org/about`) instead of overflowing L0_table.
 
 ## Search Method — Q1 / Q2 / Q3
 

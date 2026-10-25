@@ -92,6 +92,8 @@ output:
 
 For runtime config, context modes, limits, and cost tracking, see [references/authoring.md](references/authoring.md).
 
+For a complete repo example with script agents, routing, and a scorecard, see `workflows/skill_eval_workflow.yaml` (run it with `just skill-eval`).
+
 ## Key Concepts
 
 | Concept | Description |

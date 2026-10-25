@@ -29,7 +29,7 @@ Experiences aggregate 3 trajectories; an experience summary describes its conten
 | # | Type | Serena Path | Example Name | Notes |
 |---|---|---|---|---|
 | 1 | profile | profile/ | profile/user/background | Identity and soul are sub-paths: profile/identity/voice, profile/soul/values |
-| 2 | preferences | preferences/ | preferences/editor/theme | User choices, settings; profile subpaths only identity/soul — `preferences/` holds flat preferences; nested preferences live under `profile/preferences/` |
+| 2 | preferences | preferences/ | preferences/editor/theme | User choices, settings; canonical path is `preferences/`; `profile/preferences/` is a legacy alias kept for navigation only |
 | 3 | entities | entities/ | entities/person/alice | People, systems, orgs |
 | 4 | events | events/ | events/2026-05-01-meeting-notes | Time-stamped observations |
 | 5 | cases | cases/ | cases/bugfix/auth-timeout | Single failure + fix |
@@ -38,15 +38,28 @@ Experiences aggregate 3 trajectories; an experience summary describes its conten
 | 8 | claims | claims/ | claims/alice-role | Atomic fact + evidence |
 | 9 | cache | cache/ | cache/fetch/github-pr-42 | Resource verbatim, TTL short |
 
+### Case vs Claim Decision Rule
+
+- Atomic fact with source evidence -> `claims/*`.
+- Single failure + fix narrative -> `cases/*`.
+- Pattern across >=3 cases -> `trajectories/*`.
+
 ### Exempt patterns — untyped but not errors
 
 | Pattern | Gate | Notes |
 |---|---|---|
-| `serena/*`, `cache/*`, `researches/*` (synthesis), `private/*`, `browser-automation/*` | exempt from Typed + Disclosed | Untyped until promoted; not a gate error |
+| `serena/*`, `cache/*`, `researches/*` (synthesis), `private/*`, `browser-automation/*`, `evals/*` | exempt from Typed + Disclosed | Untyped until promoted; not a gate error; still carry an `*/about` for navigation. `evals/*` holds evaluation fixtures and outputs |
 
 Identity/soul rule: store under profile/ — profile/identity/*for voice/role, profile/soul/* for values/beliefs; never create top-level identity/ or soul/ domains.
 
 About inheritance: each typed scope aggregates children into */about with About FM — See [frontmatter.md § Inheritance](./frontmatter.md) for L0_table sorted cap 32 and 0.10 update rule.
+
+## Scope Rationale (note template)
+Record why the scope was chosen so scope is testable from the memory, not asserted. Store `scope: <type> — <reason>` in L0 or a `scope:` line:
+```text
+scope: entities — person, not preferences (no user choice recorded)
+```
+A missing rationale means the scope is unverified.
 
 ## Topic Filter Semantics — prefix matching
 
@@ -55,10 +68,7 @@ About inheritance: each typed scope aggregates children into */about with About 
 ```javascript
 // prefix filter — copy-pasteable
 var raw = list_memories({ topic: "researches/german-it-companies" });
-var memories = JSON.parse(raw).memories || [];
-// returns researches/german-it-companies/* and researches/german-it-companies itself
-var raw2 = list_memories({ topic: "researches" });
-var allResearch = JSON.parse(raw2).memories || []; // all researches/* — Implements: prefix semantics
+var raw2 = list_memories({ topic: "researches" }); // all researches/* — Implements: prefix semantics
 // BAD: topic:"automa" → 0 (prefix != substring); GOOD: topic:"browser-automation"
 ```
 
@@ -72,11 +82,7 @@ Use `list_memories({})` with manual filter when you need exact match.
 - Frontmatter may be absent; add it when you promote to entities/claims.
 
 ```javascript
-function isResearchSynthesis(name, frontmatter){
-  if(name.indexOf("researches/")===0 && !frontmatter) return "Resource-synthesis — gate Typed exempt";
-  return "typed";
-}
-isResearchSynthesis("researches/german-it-companies", null) // exempt — Implements: synthesis ambiguity
+// researches/* synthesis exempt from Typed gate until promoted — Implements: synthesis ambiguity
 ```
 
 ## Examples

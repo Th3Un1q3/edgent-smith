@@ -63,7 +63,8 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 ├── cli/                # CLI Service Agents — main.py, commands/, services/ (stateless layer)
 ├── evals/              # Evaluation/Provider Agents — runner.py, baselines, smoke tests
 ├── experiments/        # State storage: index.json (CLI) + <issue>.state.json (script)
-├── scripts/conductor/  # Conductor scaffold — Python workers (YAML planned)
+├── scripts/conductor/  # Conductor Python workers (execution primitives)
+├── workflows/          # Conductor YAML workflows, skill_eval_workflow.yaml (skill-eval)
 ├── tests/              # Comprehensive test suite covering CLI, agents, and evals
 ├── justfile            # Root — global quality gates (cross-cutting, no domain deps) + mod imports — see CONVENTIONS
 ├── evals/justfile      # eval workflows (smoke/CI/baselines)
@@ -83,7 +84,8 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 | System B — DSH / Cordis RUG | `.dsh/`, `cordis.patch.yml`, `child-runtime/cordis.yml` | Harness-native; DeepSeek RUG profiles |
 | OpenCode RUG Framework | `.opencode/agents/rug.md`, `.opencode/plugins/` | RUG orchestration + TS plugin SDK |
 | GitHub Copilot Agents | `.github/agents/*.agent.md`, `.github/prompts/` | Custom agents + prompt templates |
-| Conductor Workflows | `scripts/conductor/` | Scaffold — Python workers (YAML planned) |
+| Conductor Workflows | `workflows/*.yaml`, `scripts/conductor/` | Conductor runs YAML workflows; Python workers are execution primitives |
+| Skill-eval workflow | `workflows/skill_eval_workflow.yaml` | Runs skill evaluations via `just skill-eval` (inputs: skill, cases, max_turns, timeout) |
 | CLI Service Agents | `cli/main.py`, `cli/commands/`, `cli/services/` | Click routing → logic → stateless services |
 | Evaluation / Providers | `evals/runner.py` | Benchmarks, baselines, smoke tests |
 | Serena / MCP Gateway | `mcp/catalog.yaml`, `.serena/memories/` | 9 MCP servers; gateway-mediated memories |
@@ -101,7 +103,7 @@ The system is architected around high-centrality components in the following mod
 | CLI Entrypoint | Interface | `cli/main.py` | Click entry point and command routing hub |
 | CLI Services | Service Layer | `cli/services/` | Shared stateless services for commands |
 | Evaluator | Test Runner | `evals/runner.py` | Orchestrates model benchmarks and baselines |
-| Conductor Orchestrator | Workflow Engine | `scripts/conductor/` | Scaffold — Python workers (YAML planned) |
+| Conductor Orchestrator | Workflow Engine | `workflows/`, `scripts/conductor/` | Runs YAML workflows; Python workers are execution primitives |
 | MCP Gateway | Platform | `mcp/catalog.yaml` | 9-server catalog; Docker MCP Gateway config |
 
 ## CONVENTIONS
@@ -148,7 +150,7 @@ The system is architected around high-centrality components in the following mod
 
 ### Workflows & Platforms (4)
 
-- **Conductor Multi-Agent Workflows**: `scripts/conductor/`; scaffold — Python workers (YAML planned); human-in-the-loop gates.
+- **Conductor Multi-Agent Workflows**: `workflows/*.yaml` run by Conductor, Python workers in `scripts/conductor/`; skill evals use `workflows/skill_eval_workflow.yaml`; human-in-the-loop gates.
 - **Serena / MCP Gateway Ecosystem**: `mcp/catalog.yaml` (9 servers), `.serena/memories/`; symbol search, gateway-mediated memory.
 - **OpenCode Plugin SDK**: `.opencode/plugins/helpers/`, `*.ts`; TypeScript harness internals; quality-gate enforcers, loaders.
 - **Skill Marketplace**: `.agents/skills/` (40 skills); modular capabilities; see SYSTEM BOUNDARIES & OWNERSHIP below.
@@ -161,7 +163,7 @@ The system is architected around high-centrality components in the following mod
 | 2 | DeepSeek / Cordis RUG (B) | Yes — DSH | `.dsh/`, `cordis.patch.yml` | `dsh` CLI + Cordis RUG | Do not edit `agents/` for harness logic |
 | 3 | OpenCode RUG Framework | Yes — OpenCode | `.opencode/agents/`, `.opencode/plugins/` | `opencode` CLI + plugins | Do not duplicate DSH profiles here |
 | 4 | GitHub Copilot Agents | Yes — Copilot | `.github/agents/`, `.github/prompts/` | Copilot Chat agent picker | Do not add runtime code; prompts only |
-| 5 | Conductor Workflows | Yes — Conductor | `scripts/conductor/` | `conductor` YAML + CLI | Do not bypass via direct `agents/` calls |
+| 5 | Conductor Workflows | Yes — Conductor | `scripts/conductor/`, `workflows/` | `conductor run` on YAML workflows in `workflows/` | Do not bypass via direct `agents/` calls |
 | 6 | CLI Service Agents | No | `cli/` | `click` + `just` recipes | Do not duplicate logic; use `cli/services/` |
 | 7 | Evaluation / Provider | No | `evals/` | `evals/runner.py` | Do not mix with `agents/` runtime |
 | 8 | Serena / MCP Gateway | Yes — Gateway | `mcp/catalog.yaml`, `.serena/` | `gateway_mcp-*` tools | See CONVENTIONS — Serena Gateway |

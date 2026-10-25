@@ -25,6 +25,8 @@ tests/
   workflows/
     ci.yml                     # Lint + type-check + tests (DevContainer)
     experiment.yml             # Issue-driven auto-research workflow (DevContainer)
+workflows/
+  skill_eval_workflow.yaml     # Conductor workflow, skill evaluations (`just skill-eval`)
 ```
 
 ---

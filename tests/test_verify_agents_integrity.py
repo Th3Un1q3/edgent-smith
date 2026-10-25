@@ -13,11 +13,11 @@ def _read_text(path: pathlib.Path) -> str:
 
 def test_justfile_boundary_allowed_11_and_mod_7() -> None:
     text = _read_text(pathlib.Path("justfile"))
-    # allowed list must be exactly 11
+    # allowed list must be exactly 12
     match = re.search(r'^\s*allowed="([^"]+)"', text, re.MULTILINE)
     assert match is not None, "allowed variable not found in justfile"
     allowed = match.group(1).split()
-    assert len(allowed) == 11, f"expected 11 allowed recipes, got {len(allowed)}: {allowed}"
+    assert len(allowed) == 12, f"expected 12 allowed recipes, got {len(allowed)}: {allowed}"
     assert set(allowed) == {
         "test",
         "lint",
@@ -30,15 +30,16 @@ def test_justfile_boundary_allowed_11_and_mod_7() -> None:
         "verify-agents",
         "oc",
         "oc-log",
+        "skill-eval",
     }
-    # verify actual recipes count matches allowed 11 (filter set := assignments)
+    # verify actual recipes count matches allowed 12 (filter set := assignments)
     actual_names = []
     for line in text.splitlines():
         if re.match(r"^[a-z][a-z0-9_-]*.*:", line) and ":=" not in line:
             m = re.match(r"^([a-z][a-z0-9_-]*)", line)
             if m:
                 actual_names.append(m.group(1))
-    assert len(actual_names) == 11, f"expected 11 recipes, got {len(actual_names)}: {actual_names}"
+    assert len(actual_names) == 12, f"expected 12 recipes, got {len(actual_names)}: {actual_names}"
 
     # mod_count must be 7
     mod_count = len(re.findall(r"^mod\?? ", text, re.MULTILINE))

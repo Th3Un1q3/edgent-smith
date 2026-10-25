@@ -25,6 +25,7 @@
             "options": {
                 "baseURL": "http://host.docker.internal:1289/v1"
             },
+            "npm": "@ai-sdk/openai-compatible",
             "models": {
                 "qwen3.6-28b-reap20-a3b": {
                     "name": "l-qwen3.6-28b",
@@ -43,11 +44,14 @@
                         "output": 32768
                     }
                 },
-                "google/gemma-4-e2b": {
-                    "name": "l-gemma-4-e2b",
-                    "temperature": true,
-                    "attachment": true
-                }
+                "spark-x2.5-4b": {
+                    "name": "l-spark-x2.5-4b",
+                    "attachment": true,
+                    "limit": {
+                        "context": 128000,
+                        "output": 32768
+                    }
+                },
             }
         }
     },
@@ -59,9 +63,11 @@
         "list_mcp_resources": "deny",
         "bash": {
             "*": "allow",
-            "git *": "ask",
+            "git *": "deny",
             "rtk git *": "ask",
             "git blame *": "allow",
+            "git grep *": "allow",
+            "git rev-parse *": "allow",
             "rtk git blame *": "allow",
             "git diff *": "allow",
             "rtk git diff *": "allow",
@@ -79,9 +85,10 @@
             "rtk curl *": "deny",
         },
         "gateway_*": "allow",
-        "gateway_mcp-find": "allow",
-        "gateway_code-mode": "allow",
-        "gateway_mcp-exec": "allow"
+        "gateway_execute_shell_command": "deny",
+        "gateway_mcp-exec": "deny",
+        "gateway_code-mode": "deny",
+        "gateway_mcp-find": "allow"
     },
     "plugin": [
         "@mohak34/opencode-notifier@latest",

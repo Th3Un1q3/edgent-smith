@@ -29,6 +29,8 @@ Run before any write_memory or edit_memory — every content write or edit inclu
 | No existing memory on topic | — | Create |
 | Near-identical, same provenance | >0.9 | Skip (DEDUP_SKIP) |
 | Overlap, complementary detail | 0.6–0.9 | Merge into existing |
+| High-conf contradiction, same subject | 0.6–0.9 | Supersede old (status superseded + provenance link); keep old for audit |
+| Uncertain contradiction, same subject | 0.6–0.9 | Both status disputed + human gate; no merge, no propagation |
 | Identical but stale vs fresh | >0.9 | Delete stale, keep fresh |
 
 ## Examples
@@ -89,6 +91,8 @@ just agent_utils::validate-memories
 ```
 
 Stop when any script fails; declare complete only after all three exit 0.
+
+Note: `validate_memory_frontmatter.py` cannot target individual files (it scans the whole store); pre-existing out-of-scope failures in other memories are grandfathered and are NOT a gate failure for this skill.
 
 ## Acceptance Criteria
 

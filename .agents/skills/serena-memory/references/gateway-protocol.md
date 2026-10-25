@@ -40,23 +40,24 @@ Never re-invoke the failed call for the same id. When the environment cannot rea
 
 ## Return Ritual
 
-Every `list_memories` must be followed by `read_memory({memory_name: ids[0]})` before you answer; never answer from names alone.
+A `list_memories` call must be followed by `read_memory` before you answer with content; existence, count, and name-scan queries may answer from names alone. Keep the ritual for any content answer.
 
 ```javascript
 var listRes = tools.gateway["list_memories"]({topic:"entities"});
 var listJson = typeof listRes === "string" ? listRes : listRes.result; // live shape: {result: "<json string>"}
 if (gatewayEmpty(listJson)) throw new Error("gateway empty - bash cat .serena/memories/<id>.md (0 retries)");
 var ids = JSON.parse(listJson).memories || [];
-var body = tools.gateway["read_memory"]({memory_name: ids[0]}); // return ritual: read_memory before any answer
+// content answer: read_memory before answering
+var body = tools.gateway["read_memory"]({memory_name: ids[0]});
 snapshot(typeof body === "string" ? body : JSON.stringify(body));
-// Implements: 2 KB cap + empty-return fallback + list_memories -> read_memory return ritual
+// Implements: 2 KB cap + empty-return fallback + conditional list_memories -> read_memory return ritual
 ```
 
 ## Call Shape
 
 Call the flat gateway tools directly — one tool per call, with a plain argument object.
 
-- List: `tools.gateway["list_memories"]({})`. Read: `tools.gateway["read_memory"]({memory_name: "<id>"})`. Write: `tools.gateway["write_memory"]({memory_name: "<id>", content: "<body>"})`. Edit: `tools.gateway["edit_memory"]({memory_name: "<id>", needle: "<find>", repl: "<replace>"})`.
+- List: `tools.gateway["list_memories"]({})`. Read: `tools.gateway["read_memory"]({memory_name: "<id>"})`. Write: `tools.gateway["write_memory"]({memory_name: "<id>", content: "<body>"})`. Edit: `tools.gateway["edit_memory"]({memory_name: "<id>", needle: "<find>", repl: "<replace>", mode: "literal"})`. `mode` is required; `"literal"` is the safe default.
 - A return may be an object or a JSON string: inspect it before indexing, and `JSON.parse` only when it is a string. `list_memories` returns an object whose `result` field holds a JSON string; parse `result`, then read its `memories`.
 - The `gateway_code-mode` wrapper and `gateway_mcp-exec` still exist and still work, but normal use does not need them.
 - Each tool is gated by its own `gateway_<tool>` permission, so allowing the code-mode `execute` tool does not grant these tools. An absent tool is not proof of a permission rule — check the configured permissions before concluding one exists.

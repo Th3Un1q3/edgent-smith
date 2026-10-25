@@ -61,6 +61,15 @@ TTL (see [references/lifecycle.md](./lifecycle.md)) sets review deadline per typ
 - **Superseded provenance** → mark status: superseded, keep for audit, always stale.
 - **Disputed with conflicting evidence** → mark disputed, require human gate, always stale.
 
+## Status Transitions
+
+Status changes are symmetric and provenance is written on both sides.
+
+- **Supersede:** old `superseded`, new `active`, new provenance carries `supersedes: <old-id>`.
+- **Disputed:** BOTH old and new `disputed`; NEVER leave one `active`. An old `active` beside a new `disputed` is a forbidden asymmetric state.
+- **Never** two `active` claims for one subject; that is ambiguous duplication. Resolve or dispute it.
+- Every transition writes provenance naming the other memory.
+
 ## Examples
 
 Write a claim with evidence (copy-pasteable):
@@ -105,3 +114,4 @@ canEvolve(0.92) // pass — Implements: ≥0.6 threshold
 ## Related Skills
 
 - Call context-gathering via Skill tool on context-gathering/SKILL.md when evidence comes from external research.
+- For conflicting/ambiguous memories without an explicit pointer, see [references/ambiguity.md](./ambiguity.md).

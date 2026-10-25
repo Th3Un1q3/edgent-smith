@@ -1,0 +1,201 @@
+{
+  "skill_name": "serena-memory",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Follow the guidance in the serena-memory skill and find what Alice's role is in the evals/ namespace.",
+      "expected_output": "The run recalls evals/entities/alice (directly or via evals/about) and answers that Alice is a backend engineer, citing the memory by name or mem: ref such as mem:evals/claims/alice-role. Minimal path: at most 5 gateway calls, and no direct filesystem read of .serena/memories.",
+      "assertions": [
+        {
+          "text": "answer states Alice's role is backend engineer",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "answer cites the source memory by name or mem: ref (evals/entities/alice or evals/claims/alice-role)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "recall is completed directly without an exhaustive scan of the whole store (answer is grounded in the target memory)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "no direct read of .serena/memories from the filesystem",
+          "passed": null,
+          "evidence": null
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Follow the guidance in the serena-memory skill and save these notes as persistent memory in the evals/run-{run_id}/ namespace: 'Bob joined Acme in 2025 as a site reliability engineer. He owns the payments service and mentors two junior engineers. In August 2026 a payments outage was caused by a missing circuit breaker; the fix was a 5-second timeout.'",
+      "expected_output": "The unstructured note is decomposed into new structured memories for Bob: an entity (evals/entities/bob), atomic claims (evals/claims/bob-role, evals/claims/bob-service), and a case (evals/cases/payments-outage-2026-08). Each memory carries a hierarchical typed name and an L0 summary; writes are read back or the index/about entry is updated.",
+      "assertions": [
+        {
+          "text": ">=3 new structured memories are created under evals/run-{run_id}/ for Bob",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "memory names are hierarchical and typed under evals/run-{run_id}/",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "each written memory carries an L0 summary",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "writes are read back or the parent evals/run-{run_id}/about index is updated",
+          "passed": null,
+          "evidence": null
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Follow the guidance in the serena-memory skill and produce a profile report of everything known about Carol in the evals/ namespace.",
+      "expected_output": "The report is assembled from multiple memories rather than a single hit: evals/entities/carol, evals/claims/carol-role, evals/claims/carol-team and evals/cases/etl-failure-2026-10 are consulted, and the report covers Carol's role (data engineer), her team, and the etl-failure case with mem: refs for each source. All reads go through the gateway, never the .serena/memories filesystem.",
+      "assertions": [
+        {
+          "text": "at least 2 distinct Carol memories are read (e.g. evals/entities/carol and evals/claims/carol-role)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "report includes Carol's role, her team, and the etl-failure-2026-10 case",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "each contributing memory is cited by mem: ref",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "no direct read of .serena/memories from the filesystem",
+          "passed": null,
+          "evidence": null
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Follow the guidance in the serena-memory skill and update Dave's role from frontend engineer to staff frontend engineer everywhere it appears in the evals/ namespace.",
+      "expected_output": "The role change propagates consistently: evals/claims/dave-role and evals/entities/dave are updated, no memory still asserts Dave is a frontend engineer, dependent references or links are updated, and the evals/about L0 entry reflects the new role.",
+      "assertions": [
+        {
+          "text": "Dave's role is updated to staff frontend engineer in evals/claims/dave-role",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "the dave-role claim and dave entity agree on staff frontend engineer and no other Dave memory contradicts it",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "references or links pointing at the old claim are updated",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "the evals/about L0 entry reflects the updated role",
+          "passed": null,
+          "evidence": null
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Follow the guidance in the serena-memory skill and save this new information in the evals/ namespace: 'Eve is now a principal engineer.'",
+      "expected_output": "The conflict against evals/claims/eve-role is detected before writing, the old DevOps-engineer claim is superseded or disputed with rationale, the new principal-engineer claim is active with confidence, and a provenance link connects the new claim to the one it replaces.",
+      "assertions": [
+        {
+          "text": "the conflict with the existing evals/claims/eve-role claim is detected and named before writing",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "the old Eve role claim is superseded or disputed with rationale",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "the new claim is active, or both old and new claims are disputed symmetrically (no old-active + new-disputed state)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "a provenance link records the new claim's relation to the old one",
+          "passed": null,
+          "evidence": null
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "Follow the guidance in the serena-memory skill and clean up any outdated or irrelevant memories about Frank in the evals/ namespace.",
+      "expected_output": "Staleness is evaluated against each Frank memory rather than assumed: evals/claims/frank-role is low-confidence (0.4) with freshness 2024-01-01, and evals/entities/frank carries the same stale date. Outdated memories are marked stale or retired instead of deleted outright, an audit trail of the action is retained, and the report states what was done and why.",
+      "assertions": [
+        {
+          "text": "staleness is checked for each Frank memory rather than assumed (evals/claims/frank-role confidence 0.4, freshness 2024-01-01)",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "outdated memories are marked stale/retired (status change or audit write), not deleted",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "an audit record of the cleanup is retained",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "the report states the action taken and its rationale",
+          "passed": null,
+          "evidence": null
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Follow the guidance in the serena-memory skill and find where Service X is deployed in the evals/ namespace. Report what you find.",
+      "expected_output": "Both conflicting memories are found and read: evals/claims/service-x-region-old (us-east-1) and evals/claims/service-x-region-new (eu-west-1). The response presents both values, explains the conflict, judges trust by freshness and confidence (eu-west-1: freshness 2026-09-01 vs 2024-01-01, confidence 0.95 vs 0.9), and writes cross-references (supersedes/superseded-by) between the pair rather than silently picking one.",
+      "assertions": [
+        {
+          "text": "both evals/claims/service-x-region-old and evals/claims/service-x-region-new are read",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "the response presents both region values and explains the conflict",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "eu-west-1 is identified as more trustworthy with a freshness/confidence rationale",
+          "passed": null,
+          "evidence": null
+        },
+        {
+          "text": "cross-reference links are written between the two memories (supersedes/superseded-by)",
+          "passed": null,
+          "evidence": null
+        }
+      ],
+      "files": []
+    }
+  ]
+}

@@ -19,7 +19,7 @@ Decompose into standalone subtasks, run each via `tools.subtask_run`, validate i
 
 0. Never abandon unfinished work(goal) because a new request arrived. Extend/modify or replace current goal based on user input.
 1. Restate the request in one sentence with its deliverable and consumer, write every acceptance criterion you can infer, and split the work into standalone subtasks sized for one focused session and completable without seeing this conversation.
-2. Execute with `execute({ code })` calling `tools.subtask_run`, one subtask per unit of work; never bundle a whole feature into one child.
+2. Execute with `execute({ code })` calling `tools.subtask_run`, one subtask per unit of work; never bundle a whole feature into one child. Carry every child task_id forward; it is the handle for all follow-up work on that deliverable.
 3. Scout skills before the first subtask of each new stage and every 8 dispatches since the last pass: run one `find-skills` subtask for that stage's deliverable and push its choice into the trace. A pass that returns no usable answer is not evidence that no skill fits: list the skill names and read the descriptions of the closest ones.
 4. Validate every artifact in a fresh subtask that never received the producer's `task_id` or `fork_from`, then report the outcome with evidence or escalate with `question`.
 
@@ -318,6 +318,8 @@ const result = { stage: 'revisit', status: 'retried', rolled_back_child: attempt
 
 ## Cross-session handover
 
+**Continuation is mandatory for follow-ups.** When a child produced work and the next step continues that same deliverable (a fix, a refinement, a re-run, or a report on what remains), call `tools.subtask_run({ task_id: <prior id>, ... })`. Never start a fresh child for the same deliverable. Relaunch only when the context is wrong: a different specialist, a fresh judgement, or a polluted context.
+
 The orchestrator is not a courier: do not read a child's output and retype it for the next child when a mechanism below can carry it; a handover is one hop, child → child. Apply this ladder in order and stop at the first rung that fits.
 
 1. **Reuse the session** — the default and the best. Call `tools.subtask_run({ task_id, ... })` and the child keeps its context, working state, and injected skills; nothing crosses the boundary and the prompt carries only the delta. Right choice: whenever the next step continues the same work, including a fix after a `FAIL`. Cost: its context keeps growing, so it is wrong for a fresh judgement or a different specialist.
@@ -398,12 +400,14 @@ Open: <what remains, or none>
 
 ## Retrospective stage
 
-Run the retrospective stage after the last validation passes and before returning whenever behavior or docs changed; a run that changed neither skips it. It is a stage, not a hook: only the orchestrator observed the whole run, and each child saw only its own session.
+Run the retrospective stage after the last validation passes and before returning whenever behavior or docs changed; a run that changed neither skips it, as does a run with no struggling children and no orchestrator observations. It is a stage, not a hook: only the orchestrator observed the whole run, and each child saw only its own session.
 
 - The orchestrator owns the run record: what worked, what failed, which prompt was vague, which subtask needed a retry.
 - Children own their own experience, so the orchestrator interrogates only the children that failed, were retried, or produced nothing, asking what blocked them, what was ambiguous in their prompt, and what they would change.
 - The orchestrator groups the answers by cause, keeps the child ids, and hands that bundle alone to one fresh `harness-management` subtask. That agent proposes and applies the harness change and never interviews children itself.
 - The same subtask records the durable lesson through the serena gateway memory write and confirms it with `read_memory`; the memory name and read-back size go into the report.
+- The memory write runs only when the bundle is non-empty; otherwise the report notes "no new lesson".
+- The implement step runs only when the plan names applicable harness changes; otherwise the report notes "no applicable changes".
 
 ```js
 // body for the envelope above
@@ -417,6 +421,12 @@ const subagentsWhoStruggledIds = [
   'task_id_N',
 ];
 
+// Early skip: nothing to learn from.
+if (subagentsWhoStruggledIds.length === 0 && orchestratorObservations.length === 0) {
+  trace.push('retrospective skipped: no struggling children and no orchestrator observations')
+  return { trace, stage: 'retrospective', status: 'skipped', reason: 'no failures or observations' }
+}
+
 // Resume, never fork: the retrospective groups answers by the child ids that did
 // the work, and a fork is a separate session under a new id. An idled child gets
 // its counter cleared, so the resume opens a fresh ~24-call window; read its
@@ -425,12 +435,18 @@ const subagentsWhoStruggledIds = [
 const reports = await Promise.all(subagentsWhoStruggledIds.map(async (task_id) => {
   const raw = await tools.subtask_tail({ task_id, count: 1 })
   const entries = typeof raw === 'string' ? JSON.parse(raw) : raw
-  const landed = entries.at(-1)?.outputText.trim() ?? ''
-  return run({ task_id, description: 'interrogate a run child', prompt: `${asked}\nYour recorded output, so you need not redo the work:\n${landed.slice(0, 600)}` })
+  const landed = (Array.isArray(entries) ? entries : []).filter((e) => e && !e.truncated && String(e.outputText || '').trim()).pop()
+  if (!landed) return { silent: true, task_id }
+  return run({ task_id, description: 'interrogate a run child', prompt: `${asked}\nYour recorded output, so you need not redo the work:\n${landed.outputText.trim().slice(0, 600)}` })
 }))
-const silent = reports.filter((r) => !r.outputText.trim()).length
-trace.push(`grouping the answers (${silent} silent children)`)
-const bundle = reports.map((r, i) => `child ${subagentsWhoStruggledIds[i]} (${r.status}): ${r.outputText.trim() || 'no report'}`).join('\n')
+const silentCount = reports.filter((r) => r.silent).length
+trace.push(`grouping the answers (${silentCount} silent children)`)
+const bundle = reports.map((r, i) => {
+  const id = subagentsWhoStruggledIds[i]
+  const tid = r.task_id ?? id
+  if (r.silent) return `child ${id} (task_id ${tid}): silent — no untruncated output; tail ${tid} for full context`
+  return `child ${id} (task_id ${tid}, status ${r.status}): ${r.outputText.trim() || 'no report'}`
+}).join('\n')
 const improvementPlan = `Analyze observations from the sessions below.
 
 Identify root causes of the subtasks and orchestration issues.
@@ -447,11 +463,23 @@ ${orchestratorObservations.join('\n')}
 
 const plan = await run({ description: 'Plan changes', skills: ['harness-management'], prompt: improvementPlan });
 
-const memorize = await run({ description: 'memorize ideas', skills: ['serena-memory'], task_id: plan.task_id, prompt: `Capture the ideas as relevant memories. Format: idea, scope, rationate. One memory each.` });
+// Conditional memory write: only when the bundle is non-empty.
+let memoryNote = 'no new lesson'
+if (bundle.trim()) {
+  const memorize = await run({ description: 'memorize ideas', skills: ['serena-memory'], task_id: plan.task_id, prompt: `Capture the ideas as relevant memories. Format: idea, scope, rationate. One memory each.` })
+  memoryNote = memorize.status === 'ok' && memorize.outputText.trim() ? memorize.outputText.trim().slice(0, 200) : `memorize failed: ${memorize.status}`
+}
 
-const change = await run({ description: 'implement', prompt: 'Implement the top 3', task_id: plan.task_id });
-if (change.status !== 'ok' || change.truncated || !change.outputText.trim()) return { trace, stage: 'retrospective', status: change.status, error: change.error }
-const result = { stage: 'retrospective', report: change.outputText.slice(0, 600) }
+// Conditional implement: only when the plan names applicable harness changes.
+const planText = plan.status === 'ok' ? plan.outputText.trim() : ''
+const hasApplicable = planText.length > 0 && !/no applicable changes/i.test(planText)
+let changeReport = 'no applicable changes'
+if (hasApplicable) {
+  const change = await run({ description: 'implement', prompt: 'Implement the top 3', task_id: plan.task_id })
+  if (change.status !== 'ok' || change.truncated || !change.outputText.trim()) return { trace, stage: 'retrospective', status: change.status, error: change.error }
+  changeReport = change.outputText.trim().slice(0, 600)
+}
+const result = { stage: 'retrospective', report: `${changeReport}\nMemory: ${memoryNote}`.slice(0, 600) }
 ```
 
 ## Failures Modes

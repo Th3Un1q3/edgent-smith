@@ -51,7 +51,7 @@ Apply the first rule that matches; a domain-governing skill overrides (see Domai
 | **DeepSeek-specific** | `.dsh/cordis.patch.yml`, `.dsh/child-runtime/cordis.yml`, `.dsh/.agent-presets/**`, `.dsh/settings.yaml` | DSH / Cordis RUG only; place only DSH / Cordis behavior here; picked up next DSH session, no restart |
 | **GitHub Copilot-specific** | `.github/agents/*.agent.md`, `.github/prompts/*.md`, `.github/instructions/*.instructions.md`, `.github/copilot-instructions.md` | GitHub Copilot Chat only; read by the agent and prompt picker |
 
-Conductor and System A are not harnesses. Conductor (`scripts/conductor/`) is a scaffold (YAML + CLI planned); System A (`agents/edge.py`, `config.py`) is a harness-free runtime that builds one `pydantic_ai.Agent` with inline tools. Neither has a skill loader or hook layer: deliver guidance as plain files the workflow author reads, and name the verifier — a human or a CI job running the repo `just` gates.
+Conductor and System A are not harnesses. Conductor runs YAML workflows from `workflows/` (the skill-eval workflow is `workflows/skill_eval_workflow.yaml`, run by `just skill-eval`), with Python workers in `scripts/conductor/`; System A (`agents/edge.py`, `config.py`) is a harness-free runtime that builds one `pydantic_ai.Agent` with inline tools. Neither has a skill loader or hook layer: deliver guidance as plain files the workflow author reads, and name the verifier — a human or a CI job running the repo `just` gates.
 
 ## When to Use (Universal)
 

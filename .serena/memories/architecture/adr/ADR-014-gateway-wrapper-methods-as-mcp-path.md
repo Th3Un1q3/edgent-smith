@@ -1,9 +1,10 @@
 ---
 id: ADR-014
 title: MCP access uses the gateway wrapper methods through native execute
-status: rejected
+status: superseded
 date: 2026-10-23
 scope: MCP access path across the opencode harness
+superseded-by: ADR-013
 ---
 
 # ADR-014: MCP access uses the gateway wrapper methods through native execute

@@ -22,12 +22,20 @@ Check every box before merging; see [recipes/consolidate.md](../recipes/consolid
 | Scope | TTL | Action on expiry |
 |---|---|---|
 | events | 30d | Review, promote or archive |
-| cache/fetch | 7d | Refresh or delete |
+| cache/fetch | 7d | Refresh or retire |
 | claims | 60d | Re-verify evidence |
 | profile/preferences | 90d | Refresh on change |
 | cases/trajectories/experiences | 180d | Consolidate when stale |
 
 > TTL sets the review deadline; staleness heuristic (age>30d && hot<0.3) selects merge candidates — see [references/claims.md](./claims.md) for which applies when.
+
+## Retire, Never Delete
+
+Outdated, irrelevant, or incorrect memories are retired, not removed: set `status` to `stale`, `retired`, or `superseded` and leave the file in place so the audit trail survives. Deletion is reserved for exact duplicates — same content, same scope, no unique evidence. Record every retirement in a memory (or flag it for review) so the state change is discoverable later. Marking stale/retired does not require a human gate; a human gate is required only before deleting or superseding a contested claim. Detection without a status write is incomplete. Retirement must leave a persistent audit record in memory (an events/ or cases/ memory) naming the retired ids, the old and new status, the reason, and the date. A chat/report summary is not a persistent audit record.
+
+```yaml
+status: superseded   # replaced by claims/dave-role; file kept for audit
+```
 
 ## Hotness Formula
 

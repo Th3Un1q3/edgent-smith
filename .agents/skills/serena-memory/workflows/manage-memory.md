@@ -15,10 +15,11 @@ When to load: when you edit, reorganize, or clean up memories; when dedup table 
 
 ## Steps
 
-1. **Scan full store** — call list_memories({}) with no topic filter before any correction; duplicates hide under near-identical stems (e.g., research/ vs researches/). Done when: complete memory list parsed.
-2. **Decide action via dedup table** — compare similarity: >0.9 skip, 0.6-0.9 merge, <0.6 create; >0.9 identical with newer provenance → delete stale. Done when: one of skip/create/merge/delete selected per references/gating.md.
-3. **Apply edit with gate** — for edit_memory run blocking gate on updated body; for rename_memory verify Discoverable check only; for delete_memory ensure about remains consistent. Done when: write verified by read-back or about consistent after delete.
-4. **Update claim links and inheritance** — patch claim_ids and provenance in frontmatter per [frontmatter.md § What Belongs](../references/frontmatter.md); increment hotness via lifecycle formula; update parent About L0_table when child L0 changes. Done when: claim_ids reflect merged sources and About aggregated.
+1. **Scan by scope** — call `list_memories({topic:"<scope>"})` per typed scope (and `list_memories({topic:"about"})` for navigation) instead of `list_memories({})`; duplicates hide under near-identical stems (e.g., research/ vs researches/). Full-store scan is unavailable under truncation. Done when: per-scope memory lists parsed.
+2. **Ambiguity scan** — scan relevant scopes for conflicting subjects (same subject, contradictory facts) per [references/ambiguity.md](../references/ambiguity.md); flag disputed/superseded pairs before dedup. Done when: conflicting subjects identified or none found.
+3. **Decide action via dedup table** — compare similarity: >0.9 skip, 0.6-0.9 merge, <0.6 create; >0.9 identical with newer provenance → delete stale; apply ambiguity resolution (supersede/disputed) when conflict detected. Done when: one of skip/create/merge/delete/supersede/disputed selected per references/gating.md and references/ambiguity.md.
+4. **Apply edit with gate** — for edit_memory run blocking gate on updated body; for rename_memory verify Discoverable check only; for delete_memory ensure about remains consistent. Done when: write verified by read-back or about consistent after delete. Retiring or staling also requires a persistent audit memory (events/ or cases/) naming the retired ids, old and new status, reason, and date.
+5. **Update claim links and inheritance** — patch claim_ids and provenance in frontmatter per [frontmatter.md § What Belongs](../references/frontmatter.md); increment hotness via lifecycle formula; update parent About L0_table when child L0 changes. Done when: claim_ids reflect merged sources and About aggregated.
 
 Gate: rename/delete skip full 9-check gate — still verify single owning check (Discoverable / about-consistent).
 
@@ -43,13 +44,18 @@ renameInvariance("entities/person/alice-old","entities/person/alice","# Alice")
 
 ## Examples
 
-Full-store scan before correction:
+Per-scope scan before correction:
 
 ```javascript
-var all = JSON.parse(tools.gateway["list_memories"]({}).result);
-var memories = all.memories || [];
-// scan all domains — do not scope to named domain
-var stale = memories.filter(function(m){ return m.indexOf("cache/fetch")===0; });
+var scopes = ["profile","preferences","entities","events","cases","trajectories","experiences","claims","cache"];
+var all = [];
+for (var i = 0; i < scopes.length; i++) {
+  var raw = tools.gateway["list_memories"]({ topic: scopes[i] });
+  var parsed = JSON.parse(raw.result || raw);
+  all = all.concat(parsed.memories || []);
+}
+// duplicates hide under near-identical stems (research/ vs researches/)
+var stale = all.filter(function(m){ return m.indexOf("cache/fetch")===0; });
 stale
 ```
 

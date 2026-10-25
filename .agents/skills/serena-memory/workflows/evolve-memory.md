@@ -15,10 +15,11 @@ When to load: when you have multiple cases or trajectories sharing a pattern and
 
 ## Steps
 
-1. **Verify 3:1 threshold** — list_memories for cases/ or trajectories/; count candidates sharing failure mode or pattern ≥3. Done when: count verified ≥3.
+1. **Verify 3:1 threshold** — list_memories for cases/ or trajectories/; count candidates sharing failure mode or pattern ≥3; exclude disputed/superseded claims (status active only). Done when: count verified ≥3.
 2. **Check score and hotness** — each candidate needs mem: link count ≥3 (score ≥3) and hotness ≥0.35. Done when: all candidates pass both numeric checks.
-3. **Human gate** — present candidates to operator; operator confirms dedup, frontmatter, and about update. Done when: operator approves promotion.
-4. **Write promoted memory** — create trajectory/ or experience/ with frontmatter provenance covering 3 inputs; update domain about. Done when: new memory verified by read-back and about reflects new scope.
+3. **Exclude disputed/superseded; flag dependents** — remove any candidate whose linked claim is disputed or superseded from promotion; flag (do not edit) dependent trajectories/experiences for human review. Done when: candidate set contains only active claims and dependents flagged.
+4. **Human gate** — present candidates to operator; operator confirms dedup, frontmatter, and about update. Done when: operator approves promotion.
+5. **Write promoted memory** — create trajectory/ or experience/ with frontmatter provenance covering 3 inputs; update domain about. Done when: new memory verified by read-back and about reflects new scope.
 
 Gate: do not promote without human approval — automated promotion corrupts procedural knowledge.
 

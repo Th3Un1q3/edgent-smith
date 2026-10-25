@@ -1,0 +1,187 @@
+workflow:
+  name: skill_eval
+  entry_point: probe_models
+  input:
+    skill:
+      type: string
+      required: true
+      description: Skill name or directory whose evals/evals.json is validated and run.
+    cases:
+      type: string
+      required: false
+      default: "all"
+      description: Case ids to keep, e.g. "1,3-5".
+    max_turns:
+      type: number
+      required: false
+      default: 4
+      description: Continuation turns allowed per case.
+    timeout:
+      type: number
+      required: false
+      default: 600
+      description: Per-invocation timeout in seconds.
+
+agents:
+  - name: probe_models
+    type: script
+    description: Pick the first model in evals/config.toml that answers a probe.
+    command: python3
+    args:
+      - scripts/eval/probe_models.py
+      - --config
+      - evals/config.toml
+      - --timeout
+      - "60"
+    working_dir: "{{ workflow.dir }}/.."
+    output:
+      ok:
+        type: boolean
+        description: True when a model answered the probe.
+      model:
+        type: string
+        description: First model that answered.
+    routes:
+      - to: setup
+        when: ok
+      - to: $end
+
+  - name: setup
+    type: script
+    description: Seed the eval fixtures into .serena/memories/evals before validation.
+    command: python3
+    args:
+      - "{{ workflow.dir }}/../.agents/skills/{{ workflow.input.skill }}/evals/setup.py"
+    working_dir: "{{ workflow.dir }}/.."
+    output:
+      ok:
+        type: boolean
+        description: True when the fixtures were seeded.
+    routes:
+      - to: validate_evals
+        when: ok
+      - to: $end
+
+  - name: validate_evals
+    type: script
+    description: Validate the skill eval set and resolve the case ids to run.
+    command: python3
+    args:
+      - scripts/eval/validate_evals.py
+      - --skill
+      - "{{ workflow.input.skill }}"
+      - --cases
+      - "{{ workflow.input.cases }}"
+    working_dir: "{{ workflow.dir }}/.."
+    output:
+      ok:
+        type: boolean
+        description: True when the eval set is valid and at least one case matched.
+      valid:
+        type: boolean
+        description: True when no validation errors were reported.
+      eval_set:
+        type: string
+        description: Path to the eval set that was validated.
+      count:
+        type: number
+        description: Number of selected cases.
+      case_ids:
+        type: array
+        description: Selected case ids.
+        items:
+          type: number
+      errors:
+        type: array
+        description: Validation errors.
+        items:
+          type: string
+    routes:
+      - to: run_cases
+        when: ok
+      - to: $end
+
+  - name: run_cases
+    type: script
+    description: Run each case through run_skill_evals.py and tally the results.
+    command: python3
+    args:
+      - scripts/eval/run_cases.py
+      - --skill
+      - "{{ workflow.input.skill }}"
+      - --model
+      - "{{ probe_models.output.model }}"
+      - --case-ids
+      - "{{ validate_evals.output.case_ids | join(',') }}"
+      - --max-turns
+      - "{{ workflow.input.max_turns }}"
+      - --timeout
+      - "{{ workflow.input.timeout }}"
+    working_dir: "{{ workflow.dir }}/.."
+    output:
+      ok:
+        type: boolean
+        description: True when every case produced a result file.
+      results_dir:
+        type: string
+        description: Directory holding case-<id>.json files.
+      passed:
+        type: number
+        description: Cases whose assertions all passed.
+      failed:
+        type: number
+        description: Cases with at least one failed assertion.
+      case_ids:
+        type: array
+        description: Case ids that were run.
+        items:
+          type: number
+    routes:
+      - to: scorecard
+
+  - name: scorecard
+    type: script
+    description: Aggregate the per-case results into scorecard.json.
+    command: python3
+    args:
+      - scripts/eval/scorecard.py
+      - --results
+      - "{{ run_cases.output.results_dir }}"
+    working_dir: "{{ workflow.dir }}/.."
+    output:
+      ok:
+        type: boolean
+        description: True when the scorecard was written.
+      scorecard:
+        type: string
+        description: Path to the written scorecard.
+      total:
+        type: number
+        description: Cases aggregated.
+      passed:
+        type: number
+        description: Cases that passed.
+      failed:
+        type: number
+        description: Cases that failed.
+    routes:
+      - to: cleanup
+
+  - name: cleanup
+    type: script
+    description: Remove the eval fixtures written by setup.
+    command: python3
+    args:
+      - "{{ workflow.dir }}/../.agents/skills/{{ workflow.input.skill }}/evals/teardown.py"
+    working_dir: "{{ workflow.dir }}/.."
+    output:
+      ok:
+        type: boolean
+        description: True when the fixtures were removed.
+    routes:
+      - to: $end
+
+output:
+  scorecard: "{{ scorecard.output.scorecard }}"
+  passed: "{{ scorecard.output.passed }}"
+  failed: "{{ scorecard.output.failed }}"

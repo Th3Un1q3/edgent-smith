@@ -12,8 +12,16 @@ L0_table:
     L0: "cache entries stay verbatim; syntheses link via mem:"
   - id: claims/linkedin/growth-chart-selector-claim
     L0: "LinkedIn growth chart needs aria-label regex"
+  - id: claims/serena_memory_skill_round6_usage
+    L0: "Round 6 serena-memory usage: scoped claims list avoids hyphenated topics; store with freshness/hotness and parent about update."
   - id: claims/ci-34761145832-verification
     L0: "CI 34761145832 verification: lint 0 errors, mutation 85.57, ci 13 gates"
+  - id: claims/serena-memory-ralph-loop-lesson
+    L0: "Ralph-loop lesson: contract-first, cap discovery at half-budget, split subtasks, explicit verbs, lint-after-write, resume idled children."
+  - id: claims/test-conflict-demo
+    L0: "test-conflict-demo claim: verifies conflict handling via serena memory evidence"
+  - id: claims/python-minimum-version
+    L0: "edgent-smith requires Python >=3.13 per pyproject.toml requires-python"
 ---
 # Claims
 

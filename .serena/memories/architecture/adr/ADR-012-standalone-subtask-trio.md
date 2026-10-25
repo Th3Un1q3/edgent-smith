@@ -1,7 +1,7 @@
 ---
 id: ADR-012
 title: Standalone trio subtask_run, subtask_ls, subtask_tail - Deprecate workflow
-status: Proposed
+status: proposed
 date: 2026-10-21
 scope: gateway code-mode trio with shared prefix for permissions
 ---

@@ -66,6 +66,10 @@ oc-log:
 oc *ARGS:
     opencode {{ ARGS }}
 
+# Run skill evaluations via the conductor workflow
+skill-eval skill cases="1-7" max_turns="4" timeout="600":
+    conductor run workflows/skill_eval_workflow.yaml --input skill={{skill}} --input cases={{cases}} --input max_turns={{max_turns}} --input timeout={{timeout}}
+
 # Verify AGENTS.md 8 grep gates stay in sync with repo topology (AGENTS.md:190-220) + justfile boundary
 verify-agents:
     #!/usr/bin/env bash
@@ -87,8 +91,8 @@ verify-agents:
     ls mcp/catalog.yaml && grep -c "  type:" mcp/catalog.yaml && echo "mcp catalog OK"
     echo "#7 Skill marketplace"
     count=$(ls .agents/skills/ | wc -l); echo "skills: $count"; test "$count" -ge 1
-    echo "#8 Justfile boundary (root is 11 globals + mods only)"
-    allowed="test lint typecheck ci ci-fast format format-check clean verify-agents oc oc-log"
+    echo "#8 Justfile boundary (root is 12 globals + mods only)"
+    allowed="test lint typecheck ci ci-fast format format-check clean verify-agents oc oc-log skill-eval"
     allowed_count=$(echo "$allowed" | wc -w)
     # count recipes in root justfile (lines starting with recipe name + colon)
     actual_recipes=$(grep -E "^[a-z][a-z0-9_-]*.*:" justfile | grep -v ":=" | sed -E 's/^([a-z][a-z0-9_-]*).*/\1/' | sort)

@@ -4,15 +4,16 @@ Retrieve memories with progressive disclosure L0→L1→L2 via Serena gateway.
 
 When to load: when you list, search, or read persistent memories to answer or ground a task.
 
-## Pagination — handle truncation first
+## Pagination — no pagination API
 
-`list_memories` truncates without pagination. Handle it at the top of every recall:
+`list_memories` has no pagination. Handle truncation at the top of every recall:
 
-- Chunk with `slice(0,32)` or topic prefix filter `list_memories({topic:"prefix"})`.
-- Prefix does exact prefix match on memory name (see [references/typing.md](../references/typing.md)).
+- Prefer scoped calls: `list_memories({topic:"<scope>"})` then slice 32.
+- Full-store recall is undefined as a single call; use scoped topic-prefix calls plus `*/about` tables instead of `list_memories({})`.
+- Never assume one call returns all.
 
 ```javascript
-// Chunked filtering — copy-pasteable, handles truncation
+// Scoped recall — copy-pasteable, handles truncation
 var raw = list_memories({ topic: "entities" }); // prefix filter
 var parsed = JSON.parse(raw);
 var all = parsed.memories || [];
@@ -21,13 +22,12 @@ var page = all.slice(0, 32); // first page — Implements: 32-sample + prefix
 page.join("\n");
 ```
 
-If you need the full store, call `list_memories({})` then sort and slice 32. Never assume one call returns all.
-
 ## Prerequisites
 
-- Call `tools.gateway["list_memories"]({})` directly; no sandbox setup.
+- Call `tools.gateway["list_memories"]` directly with a topic filter when known; use `list_memories({})` only when no topic is known. No sandbox setup.
 - Load [references/frontmatter.md](../references/frontmatter.md) § Search Method for Q1/Q2/Q3 and budgets; [references/disclosure.md](../references/disclosure.md) for budgets; [references/typing.md](../references/typing.md) for scope filters.
-- Guard every gateway return: cap to 2 KB (`snapshot`) and treat an empty/stderr return (`!raw || raw.trim() == ""`, `/Access denied/`, `content:[]`) as an infra flake — fall back once to `bash cat .serena/memories/<id>.md`, zero gateway retries.
+- Guard every gateway return: cap to 2 KB (`snapshot`) and treat an empty/stderr return as an infra flake — fall back once to `bash cat .serena/memories/<id>.md`, zero gateway retries.
+- Return ritual is conditional: `read_memory` is required before answering with content; existence/count/name-scan queries may answer from names alone.
 
 ## Tools
 
@@ -35,90 +35,115 @@ If you need the full store, call `list_memories({})` then sort and slice 32. Nev
 
 ## Topic Prefix Semantics
 
-`list_memories({topic:"prefix"})` matches memory names with that prefix. `topic:"about"` returns all `*/about` (every domain's about) — prefix match on `about` suffix via About tables. Use it for scoped recall; Q1 scans About tables first via `topic:"about"`. See [references/typing.md](../references/typing.md) and [frontmatter.md § Search Method](../references/frontmatter.md).
+`list_memories({topic:"prefix"})` matches memory names with that prefix. `topic:"about"` returns all `*/about` (every domain's about) — prefix match on `about` suffix via About tables. Use it for scoped recall. See [references/typing.md](../references/typing.md) and [frontmatter.md § Search Method](../references/frontmatter.md).
 
 // BAD: topic:"automa" → 0 (prefix != substring); GOOD: topic:"browser-automation"
 
-## Steps
+### Hyphenated topics (F7)
 
-1. **List with L0 scan** — call list_memories, treat names as L0 256c summaries; do not read bodies yet. Done when: you have parsed .memories array and filtered by typed prefix or topic.
-2. **Rerank top-K at L1** — read_memory truncated to 4000c for candidates; score with hybrid 0.6*BM25 + 0.3*vector + 0.1*hotness (vector 0 when absent) and threshold 0.35. When BM25/hotness not returned by Serena, fallback to exact-name match or alphabetical and bypass 0.35 threshold for exact matches — see fallback below. Done when: ranked list of K≤5 candidates with final >0.35 or exact match.
-3. **Fetch L2 for execution** — read full body only for top-K verified candidates; inject mem: refs into context. Done when: full bodies available for synthesis and cited.
+`list_memories` prefix filter splits on `-`, so a hyphenated topic such as `ci-failures` matches nothing. Use the first segment plus a client filter, or prefer underscore ids `ci_failures`.
 
-Gate: never fetch L2 for the entire store — cap L2 reads to top-K (default 3).
+```javascript
+function hyphenSafe(topic){
+  var seg = topic.split("-")[0];
+  var raw = list_memories({ topic: seg });
+  var names = JSON.parse(raw).memories || [];
+  return names.filter(function(n){ return n.indexOf(topic) >= 0; });
+}
+hyphenSafe("ci-failures") // Implements: first segment + client filter
+```
+
+## Fast path (small stores <=32 memories)
+
+> ⚠️ **WARNING: NEVER pass a hyphenated topic to `list_memories` (hyphen splits on `-` and returns 0). Use the first segment (e.g. `serena`) plus client filter, or use underscore ids. See [frontmatter.md](../references/frontmatter.md) § Hyphen prefix bug.**
+
+Default to a scoped call: `list_memories({topic:"<scope>"})`. Use unfiltered `list_memories({})` only when no topic is known, then filter client-side. Shell filtering (bash/grep over names) is a fallback, not the primary path. Treat an empty return as an infra flake per [gateway-protocol.md](../references/gateway-protocol.md) — one-shot `bash cat .serena/memories/<id>.md` fallback, 0 retries. Target <=3 gateway calls typical. Budget target: recall+store <=5 gateway calls typical (4 when single candidate).
+
+- 1 call `list_memories({topic:"<scope>"})` → names (L0 quote-only, 256c); slice to 32. If no topic is known, use `list_memories({})` and filter client-side.
+- Read at most 2 bodies via `read_memory` (top-2); a 3rd read only on miss.
+- Skip the about-table scan unless names are insufficient.
+
+## Steps — Minimal Recall (default path)
+
+Default path uses at most 1 `list_memories` and at most 2 `read_memory` calls typical (3 on miss).
+
+1. **List names (L0)** — one `list_memories({topic:"<scope>"})`; treat names as L0 summaries; do not read bodies yet. Done when: parsed `.memories` array filtered by typed prefix or topic.
+2. **Read L0 first (quote-only, 256c)** — quote the L0 field (≤256c) from frontmatter; escalate to L1 only on miss. Never read the full body unless top-K verified. Done when: L0 quotes captured for candidates.
+3. **Read top-K at L1** — `read_memory` truncated to 4000c for at most 3 candidates; rank by prefix/exact/alphabetical plus optional hotness if present. Done when: ranked list of K≤3 candidates.
+4. **Conflict check** — compare the K candidates for same-subject contradictions before answering; reconcile per [references/ambiguity.md](../references/ambiguity.md): compare freshness/hotness/confidence/evidence, present both, write the cross-reference. Done when: no unlinked contradictory pair remains in the answer.
+5. **Fetch L2 for execution** — read full body only for verified top-K; inject mem: refs into context. Done when: full bodies available for synthesis and cited.
+
+Gate: never fetch L2 for the entire store — cap L2 reads to top-K (default 3). Never read more than 3 bodies on the default path.
+
+### Large-store fallback (about-table scan)
+
+Use this only when the default path misses or the store is large. It costs more calls.
+
+```javascript
+function searchByAbout(query){
+  var abouts = JSON.parse(list_memories({topic:"about"})).memories || [];
+  for (var i = 0; i < abouts.length; i++) {
+    var body = read_memory({ memory_name: abouts[i] });
+    if (body.indexOf(query) >= 0) return abouts[i];
+  }
+  return null;
+}
+searchByAbout("backend") // Implements: about-table scan fallback
+```
 
 ## Search Method — Q1 / Q2 / Q3
 
 Use Q1/Q2/Q3 snippets from [frontmatter.md § Search Method](../references/frontmatter.md) — About tables first, prefix scan fallback, budgets 256c/4000c/700c.
 
-### Q1 — Search by L0 via About tables
+### Q1 — Search by L0 via About tables (fallback)
 
-```javascript
-function searchByL0(query){
-  var abouts = JSON.parse(list_memories({topic:"about"})).memories || [];
-  for(var i=0;i<abouts.length;i++){
-    var body = read_memory({memory_name: abouts[i]});
-    if(body.indexOf(query)>=0) return abouts[i];
-  }
-  var all = JSON.parse(list_memories({})).memories || [];
-  return all.filter(function(m){ return m.indexOf(query)>=0; }).slice(0,32);
-}
-searchByL0("backend")
-// Implements: Q1 index-first via about
-```
-
-Experiences aggregate 3 trajectories → hint describes experience content, not its topic prefix
+About-table scan is the large-store fallback, not the default. Use the minimal path above first.
 
 ### Q2 — Summary L0 per Scope via About
 
 ```javascript
 function scopeSummary(scope){
-  var body = read_memory({memory_name: scope + "/about"});
+  var body = read_memory({ memory_name: scope + "/about" });
   var fm = body.match(/^---\n([\s\S]*?)\n---/);
   return fm ? fm[1].slice(0,4000) : body.slice(0,4000);
 }
-scopeSummary("entities")
-// Implements: Q2 L0 summary per scope
+scopeSummary("entities") // Implements: Q2 L0 summary per scope
 ```
 
-### Q3 — Fetch All L1s via Topic Prefix
+### Q3 — Fetch L1s by Topic Prefix (top-K only)
+
+Read at most 3 bodies, not 32.
 
 ```javascript
-function fetchL1s(topic){
+function fetchL1s(topic, k){
+  k = k || 3;
   var names = JSON.parse(list_memories({topic: topic})).memories || [];
   names.sort();
-  return names.slice(0,32).map(function(n){
-    var full = read_memory({memory_name: n});
+  return names.slice(0, k).map(function(n){
+    var full = read_memory({ memory_name: n });
     return {name:n, l1:full.slice(0,4000), excerpt:full.slice(0,700)};
   });
 }
-fetchL1s("entities/person")
-// Implements: Q3 topic prefix slice 4000c/700c
+fetchL1s("entities/person", 3) // Implements: Q3 top-K (3) only
 ```
 
-## Hybrid Scoring Fallback — when BM25/hotness missing
+## Hybrid Scoring — simplified (F4)
 
-Serena may not return BM25 or hotness. Apply this operational fallback:
-
-- If no scores returned, rank by exact name match first, then alphabetical.
-- Do not enforce 0.35 threshold for exact prefix matches.
-- For rerank, treat missing hot as 0 and vec as 0.
+Drop the BM25/vector/hotness formula. Rank by prefix match, then exact match, then alphabetical; apply hotness only if present in frontmatter.
 
 ```javascript
-function hybridScore(bm25, hot, backlinks){
-  var vec = 0; // no embedding yet
-  var s = 0.6*bm25 + 0.3*vec + 0.1*hot;
-  var boost = 1 + 0.05*Math.log(1 + (backlinks||0));
-  return s * boost;
+function rankMemories(names, query, hotnessMap){
+  hotnessMap = hotnessMap || {};
+  var scored = names.map(function(n){
+    var prefix = n.indexOf(query) === 0 ? 0 : 1;
+    var exact = n === query ? 0 : 1;
+    var hot = hotnessMap[n] || 0;
+    return {name:n, key: prefix + ":" + exact + ":" + (hot ? (1-hot).toFixed(3) : "1.000")};
+  });
+  scored.sort(function(a,b){ return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; });
+  return scored.map(function(x){ return x.name; });
 }
-// Fallback when scores absent — exact name wins
-function fallbackRank(memories, query){
-  var exact = memories.filter(function(m){ return m===query; });
-  if(exact.length) return exact;
-  memories.sort();
-  return memories.slice(0,5);
-}
-// Implements: fallback to exact/alphabetical, bypass 0.35 for exact
+rankMemories(["entities/person/alice","entities/person/bob"], "entities/person/alice", {}) // Implements: prefix/exact/alphabetical + optional hotness
 ```
 
 ## Examples
@@ -129,9 +154,8 @@ List and scan at L0 budget:
 var raw = list_memories({ topic: "entities" });
 var parsed = JSON.parse(raw);
 var memories = parsed.memories || [];
-// L0 — names only, ≤256c each
 var candidates = memories.filter(function(m){ return m.indexOf("entities/person")===0; });
-candidates.slice(0, 32).join("\n"); // sample 32 deterministically
+candidates.slice(0, 3).join("\n"); // sample top-3
 ```
 
 Rerank at L1 with budget guard:
@@ -139,26 +163,24 @@ Rerank at L1 with budget guard:
 ```javascript
 var read = read_memory({ memory_name: "entities/person/alice" });
 var l1 = read.slice(0, 4000); // L1 cap — Implements: 4000c budget
-if (hybridScore(0.8, 0.72, 2) <= 0.35) "discard";
 ```
 
 L2 guarded fetch:
 
 ```javascript
-// Only for verified top-K
 var full = read_memory({ memory_name: "entities/person/alice" });
-// keep header + excerpt ≤700c for model context
 var excerpt = full.slice(0, 700);
 excerpt
 ```
 
 ## Gateway Guard + Return Ritual (MANDATORY)
 
-Apply the 2 KB `snapshot`, the empty-return fallback, and the `list_memories` → `read_memory` return ritual from [gateway-protocol.md](../references/gateway-protocol.md) before any synthesis.
+Apply the 2 KB `snapshot`, the empty-return fallback, and the conditional return ritual from [gateway-protocol.md](../references/gateway-protocol.md) before any synthesis.
 
 ## Acceptance Criteria
 
-- Done when: L0 scan complete, top-K reranked at L1 4000c, L2 fetched only for K≤5 verified hits, mem: refs cited, and return ritual verified (`read_memory` payload cited, not just `list_memories` names).
+- Cite recalled memories with `mem:` refs: every contributing memory in a report/answer appears as `mem:memory-name`, not a bare name.
+- Done when: default path uses ≤1 list_memories + ≤2 read_memory typical (3 on miss), top-K reranked at L1 4000c, L2 fetched only for K≤3 verified hits, mem: refs cited, return ritual verified for content answers, and budget target recall+store <=5 gateway calls typical (4 when single candidate).
 
 ## Related Skills
 

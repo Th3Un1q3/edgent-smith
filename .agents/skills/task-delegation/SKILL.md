@@ -5,9 +5,9 @@ description: >
 license: MIT
 compatibility: Requires OpenCode
 metadata:
-  version: "1.5.14"
+  version: "1.5.16"
   author: "Th3Un1qu3"
-  delta: "1.5.14 — delegated reports close with a sentinel and a count, verdicts are never sliced, enumeration prompts fix the counting unit, and an empty outputText is tailed before relaunch."
+  delta: "1.5.16 — storage target named per deliverable before dispatch; memory writes pre-name the target and cap discovery; exact artifact shape and versions stated before research. 1.5.15 — a delegated report opens with the deliverable, not a task contract; the word cap is net of mandatory blocks and says whether they count; prompt vocabulary is fixed with a disambiguating instance per term. 1.5.14 — delegated reports close with a sentinel and a count, verdicts are never sliced, enumeration prompts fix the counting unit, and an empty outputText is tailed before relaunch."
 ---
 
 # Task Delegation Skill
@@ -27,8 +27,9 @@ Teaches the RUG (Repeat Until Good) orchestrator pattern for decomposing user re
 
 ## Report Completeness and Verdict Integrity
 
-These six rules bind every prompt the orchestrator writes and every result it accepts.
+These seven rules bind every prompt the orchestrator writes and every result it accepts.
 
+- **Return the deliverable, never the process.** The first block of a delegated report is the answer the prompt asked for: the ledger, the verdict, the table, or the file path. A task contract, an `execute` block, a plan, or a transcript dump is not a deliverable: the orchestrator re-requests the answer once with the same `task_id` and does not accept the run.
 - **Close every report with a sentinel and a count.** A delegated report, ledger, or enumeration ends with one final line naming the deliverable and its total, for example `END ledger — 42 statements`. A report without that line is truncated, never complete: the orchestrator reports the missing tail and re-requests the remainder rather than passing the body downstream. A word cap compresses prose, never the sentinel or the count.
 - **Never slice a verdict.** Pass a child's report whole, or pass a pointer plus the one section the next child needs. A character slice removes the tail, where the sentinel, the totals, and the last rows live; a sliced ledger reads as complete and silently under-feeds the child that receives it.
 - **State the counting granularity.** A statement-by-statement, audit, or enumeration prompt defines the unit before the child starts: sentence, semicolon-joined clause, table row, table row with its header, code-fence delimiter, template field, or tripwire. Two children given no unit return incompatible ledgers that a third child must merge by hand.
@@ -77,6 +78,9 @@ When the request is a parity or porting task — "as close as possible to X", "m
 
 A prompt that names a seam only as "file X line N" spends the subagent's budget re-deriving the real contract, and the surprise lands mid-implementation. Convert discovery into exact facts before writing the prompt:
 
+- **Storage target for every deliverable.** Before dispatch, name where each deliverable lands — repository path, memory name, or `.tmp/` path. A deliverable with no named target defaults to the report and the research is never persisted.
+- **Exact artifact shape and versions before research.** State the concrete path shape (`group/<name>/` vs `groups/<name>/`) and target installer versions in the prompt; a child that infers the shape returns an unusable layout.
+- **Fix the domain vocabulary in the prompt.** List each load-bearing term with its meaning and one disambiguating instance: what each tag value means, and whether "skill name" is the directory (`.agents/skills/<name>/`) or the frontmatter `name`. A term the child must infer from usage spends its discovery calls and still returns a guess.
 - **API and type seams.** Name the installed package and version (`@opencode/client 2.0.24`, not a remembered `@opencode-ai/sdk`), the method that actually exists (`catchCause`; Effect v4 has no `catchAll`), and the accepted input shape (`SessionGenerateInput` has no `tools` option). A field that does not exist is a defect the prompt prevents, not one the subagent discovers after writing code against it.
 - **Injection points.** Say where a dependency must be threaded (`context.storage` into `publishInstructionSet`) and which production path always sets a value, so the missing-value case is handled with a stub instead of an invented fallback.
 - **Repo ceilings for the files in scope.** State the lint and size caps verbatim: max-lines 650 per test file, complexity 8, `unicorn/prefer-includes`, no-await-expression-member, no-top-level-assignment-in-function. A subagent that learns a cap from a failing gate refactors or splits files after the work is done, and often runs out of budget first.
@@ -90,10 +94,13 @@ A prompt that names a seam only as "file X line N" spends the subagent's budget 
 ## Child Budget Accounting
 - **The ~24-call budget is per turn.** A child that idles (every completed subtask does) gets its counter cleared, so a `task_id` resume starts a fresh 24-call window; resume is therefore the cheapest path after idle, not a last resort. Only a child still mid-turn carries its count. 24 is the advertised `<task-budget>` and triggers a stop-reminder, not a hard block; a child told to stop may overrun, so treat >24 calls as overrun evidence, not a hard limit. `subtask_tail({ task_id })` reads completed output for one orchestrator call and no child budget: tail, then resume — the resume resets the budget; relaunch only when the context itself is wrong.
 - **Setup is charged before research.** Skill load, gateway tool discovery, and page discovery consume ~4-6 calls. State the values setup would discover (page id, tab id, tool name, URL pattern, filter syntax) in the prompt, or name the one skill that owns them; never paste one recipe into several prompts, because each child re-derives it and invents its own workaround. Say the split too: ~6 setup, ~12 work, ~4 report, fields capped at 3-5.
+- **Memory writes: pre-name the target and cap discovery.** State the memory name (namespace/path) in the prompt and cap discovery at a few reads; validate only the single written file, not the whole directory. A child that must find the memory name spends its budget on `list_memories` and never writes.
 - **State the evidence bar and the verdict rule.** Define what counts as proof per criterion and what a missing value means (fails the criterion, or passes as "not found"); for a term with two readings, say which wins. Cap each validator at <=3 claims with pages pre-opened: a nine-claim validator dies mid-verification.
-- **Cap output length.** `outputText` holds ~4000 chars, so ask for one section and a word cap ("<=150 words, no tables"); an over-long report truncates silently.
+- **Cap output length against the mandatory content.** `outputText` holds ~4000 chars, so ask for one section and a word cap ("<=150 words, no tables"); an over-long report truncates silently. Subtract every mandatory block — a required name list, a validation block, a sentinel — from the cap, and state whether those blocks count inside it: a 450-word cap carrying a 45-word mandatory list and an uncounted validation block truncates the delivery. Give the child the item count next to the cap so it can check the fit before writing.
 
 ## Subagent Failure Recovery
+
+Resume is the default continuation, not a last resort. For any follow-up to a child that produced work, pass its `task_id`. A resume carries the child's memory, injected skills, and working state; a relaunch loses them. Relaunch only after a failed resume or when the context is wrong.
 
 When a subagent returns no usable output or exhausts its budget without producing code:
 
