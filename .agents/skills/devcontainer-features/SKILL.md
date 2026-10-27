@@ -4,8 +4,8 @@ description: "Fix broken, unportable, or unpublished devcontainer Features that 
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.0.0"
-  delta: "1.0.0 — Initial shaped skill: 6 workflows (design/implement/test/publish/version-and-update/configure), 7 references, 2 recipes, 1 validate helper; fixes unportable/unpublished Feature failure with platform checks, OCI publishing, semver."
+  version: "1.0.1"
+  delta: "1.0.1 — dropped the inventory counts from the initial shape note: workflows for design/implement/test/publish/version-and-update/configure, plus references, recipes, and a validate helper; fixes unportable/unpublished Feature failure with platform checks, OCI publishing, semver."
 ---
 
 # Devcontainer Features

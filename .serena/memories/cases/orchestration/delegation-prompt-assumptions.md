@@ -1,7 +1,7 @@
 ---
 id: cases/orchestration/delegation-prompt-assumptions
 type: cases
-L0: "A delegation prompt inherits the orchestrator's assumptions: an ADR lives in mem: rules plus the about index, not a repo file:line; a child catalog may lack the Serena gateway, so it is loaded before planning; a citation that disagrees with the tree is corrected, never made to fit a count."
+L0: "A delegation prompt inherits orchestrator assumptions: an ADR lives in mem: rules plus the about index, not a repo file:line; a child may lack the gateway, so load it first; a citation disagreeing with the tree is corrected, never fit to a count."
 hotness: 0.6
 ttl: 90d
 version: 1

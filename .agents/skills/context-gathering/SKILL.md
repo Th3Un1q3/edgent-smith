@@ -82,6 +82,7 @@ flowchart TD
 - **Persist findings, do not just report them:** end every research or inventory by storing its findings through serena-memory; a report carrying no `mem:` reference is incomplete. Acceptance is the memory name plus its read-back size in bytes.
 - **Call tools, not servers:** the gateway namespace already lists the tools — serena, tavily, fetch, github, context7, deepwiki, devtools — so call the specific tool with real arguments instead of searching for a server.
 - **Minimize round trips**: Batch independent tool calls in one `execute`; keep every call top-level and synchronous.
+- **Scope the first search**: restrict the first codebase search to source directories with dependency and environment trees excluded (`.opencode/node_modules`, `.venv`, `.pnpm-store`); run a repo-wide pattern search only after a scoped search returns nothing. When [recipes/codebase-exploration.md](./recipes/codebase-exploration.md) is in use that recipe governs: its one-call `search_for_pattern` is the first search, an explicit exception to the scoped-first rule.
 - **Trust server authentication**: Servers are credentialed; only devtools may need a login-wall probe.
 - **Verify every write**: After any cache/file write read it back and confirm before reporting success.
 - **Start with the lightest server**: Pick the default per category; escalate only on documented failure.

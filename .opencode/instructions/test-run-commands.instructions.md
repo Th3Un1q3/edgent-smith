@@ -34,7 +34,8 @@ Avoid manual venv activation (`source .venv/bin/activate`). Run Python via `uv r
 
 1. **Verify each file as you finish it** — after editing a file, run the relevant per-file check (e.g., `just test -- <path-to-file>`, or lint/typecheck scoped to that file) BEFORE moving on to the next file. Do NOT defer verification to the end of the task.
 2. **Verification is not optional** — a file is not done until its check passes, or the failure is explicitly documented. Verification is part of "done", not a follow-up.
-3. **Budget for it** — per-file verification consumes tool calls. Account for it against the advertised `<task-budget tool-calls="N" />` and reserve calls for verification. If the budget is too tight to verify everything, verify the most critical subset and explicitly report which files were NOT verified and why.
+3. **Budget for it** — per-file verification consumes tool calls. Account for it against the advertised `<task-budget tool-calls="N" />` and reserve calls for verification; `.opencode/plugins/tool-limit-reminder.ts` enforces that tag by blocking the call that would cross `N`, so the tag is the load-bearing number here. If the budget is too tight to verify everything, verify the most critical subset and explicitly report which files were NOT verified and why.
+4. **Earn an UNVERIFIABLE verdict** — an "unverifiable" or "not executable" claim names the exact `just` recipe attempted and quotes its output; a missing raw binary (`pytest: not found`) is not that evidence, because the sanctioned runners resolve the environment (see the runner policy above and the `uv run` rule below).
 
 ### Handling Quality Gate Failures
 

@@ -2,7 +2,7 @@
 
 # Workflow tool
 
-The `workflow` tool runs a short JavaScript script that orchestrates subagents. Any agent granted the `workflow` permission can call it; `rug-workflow` is the configured workflow orchestrator. Reach for it when a goal needs several child agents working in parallel, a chain of follow-ups, or a merge step, and you want each call to run one phase and produce one result.
+The `workflow` tool runs a short JavaScript script that orchestrates subagents. Any agent granted the `workflow` permission can call it; `rug` is the configured workflow orchestrator. Reach for it when a goal needs several child agents working in parallel, a chain of follow-ups, or a merge step, and you want each call to run one phase and produce one result.
 
 ## Overview and mental model
 
@@ -453,7 +453,7 @@ Workflow runs are normal sessions, so you can inspect them after the fact.
 Run a goal and let the agent design the script:
 
 ```bash
-opencode run --agent rug-workflow "Summarize the three riskiest modules and why"
+opencode run --agent rug "Summarize the three riskiest modules and why"
 ```
 
 Capture the session id. The run prints it, and you can also read the newest session:

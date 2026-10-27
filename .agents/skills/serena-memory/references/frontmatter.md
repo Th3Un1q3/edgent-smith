@@ -32,15 +32,23 @@ Vocabulary: frontmatter — YAML block between --- delimiters at file top; L0 �
 
 ### Other Families
 
-- **ADR (architecture/adr/*):** id == memory_name, title, status (proposed/accepted/superseded), date (YYYY-MM-DD), optional scope.
-- **About (profile/about, entities/about, ...):** type (parent scope), quoted L0 ≤256c, L0_table (sorted child L0s, cap 32), optional version and freshness.
+- **ADR (architecture/adr/*):** `id` is the `ADR-<n>` token and the file stem begins with it (`ADR-020` in `ADR-020-serving-....md`), so the pair raises no `id` warning; a different `ADR` number, or the same form outside `architecture/adr/`, still warns. Under `architecture/adr/` the typed-memory rule does not apply, so `type` and `L0` are not required; the family is title, status (proposed/accepted/superseded), date (YYYY-MM-DD), optional scope.
+- **About (profile/about, entities/about, ...):** `type:` names the parent scope (`type: entities`); `type: about` is accepted but warns, because `about` is not one of the 9 types. Quoted L0 ≤256c, L0_table (sorted child L0s, cap 32), optional version and freshness.
 - **Cache limited header (cache/* only, exempt):** tool, url, date required; optional source. No --- delimiters.
 
 No other keys belong in frontmatter; the body holds remaining content.
 
 ## Which Memories Carry FM
 
-Typed scopes (profile/\*, preferences/\*, entities/\*, events/\*, cases/\*, trajectories/\*, experiences/\*, claims/\*) require Typed FM + L0. architecture/adr/\* uses ADR FM. \*/about uses About FM + L0_table. overview/\* and index/\* are derived. cache/\* uses the limited header only. researches/\* synthesis, serena/\*, browser-automation/\*, private/\*, tooling/\* stay untyped until promoted; on promotion add Typed FM.
+Typed scopes (profile/\*, preferences/\*, entities/\*, events/\*, cases/\*, trajectories/\*, experiences/\*, claims/\*) require Typed FM + L0. architecture/adr/\* uses ADR FM. \*/about uses About FM + L0_table. overview/\* and index/\* are derived. cache/\* uses the limited header only. researches/\* synthesis, serena/\*, browser-automation/\*, private/\*, evals/\*, tooling/\* stay untyped until promoted; on promotion add Typed FM.
+
+## Validation Tiers — What the Gate Checks
+
+`validate_memory_frontmatter.py` classifies each file by path, and `just agent_utils::validate-memories` runs it. EXEMPT — `cache/`, `researches/`, `serena/`, `private/`, `browser-automation/`, `evals/`, `tooling/` — is machine-written or copied from outside, so its findings are counted and skipped — except an `*/about.md` beneath an exempt prefix, which `scope_tier` validates first and which is the only exempt-prefix finding. VALIDATE — `profile/`, `preferences/`, `entities/`, `events/`, `cases/`, `claims/`, `experiences/`, `trajectories/`, `architecture/adr/`, and every `*/about.md` — carries every rule as a hard failure. STRUCTURAL is every other namespace: a file there opts into validation by declaring `type:` in its frontmatter, and an untyped file is only counted.
+
+- Fatal, VALIDATE only (exit 1): L0 not double-quoted or over 256c, empty `id`, `type` outside the 9-type set, missing `type` or `L0` in a typed scope, `status` outside proposed/accepted/superseded under `architecture/adr/`.
+- Warning (printed, exit 0): trailing space, odd indent, `id` != memory name, `type: about` on an About file, non-canonical typed FM in STRUCTURAL. `--strict` promotes every warning to a failure.
+- FM opens only when `---` is the first line of the file; a `---` later in the body never opens it.
 
 ## FM vs Inferred
 

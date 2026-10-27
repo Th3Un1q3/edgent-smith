@@ -36,6 +36,6 @@ export const DEFAULT_GOAL_ENFORCEMENT: GoalEnforcementConfig = {
   enforceAll: false,
   agents: [],
   optOut: [],
-  readOnlyAllowlist: ['question', 'read', 'glob', 'grep', 'skill'],
+  readOnlyAllowlist: ['question', 'execute', 'read', 'glob', 'grep', 'skill'],
   maxSteeringRepeats: 3,
 }

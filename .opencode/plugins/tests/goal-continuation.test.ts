@@ -45,6 +45,24 @@ describe('goal-continuation (v2)', () => {
   })
 
   describe('goal tool', () => {
+    it('registers the goal tool in the Code Mode catalog without disarming the gate', async () => {
+      goalConfig.enforceAll = true
+      goalConfig.agents = ['build']
+
+      const h = makeHarness()
+
+      await register(h)
+      await h.arm('ses_1')
+
+      const tool = h.tools.get('goal') as unknown as { options?: { codemode?: boolean } }
+      const denied = await h.before(toolEvent('bash'))
+      const allowed = await h.before(toolEvent('goal'))
+
+      expect(tool.options?.codemode).toBe(true)
+      expect(Exit.isFailure(denied)).toBe(true)
+      expect(Exit.isSuccess(allowed)).toBe(true)
+    })
+
     it('writes {text, nudges: 0} and disarms the gate when a goal is set', async () => {
       const h = makeHarness()
 
@@ -501,18 +519,18 @@ describe('goal-continuation (v2)', () => {
 
     it('enforces a configured agent whose goal allow follows a star deny', async () => {
       goalConfig.enforceAll = false
-      goalConfig.agents = ['rug-workflow']
+      goalConfig.agents = ['rug-swe']
 
       const h = makeHarness()
 
-      h.agentList = [{ id: 'rug-workflow', permissions: [
+      h.agentList = [{ id: 'rug-swe', permissions: [
         { action: '*', resource: '*', effect: 'deny' },
         { action: 'goal', resource: '*', effect: 'allow' },
       ] }]
       await register(h)
       await h.arm('ses_1')
 
-      const exit = await h.before(toolEvent('bash', 'ses_1', 'rug-workflow'))
+      const exit = await h.before(toolEvent('bash', 'ses_1', 'rug-swe'))
 
       expect(Exit.isFailure(exit)).toBe(true)
     })
@@ -617,14 +635,14 @@ describe('goal-continuation (v2)', () => {
   describe('activation log', () => {
     it('logs the enforced agents at effect start', async () => {
       goalConfig.enforceAll = false
-      goalConfig.agents = ['rug', 'rug-workflow']
+      goalConfig.agents = ['rug', 'rug-swe']
 
       const h = makeHarness()
 
       h.agentList = []
       await register(h)
 
-      expect(h.logs.some(line => line.includes('enforced agents: rug, rug-workflow'))).toBe(true)
+      expect(h.logs.some(line => line.includes('enforced agents: rug, rug-swe'))).toBe(true)
     })
 
     it('logs enforcement disabled when nothing is enforced', async () => {

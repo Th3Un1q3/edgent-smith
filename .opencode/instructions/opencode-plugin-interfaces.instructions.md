@@ -27,12 +27,12 @@ Use these in order. When a lower source disagrees with a higher one, the higher 
 
    The unversioned <https://opencode.ai/docs/plugins/> documents v1. Do not cite it for v2.
 4. Repo examples that compile and pass tests.
-   - `.opencode/plugins/workflow.ts`: `id` 199, `effect` 200, `session.hook('context')` 215, `tool.transform` 248, `export default` 271. Smallest complete example.
-   - `.opencode/plugins/goal-continuation.ts`: `tool.transform` 273, `session.hook('prompt')` 303, `tool.hook('execute.before')` 320, `event.subscribe()` 395.
-   - `.opencode/plugins/quality-gate-enforcer.ts`: hook-only plugin, `effect` 43, hooks at 83 and 90.
-   - `.opencode/plugins/tests/workflow.test.ts:90-92`: how a test drives `plugin.effect` with `Effect.runPromise(Effect.scoped(...))`.
+   - `.opencode/plugins/workflow.ts`: `id: 'opencode.workflow'`, `effect: context =>`, `context.tool.transform((editor) =>`, `export default plugin`. Smallest complete example.
+   - `.opencode/plugins/goal-continuation.ts`: `context.tool.transform((editor) =>`, `context.session.hook('prompt'`, `context.tool.hook('execute.before'`, `context.event.subscribe().pipe(`.
+   - `.opencode/plugins/quality-gate-enforcer.ts`: hook-only plugin, `effect: context => Effect.gen`, `context.tool.hook('execute.before'`, `context.tool.hook('execute.after'`.
+   - `.opencode/plugins/tests/workflow.test.ts`: how a test drives `plugin.effect` with `Effect.scoped(plugin.effect(h.context))` and `Effect.runPromise`.
 
-All five root plugins import `Plugin` from `@opencode/plugin/effect/plugin`; three of them also import `Context` there. None imports from the documented `@opencode/plugin/effect` subpath, which exposes `Plugin` only as a namespace (`export * as Plugin`).
+Plugin entry points at the root of `.opencode/plugins/` import `Plugin`, and `Context` when they need it, from `@opencode/plugin/effect/plugin`; the subdirectories there hold plugin modules and tests, not entry points. None imports from the documented `@opencode/plugin/effect` subpath, which exposes `Plugin` only as a namespace (`export * as Plugin`).
 
 ```ts
 import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
@@ -60,7 +60,7 @@ export interface Plugin {
 }
 ```
 
-`define(plugin)` returns its argument unchanged (`dist/effect/plugin.js`). The repo skips it and default-exports an object literal (`instructions-loader.ts:58-60`). `Plugin.define` needs the namespace value import `import { Plugin } from '@opencode/plugin/effect'`; a type-only import gives the interface, which has no `.define`.
+`define(plugin)` returns its argument unchanged (`dist/effect/plugin.js`). The repo skips it and default-exports an object literal (`instructions-loader.ts`: `export default plugin`). `Plugin.define` needs the namespace value import `import { Plugin } from '@opencode/plugin/effect'`; a type-only import gives the interface, which has no `.define`.
 
 Every registration is scoped. Register inside `Effect.gen` and the runtime releases it when the plugin unloads; the promise variant returns a cleanup function instead. There is no `dispose` key.
 
@@ -93,7 +93,11 @@ const plugin: Plugin = {
 export default plugin
 ```
 
-`tool.transform` receives an editor with `list`, `get`, `add`, `update`, `remove`, and `namespace`. Tool `input` accepts Effect Schema, Standard Schema, or JSON Schema. `execute` returns `Effect<{ output?, content?, metadata? }, Tool.Error>`, never a string. Hook names are the keys of the domain's hook interface: `tool.hook` accepts `execute.before` and `execute.after`; `session.hook` accepts `prompt`, `context`, `compaction`, `generate`, `title`, `model.request`, `http.request`, `http.response`, `retry`, and three `experimental.ws.*` names; `permission.hook` accepts `evaluate`. Read `dist/effect/<domain>.d.ts` for payloads instead of trusting a list in prose.
+`tool.transform` receives an editor with `list`, `get`, `add`, `update`, `remove`, and `namespace`. Tool `input` accepts Effect Schema, Standard Schema, or JSON Schema. `execute` returns `Effect<{ output?, content?, metadata? }, Tool.Error>`, never a string. Hook names are the keys of the domain's hook interface: `tool.hook` accepts `execute.before` and `execute.after`; `session.hook` accepts `prompt`, `context`, `compaction`, `generate`, `title`, `model.request`, `http.request`, `http.response`, `retry`, and the `experimental.ws.*` names; `permission.hook` accepts `evaluate`. Read `dist/effect/<domain>.d.ts` for payloads instead of trusting a list in prose.
+
+Tool `options` sets exposure. `Tool.Info.options` takes `Options`: `codemode` omitted or `true` puts the tool in the Code Mode catalog, so a model calls it as `tools.<name>({ ... })` from an `execute` block, and `codemode: false` keeps it out of that catalog. `pinned` sits on the `codemode?: true` branch and is typed `pinned?: never` when `codemode` is `false`, so a tool that opts out of Code Mode cannot be pinned. The installed type is `/workspace/.opencode/node_modules/@opencode/schema/dist/tool.d.ts`.
+
+`.opencode/plugins/goal-continuation.ts` registers its goal tool with `options: { codemode: true }`, so `tools.goal({ action, text })` runs from an `execute` block. The goal-first gate is unchanged: for `rug` the gate rejects `execute` until a goal exists, so the first goal in a session still comes from the direct goal tool.
 
 Events are a scoped stream, not a plugin key: `yield* context.event.subscribe().pipe(Stream.filter(...), Stream.runForEach(...), Effect.forkScoped)`.
 
@@ -113,10 +117,10 @@ Run `just` targets only. They pass the Bun and istanbul flags this runtime needs
 
 | Gate | Command | Wiring |
 |---|---|---|
-| Typecheck | `just .opencode/typecheck` | CI (`scripts/ci.sh:76`) |
+| Typecheck | `just .opencode/typecheck` | CI (`scripts/ci.sh`: `run_check opencode-typecheck`) |
 | One test file | `just .opencode/test -- plugins/tests/<name>.test.ts` | CI |
 | Coverage | `just .opencode/test --coverage` | CI, 90% branch/function/line/statement |
-| Lint | `just .opencode/lint` | CI (`scripts/ci.sh:75`) |
+| Lint | `just .opencode/lint` | CI (`scripts/ci.sh`: `run_check opencode-lint`) |
 
 A unit test builds a fake `Context`, calls `Effect.runPromise(Effect.scoped(plugin.effect(context)))`, then asserts the registrations. `.opencode/plugins/tests/workflow.test.ts` is the model.
 

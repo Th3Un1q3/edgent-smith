@@ -3,9 +3,9 @@ name: software-installation
 description: Install packages, software, and libraries with the full set of nuances that break naive installs in this repo's devcontainer: version pinning (incl. rc tags), idempotent version-checked install guards, npm's allow-scripts gate and native-module/ABI pitfalls, devcontainer lifecycle (Features vs postCreateCommand) and rebuild persistence, named-volume ownership, PATH/containerEnv, config-as-code, verification (introspection, smoke tests, native-load checks), and secret hygiene. Trigger on: "install a package/tool/library", "how do I install X", "npm install", "add a dependency", "setup-dev.sh", "install a CLI", "what could go wrong installing X". Not for: opencode config mechanics (customize-opencode), devcontainer.json spec authoring (devcontainers-best-practices — cross-reference it), or application code.
 license: MIT
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   author: SWE
-  delta: "1.0.0: initial authoring — 3 workflows + 4 references covering verified devcontainer install nuances (pinned rc-tag installs, version-checked guards, allow-scripts whitelists, lifecycle placement, volume ownership, config-as-code, smoke classification, secret and telemetry hygiene)."
+  delta: "1.0.1: dropped the inventory counts from the initial-authoring note; workflows and references cover verified devcontainer install nuances (pinned rc-tag installs, version-checked guards, allow-scripts whitelists, lifecycle placement, volume ownership, config-as-code, smoke classification, secret and telemetry hygiene)."
 ---
 
 # Software Installation

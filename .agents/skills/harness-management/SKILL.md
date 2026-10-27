@@ -12,9 +12,9 @@ description: >-
 license: MIT
 compatibility: Requires OpenCode + DSH + GitHub Copilot
 metadata:
-  version: "1.4.4"
+  version: "1.4.5"
   delta: |
-    1.4.4 — live-verification guidance consolidated into the canonical instruction set (self-injecting); the shell verification ledger stays distinct.
+    1.4.5 — a skill edit ends with the semantic pass the gates cannot run: a contradiction sweep pairs the statements that govern one behaviour and restates one when a pair cannot both hold, and a dead-name check resolves every tool, command, path, and config key in the tree while the agent cards stay read-only input. 1.4.4 — live-verification guidance consolidated into the canonical instruction set (self-injecting); the shell verification ledger stays distinct.
     1.4.3 — passive-hooks.md: repointed the live hook entry-point list to the four current live plugins (quality-gate-enforcer, instructions-loader, goal-continuation, workflow); dropped the quarantined todo-enforcer, skills-loader, and session-tracker names.
     1.4.2 — replaced stale "ask for an opencode restart" claims with OpenCode v2 hot-reload facts across SKILL.md, references/placement-rules.md, and the workflow files.
     1.4.1 — repointed manage-skill.md link validation from the removed per-skill building-modular-skills/scripts path to the shared agent_utils/scripts tooling and `just agent_utils::validate-skill`.
@@ -89,7 +89,7 @@ Invoke this skill when:
 | Enforce a recurring rule on an event instead of agent recall | Passive hook | `.opencode/plugins/*.ts`, `.opencode/plugins/helpers/**` | OpenCode-specific | [workflows/passive-hooks.md](./workflows/passive-hooks.md) |
 | Keep one skill source and generate harness variants without drift | Per-harness compile | `.agents/skills/<name>/` (source) to `.opencode/**`, `.dsh/**`, `.github/**` (variants) | Universal; variants for OpenCode, DSH, and GitHub Copilot | [workflows/per-harness-compile.md](./workflows/per-harness-compile.md) |
 
-Enforcement: OpenCode plugin + CI runs the gates on edits and sessions. Every other home has no enforcement layer — name the verifier: a human who runs the command, or a CI job on the repo.
+Enforcement: OpenCode plugin + CI runs the gates on edits and sessions. Every other home has no enforcement layer — name the verifier: a human who runs the command, or a CI job on the repo. The gates are mechanical — budgets, links, fences — and none of them reads meaning, so a skill edit also ends with a contradiction sweep and a dead-name check. Contradiction sweep: pair the normative statements that govern one behaviour and restate one when a pair cannot both hold. Dead-name check: every tool, command, path, and config key the edit names resolves in the tree. Procedure and scope: `.opencode/instructions/skill-editing.instructions.md`, which activates on `.agents/skills/**` and `.opencode/agents/*.md` edits; there the agent cards are read-only input, and changing an agent definition stays a separate change type through [workflows/agent-definition.md](./workflows/agent-definition.md).
 
 When a skill needs a rule at execution time, place the rule in the skill (skills self-contain and never depend on reading an instruction). Authoring detail: `building-modular-skills`, "Reference direction" in references/guidance-process.md Rule 25. Starting from a diagnosis instead of a goal (e.g. a session audit finding)? Map the finding to a change type with [references/improvement-patterns.md](./references/improvement-patterns.md).
 

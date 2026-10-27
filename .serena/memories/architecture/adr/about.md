@@ -1,7 +1,7 @@
 ---
 type: architecture
 L0: "ADR index — architecture decision records"
-L0_table: ["architecture/adr/ADR-018-run-skill-evaluations-via-opencode: Run skill evaluations via an OpenCode command", "architecture/adr/ADR-019-skill-eval-conductor-pipeline: Skill evaluations run as a conductor pipeline"]
+L0_table: ["architecture/adr/ADR-018-run-skill-evaluations-via-opencode: Run skill evaluations via an OpenCode command", "architecture/adr/ADR-019-skill-eval-conductor-pipeline: Skill evaluations run as a conductor pipeline", "architecture/adr/ADR-020-serving-opencode-web-locally-with-tunneling: Serving the opencode web UI locally with tunneling"]
 ---
 
 # ADR Index

@@ -8,50 +8,34 @@ scope: <system area this decision covers>
 
 # ADR-NNN: <title>
 
+## Context
+
+Optional problem statement: the problem, constraints, and facts that make a decision necessary. May precede `## Criteria`; it states the problem, not the answer.
+
+## Criteria
+
+3 to 5 criteria chosen for THIS decision's dominant risk — not a fixed universal set. Per criterion, one line: the name, what it measures on the -2..+2 scale, and why it belongs to this decision's kind (security of exposure for a decision that widens the attack surface; familiarity/operational load for a decision an operator must run repeatedly). Close with why this set fits and which criteria a reader might expect but that were rejected as non-discriminating here.
+
+## Options considered
+
+At least two options, each with pros AND cons. Options that fail a non-negotiable requirement are still recorded here.
+
+## Non-negotiable requirements
+
+Hard, testable filters, distinct from criteria: each is stated so a reader can mark an option pass or fail, and derives from the actual constraint set (user constraints, security floor, existing repo invariants) — never invented to fit a favourite option. An option failing any requirement is ineligible: record it, name the requirement it violates, mark it filtered out, and exclude it from the totals. If one option is left eligible, say so plainly.
+
+## Scoring
+
+Every eligible option scored on every criterion, -2..+2, with explicit totals; scores stay unweighted unless the ADR states and justifies weights. Filtered-out options are excluded.
+
+| Criterion | Opt A | Opt B | Opt C |
+| <criterion> | <score> | <score> | <score> |
+| Total | <sum> | <sum> | <sum> |
+
 ## Decision
 
-The Decision is a clear, self-contained statement of WHAT was decided — one or two declarative sentences that read standalone.
+The output of criteria + options + non-negotiables + scoring: one or two declarative sentences stating WHAT was decided — "<what is decided> <chosen approach>" plus the essential implementation detail, in declarative voice, readable standalone. Do not recap scores, list rejected options, hedge ("probably", "might"), or use relative language ("better", "close").
 
-How to form a good decision message:
-- Form: "<what is decided> <chosen approach>" plus the essential implementation detail — e.g., "One-time envelope implemented as an XML tag and parsed with a regex."
-- Test: a reader who reads ONLY this section must understand the outcome. If you need the scoring or options to make sense of it, it is not self-contained.
-- Do: state the concrete choice (technology, pattern, structure); use declarative voice ("is", "uses", "implemented as"); name the key mechanics.
-- Don't: recap scores ("wins with +7"), list rejected options, hedge ("probably", "might"), or use relative language ("better", "close").
+## Consequences
 
-The analysis (options, pros/cons, scoring, and any constraint overrides) lives in Considerations below. Best total score wins; note any constraints that override scores in Considerations.
-
-## Considerations
-
-### Context
-
-Why this decision is needed: the problem, constraints, and relevant facts.
-
-### Options considered
-
-#### Option A: <name>
-Pros:
-- ...
-Cons:
-- ...
-
-#### Option B: <name>
-...
-
-### Scoring
-
-Criteria (each scored -2 to +2):
-- Maintainability — ease of understanding and evolving over time
-- Flexibility — adaptability to future requirements
-- Implementation ease — straightforwardness with the current stack
-- Initial implementation cost — effort to build (higher score = cheaper)
-
-|Criteria | Opt A | Opt B | Opt C |
-| Maintiainability| -1 | -2 | 0 |
-| Flexibility | 2 | 0 | -1 |
-| Implementation ease | 0 | 0 | 0 |
-| Initial implementation cost | -2 | 1 | 0 |
-| Total   | ? |  ? | ? |
-
-### Consequences
-
-What changes as a result of this decision.
+What changes as a result of this decision, and any constraint override recorded here.

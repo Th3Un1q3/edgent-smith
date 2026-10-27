@@ -25,7 +25,7 @@ jobs:
           runCmd: |
             just test
 ```
-Pin once and count: `grep -R "devcontainers/ci@" --include="*.yml" .github/` must return exactly 5 hits (2 in `ci.yml`, 3 in `experiment.yml`). Current pin is `devcontainers/ci@v0.3.1900000450`. Update all 5 hits with one `sed` when bumping.
+Pin once and count: `grep -R "devcontainers/ci@" --include="*.yml" .github/` must return exactly 5 hits. Current pin is `devcontainers/ci@v0.3.1900000450`. Update every hit with one `sed` when bumping.
 
 ## Required CI hardening (P0)
 
@@ -49,14 +49,14 @@ Apply to every `.github/workflows/*.yml` that uses `devcontainers/ci`:
      if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
    ```
    Downstream `ci` must allow skip: `if: always() && (needs.prebuild-devcontainer.result == 'success' || needs.prebuild-devcontainer.result == 'skipped')`.
-4. **Parity:** remote runs `just ci` inside the DevContainer (`runCmd` invokes `just ci` and preserves its exit code). Keep `scripts/ci.sh` (13 gates, sequential) and `.github/workflows/ci.yml` in sync.
+4. **Parity:** remote runs `just ci` inside the DevContainer (`runCmd` invokes `just ci` and preserves its exit code). Keep `scripts/ci.sh` and `.github/workflows/ci.yml` in sync.
 5. **Gate it:** `scripts/verify_thresholds.sh` check #8 asserts `grep -R "devcontainers/ci@"` count = 5; it runs as Gate #0 inside `just verify-agents`.
 
 ## Stryker incremental cache
 
 All quality gates run inside the DevContainer (`runCmd` invokes `just ci`). The host runs only checkout, `.env` bootstrap, and the cache plumbing around the container entry point: restore, permission normalization, and save for Stryker's incremental file `.opencode/reports/stryker-incremental.json`.
 
-The cache key has two hash segments, and `restore-keys` repeats only the first:
+The cache key is composed of hash segments, and `restore-keys` repeats only the first:
 
 ```yaml
 key: ${{ runner.os }}-stryker-v2-${{ hashFiles('.opencode/bun.lock', '.opencode/package.json', '.devcontainer/devcontainer.json', '.devcontainer/docker-compose.yml', '.devcontainer/setup-dev.sh') }}-${{ hashFiles('.opencode/plugins/**/*.ts', '.opencode/plugins/tests/**/*.test.ts', '.opencode/stryker.config.mjs', '.opencode/vitest.config.ts', '.opencode/tsconfig.json') }}

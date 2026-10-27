@@ -104,7 +104,7 @@ A comment claims a return path the function does not have.
 
 **Why it is a problem.** Nothing validates the number, the next edit invalidates it, and a confident false claim is worse than no comment.
 
-**What to do instead.** Keep the invariant (the condition that must always stay true) and one clause of justification. Move measurements to one authoritative source. Correct or delete a false claim in the same change.
+**What to do instead.** Keep the invariant (the condition that must always stay true) and one clause of justification. Move measurements to one authoritative source. Delete a volatile count rather than correcting it; keep a number only when a checker, script, test, or rule reads it, and name that consumer in the comment. When a reader still needs the fact, point at its source of truth: the directory, recipe, catalog, or script. Correct or delete a false claim in the same change.
 
 ### 4. Edit and provenance narration
 

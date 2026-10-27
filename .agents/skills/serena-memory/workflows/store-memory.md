@@ -58,10 +58,10 @@ No separate reference read is required for these two fields.
 5. **Run blocking gate** — verify all 9 checks in [references/gating.md](../references/gating.md) with direct gateway calls. Done when: every check passes or you skip the write and report DEDUP_SKIP.
 6. **Write and verify** — build FM with `normalizeFM` (defined in the example below), include quoted L0 ≤256c per [references/disclosure.md](../references/disclosure.md), strip leading space, call write_memory. Guard every return with the snapshot + empty-return fallback in [references/gateway-protocol.md](../references/gateway-protocol.md). Done when: write_memory returns.
 7. **Update parent about** — after a successful write, if a parent `*/about` exists, edit_memory its L0_table to add this child's L0 (or flag for review if edit unavailable). Done when: parent about updated or flagged.
-8. **Read-back verification (HARD GATE)** — read_memory after write; compare echo; on empty return, `bash cat .serena/memories/<id>.md` fallback once. Done when: read-back content equals written content and L0 present.
+8. **Read-back verification (HARD GATE)** — read_memory after write; compare echo; on empty return, `bash cat .serena/memories/<id>.md` fallback once where direct reads are permitted. Done when: read-back content equals written content and L0 present.
 9. **Optional local verification** — scripts are optional verification; gate passes on 9 checks. The 9-check gate above is sufficient to declare complete. If available, run `python3 agent_utils/scripts/validate_memory_frontmatter.py --path .serena/memories`, `python3 agent_utils/scripts/validate_md_links.py .agents/skills/serena-memory .agents/skills/context-gathering .agents/skills/building-modular-skills`, and `python3 agent_utils/scripts/audit_fences.py .agents/skills/serena-memory .agents/skills/context-gathering .agents/skills/building-modular-skills` (or `just agent_utils::validate-memories`) as a bonus check; a missing script is not a failure.
 
-Gate: if any gate check fails, stop — do not call write_memory. If any script fails, stop — do not declare complete.
+Gate: if any gate check fails, stop — do not call write_memory. If any script that runs fails, stop — do not declare complete; a missing script is not a failure.
 
 ## Examples
 

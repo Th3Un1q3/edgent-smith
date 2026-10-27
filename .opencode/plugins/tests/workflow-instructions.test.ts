@@ -16,7 +16,7 @@ import type { SessionID } from '@opencode/schema/session-id'
 // `register()` to steer the instructions path per scenario.
 const workflowConfig = vi.hoisted(() => ({
   instructions: '.agents/skills/task-delegation/SKILL.md',
-  agents: ['rug-workflow'],
+  agents: ['rug-swe'],
   missing: false,
 }))
 
@@ -126,7 +126,7 @@ const register = async (h: Harness): Promise<void> => {
 describe('workflow instructions', () => {
   beforeEach(() => {
     workflowConfig.instructions = CONFIGURED_INSTRUCTIONS
-    workflowConfig.agents = ['rug-workflow']
+    workflowConfig.agents = ['rug-swe']
     workflowConfig.missing = false
     entryClient.writeEntry.mockReset().mockResolvedValue({ status: 'written' })
     entryClient.removeEntry.mockReset().mockResolvedValue({ status: 'absent' })
@@ -296,7 +296,7 @@ describe('workflow instructions', () => {
     it('writes the entry for an agent named on the session.agent.selected event', async () => {
       const h = await setup()
 
-      await emit(h, { type: 'session.agent.selected', data: { sessionID: 'ses_selected' as unknown as SessionID, agent: 'rug-workflow' } })
+      await emit(h, { type: 'session.agent.selected', data: { sessionID: 'ses_selected' as unknown as SessionID, agent: 'rug-swe' } })
 
       expect(entryClient.writeEntry).toHaveBeenCalledWith('ses_selected', 'workflow.instructions', entryValue)
     })
@@ -309,8 +309,8 @@ describe('workflow instructions', () => {
       it('calls the writer and logs that nothing was written', async () => {
         const h = await setup()
 
-        await emit(h, { type: 'session.created', data: { sessionID: 'ses_repeat' as unknown as SessionID, agent: 'rug-workflow' } })
-        await emit(h, { type: 'session.created', data: { sessionID: 'ses_repeat' as unknown as SessionID, agent: 'rug-workflow' } })
+        await emit(h, { type: 'session.created', data: { sessionID: 'ses_repeat' as unknown as SessionID, agent: 'rug-swe' } })
+        await emit(h, { type: 'session.created', data: { sessionID: 'ses_repeat' as unknown as SessionID, agent: 'rug-swe' } })
 
         expect(entryClient.writeEntry).toHaveBeenCalledTimes(2)
         expect(entryClient.writeEntry).toHaveBeenLastCalledWith('ses_repeat', 'workflow.instructions', entryValue)
@@ -350,7 +350,7 @@ describe('workflow instructions', () => {
 
       const h = await setup()
 
-      await emit(h, { type: 'session.created', data: { sessionID: 'ses_write_failed' as unknown as SessionID, agent: 'rug-workflow' } })
+      await emit(h, { type: 'session.created', data: { sessionID: 'ses_write_failed' as unknown as SessionID, agent: 'rug-swe' } })
 
       expect(h.logs).toContainEqual(['workflow.instructions', expect.objectContaining({ sessionID: 'ses_write_failed', status: 'failed' })])
       expect(h.logs).toContainEqual(['workflow.instructions.error', expect.objectContaining({ message: expect.stringContaining('write failed') })])
@@ -393,7 +393,7 @@ describe('workflow instructions', () => {
         return { status: 'written' }
       })
 
-      const h = makeHarness(directory, [{ type: 'session.created', data: { sessionID: 'ses_rendered' as unknown as SessionID, agent: 'rug-workflow' } }])
+      const h = makeHarness(directory, [{ type: 'session.created', data: { sessionID: 'ses_rendered' as unknown as SessionID, agent: 'rug-swe' } }])
       const registered = plugin.effect(h.context)
       const awaitWrite = Effect.callback<void>((resume) => {
         if (written === undefined) {

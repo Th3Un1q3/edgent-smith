@@ -1,5 +1,7 @@
 ---
 id: experiences/restart-safe-resume
+type: experiences
+L0: "Plugin restart aborts only its own workflow, resumes additively, retires last, then re-enters standalone; verified by gateway readback."
 title: Restart Safe Resume
 status: verified
 date: 2026-10-21

@@ -26,7 +26,7 @@ flowchart TB
     subgraph platform["Platform & Extensibility"]
         DevContainer["Dev Container\nPython 3.13 + Ollama"]
         PluginSDK["Plugin SDK\n.opencode/plugins/helpers (TS)"]
-        Skills["Skill Marketplace\n.agents/skills (40 skills)"]
+        Skills["Skill Marketplace\n.agents/skills"]
     end
     Agent["Agent (you)"] -- executes via --> OpenCode
     Agent -- executes via --> DSH
@@ -44,7 +44,7 @@ flowchart TB
 
 ## OVERVIEW
 
-edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an issue-driven experiment loop and DevContainer-first development. It spans 10 distinct agent/workflow systems across 4 harness planes and 3 runtime planes — see Taxonomy and System Boundaries below for ownership. The architecture separates harness-free execution (System A) from harness-native orchestration (System B), with shared platform services (MCP, skills, plugins) mediating both.
+edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an issue-driven experiment loop and DevContainer-first development. It spans the agent and workflow systems listed under AGENT & WORKFLOW TAXONOMY below, across harness, runtime and platform planes; consult SYSTEM BOUNDARIES & OWNERSHIP for ownership. The architecture separates harness-free execution (System A) from harness-native orchestration (System B), with shared platform services (MCP, skills, plugins) mediating both.
 
 ## PROJECT STRUCTURE
 
@@ -54,9 +54,9 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 ├── .dsh/               # DeepSeek harness: agent-presets, child-runtime/cordis.yml, cordis.patch.yml, settings.yaml
 ├── .github/            # CI (DevContainer), Custom Agents (.github/agents/*.agent.md), Prompts, Instructions
 ├── .opencode/          # OpenCode RUG framework: agents/rug.md, plugins/helpers (TS SDK), instructions, skills-loader
-├── .agents/skills/     # Skill marketplace — 40 skills (pydantic-ai, testing, docker, etc.)
+├── .agents/skills/     # Skill marketplace (pydantic-ai, testing, docker, etc.)
 ├── .serena/memories/   # Serena persistent typed memories — see CONVENTIONS (Serena Gateway)
-├── mcp/catalog.yaml    # MCP Gateway catalog — 9 servers (tavily, serena, github, fetch, etc.)
+├── mcp/catalog.yaml    # MCP Gateway catalog (tavily, serena, github, fetch, etc.)
 ├── agents/             # System A: Custom Pydantic Orchestrator — edge.py (harness-free)
 ├── config.py           # System A config — env + model settings (root)
 ├── agent_utils/        # Utility scripts for agent tasks (notifications)
@@ -87,10 +87,11 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 | Conductor Workflows | `workflows/*.yaml`, `scripts/conductor/` | Conductor runs YAML workflows; Python workers are execution primitives |
 | Skill-eval workflow | `workflows/skill_eval_workflow.yaml` | Runs skill evaluations via `just skill-eval` (inputs: skill, cases, max_turns, timeout) |
 | CLI Service Agents | `cli/main.py`, `cli/commands/`, `cli/services/` | Click routing → logic → stateless services |
-| Evaluation / Providers | `evals/runner.py` | Benchmarks, baselines, smoke tests |
-| Serena / MCP Gateway | `mcp/catalog.yaml`, `.serena/memories/` | 9 MCP servers; gateway-mediated memories |
+| Evaluation / Providers | `evals/runner.py` | Edge-agent/model benchmarks, datasets, baselines (not skill evals) |
+| Evaluation design | `.agents/skills/skill-creator/references/eval-design.md` | Skill evals: scenario prompts, spectrum, assertions, fixtures |
+| Serena / MCP Gateway | `mcp/catalog.yaml`, `.serena/memories/` | MCP servers in the catalog; gateway-mediated memories |
 | Plugin SDK (TS Harness) | `.opencode/plugins/helpers/`, `*.ts` | Harness internals; not runtime code |
-| Skill Marketplace | `.agents/skills/` | 40 skills; modular capabilities |
+| Skill Marketplace | `.agents/skills/` | Modular capabilities; contents in the directory |
 
 ## CODE MAP (Core)
 
@@ -104,7 +105,7 @@ The system is architected around high-centrality components in the following mod
 | CLI Services | Service Layer | `cli/services/` | Shared stateless services for commands |
 | Evaluator | Test Runner | `evals/runner.py` | Orchestrates model benchmarks and baselines |
 | Conductor Orchestrator | Workflow Engine | `workflows/`, `scripts/conductor/` | Runs YAML workflows; Python workers are execution primitives |
-| MCP Gateway | Platform | `mcp/catalog.yaml` | 9-server catalog; Docker MCP Gateway config |
+| MCP Gateway | Platform | `mcp/catalog.yaml` | Server catalog; Docker MCP Gateway config |
 
 ## CONVENTIONS
 
@@ -112,12 +113,14 @@ The system is architected around high-centrality components in the following mod
 - **Click Architecture**: Strict separation between command routing (`cli/main.py`), logic (`commands/*.py`), and services (`services/*.py`).
 - **Task Runner**: See `.opencode/instructions/justfiles.instructions.md`.
 - **Test Verification**: `.opencode/instructions/live-verification.instructions.md` defines unit versus live tests and their reporting rules.
-- **CI Fast Path**: `just ci` runs the 13-gate sequence; for docs-only changes use `just ci-fast` (~20s). Pins and escapes: `.opencode/instructions/threshold-policy.instructions.md`; CI job internals: `.opencode/instructions/github-actions-tech-guidance.instructions.md`.
+- **CI Fast Path**: `just ci` runs the gate sequence in `scripts/ci.sh`; for docs-only changes use `just ci-fast` (~20s). Pins and escapes: `.opencode/instructions/threshold-policy.instructions.md`; CI job internals: `.opencode/instructions/github-actions-tech-guidance.instructions.md`.
 - **CI Workflow**: `.github/workflows/ci.yml` runs `prebuild-devcontainer` then `ci` inside the DevContainer. See `.opencode/instructions/github-actions-tech-guidance.instructions.md`.
 - **Pre-check Gate**: See `.opencode/instructions/justfiles.instructions.md`.
+- **Evaluation Families**: Skill evals measure a skill's guidance (`just skill-eval`, cases in `.agents/skills/<skill>/evals/`); edge-agent evals measure models on datasets (`just evals::*`). Routing: `evals/AGENTS.md`.
 - **Environment Management**: Heavy reliance on DevContainers for consistent execution across local and CI environments.
 - **Serena Gateway:** Memory access goes only through the gateway; never `read`, `ls`, or `grep` `.serena/memories/*` from the filesystem. Call protocol: `.agents/skills/serena-memory/references/gateway-protocol.md`.
 - **Permission Denials**: A denial is final for the denied action; never reproduce a denied effect through another mechanism, and never perform a gated write (`git add`/`commit`/`push` or any other write) without explicit user authorization in the current session. Canonical forms and detailed procedure: `.opencode/instructions/no-permission-workarounds.instructions.md`.
+- **Skill Edits**: Skill and agent-definition edits pass a contradiction sweep — see `.opencode/instructions/skill-editing.instructions.md`.
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
@@ -137,23 +140,23 @@ The system is architected around high-centrality components in the following mod
 
 ## AGENT & WORKFLOW TAXONOMY
 
-10 distinct systems across harnesses, runtimes, and platform layers.
+The systems below span harnesses, runtimes, and platform layers.
 
-### Agents (6)
+### Agents
 
 - **System A — Custom Pydantic Orchestrator (harness-free)**: `agents/edge.py`, `config.py` (root); pyproject.toml `pydantic-ai`; no harness config; direct Python execution.
 - **System B — DeepSeek Harness / Cordis RUG (harness-native)**: `.dsh/*`, `cordis.patch.yml`, `child-runtime/cordis.yml`; RUG profiles via DSH.
-- **OpenCode RUG Framework**: `.opencode/agents/rug.md`, `rug-swe.md`, `rug-team-coach.md`, `rug-workflow.md`; plugins + instructions; harness-native.
+- **OpenCode RUG Framework**: `.opencode/agents/rug.md`, `rug-swe.md`, `rug-team-coach.md`; plugins + instructions; harness-native.
 - **GitHub Copilot Custom Agents**: `.github/agents/*.agent.md` (`brainstorm`, `edge-architect`, `implement`); prompt templates in `.github/prompts/`.
 - **CLI Service Agents**: `cli/main.py`, `cli/commands/`, `cli/services/`; Click-based; stateless service layer.
 - **Evaluation / Provider Agents**: `evals/runner.py`; benchmark and baseline comparison runners.
 
-### Workflows & Platforms (4)
+### Workflows & Platforms
 
 - **Conductor Multi-Agent Workflows**: `workflows/*.yaml` run by Conductor, Python workers in `scripts/conductor/`; skill evals use `workflows/skill_eval_workflow.yaml`; human-in-the-loop gates.
-- **Serena / MCP Gateway Ecosystem**: `mcp/catalog.yaml` (9 servers), `.serena/memories/`; symbol search, gateway-mediated memory.
+- **Serena / MCP Gateway Ecosystem**: `mcp/catalog.yaml`, `.serena/memories/`; symbol search, gateway-mediated memory.
 - **OpenCode Plugin SDK**: `.opencode/plugins/helpers/`, `*.ts`; TypeScript harness internals; quality-gate enforcers, loaders.
-- **Skill Marketplace**: `.agents/skills/` (40 skills); modular capabilities; see SYSTEM BOUNDARIES & OWNERSHIP below.
+- **Skill Marketplace**: `.agents/skills/`; modular capabilities; see SYSTEM BOUNDARIES & OWNERSHIP below.
 
 ## SYSTEM BOUNDARIES & OWNERSHIP
 

@@ -31,7 +31,7 @@ const GOAL_PREFIX = 'goal/'
 /**
 Orchestrators allowed to call `goal` regardless of enforcement config.
 */
-const ALLOWED_ORCHESTRATORS = new Set(['rug', 'rug-workflow', 'rug-team-coach'])
+const ALLOWED_ORCHESTRATORS = new Set(['rug', 'rug-team-coach'])
 
 type GoalRecord = {
   text: string
@@ -275,7 +275,7 @@ const plugin: Plugin = {
         name: GOAL_TOOL,
         description: 'Declare or clear this session\'s continuation goal. Call before other tools when goal-first enforcement is active.',
         input: goalInput,
-        options: { codemode: false },
+        options: { codemode: true },
         execute: (input, toolContext) => Effect.gen(function* () {
           const arguments_ = input as { action?: unknown, text?: unknown }
           const agent = toolContext.agent as unknown as string
@@ -330,7 +330,7 @@ const plugin: Plugin = {
         entry = { armed: true, goalSet: false, steeringSent: 0 }
         yield* writeGate(sessionID, entry)
       }
-      if (!entry.armed || (event.tool === GOAL_TOOL) || isReadOnly(event.tool)) return
+      if ([!entry.armed, isReadOnly(event.tool), event.tool === GOAL_TOOL].some(Boolean)) return
 
       const state = entry
       if (state.steeringSent < maxSteeringRepeats) {
@@ -355,7 +355,7 @@ const plugin: Plugin = {
     // `steeringSent` across the reload.
     yield* Effect.gen(function* () {
       let after: string | undefined
-      for (;;) {
+      for (; ;) {
         const page = yield* context.storage.scan(
           after === undefined ? { prefix: GATE_PREFIX } : { prefix: GATE_PREFIX, after },
         )
@@ -372,7 +372,7 @@ const plugin: Plugin = {
     // not re-emitted for an already-idle session.
     yield* Effect.gen(function* () {
       let after: string | undefined
-      for (;;) {
+      for (; ;) {
         const page = yield* context.storage.scan(
           after === undefined ? { prefix: GOAL_PREFIX } : { prefix: GOAL_PREFIX, after },
         )

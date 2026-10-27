@@ -18,8 +18,7 @@ A case passes only when ALL of its assertions have `passed: true` with non-null 
 
 ## Aggregate Success
 
-- At least 80% of cases (ceil of 0.8 * total cases) pass.
-- With 13 cases, that means at least 11 cases pass.
+- Aggregate: at least ceil(0.8 * total cases) cases pass, where `total cases` is the count in the run's `evals.json`.
 
 ## Hard Failures (zero tolerance)
 
@@ -53,3 +52,4 @@ Report per-case pass/fail with evidence, aggregate pass rate, hard-failure list,
 
 - Call context-gathering via Skill tool on context-gathering/SKILL.md when eval evidence requires external research.
 - `building-modular-skills` — completion gate and skill shaping.
+- `skill-creator/references/eval-design.md` — generic scenario, assertion, and fixture-design guidance.

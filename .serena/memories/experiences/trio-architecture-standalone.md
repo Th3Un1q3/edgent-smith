@@ -1,5 +1,7 @@
 ---
 id: experiences/trio-architecture-standalone
+type: experiences
+L0: "Three-level taxonomy collapses to the trio prefix for permission scope; retire-last stands alone behind an 883-green gate, then standalone-after."
 title: Trio Architecture Standalone
 status: verified
 date: 2026-10-21

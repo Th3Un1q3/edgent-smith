@@ -26,7 +26,7 @@ page.join("\n");
 
 - Call `tools.gateway["list_memories"]` directly with a topic filter when known; use `list_memories({})` only when no topic is known. No sandbox setup.
 - Load [references/frontmatter.md](../references/frontmatter.md) § Search Method for Q1/Q2/Q3 and budgets; [references/disclosure.md](../references/disclosure.md) for budgets; [references/typing.md](../references/typing.md) for scope filters.
-- Guard every gateway return: cap to 2 KB (`snapshot`) and treat an empty/stderr return as an infra flake — fall back once to `bash cat .serena/memories/<id>.md`, zero gateway retries.
+- Guard every gateway return: cap to 2 KB (`snapshot`) and treat an empty/stderr return as an infra flake — fall back once to `bash cat .serena/memories/<id>.md` where direct reads are permitted, zero gateway retries.
 - Return ritual is conditional: `read_memory` is required before answering with content; existence/count/name-scan queries may answer from names alone.
 
 ## Tools
@@ -57,7 +57,7 @@ hyphenSafe("ci-failures") // Implements: first segment + client filter
 
 > ⚠️ **WARNING: NEVER pass a hyphenated topic to `list_memories` (hyphen splits on `-` and returns 0). Use the first segment (e.g. `serena`) plus client filter, or use underscore ids. See [frontmatter.md](../references/frontmatter.md) § Hyphen prefix bug.**
 
-Default to a scoped call: `list_memories({topic:"<scope>"})`. Use unfiltered `list_memories({})` only when no topic is known, then filter client-side. Shell filtering (bash/grep over names) is a fallback, not the primary path. Treat an empty return as an infra flake per [gateway-protocol.md](../references/gateway-protocol.md) — one-shot `bash cat .serena/memories/<id>.md` fallback, 0 retries. Target <=3 gateway calls typical. Budget target: recall+store <=5 gateway calls typical (4 when single candidate).
+Default to a scoped call: `list_memories({topic:"<scope>"})`. Use unfiltered `list_memories({})` only when no topic is known, then filter client-side. Shell filtering (bash/grep over names) is a fallback, not the primary path. Treat an empty return as an infra flake per [gateway-protocol.md](../references/gateway-protocol.md) — one-shot `bash cat .serena/memories/<id>.md` fallback where direct reads are permitted, 0 retries. Target <=3 gateway calls typical. Budget target: recall+store <=5 gateway calls typical (4 when single candidate).
 
 - 1 call `list_memories({topic:"<scope>"})` → names (L0 quote-only, 256c); slice to 32. If no topic is known, use `list_memories({})` and filter client-side.
 - Read at most 2 bodies via `read_memory` (top-2); a 3rd read only on miss.

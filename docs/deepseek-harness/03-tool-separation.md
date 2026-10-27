@@ -38,7 +38,7 @@ Never directly: `tool-bash`, `tool-fs`, `tool-fs-search`, `tool-str-replace-edit
 | `tool-str-replace-editor` (`@deepseek-ai/dsh-tool-str-replace-editor`) | Precise file edits |
 | `tool-todo` (`@deepseek-ai/dsh-tool-todo`) | Worker-local todo tracking |
 | `skill` (`@deepseek-ai/dsh-skill-filesystem`) | Load domain skills |
-| `web` / `mcp-gateway` (`@deepseek-ai/dsh-mcp-client`, `url: http://mcp_gateway:8080/mcp`, `failOnStartupError: true`) | Retrieval via gateway catalog (tavily, serena, 9 servers) |
+| `web` / `mcp-gateway` (`@deepseek-ai/dsh-mcp-client`, `url: http://mcp_gateway:8080/mcp`, `failOnStartupError: true`) | Retrieval via gateway catalog (`mcp/catalog.yaml`: tavily, serena, …) |
 | `sandbox-policy` + `bash-sandbox` | Landlock `workspace-write` boundary |
 
 Never on worker: `subagent` delegation.

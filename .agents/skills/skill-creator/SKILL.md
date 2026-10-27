@@ -4,8 +4,9 @@ description: Create new skills, modify and improve existing skills, and measure 
 license: MIT
 compatibility: Universal
 metadata:
-  version: "2.1.0"
+  version: "2.1.1"
   delta: |
+    2.1.1 — routed `references/eval-design.md` for scenario prompts, spectrum coverage, assertions, fixtures, and grading roles.
     2.1.0 — added a scope/boundary line: structure and shaping rules live in `building-modular-skills`, placement in `harness-management`; this skill owns the create → evaluate → iterate → benchmark lifecycle and description/trigger optimization.
     2.0.1 — field definition realigned in workflows/create-skill.md (no label change).
     2.0.0 (harness-portability pass): divergent candidate generation behind a provider seam, a portable completion gate with documented fallbacks, iteration records as JSON primary with Serena optional, the schema reference split into per-topic files, and content routing driven by the reference index.
@@ -47,6 +48,7 @@ Load a file only when its row matches the task.
 |---|---|
 | Capture intent, draft the skill, design test cases | [workflows/create-skill.md](workflows/create-skill.md) |
 | Run and evaluate test cases | [workflows/run-evals.md](workflows/run-evals.md) |
+| Design evaluation scenarios | [references/eval-design.md](references/eval-design.md) |
 | Improve from feedback and iterate | [workflows/improve-skill.md](workflows/improve-skill.md) |
 | Optimize the description for triggering | [workflows/optimize-description.md](workflows/optimize-description.md) |
 | Adapt when reviewers, a browser, or packaging are unavailable | [references/capability-fallbacks.md](references/capability-fallbacks.md) |

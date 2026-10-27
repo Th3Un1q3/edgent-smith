@@ -1,7 +1,7 @@
 ---
 id: ADR-012
 title: Standalone trio subtask_run, subtask_ls, subtask_tail - Deprecate workflow
-status: proposed
+status: accepted
 date: 2026-10-21
 scope: gateway code-mode trio with shared prefix for permissions
 ---
@@ -44,3 +44,13 @@ Current execute->workflow->subtask obstruction confuses agents across three leve
 ## Rollback/Test notes
 - Rollback: codemod checkpoint per script; auto-rollback if checkScript finds >0 non-shim callers; shim kill-switch restores workflow if zero-caller never reached.
 - Tests: contract tests pin ls default/cap, tail 5-entry/12KB/60KB/24h caps, QUEUE_FULL shape, unified error schema, NOT_FOUND on unknown id.
+
+## Status update (2026-10-25)
+
+Status set to `accepted`. The code half of this decision is in the tree: `subtask_run`, `subtask_ls` and `subtask_tail` are registered in `.opencode/plugins/workflow.ts`, no `workflow` tool is registered, and the retirement comment at `workflow.ts:190` states the trio is the only execution surface.
+
+Two residues remain, both text-only:
+- `docs/workflow-tool.md` — the retirement banner at line 1 is accurate, but lines 5, 17 and 342-343 still describe a callable `workflow` tool and its whole-script timeout.
+- `.opencode/agents/rug-workflow.md` — line 8 still grants `"workflow": "allow"`, and lines 18 and 423 speak of `workflow` in the present tense.
+
+Both residues are documentation/agent-text drift, not a missing implementation. Nothing supersedes this ADR. The in-body `Status: Proposed` line is retained verbatim as the historical record of the original text.

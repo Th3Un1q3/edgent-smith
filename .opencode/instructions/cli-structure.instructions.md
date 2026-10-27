@@ -82,7 +82,7 @@ def run_design(brief: str | None, config_path: str | None = None) -> None:
 **Purpose:** Reusable, stateless utilities and external integrations.
 
 **What goes here:**
-- Classes and functions used by 2+ command modules
+- Classes and functions shared across command modules
 - External integrations (e.g., `CopilotSessionService`)
 - Data loading and transformation (e.g., `load_project_config()`)
 - Utility constants
@@ -187,7 +187,7 @@ def test_design_with_brief(tmp_path):
 
 ## Checklist: Adding a New Service
 
-1. **Create** `cli/services/{name}.py` if the utility will be used by 2+ commands.
+1. **Create** `cli/services/{name}.py` if the utility will be shared across command modules.
 2. **Verify** the service is stateless or safe for reuse.
 3. **Export** public symbols in `__all__`.
 4. **Test** via `tests/test_{name}.py` by mocking external calls (subprocess, file I/O, etc.).

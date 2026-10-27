@@ -24,7 +24,7 @@ Content that is not about editing the matched files does not belong here.
 
 ## Pointer pattern
 
-When a skill owns the procedure, name the skill file and stop. One or two lines, never a summary of its steps:
+When a skill owns the procedure, name the skill file and stop. Never a summary of its steps:
 
 ```markdown
 Run expansions through the `context-gathering` skill; it owns the procedure.
@@ -76,13 +76,18 @@ Apply this file to agent definitions (`.opencode/agents/**/*.md`, `.github/agent
 
 ## Before adding or editing an instruction
 
-1. Does `applyTo` match exactly the files this helps, no wider and no narrower?
-2. Would an agent editing those files otherwise get it wrong?
-3. Is every line about editing those files, not about process?
-4. Does a skill already own this, and if so, is a pointer enough?
-5. Does anything here duplicate `AGENTS.md`?
-6. Would deleting this file change any behaviour?
-7. Has every rule line produced a ledger row with at least one cell other than `none`?
+1. Inventory the overlap before writing: list every instruction file whose `applyTo` matches the path you are changing, plus the skills and agent cards that consume those paths. For `.opencode/instructions/**/*.md` that is this file, `writing-style`, `comments`, and `no-permission-workarounds`, consumed by `harness-management`, `building-modular-skills`, `unslop`, and the `.opencode/agents/*.md` cards. An edit with no overlap list is unfinished.
+2. Pair the new text against that inventory; each pair takes a class from `skill-editing.instructions.md`, Contradiction sweep, and a pair that cannot both hold is restated before the text ships.
+3. Prefer extending an existing instruction over creating a file. Add the rule to an existing instruction when its trigger paths and audience both already match; create a file only when the trigger paths or the audience differ, and name which of the two differs in the change.
+4. Write the downstream effect into the change: the paths and agents that now receive the rule, and for each existing rule it touches, whether it supersedes, narrows, or leaves that rule alone, cited by `file:line`. A change that names none of the three is incomplete.
+5. Re-check the edited neighbourhood after the edit: run steps 1 and 2 again over the touched files and their overlap list. Done when a complete pass over the touched files leaves every pair compatible or restated, not at the first clean read.
+6. Does `applyTo` match exactly the files this helps, no wider and no narrower?
+7. Would an agent editing those files otherwise get it wrong?
+8. Is every line about editing those files, not about process?
+9. Does a skill already own this, and if so, is a pointer enough?
+10. Does anything here duplicate `AGENTS.md`?
+11. Would deleting this file change any behaviour?
+12. Has every rule line produced a ledger row whose cells are not all `none`?
 
 ## Placement and style
 

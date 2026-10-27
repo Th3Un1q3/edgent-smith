@@ -1,5 +1,7 @@
 ---
 id: trajectories/fresh_validators_file_artifacts_pass_firstline
+type: trajectories
+L0: "Fresh validators prove a file artifact on the PASS first line, run schema diagnostics before editing, and never resume a truncated envelope."
 title: Fresh Validators File Artifacts Pass
 status: verified
 date: 2026-10-21

@@ -7,7 +7,7 @@ import type { Context } from '@opencode/plugin/effect/plugin'
 const harness = vi.hoisted(() => {
   const defaults = {
     instructions: '.agents/skills/task-delegation/SKILL.md',
-    agents: ['rug', 'rug-workflow'],
+    agents: ['rug', 'rug-swe'],
   }
   const config: { plugins: { workflow?: { instructions?: unknown, agents?: unknown } } } = {
     plugins: { workflow: { ...defaults } },

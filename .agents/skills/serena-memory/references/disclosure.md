@@ -24,7 +24,7 @@ Legacy noFM: L0 inferred as first body line slice(0,256) — see [frontmatter.md
 
 - **Verify L0 budget:** treat list_memories names as L0 — scan names only, do not read bodies yet.
 - **Adopt L1 cap:** truncate read_memory to 4000c in gateway script; cite full body with mem: refs.
-- **Expose L2 guard:** fetch full body only for verified top-K inside gateway_mcp-exec; never return L2 verbatim to model context.
+- **Expose L2 guard:** fetch full body only for verified top-K inside one `execute` call; never return L2 verbatim to model context.
 
 ## Examples
 

@@ -68,7 +68,7 @@ P1: Skill was loaded but objective not achieved...
 Shell logic the command needs lives as justfile recipes — not standalone Python scripts.
 
 - **Put state-management bash recipes in the project's justfile** (e.g., `agent_utils/justfile`) as shebang recipes.
-- **Prefer bash over Python** for command support scripts — simpler, fewer dependencies, faster startup. Bash handles the common trifecta — file checks, `sed`/`cp`, and `jq` extraction. A 30-line bash recipe in the justfile is better than a 250-line Python script.
+- **Prefer bash over Python** for command support scripts — simpler, fewer dependencies, faster startup. Bash handles the common trifecta — file checks, `sed`/`cp`, and `jq` extraction. The same job is a justfile recipe in bash, not a standalone Python script.
 - **A recipe does ONE thing** and emits the recipe→command output contract as `KEY=VALUE` lines: `STATUS` (`new`, `resumed`, `error`, `no_sessions`), `MESSAGE` (human-readable context), and path keys the command consumes (e.g., `SESSION_JSON`, `REVIEW_MD`).
   ```just
   echo "STATUS=new"

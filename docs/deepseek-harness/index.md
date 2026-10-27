@@ -8,24 +8,22 @@ Host DSH session (RUG preset, Cordis) orchestrates; child-runtime (dsh-sdk) exec
 
 ## Hub — pick your time budget
 
-| Goal | File | Lines | Time |
-|------|------|-------|------|
-| 5-min run | [01-quickstart.md](01-quickstart.md) | ~82 | 5 min |
-| Build architecture | [02-architecture.md](02-architecture.md) | ~92 | 10 min |
-| Tool separation + models | [03-tool-separation.md](03-tool-separation.md) | ~130 | 10 min |
-| Run workflows | [04-workflows.md](04-workflows.md) | ~104 | 10 min |
-| Reference & gates | [05-reference.md](05-reference.md) | ~180 | 30 min |
-
-Total ~588 + index 44 ≈ 632 + nav overhead.
+| Goal | File | Time |
+|------|------|------|
+| 5-min run | [01-quickstart.md](01-quickstart.md) | 5 min |
+| Build architecture | [02-architecture.md](02-architecture.md) | 10 min |
+| Tool separation + models | [03-tool-separation.md](03-tool-separation.md) | 10 min |
+| Run workflows | [04-workflows.md](04-workflows.md) | 10 min |
+| Reference & gates | [05-reference.md](05-reference.md) | 30 min |
 
 ---
 
 ## Map
 
-- **01** — trimmed mermaid, Day-0 5 steps, exit criteria.
-- **02** — full mermaid, roles table, `.dsh/*` inventory (69L/92L/351L/465L/117B).
+- **01** — trimmed mermaid, Day-0 run, exit criteria.
+- **02** — full mermaid, roles table, `.dsh/*` inventory.
 - **03** — persona verbatim, plugin tables, model wiring, provider canonical.
-- **04** — prompt contract, 6 patterns (decompose → follow-up).
+- **04** — prompt contract, workflow patterns (decompose → follow-up).
 - **05** — YAML skeletons, preset, observability (`~/.dsh/sessions/`), risks, gates.
 
 ---

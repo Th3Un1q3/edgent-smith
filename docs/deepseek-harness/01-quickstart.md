@@ -1,4 +1,4 @@
-> Part of [DeepSeek Harness Guide](index.md) — L1 · 5-min run
+> Part of [DeepSeek Harness Guide](index.md) — L1
 
 # Quickstart — 5 Minutes to First Worker
 
@@ -27,7 +27,7 @@ Full diagram → [02-architecture.md](02-architecture.md).
 
 ---
 
-## Day-0 — 5 steps (harness-native)
+## Day-0 (harness-native)
 
 ```bash
 # 1. Verify bind + child-runtime pinned

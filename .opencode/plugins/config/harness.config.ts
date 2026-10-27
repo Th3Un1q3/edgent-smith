@@ -50,9 +50,9 @@ const qualityGates: GateConfig[] = [
 // the code default in `../types/goal-enforcement` enforces nothing.
 const goalEnforcement: GoalEnforcementConfig = {
   enforceAll: false,
-  agents: ['rug', 'rug-workflow'],
+  agents: ['rug'],
   optOut: [],
-  readOnlyAllowlist: ['question', 'read', 'glob', 'grep', 'skill'],
+  readOnlyAllowlist: ['question', 'execute', 'read', 'glob', 'grep', 'skill'],
   maxSteeringRepeats: 3,
 }
 
@@ -76,7 +76,7 @@ const toolLimit: ToolLimitConfig = {
  */
 const workflowPlugin: { instructions: string, agents: string[] } = {
   instructions: '.agents/skills/task-delegation/SKILL.md',
-  agents: ['rug', 'rug-workflow'],
+  agents: ['rug'],
 }
 
 export const harnessConfig = {

@@ -80,7 +80,7 @@ dedup(0.95, true) // skip — Implements: >0.9 skip
 
 ## Local Verification — 3-script gate
 
-Canonical scripts live in `agent_utils/scripts` only; run all three before declaring complete:
+Canonical scripts live in `agent_utils/scripts` only; run all three when present before declaring complete:
 
 ```bash
 python3 agent_utils/scripts/validate_memory_frontmatter.py --path .serena/memories
@@ -90,13 +90,13 @@ python3 agent_utils/scripts/audit_fences.py .agents/skills/serena-memory .agents
 just agent_utils::validate-memories
 ```
 
-Stop when any script fails; declare complete only after all three exit 0.
+`just agent_utils::validate-memories` runs every pass even when an earlier one fails and exits nonzero if any pass failed, so the aggregate cannot hide a finding. `validate_memory_frontmatter.py` tiers by path, and that table is separate from the write-gate exemptions above: EXEMPT namespaces (`cache/`, `researches/`, `serena/`, `private/`, `browser-automation/`, `evals/`, `tooling/`) never fail, with one exception: an `*/about.md` beneath an exempt prefix is classified VALIDATE because `scope_tier` tests `_is_about` before the prefix, so it can fail, and that is the only way an exempt prefix produces a finding — every other file there is counted and skipped. VALIDATE namespaces and every `*/about.md` fail on a fatal finding, and a STRUCTURAL file is checked only once it declares `type:` — then at warning severity. Warnings alone exit 0; `--strict` promotes them. Stop when the aggregate exits nonzero; a script absent from the tree is not a failure when you run the three by hand, but the recipe names fixed paths, so a missing script fails its pass.
 
-Note: `validate_memory_frontmatter.py` cannot target individual files (it scans the whole store); pre-existing out-of-scope failures in other memories are grandfathered and are NOT a gate failure for this skill.
+Note: `validate_memory_frontmatter.py` cannot target individual files (it scans the whole store), so a pre-existing error in another memory still fails the run — report it as a failure, not as grandfathered.
 
 ## Acceptance Criteria
 
-- Done when: all 9 checks pass, dedup action selected, and gate result recorded before write_memory; all three local scripts exit 0.
+- Done when: all 9 checks pass, dedup action selected, and gate result recorded before write_memory; every local script present exits 0.
 
 ## Related Skills
 

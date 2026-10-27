@@ -5,9 +5,9 @@ description: >
 license: MIT
 compatibility: Requires OpenCode
 metadata:
-  version: "1.8"
+  version: "1.9.4"
   author: "edgent-smith team"
-  delta: "states current behaviour only; provenance lives in the report or commit message."
+  delta: "1.9.4 — the timeout passage states the omit, extend, then tail-and-resume rule with no recorded-run evidence; the per-turn budget fact moves behind a SKILL.md pointer; the tool-limit citation names the code that computes the threshold. 1.9.3 — the budgets table no longer implies an uncapped per-child timeout: the row and the prose both say omit by default and set a value only for an expected overrun. 1.9.2 — one statement per topic: resume (task_id) is the default and a fresh child is reserved for wrong context, a different specialist or fresh judgement; gate commands are named while implementation commands and step order stay with the child; provenance has two homes — this version delta for skill-file edits, the report or commit for work artifacts."
 ---
 
 # Task Delegation Workflow
@@ -28,7 +28,7 @@ Break the user's request into discrete tasks. Each task should satisfy all of th
 - **Independently completable** — no task depends on another producing intermediate results that it then reads; if they do, the dependent task must receive its input as explicit parameters in the subagent prompt
 - **Bounded scope** — can be completed by a single agent invocation without requiring follow-up clarification about what to work on next
 - **Verifiable outcome** — has clear acceptance criteria that a validation subagent can check
-- **Fits the subagent budget** — completable within the target agent's tool-call threshold `floor(steps * 0.8)` (`.opencode/plugins/tool-limit-reminder.ts:59,79`); keep each task well under it (about 20 calls against `rug-swe`'s 24-call threshold)
+- **Fits the subagent budget** — completable within the target agent's tool-call threshold `floor(steps * 0.8)` (`.opencode/plugins/helpers/tool-limit.ts:37`; `rug-swe` declares `steps: 30`, so 24 calls), with calls left over for verification and the report
 
 ### Decomposition Checklist
 
@@ -40,11 +40,11 @@ Before launching any subagent, verify each task:
 | Bounded scope? | Can an agent complete this without needing to ask clarifying questions about what to work on next? |
 | Verifiable outcome? | Is there a concrete acceptance criterion I can check when the subagent reports back? |
 | Independent? | Does this task require reading output from another task before it starts? If yes, pass that information as explicit context in the prompt. |
-| Fits budget? | Can an agent complete this within the target agent's threshold `floor(steps * 0.8)` (about 20 calls against `rug-swe`'s 24)? |
+| Fits budget? | Can an agent complete this within the target agent's threshold `floor(steps * 0.8)` (24 calls for `rug-swe`), leaving calls for verification and the report? |
 
 ### Budget-Aware Task Sizing
 
-Every delegated task must fit the target agent's tool-call threshold `floor(steps * 0.8)` (`.opencode/plugins/tool-limit-reminder.ts:59,79`), leaving headroom for discovery and verification. Decompose further when a task has:
+Every delegated task must fit the target agent's tool-call threshold `floor(steps * 0.8)` (`.opencode/plugins/helpers/tool-limit.ts:37`), leaving headroom for discovery and verification. Decompose further when a task has:
 
 - **More than 3 requirement areas** — split by area into separate tasks
 - **More than 2 phases** — investigate, write, and verify must be separate tasks
@@ -55,7 +55,7 @@ When a task cannot be decomposed further, the prompt must include a **resume pla
 
 ### Output and Timeout Budgets
 
-- Set an explicit `timeout_minutes` of 15 to 30 on any subtask that may exceed the 15-minute default (file or directory enumeration, gate or CI runs, full test suites); raise the workflow `timeout_minutes` above its 90-minute default to match. The retired `timeout_seconds` key is rejected: divide a legacy seconds value by 60 and rename it to `timeout_minutes`.
+- **Leave `timeout_minutes` unset unless this task is expected to outrun the default.** The default is 15 minutes per subtask and 90 for the workflow (`.opencode/plugins/workflow.ts:228`, `.opencode/plugins/helpers/workflow-types.ts:160`). Set `timeout_minutes` only to extend a task you expect to run longer than that, such as a full test suite, a gate or CI run, or a large enumeration, and raise the enclosing workflow's `timeout_minutes` above the child's when you do. Never set it to shorten a task, and never size it per dispatch. When a child does expire, `subtask_tail({ task_id })` shows its progress and a `task_id` resume continues the same child with a fresh budget; re-dispatching with a larger guessed value spends a fresh child on work the resume already holds. The retired `timeout_seconds` key is rejected: divide a legacy seconds value by 60 and rename it to `timeout_minutes`. Budget arithmetic, per-turn and not a hard block: [Child Budget Accounting](../SKILL.md#child-budget-accounting).
 - Keep the reducer under about 2KB. Return only counts, statuses and key data. Never return full transcripts, long evidence strings, or whole file contents; oversized reducers are truncated at about 8KB (logs dropped first, then result, then steps), which loses data and forces re-runs.
 - Capture `steps[].task_id` and, on a truncated or empty result, resume that session for a compact status instead of re-running the work.
 
@@ -67,7 +67,7 @@ Run this gate before launching ANY subagent — task sizing is mandatory, not ad
   (a) a research/decide subagent that returns a concrete plan, and
   (b) a write+verify subagent that executes that plan
 - A task estimated at more than ~20 tool calls MUST be split the same way
-- Resume (`task_id`) is the default for any follow-up to a child that produced work; split a task when it is too large, then resume each part. Relaunch only after a failed resume or when the context is wrong.
+- Resume (`task_id`) is the default for any follow-up to a child that produced work; split a task when it is too large, then resume each part. Launch a fresh child only when a resume cannot work: the prior context is wrong, the work needs a different specialist, or the result needs fresh judgement.
 - If a task burned its budget on investigation, resuming to finish is acceptable — the split
   rule is what prevents the burn
 
@@ -115,7 +115,7 @@ Every subagent prompt must include six elements:
 
 ### Method Ownership
 
-Every prompt states WHAT the subagent must achieve; the subagent owns HOW, deriving its method from the skills passed via `skills` and from its own tooling. Never include step-by-step command recipes or prescribe specific tools or commands — an exact `gh` invocation, a git subcommand, or a REST endpoint goes stale, assumes permissions the auth layer may deny, and burns the subagent's budget reinventing an unsanctioned workaround instead of doing the task.
+Every prompt states WHAT the subagent must achieve; the subagent owns HOW, deriving its method from the skills passed via `skills` and from its own tooling. Name the gate command the result must pass — `just lint`, `just ci-fast` — because a named gate is a checkable acceptance criterion. Never prescribe implementation commands, a command sequence, or step order: an exact `gh` invocation, a git subcommand, or a REST endpoint goes stale, assumes permissions the auth layer may deny, and burns the subagent's budget reinventing an unsanctioned workaround instead of doing the task.
 
 When the user explicitly specifies a technology, library, framework, or approach, echo it as a non-negotiable requirement — a specified technology is a constraint on the outcome, not a command recipe.
 
@@ -128,7 +128,7 @@ A delegation prompt must not ask a subagent to bypass a permission gate or to re
 ```markdown
 CONTEXT: [Original user request quoted verbatim. Why this task exists in the larger flow.]
 
-YOUR TASK: [Specific decomposed action — the outcome to achieve, never the commands to run]
+YOUR TASK: [Specific decomposed action — the outcome to achieve, never the implementation commands or step order]
 
 SCOPE:
 - Files to create: [list with full paths]
@@ -159,7 +159,7 @@ Validation must be asymmetric: the validator challenges the work AND the criteri
 
 ### Scope Attribution Needs a Baseline
 
-A working tree is usually dirty before the producer starts, so a diff alone cannot say who changed what. Snapshot at dispatch and give the snapshot to the validator.
+A diff alone cannot say who changed what, because the tree may already carry edits made before the producer started. Snapshot at dispatch and give the snapshot to the validator.
 
 - Record the files already modified or untracked before the first subtask launches (`git status --porcelain`, `git diff --numstat`).
 - Hand that list to the validator as "pre-existing at t0". Only files and hunks absent from the baseline are producer edits; a pre-existing dirty file is not a scope violation, whatever its subject.
@@ -195,7 +195,7 @@ REPORT per criterion: PASS or FAIL with evidence
 
 ## Step 5: Iterate Until Good
 
-If validation fails, launch a NEW work subagent that includes the validation failure report and specific fix instructions. Do not reuse mental context from the failed attempt — give fresh complete instructions. If the same agent keeps failing, decompose the task further into smaller pieces.
+If validation fails, resume the same `task_id` with the validation failure report and the fix instructions — resume is the default, so send the full report rather than assuming the child remembers the failed attempt. Launch a fresh work child only when a resume cannot work: the prior context is wrong, the work needs a different specialist, or the result needs fresh judgement. If the same agent keeps failing, decompose the task further into smaller pieces.
 
 ### Iteration Decision Tree
 
@@ -204,7 +204,7 @@ Validation result?
 ├── All PASS → Proceed to next independent task
 ├── Partial FAIL → Launch fix subagent for failed criteria only
 │   └── Same criteria fails again twice → Decompose further or escalate to rug-expert
-└── All FAIL → Relaunch entire task with fresh instructions; do not patch partial failures
+└── All FAIL → context was wrong: launch a fresh child for the whole task with fresh instructions; do not patch partial failures
 ```
 
 ## Agents Team Reference
@@ -259,6 +259,4 @@ The RUG workflow is simple but strict: **decompose → route → prompt → vali
 2. Route each task to the agent whose specialization matches the task type
 3. Construct prompts with context, scope, acceptance criteria, constraints, output expectations, and method ownership
 4. Validate every result with a separate subagent — never trust self-assessment
-5. Iterate failures by resuming the same task_id; relaunch only when the context is wrong.
-
-Apply these principles consistently. The quality of delegation determines the quality of outcomes.
+5. Iterate failures by resuming the same `task_id`; launch a fresh child only for the three cases in Step 5.

@@ -13,7 +13,7 @@ import type { Context } from '@opencode/plugin/effect/plugin'
 const harness = vi.hoisted(() => {
   const defaults = {
     instructions: '.agents/skills/task-delegation/SKILL.md',
-    agents: ['rug', 'rug-workflow'],
+    agents: ['rug', 'rug-swe'],
   }
   const config: { plugins: { workflow?: { instructions?: unknown, agents?: unknown } } } = {
     plugins: { workflow: { ...defaults } },
@@ -119,7 +119,7 @@ const emitSessionEvent = async (
 ): Promise<Harness['logs']> => {
   const logs: Harness['logs'] = []
   const effect = handleSessionEvent(event, options ?? {
-    agentAllowlist: new Set(['rug', 'rug-workflow']),
+    agentAllowlist: new Set(['rug', 'rug-swe']),
     block: 'BLOCK-BODY',
     entryBytes: 10,
   })
@@ -163,7 +163,7 @@ describe('workflow instruction session events', () => {
   })
 
   it('writes the entry when a session.created payload names a listed agent', async () => {
-    await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_created', agent: 'rug-workflow' } })
+    await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_created', agent: 'rug-swe' } })
 
     expect(entryClient.writeEntry).toHaveBeenCalledWith('ses_created', 'workflow.instructions', 'BLOCK-BODY')
   })
@@ -220,7 +220,7 @@ describe('workflow instruction session events', () => {
   it('logs the unchanged status when the entry value is already current', async () => {
     entryClient.writeEntry.mockResolvedValue({ status: 'unchanged' })
 
-    const logs = await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_unchanged', agent: 'rug-workflow' } })
+    const logs = await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_unchanged', agent: 'rug-swe' } })
 
     expect(logs).toContainEqual([
       'workflow.instructions',
@@ -230,8 +230,8 @@ describe('workflow instruction session events', () => {
 
   it('skips the write when the entry would exceed the size limit', async () => {
     const logs = await emitSessionEvent(
-      { type: 'session.created', data: { sessionID: 'ses_big', agent: 'rug-workflow' } },
-      { agentAllowlist: new Set(['rug', 'rug-workflow']), block: 'BLOCK-BODY', entryBytes: 300_000 },
+      { type: 'session.created', data: { sessionID: 'ses_big', agent: 'rug-swe' } },
+      { agentAllowlist: new Set(['rug', 'rug-swe']), block: 'BLOCK-BODY', entryBytes: 300_000 },
     )
 
     expect(logs).toContainEqual([
@@ -242,15 +242,15 @@ describe('workflow instruction session events', () => {
   })
 
   it('writes an entry that is exactly at the size limit and skips the next byte', async () => {
-    const options = { agentAllowlist: new Set(['rug', 'rug-workflow']), block: 'BLOCK-BODY', entryBytes: 256 * 1024 }
+    const options = { agentAllowlist: new Set(['rug', 'rug-swe']), block: 'BLOCK-BODY', entryBytes: 256 * 1024 }
 
-    await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_at_limit', agent: 'rug-workflow' } }, options)
+    await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_at_limit', agent: 'rug-swe' } }, options)
     expect(entryClient.writeEntry).toHaveBeenCalledTimes(1)
 
     entryClient.writeEntry.mockClear()
 
     await emitSessionEvent(
-      { type: 'session.created', data: { sessionID: 'ses_over_limit', agent: 'rug-workflow' } },
+      { type: 'session.created', data: { sessionID: 'ses_over_limit', agent: 'rug-swe' } },
       { ...options, entryBytes: 256 * 1024 + 1 },
     )
     expect(entryClient.writeEntry).not.toHaveBeenCalled()
@@ -258,9 +258,9 @@ describe('workflow instruction session events', () => {
 
   it('writes the entry once per subscribed event and ignores other event types', async () => {
     const h = makeHarness([
-      { type: 'session.created', data: { sessionID: 'ses_stream_created', agent: 'rug-workflow' } },
+      { type: 'session.created', data: { sessionID: 'ses_stream_created', agent: 'rug-swe' } },
       { type: 'session.agent.selected', data: { sessionID: 'ses_stream_selected', agent: 'rug' } },
-      { type: 'session.idle', data: { sessionID: 'ses_stream_idle', agent: 'rug-workflow' } },
+      { type: 'session.idle', data: { sessionID: 'ses_stream_idle', agent: 'rug-swe' } },
     ])
 
     const log = collectLogger(h.logs)
@@ -285,7 +285,7 @@ describe('workflow instruction session events', () => {
   it('reports a failed write status as an error', async () => {
     entryClient.writeEntry.mockResolvedValue({ status: 'failed', error: 'put failed' })
 
-    const logs = await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_put_error', agent: 'rug-workflow' } })
+    const logs = await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_put_error', agent: 'rug-swe' } })
 
     expect(logs).toContainEqual([
       'workflow.instructions',
@@ -315,7 +315,7 @@ describe('workflow instruction session events', () => {
   it('reports a rejected write as an error instead of swallowing it', async () => {
     entryClient.writeEntry.mockRejectedValue(new Error('write exploded'))
 
-    const logs = await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_write_reject', agent: 'rug-workflow' } })
+    const logs = await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_write_reject', agent: 'rug-swe' } })
 
     expect(logs).toContainEqual([
       'workflow.instructions.error',
@@ -331,7 +331,7 @@ describe('workflow instruction session events', () => {
     } as unknown as ReadonlySet<string>
 
     const logs = await emitSessionEvent(
-      { type: 'session.created', data: { sessionID: 'ses_throw', agent: 'rug-workflow' } },
+      { type: 'session.created', data: { sessionID: 'ses_throw', agent: 'rug-swe' } },
       { agentAllowlist, block: 'BLOCK-BODY', entryBytes: 10 },
     )
 
@@ -364,7 +364,7 @@ describe('workflow instructions registration log', () => {
 
     expect(details.resolvedPath).toBe(path.resolve(REPO_ROOT, details.path))
     expect(details.contentBytes).toBe(Buffer.byteLength(readFileSync(details.resolvedPath, 'utf8'), 'utf8'))
-    expect(details.agents).toEqual(['rug', 'rug-workflow'])
+    expect(details.agents).toEqual(['rug', 'rug-swe'])
   })
 })
 

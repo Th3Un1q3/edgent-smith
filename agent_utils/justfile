@@ -218,16 +218,25 @@ afk action="status":
 # ---------------------------------------------------------------------------
 # Validate
 # ---------------------------------------------------------------------------
-# Validate Serena memory frontmatter, links, and fences (3-script pre-commit gate).
+# Validate Serena memory frontmatter, links, and fences; every pass runs even when an earlier one fails, and any failure fails the recipe.
 
 # Usage: just agent_utils::validate-memories
 validate-memories:
     #!/usr/bin/env bash
-    set -euo pipefail
-    python3 "/workspace/agent_utils/scripts/validate_memory_frontmatter.py" --path "/workspace/.serena/memories"
-    python3 "/workspace/agent_utils/scripts/validate_memory_frontmatter.py" --path "/workspace/.agents/skills/serena-memory"
-    python3 "/workspace/agent_utils/scripts/validate_md_links.py" "/workspace/.agents/skills/serena-memory" "/workspace/.agents/skills/context-gathering" "/workspace/.agents/skills/building-modular-skills"
-    python3 "/workspace/agent_utils/scripts/audit_fences.py" "/workspace/.agents/skills/serena-memory" "/workspace/.agents/skills/context-gathering" "/workspace/.agents/skills/building-modular-skills"
+    set -uo pipefail
+    status=0
+    python3 "/workspace/agent_utils/scripts/validate_memory_frontmatter.py" --path "/workspace/.serena/memories" \
+      || { echo "FAIL: frontmatter (memories)"; status=1; }
+    python3 "/workspace/agent_utils/scripts/validate_memory_frontmatter.py" --path "/workspace/.agents/skills/serena-memory" \
+      || { echo "FAIL: frontmatter (skill)"; status=1; }
+    python3 "/workspace/agent_utils/scripts/validate_md_links.py" "/workspace/.agents/skills/serena-memory" "/workspace/.agents/skills/context-gathering" "/workspace/.agents/skills/building-modular-skills" \
+      || { echo "FAIL: markdown links"; status=1; }
+    python3 "/workspace/agent_utils/scripts/audit_fences.py" "/workspace/.agents/skills/serena-memory" "/workspace/.agents/skills/context-gathering" "/workspace/.agents/skills/building-modular-skills" \
+      || { echo "FAIL: fences"; status=1; }
+    if [ "$status" -ne 0 ]; then
+      echo "FAIL: validate-memories had failing pass(es)"
+    fi
+    exit "$status"
 
 # Validate any skill against the shaping line budgets and audits.
 

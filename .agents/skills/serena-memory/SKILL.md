@@ -5,8 +5,8 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.4.18"
-  delta: "1.4.18 — require mem: refs citation for every recalled memory used in an answer: SKILL.md principle plus recall-memory.md acceptance line."
+  version: "1.4.19"
+  delta: "1.4.19 — contradiction sweep: script-failure vs script-absence aligned, denied `gateway_mcp-exec`/`gateway_code-mode` names replaced by `execute`, single-read vs batch precedence stated, permission denial excluded from the infra-flake fallback. 1.4.18 — require mem: refs citation for every recalled memory used in an answer: SKILL.md principle plus recall-memory.md acceptance line."
   author: Th3Un1qu3
 ---
 
@@ -53,7 +53,7 @@ Gateway pre-flight (MANDATORY):
 - **Canonical preferences path:** `preferences/` is canonical; `profile/preferences/` is a legacy alias kept for navigation only.
 - **About for every scope:** every scope with children (including exempt scopes) carries an `*/about` for navigation; the global index aggregates About tables.
 - **Shard large abouts:** when a scope exceeds 32 children, split into sub-scope abouts instead of overflowing L0_table.
-- **Guard every gateway call:** snapshot returns to 2 KB, treat an empty/stderr return as an infra flake and fall back once to `bash cat .serena/memories/<id>.md` (0 retries) — the single sanctioned infra-flake exception to the never-read-.serena rule — and complete recall with the conditional `read_memory` return ritual — see references/gateway-protocol.md.
+- **Guard every gateway call:** snapshot returns to 2 KB, treat an empty/stderr return as an infra flake and fall back once to `bash cat .serena/memories/<id>.md` where the harness permits direct reads (0 retries) — the single sanctioned infra-flake exception to the never-read-.serena rule; a denial of direct reads is not an infra flake — and complete recall with the conditional `read_memory` return ritual — see references/gateway-protocol.md.
 - Cite recalled memories with `mem:` refs: every contributing memory in a report/answer appears as `mem:memory-name`, not a bare name.
 - **Never record a bypass recipe:** a memory must not tell an agent how to work around a gated action. Record the denial and the mechanism; ask the user when the gated action is essential.
 
