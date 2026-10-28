@@ -12,12 +12,14 @@ import path from 'node:path'
 import { Cause, Effect, Stream } from 'effect'
 import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
 import { harnessConfig } from './config/harness.config'
-import { listSteps, listSubtasksFromSessions, readStoredSteps } from './helpers/subtask-ls'
+import { listSubtasksFromSessions } from './helpers/subtask-ls'
 import type { SessionsReader } from './helpers/subtask-ls'
-import { runStandaloneSubtask } from './helpers/subtask-run'
+import { createSubtask } from './helpers/workflow-subtask'
+import { DEFAULT_MAX_SUBTASKS, DEFAULT_SUBTASK_AGENT } from './helpers/workflow-types'
+import type { SubtaskParameters } from './helpers/workflow-types'
 import { recordTailOutput, tailOutputs } from './helpers/subtask-tail'
 import { createWorkflowClient } from './helpers/workflow-client-adapter'
-import { writeEntry, removeEntry, entryValueBytes, MAX_ENTRY_VALUE_BYTES } from './helpers/instruction-entry-client'
+import { writeEntry, removeEntry } from './helpers/instruction-entry-client'
 import type { EntryResult } from './helpers/instruction-entry-client'
 
 const WORKFLOW_INSTRUCTIONS_SENTINEL = '<workflow_instructions'
@@ -32,7 +34,6 @@ export { WORKFLOW_INSTRUCTIONS_SENTINEL }
 const SUBTASK_LS_TOOL_NAME = 'subtask_ls'
 const SUBTASK_RUN_TOOL_NAME = 'subtask_run'
 const SUBTASK_TAIL_TOOL_NAME = 'subtask_tail'
-const WORKFLOW_CONFIG_KEY = 'workflow'
 // Server namespaces entry keys as api/<key>; the key must match ^[a-z0-9][a-z0-9._-]*$.
 const WORKFLOW_ENTRY_KEY = 'workflow.instructions'
 
@@ -55,7 +56,6 @@ export interface WorkflowInstructions {
 export interface WorkflowSessionHandlerOptions {
   readonly agentAllowlist: ReadonlySet<string>
   readonly block: string
-  readonly entryBytes: number
 }
 
 export const isWorkflowSessionEvent = (event: { readonly type: string }, type: WorkflowSessionEventType): boolean =>
@@ -69,30 +69,6 @@ const isSessionAgentSelected = (event: PluginEvent): event is Extract<PluginEven
 
 const workflowInstructionsError = (target: string, cause: string): Error =>
   new Error(`workflow instructions: ${target}: ${cause}`)
-
-const configuredInstructionsPath = (): string => {
-  const section = (harnessConfig.plugins as { workflow?: { instructions?: unknown } }).workflow
-  const configured = section?.instructions
-  if (typeof configured !== 'string' || configured.trim() === '') {
-    throw workflowInstructionsError(
-      `harnessConfig.plugins["${WORKFLOW_CONFIG_KEY}"].instructions`,
-      'missing or not a non-empty string',
-    )
-  }
-  return configured
-}
-
-const configuredAgentAllowlist = (): string[] => {
-  const section = (harnessConfig.plugins as { workflow?: { agents?: unknown } }).workflow
-  const configured = section?.agents
-  if (!Array.isArray(configured) || configured.length === 0 || configured.some(agent => typeof agent !== 'string' || agent.trim() === '')) {
-    throw workflowInstructionsError(
-      `harnessConfig.plugins["${WORKFLOW_CONFIG_KEY}"].agents`,
-      'missing or not a non-empty string array',
-    )
-  }
-  return configured
-}
 
 const resolveInstructionsPath = (directory: string, configured: string): string => {
   try {
@@ -120,7 +96,7 @@ const assertInstructionContent = (content: string, label: string): void => {
  * falling back.
  */
 export function loadWorkflowInstructions(directory: string): WorkflowInstructions {
-  const configured = configuredInstructionsPath()
+  const configured = harnessConfig.plugins.workflow.instructions
   const resolved = resolveInstructionsPath(directory, configured)
 
   let content: string
@@ -143,13 +119,13 @@ const escapeAttribute = (value: string): string =>
 const formatWorkflowInstructions = (source: string, content: string): string =>
   `${WORKFLOW_INSTRUCTIONS_SENTINEL} source="${escapeAttribute(source)}" version="1">\n${content}\n${WORKFLOW_INSTRUCTIONS_CLOSING}`
 
-const utf8Bytes = (value: string): number => new TextEncoder().encode(value).byteLength
+const utf8Bytes = (value: string): number => Buffer.byteLength(value)
 
 // The entry client names the outcome of an action; only `failed` carries a
 // cause worth surfacing, so `unchanged` and `absent` stay quiet.
 const reportEntryFailure = (action: string, result: EntryResult): Effect.Effect<void> =>
   result.status === 'failed'
-    ? Effect.logError('workflow.instructions.error', { message: `workflow instructions: ${action} failed: ${result.error ?? 'unknown error'}` })
+    ? Effect.logError('workflow.instructions.error', { message: `workflow instructions: ${action} failed: ${result.error ?? result.reason ?? 'unknown error'}` })
     : Effect.void
 
 export const handleSessionEvent = (
@@ -171,13 +147,8 @@ export const handleSessionEvent = (
     return
   }
 
-  if (options.entryBytes > MAX_ENTRY_VALUE_BYTES) {
-    yield* Effect.logInfo('workflow.instructions.skipped', { sessionID, agent, reason: 'entry-too-large', entryBytes: options.entryBytes })
-    return
-  }
-
   const write = yield* Effect.promise(() => writeEntry(sessionID, WORKFLOW_ENTRY_KEY, options.block))
-  yield* Effect.logInfo('workflow.instructions', { sessionID, agent, status: write.status, entryBytes: options.entryBytes })
+  yield* Effect.logInfo('workflow.instructions', { sessionID, agent, status: write.status })
   yield* reportEntryFailure('write', write)
 }).pipe(
   // The subscription contract is Effect<void, never>, so surface failures
@@ -190,8 +161,7 @@ export const handleSessionEvent = (
 // ADR-012: workflow tool retired. Standalone trio (subtask_ls, subtask_run,
 // subtask_tail) is the only execution surface; no script wrapper remains.
 const SUBTASK_LS_TOOL_DESCRIPTION = [
-  'List child subtasks and their forks from the sessions reader for the current session.',
-  'Falls back to the latest finished workflow run snapshot in this server process.',
+  'List child subtasks from the sessions reader for the current session.',
   'Returns an array of {description, durationMs, task_id, status}.',
 ].join(' ')
 
@@ -199,14 +169,14 @@ const SUBTASK_LS_INPUT = {
   type: 'object',
   properties: {
     count: { type: 'integer', minimum: 1, maximum: 50, default: 10, description: 'Maximum rows to return (default 10, capped at 50).' },
-    status: { type: 'string', enum: ['ok', 'error', 'empty', 'timeout', 'aborted'], description: 'Return only subtasks with this status.' },
+    status: { type: 'string', enum: ['ok', 'error'], description: 'Return only subtasks with this status.' },
   },
   additionalProperties: false,
 }
 
 interface SubtaskLsArguments {
   count?: number
-  status?: 'ok' | 'error' | 'empty' | 'timeout' | 'aborted'
+  status?: 'ok' | 'error'
 }
 
 const SUBTASK_RUN_TOOL_DESCRIPTION = [
@@ -216,6 +186,8 @@ const SUBTASK_RUN_TOOL_DESCRIPTION = [
   'Returns the subtask result JSON with status and output.',
 ].join(' ')
 
+// The tool boundary requires description although SubtaskParameters makes it
+// optional, so a prompt-only call still fails validation here.
 const SUBTASK_RUN_INPUT = {
   type: 'object',
   properties: {
@@ -232,20 +204,9 @@ const SUBTASK_RUN_INPUT = {
   additionalProperties: false,
 }
 
-interface SubtaskRunArguments {
-  prompt: string
-  description: string
-  agent?: string
-  skills?: string[]
-  task_id?: string
-  fork_from?: string
-  timeout_minutes?: number
-  schema?: Record<string, unknown>
-}
-
 const SUBTASK_TAIL_TOOL_DESCRIPTION = [
   'Return the last outputs recorded for a subtask id.',
-  'Returns an array of {task_id, outputText, status, truncated, updated_at}.',
+  'Returns an array of {task_id, outputText, status, updated_at}.',
   'An unknown or expired id returns an empty array.',
 ].join(' ')
 
@@ -253,7 +214,6 @@ const SUBTASK_TAIL_INPUT = {
   type: 'object',
   properties: {
     task_id: { type: 'string', minLength: 1, description: 'Subtask id to tail; matches the task_id returned by subtask_run.' },
-    id: { type: 'string', minLength: 1, description: 'Alias for task_id.' },
     count: { type: 'integer', minimum: 1, maximum: 5, default: 3, description: 'Maximum outputs to return (default 3, capped at 5).' },
   },
   additionalProperties: false,
@@ -261,7 +221,6 @@ const SUBTASK_TAIL_INPUT = {
 
 interface SubtaskTailArguments {
   task_id?: string
-  id?: string
   count?: number
 }
 
@@ -275,21 +234,19 @@ const plugin: Plugin = {
       catch: cause => cause instanceof Error ? cause : new Error(String(cause)),
     }).pipe(Effect.orDie)
 
-    const configuredPath = configuredInstructionsPath()
     yield* Effect.logInfo('workflow.instructions.loaded', {
-      path: configuredPath,
+      path: harnessConfig.plugins.workflow.instructions,
       resolvedPath: loaded.source,
       contentBytes: utf8Bytes(loaded.content),
-      agents: [...configuredAgentAllowlist()],
+      agents: [...harnessConfig.plugins.workflow.agents],
     })
 
     // ADR-011: instructions travel as a session instruction entry. Session
     // creation and agent selection are the only moments the owning agent is
     // known or changes; there is no system-prompt carrier and no fallback.
-    const agentAllowlist = new Set(configuredAgentAllowlist())
+    const agentAllowlist = new Set(harnessConfig.plugins.workflow.agents)
     const block = formatWorkflowInstructions(loaded.source, loaded.content)
-    const entryBytes = entryValueBytes(block)
-    const handlerOptions: WorkflowSessionHandlerOptions = { agentAllowlist, block, entryBytes }
+    const handlerOptions: WorkflowSessionHandlerOptions = { agentAllowlist, block }
 
     yield* context.event.subscribe().pipe(
       Stream.filter(isSessionCreated),
@@ -302,80 +259,66 @@ const plugin: Plugin = {
       Effect.forkScoped,
     )
 
-    let lsRegistrationError: unknown
     yield* context.tool.transform((editor) => {
-      try {
-        editor.add({
-          name: SUBTASK_LS_TOOL_NAME,
-          description: SUBTASK_LS_TOOL_DESCRIPTION,
-          input: SUBTASK_LS_INPUT,
-          execute: (input, toolContext) => Effect.gen(function* () {
-            const arguments_ = input as SubtaskLsArguments
-            const options = { count: arguments_.count, status: arguments_.status }
-            const reader = context.session as unknown as SessionsReader
-            const fromSessions = yield* Effect.promise(
-              () => listSubtasksFromSessions(reader, toolContext.sessionID as unknown as string, options),
-            ).pipe(Effect.orElseSucceed(() => {}))
-            const entries = fromSessions ?? listSteps(readStoredSteps(), options)
-            const content = JSON.stringify(entries)
-            return { content, metadata: { title: `subtask_ls: ${entries.length} subtask(s)` } }
-          }),
-        })
-        editor.add({
-          name: SUBTASK_RUN_TOOL_NAME,
-          description: SUBTASK_RUN_TOOL_DESCRIPTION,
-          input: SUBTASK_RUN_INPUT,
-          execute: (input, toolContext) => Effect.gen(function* () {
-            const arguments_ = input as SubtaskRunArguments
-            const result = yield* Effect.promise(() => runStandaloneSubtask(
-              {
-                client: createWorkflowClient(context.session, context.location.directory as unknown as string),
-                parentSessionID: toolContext.sessionID as unknown as string,
-                directory: context.location.directory as unknown as string,
-              },
-              {
-                prompt: arguments_.prompt,
-                description: arguments_.description,
-                agent: arguments_.agent,
-                skills: arguments_.skills,
-                task_id: arguments_.task_id,
-                fork_from: arguments_.fork_from,
-                timeout_minutes: arguments_.timeout_minutes,
-                schema: arguments_.schema,
-              },
-            ))
-            recordTailOutput(result)
-            return {
-              content: JSON.stringify(result),
-              metadata: {
-                title: `subtask_run: ${result.status}`,
-                status: result.status,
-                task_id: result.task_id,
-                truncated: result.truncated,
-              },
-            }
-          }),
-        })
-        editor.add({
-          name: SUBTASK_TAIL_TOOL_NAME,
-          description: SUBTASK_TAIL_TOOL_DESCRIPTION,
-          input: SUBTASK_TAIL_INPUT,
-          execute: input => Effect.gen(function* () {
-            const arguments_ = input as SubtaskTailArguments
-            const taskId = arguments_.task_id ?? arguments_.id ?? ''
-            const entries = taskId === '' ? [] : tailOutputs(taskId, { count: arguments_.count })
-            const content = JSON.stringify(entries)
-            return { content, metadata: { title: `subtask_tail: ${entries.length} output(s)` } }
-          }),
-        })
-      }
-      catch (error) {
-        lsRegistrationError = error
-      }
+      editor.add({
+        name: SUBTASK_LS_TOOL_NAME,
+        description: SUBTASK_LS_TOOL_DESCRIPTION,
+        input: SUBTASK_LS_INPUT,
+        execute: (input, toolContext) => Effect.gen(function* () {
+          const arguments_ = input as SubtaskLsArguments
+          const options = { count: arguments_.count, status: arguments_.status }
+          const reader = context.session as unknown as SessionsReader
+          const fromSessions = yield* Effect.promise(
+            () => listSubtasksFromSessions(reader, toolContext.sessionID as unknown as string, options),
+          ).pipe(Effect.orElseSucceed(() => {}))
+          const entries = fromSessions ?? []
+          const content = JSON.stringify(entries)
+          return { content, metadata: { title: `subtask_ls: ${entries.length} subtask(s)` } }
+        }),
+      })
+      editor.add({
+        name: SUBTASK_RUN_TOOL_NAME,
+        description: SUBTASK_RUN_TOOL_DESCRIPTION,
+        input: SUBTASK_RUN_INPUT,
+        execute: (input, toolContext) => Effect.gen(function* () {
+          const parameters = input as SubtaskParameters
+          const subtask = createSubtask({
+            client: createWorkflowClient(context.session, context.location.directory as unknown as string),
+            parentSessionID: toolContext.sessionID as unknown as string,
+            directory: context.location.directory as unknown as string,
+            signal: new AbortController().signal,
+            defaultAgent: DEFAULT_SUBTASK_AGENT,
+            maxSubtasks: DEFAULT_MAX_SUBTASKS,
+            budget: { used: 0 },
+            steps: [],
+            logs: [],
+            active: new Set<AbortController>(),
+          })
+          const result = yield* Effect.promise(() => subtask(parameters))
+          recordTailOutput(result)
+          return {
+            content: JSON.stringify(result),
+            metadata: {
+              title: `subtask_run: ${result.status}`,
+              status: result.status,
+              task_id: result.task_id,
+            },
+          }
+        }),
+      })
+      editor.add({
+        name: SUBTASK_TAIL_TOOL_NAME,
+        description: SUBTASK_TAIL_TOOL_DESCRIPTION,
+        input: SUBTASK_TAIL_INPUT,
+        execute: input => Effect.gen(function* () {
+          const arguments_ = input as SubtaskTailArguments
+          const taskId = arguments_.task_id ?? ''
+          const entries = taskId === '' ? [] : tailOutputs(taskId, { count: arguments_.count })
+          const content = JSON.stringify(entries)
+          return { content, metadata: { title: `subtask_tail: ${entries.length} output(s)` } }
+        }),
+      })
     })
-    if (lsRegistrationError !== undefined) {
-      yield* Effect.logError('subtask_ls.register.failed', { message: describeCause(lsRegistrationError) })
-    }
   }),
 }
 

@@ -1,12 +1,4 @@
-import { randomBytes } from 'node:crypto'
-
-// Per-run correlation id. Generated once at the run boundary and threaded
-// through the context so concurrent runs stay distinguishable in toasts and
-// child-session titles. Six lowercase hex chars keep it short but collision-safe
-// for the handful of runs a session sees.
-export const createRunId = (): string => `wf#${randomBytes(3).toString('hex')}`
-
-export interface WorkflowSessionMessageInfo {
+interface WorkflowSessionMessageInfo {
   role?: string
   providerID?: string
   modelID?: string
@@ -39,12 +31,6 @@ export interface WorkflowSdkClient {
       path: { id: string }
     }): Promise<{ data?: WorkflowSessionMessage[] }>
     abort?(input: { path: { id: string } }): Promise<unknown>
-    // v1 SDK shape: the session id travels as `path.id`. Optional so callers and
-    // minimal test doubles can omit it; every call site guards before use.
-    update?(input: {
-      path: { id: string }
-      body: { title: string }
-    }): Promise<unknown>
   }
   // Transient TUI toast channel (v1 SDK). Optional: a client without a TUI must
   // not prevent a run from completing.
@@ -53,7 +39,7 @@ export interface WorkflowSdkClient {
   }
 }
 
-export type ToastVariant = 'info' | 'success' | 'warning' | 'error'
+type ToastVariant = 'info' | 'success' | 'warning' | 'error'
 
 export interface ToastInput {
   title?: string
@@ -61,9 +47,6 @@ export interface ToastInput {
   variant: ToastVariant
   duration?: number
 }
-
-// Fire-and-forget toast sink; implementations must swallow their own failures.
-export type NotifyFunction = (toast: ToastInput) => void
 
 export type SubtaskStatus = 'ok' | 'error' | 'empty' | 'timeout' | 'aborted'
 
@@ -87,7 +70,6 @@ export interface SubtaskResult {
   status: SubtaskStatus
   error?: string
   durationMs: number
-  truncated: boolean
   data?: unknown
 }
 
@@ -97,27 +79,6 @@ export interface StepRecord {
   status: SubtaskStatus
   durationMs: number
   error?: string
-  truncated: boolean
-}
-
-export interface WorkflowStats {
-  subtasks: number
-  ok: number
-  error: number
-  empty: number
-  timeout: number
-  aborted: number
-  totalMs: number
-  truncated: boolean
-}
-
-export interface WorkflowEnvelope {
-  status: 'ok' | 'error' | 'timeout' | 'aborted' | 'budget_exceeded' | 'invalid_script' | 'forbidden_script'
-  result?: unknown
-  error?: string
-  steps: StepRecord[]
-  stats: WorkflowStats
-  logs: string[]
 }
 
 export interface WorkflowContext {
@@ -126,26 +87,14 @@ export interface WorkflowContext {
   directory?: string
   signal: AbortSignal
   defaultAgent: string
-  maxConcurrent: number
   maxSubtasks: number
   budget: { used: number }
   steps: StepRecord[]
   logs: string[]
   active: Set<AbortController>
-  // Child controller → in-flight step description for the subtasks currently
-  // running. Kept optional so callers may build a context literal; `createContext`
-  // always initializes it and `createSubtask` backfills it for direct construction.
-  running?: Map<AbortController, string>
   // Run start timestamp, backfilled by `createSubtask`. Optional so callers can
   // build a context literal.
   startedAt?: number
-  // Per-run correlation id (see `createRunId`). The runner generates it once and
-  // threads it here; `createSubtask` backfills it for directly constructed
-  // contexts. Optional so callers can build a context literal.
-  runId?: string
-  // Toast sink threaded from the runner's captured `client`. Optional so a
-  // directly constructed context needs no notifications channel.
-  notify?: NotifyFunction
 }
 
 export type LogFunction = (message: unknown) => void
@@ -160,31 +109,11 @@ export interface WorkflowHelpers {
 export const DEFAULT_TIMEOUT_MINUTES = 90
 export const DEFAULT_PER_SUBTASK_TIMEOUT_MINUTES = 15
 export const DEFAULT_SUBTASK_AGENT = 'rug-swe'
-export const DEFAULT_MAX_CONCURRENT = 4
-export const MAX_MAX_CONCURRENT_CAP = 8
 export const DEFAULT_MAX_SUBTASKS = 32
 export const MAX_MAX_SUBTASKS_CAP = 64
-export const MAX_STEP_OUTPUT_CHARS = 4000
-export const MAX_ENVELOPE_BYTES = 8192
 export const MAX_LOGS = 100
 export const MAX_LOG_CHARS = 500
 export const MAX_DESCRIPTION_CHARS = 80
-
-export const createEmptyStats = (): WorkflowStats => ({
-  subtasks: 0,
-  ok: 0,
-  error: 0,
-  empty: 0,
-  timeout: 0,
-  aborted: 0,
-  totalMs: 0,
-  truncated: false,
-})
-
-export interface LsParameters {
-  count?: number
-  status?: SubtaskStatus
-}
 
 export interface LsEntry {
   description: string

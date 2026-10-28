@@ -1,7 +1,7 @@
 ---
 id: entities/opencode-plugin/retired-workflow
 type: entities
-L0: "Retired v1 plugin workflow: exposed a workflow tool running a JS script that orchestrates subagents via subtask()/log() with bounded concurrency; migrated to v2."
+L0: "Retired v1 plugin workflow: exposed a workflow tool running a JS script that orchestrates subagents via subtask()/log() with bounded concurrency; migrated to v2, engine deleted 2026-10-28."
 hotness: 0.6
 ttl: 90d
 provenance: recovered source .tmp/retired-plugins/workflow.ts; git index .opencode/plugins-quarantine/workflow.ts
@@ -19,12 +19,15 @@ Exposed a `workflow` tool that runs a JavaScript script orchestrating child suba
 - Result envelope `{status, result, error?, steps, stats, logs}`, statuses `ok|error|timeout|aborted|budget_exceeded|invalid_script|forbidden_script`, serialized to fit 8 KB. `toToolResult` renders the title `workflow: <status> · ok/subtasks subtasks · <elapsed>`.
 
 ## Dependencies / config
-Helpers `./helpers/workflow-runner` (`runWorkflow`, `WorkflowSdkClient`, `DEFAULT_TIMEOUT_MINUTES`), `./helpers/workflow-subtask` (`formatElapsed`), `./helpers/workflow-types` (`DEFAULT_MAX_CONCURRENT`, `DEFAULT_MAX_SUBTASKS`).
+v1 loaded `./helpers/workflow-runner` (`runWorkflow`, `WorkflowSdkClient`, `DEFAULT_TIMEOUT_MINUTES`), `./helpers/workflow-subtask` (`formatElapsed`) and `./helpers/workflow-types` (`DEFAULT_MAX_CONCURRENT`, `DEFAULT_MAX_SUBTASKS`).
 
 ## Retirement
-Migrated to the live v2 plugin `.opencode/plugins/workflow.ts`.
+Replaced by `.opencode/plugins/workflow.ts`. After the 2026-10-28 prune that plugin registers the subtask trio plus its two hooks only: no `workflow` tool, no engine.
+
+## Deleted with the engine (2026-10-28)
+`workflow-runner.ts`, `workflow-script.ts`, the `subtask-run` module and four test files are removed; the shared semaphore, dynamic child titles and running map, fork listing and lineage, the snapshot store and fallback, the 4000-char step cap and the `max_concurrent`/envelope/`stats` fields are gone. Surviving: full step output under a 12 KB tail clamp. State: `mem:architecture/adr/ADR-017-prune-plugin-suite-to-hook-core`, ## Implementation (2026-10-28).
 
 ## Recovery
 Recoverable from the git index at `.opencode/plugins-quarantine/workflow.ts`; recovered copy at `.tmp/retired-plugins/workflow.ts`; test `.opencode/plugins-quarantine/tests/workflow.test.ts`.
 
-Source: recovered source `.tmp/retired-plugins/workflow.ts`; live plugin listed in `.opencode/plugins/`.
+Source: recovered source `.tmp/retired-plugins/workflow.ts`.

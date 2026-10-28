@@ -1,8 +1,8 @@
+import { clampCount } from './subtask-ls'
 import type { SubtaskResult, SubtaskStatus } from './workflow-types'
 
 export const DEFAULT_TAIL_COUNT = 3
 export const MAX_TAIL_COUNT = 5
-export const MAX_TAIL_ENTRY_CHARS = 12 * 1024
 export const TAIL_TTL_MS = 24 * 60 * 60 * 1000
 export const MAX_TAIL_TASK_IDS = 1000
 
@@ -10,7 +10,6 @@ export interface TailEntry {
   task_id: string
   outputText: string
   status: SubtaskStatus
-  truncated: boolean
   updated_at: number
 }
 
@@ -20,23 +19,15 @@ export interface TailOptions {
 
 const store = new Map<string, TailEntry[]>()
 
-const resolveCount = (count: number | undefined): number => {
-  return Number.isFinite(count) ? Math.min(Math.max(Math.floor(count as number), 1), MAX_TAIL_COUNT) : DEFAULT_TAIL_COUNT
-}
-
 const isExpired = (entry: TailEntry, now: number): boolean => now - entry.updated_at > TAIL_TTL_MS
 
 export const recordTailOutput = (result: SubtaskResult): void => {
   if (typeof result.task_id !== 'string' || result.task_id === '') return
   const now = Date.now()
-  const truncated = result.truncated || result.outputText.length > MAX_TAIL_ENTRY_CHARS
   const entry: TailEntry = {
     task_id: result.task_id,
-    outputText: result.outputText.length > MAX_TAIL_ENTRY_CHARS
-      ? result.outputText.slice(0, MAX_TAIL_ENTRY_CHARS)
-      : result.outputText,
+    outputText: result.outputText,
     status: result.status,
-    truncated,
     updated_at: now,
   }
   const existing = store.get(result.task_id) ?? []
@@ -64,6 +55,6 @@ export const readTailOutputs = (task_id: string): TailEntry[] => {
 }
 
 export const tailOutputs = (task_id: string, options: TailOptions): TailEntry[] => {
-  const wanted = resolveCount(options.count)
+  const wanted = clampCount(options.count, MAX_TAIL_COUNT, DEFAULT_TAIL_COUNT)
   return readTailOutputs(task_id).slice(-wanted)
 }

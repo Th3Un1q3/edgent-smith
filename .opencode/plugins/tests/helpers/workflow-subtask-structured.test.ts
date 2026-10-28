@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createSubtask, parseStructured } from '@plugins/helpers/workflow-subtask'
-import { MAX_STEP_OUTPUT_CHARS } from '@plugins/helpers/workflow-types'
 import type { SubtaskInput, SubtaskResult, WorkflowContext } from '@plugins/helpers/workflow-types'
 
 // ── helpers ──────────────────────────────────────────────────────
@@ -23,7 +22,6 @@ const makeContext = (client: any, partial: Partial<WorkflowContext> = {}): Workf
   parentSessionID: 'ses_parent',
   signal: new AbortController().signal,
   defaultAgent: 'rug-swe',
-  maxConcurrent: 4,
   maxSubtasks: 32,
   budget: { used: 0 },
   steps: [],
@@ -82,6 +80,8 @@ describe('parseStructured', () => {
     { name: 'parses pure JSON with no tags', body: '{"a":1}', schema: {}, expected: { usable: true, value: { a: 1 } } },
     { name: 'parses a ```json fence with no tags', body: '```json\n{"a":1}\n```', schema: {}, expected: { usable: true, value: { a: 1 } } },
     { name: 'parses a bare ``` fence with no tags', body: '```\n{"a":1}\n```', schema: {}, expected: { usable: true, value: { a: 1 } } },
+    { name: 'parses a ```json fence with no trailing newline', body: '```json\n{"a":1}```', schema: {}, expected: { usable: true, value: { a: 1 } } },
+    { name: 'unwraps a fenced tag body with no surrounding newlines', body: '<result_json>```json\n{"a":1}```</result_json>', schema: {}, expected: { usable: true, value: { a: 1 } } },
     // tag extraction
     { name: 'parses a tag-only result', body: '<result_json>{"a":1}</result_json>', schema: {}, expected: { usable: true, value: { a: 1 } } },
     { name: 'parses prose surrounding one tagged result', body: 'Here is the answer:\n<result_json>{"a":1}</result_json>\nDone.', schema: {}, expected: { usable: true, value: { a: 1 } } },
@@ -196,6 +196,27 @@ describe('createSubtask structured output', () => {
     expect(prompt).toHaveBeenCalledTimes(1)
   })
 
+  it('does not retry a prose-only reply when info.error is set', async () => {
+    prompt.mockResolvedValue({
+      data: { info: { error: new Error('boom') }, parts: [{ type: 'text', text: 'Prose only, no JSON.' }] },
+    })
+    const result = await run({ schema: SCHEMA })
+
+    expect(result).toMatchObject({ status: 'error', error: 'boom' })
+    expect(prompt).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns the parsed object from a fenced retry reply', async () => {
+    prompt
+      .mockResolvedValueOnce(text('Prose only, no JSON.'))
+      .mockResolvedValueOnce(text('<result_json>\n```json\n{"answer":9}\n```\n</result_json>'))
+    const result = await run({ schema: SCHEMA })
+
+    expect(result).toMatchObject({ status: 'ok', data: { answer: 9 } })
+    expect(prompt).toHaveBeenCalledTimes(2)
+    expect(prompt.mock.calls[1][0].body.parts[0].text).toContain('did not contain a usable <result_json>')
+  })
+
   it('errors with the schema message after two unusable turns and keeps outputText', async () => {
     const body = 'Prose only.\n<result_json>not json</result_json>'
     prompt.mockResolvedValue(text(body))
@@ -232,7 +253,7 @@ describe('createSubtask structured output', () => {
     const result = await run({ schema: SCHEMA })
 
     expect(Object.keys(result).sort((a, b) => a.localeCompare(b))).toEqual(
-      ['data', 'durationMs', 'error', 'outputText', 'status', 'task_id', 'truncated'].sort((a, b) => a.localeCompare(b)),
+      ['data', 'durationMs', 'error', 'outputText', 'status', 'task_id'].sort((a, b) => a.localeCompare(b)),
     )
   })
 
@@ -285,13 +306,12 @@ describe('createSubtask structured output', () => {
     expect(hanging).toHaveBeenCalledTimes(1)
   })
 
-  it('truncates outputText while keeping the parsed tagged data intact', async () => {
-    const answer = 'a'.repeat(MAX_STEP_OUTPUT_CHARS + 10)
+  it('returns the whole outputText while keeping the parsed tagged data intact', async () => {
+    const answer = 'a'.repeat(10_000)
     prompt.mockResolvedValue(text(`<result_json>${JSON.stringify({ answer })}</result_json>`))
     const result = await run({ schema: { type: 'object', required: ['answer'] } })
 
     expect(result.data).toEqual({ answer })
-    expect(result.truncated).toBe(true)
-    expect(result.outputText).toContain('…[truncated')
+    expect(result.outputText.length).toBeGreaterThan(10_000)
   })
 })

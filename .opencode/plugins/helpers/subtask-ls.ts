@@ -1,11 +1,11 @@
 import { Effect } from 'effect'
 import { MAX_DESCRIPTION_CHARS } from './workflow-types'
-import type { LsEntry, StepRecord, SubtaskStatus } from './workflow-types'
+import type { LsEntry, SubtaskStatus } from './workflow-types'
 
-export const DEFAULT_LS_COUNT = 10
-export const MAX_LS_COUNT = 50
+const DEFAULT_LS_COUNT = 10
+const MAX_LS_COUNT = 50
 
-export interface ListStepsOptions {
+interface ListStepsOptions {
   count?: number
   status?: SubtaskStatus
 }
@@ -15,34 +15,14 @@ export interface SessionsReader {
   get?: (input?: unknown) => unknown
 }
 
-// Latest completed run snapshot, shared across sessions in the same server
-// process. A restart clears it, so subtask_ls reports no rows until the next run.
-const lastSteps: StepRecord[] = []
-
-export const recordSteps = (steps: StepRecord[]): void => {
-  lastSteps.length = 0
-  lastSteps.push(...steps)
+export const clampCount = (value: number | undefined, max: number, fallback: number): number => {
+  return Number.isFinite(value) ? Math.min(Math.max(Math.floor(value as number), 1), max) : fallback
 }
 
-export const readStoredSteps = (): StepRecord[] => [...lastSteps]
-
-const resolveCount = (count: number | undefined): number => {
-  return Number.isFinite(count) ? Math.min(Math.max(Math.floor(count as number), 1), MAX_LS_COUNT) : DEFAULT_LS_COUNT
-}
+const resolveCount = (count: number | undefined): number => clampCount(count, MAX_LS_COUNT, DEFAULT_LS_COUNT)
 
 const truncateDescription = (description: string): string =>
   description.length > MAX_DESCRIPTION_CHARS ? description.slice(0, MAX_DESCRIPTION_CHARS) : description
-
-export const listSteps = (steps: StepRecord[], options: ListStepsOptions): LsEntry[] => {
-  const wanted = resolveCount(options.count)
-  const filtered = options.status === undefined ? steps : steps.filter(step => step.status === options.status)
-  return filtered.slice(0, wanted).map(step => ({
-    description: truncateDescription(step.description),
-    durationMs: step.durationMs,
-    task_id: step.task_id,
-    status: step.status,
-  }))
-}
 
 const stripStatusMarker = (title: string): string =>
   title.replace(/^\[(ok|error)\]\s*/i, '')
@@ -138,41 +118,6 @@ const listChildSessions = async (
   return sessions
 }
 
-// A forked session records its source in `Session.Info.fork`, which is the only
-// lineage the server exposes; `fork` has no parent override. The scan is
-// additive, so a reader that cannot list without a parent yields no forks
-// instead of failing the child listing.
-const forkSourceID = (session: Record<string, unknown>): string | undefined => {
-  const fork = session.fork
-  if (fork === null || typeof fork !== 'object') return undefined
-  const source = (fork as { sessionID?: unknown }).sessionID
-  return typeof source === 'string' && source !== '' ? source : undefined
-}
-
-const listEverySession = async (reader: SessionsReader): Promise<Array<Record<string, unknown>>> => {
-  if (typeof reader.list !== 'function') return []
-  try {
-    return toSessionArray(await resolveEffectValue(reader.list()))
-  }
-  catch {
-    return []
-  }
-}
-
-const dedupeByID = (sessions: Array<Record<string, unknown>>): Array<Record<string, unknown>> => {
-  const seen = new Set<string>()
-  const unique: Array<Record<string, unknown>> = []
-  for (const session of sessions) {
-    const id = typeof session.id === 'string' ? session.id : ''
-    if (id !== '') {
-      if (seen.has(id)) continue
-      seen.add(id)
-    }
-    unique.push(session)
-  }
-  return unique
-}
-
 export const listSubtasksFromSessions = async (
   reader: SessionsReader,
   parentSessionID: string,
@@ -181,17 +126,7 @@ export const listSubtasksFromSessions = async (
   const wanted = resolveCount(options.count)
   const now = Date.now()
   const children = await listChildSessions(reader, parentSessionID)
-  const childIDs = new Set(
-    children.map(session => (typeof session.id === 'string' ? session.id : '')).filter(id => id !== ''),
-  )
-  // `fork.sessionID` names the source; count a fork as this session's work when
-  // the source is the caller or one of the caller's children.
-  const allSessions = await listEverySession(reader)
-  const forks = allSessions.filter((session) => {
-    const source = forkSourceID(session)
-    return source !== undefined && (source === parentSessionID || childIDs.has(source))
-  })
-  const entries = dedupeByID([...children, ...forks]).map(session => sessionToEntry(session, now))
+  const entries = children.map(session => sessionToEntry(session, now))
   const filtered = options.status === undefined ? entries : entries.filter(entry => entry.status === options.status)
   return filtered.slice(0, wanted)
 }

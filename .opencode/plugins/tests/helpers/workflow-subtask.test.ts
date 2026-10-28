@@ -2,22 +2,21 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { afterAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   BudgetExceededError,
-  createSemaphore,
   createSubtask,
   extractOutputText,
   injectSkills,
   loadSkill,
   resolveParentModel,
 } from '@plugins/helpers/workflow-subtask'
-import { MAX_LOGS, MAX_LOG_CHARS, MAX_MAX_SUBTASKS_CAP, MAX_STEP_OUTPUT_CHARS } from '@plugins/helpers/workflow-types'
+import { MAX_LOGS, MAX_LOG_CHARS, MAX_MAX_SUBTASKS_CAP } from '@plugins/helpers/workflow-types'
 // Namespace import so a missing MAX_DESCRIPTION_CHARS export fails this test
 // cleanly instead of breaking the whole module at link time.
 import * as workflowTypes from '@plugins/helpers/workflow-types'
-import type { SubtaskInput, WorkflowContext, WorkflowSdkClient } from '@plugins/helpers/workflow-types'
+import type { SubtaskInput, SubtaskResult, WorkflowContext, WorkflowSdkClient } from '@plugins/helpers/workflow-types'
 
 // ── helpers ──────────────────────────────────────────────────────
 
@@ -67,7 +66,6 @@ const makeContext = (client: any, partial: Partial<WorkflowContext> = {}): Workf
   parentSessionID: 'ses_parent',
   signal: new AbortController().signal,
   defaultAgent: 'rug-swe',
-  maxConcurrent: 4,
   maxSubtasks: 32,
   budget: { used: 0 },
   steps: [],
@@ -102,47 +100,6 @@ await writeFile(
 
 afterAll(async () => {
   await rm(skillDirectory, { recursive: true, force: true })
-})
-
-// ── createSemaphore ──────────────────────────────────────────────
-
-describe('createSemaphore', () => {
-  it('bounds concurrent executions to the limit', async () => {
-    const semaphore = createSemaphore(2)
-    let active = 0
-    let highWater = 0
-    const run = async (): Promise<void> => {
-      active += 1
-      highWater = Math.max(highWater, active)
-      await delay(10)
-      active -= 1
-    }
-
-    await Promise.all(Array.from({ length: 6 }, () => semaphore.run(run)))
-
-    expect(highWater).toBeLessThanOrEqual(2)
-  })
-
-  it('drains queued work in FIFO order', async () => {
-    const semaphore = createSemaphore(1)
-    const order: number[] = []
-    const run = (value: number) => async (): Promise<void> => {
-      await delay(1)
-      order.push(value)
-    }
-
-    await Promise.all([
-      semaphore.run(run(1)),
-      semaphore.run(run(2)),
-      semaphore.run(run(3)),
-    ])
-
-    expect(order).toEqual([1, 2, 3])
-  })
-
-  it('throws RangeError when limit is below 1', () => {
-    expect(() => createSemaphore(0)).toThrow(RangeError)
-  })
 })
 
 // ── extractOutputText ────────────────────────────────────────────
@@ -215,7 +172,8 @@ describe('injectSkills', () => {
 describe('createSubtask', () => {
   it('creates a child session with the description as title and the parent id', async () => {
     const client = createClient()
-    const result = await createSubtask(makeContext(client))('do work')
+    const context = makeContext(client)
+    const result = await createSubtask(context)('do work')
 
     expect(client.session.create).toHaveBeenCalledWith({
       body: { title: 'do work', parentID: 'ses_parent' },
@@ -289,6 +247,7 @@ describe('createSubtask', () => {
 
     expect(result.status).toBe('timeout')
     expect(result.error).toContain('0.02 minutes')
+    expect(result.outputText).toBe('')
     expect(abort).toHaveBeenCalledWith({ path: { id: 'ses_child' } })
   })
 
@@ -367,7 +326,8 @@ describe('createSubtask', () => {
 
     expect(result.status).toBe('error')
     expect(result.error).toContain('non-empty')
-    expect(context.steps[0]).toMatchObject({ status: 'error', task_id: '' })
+    expect(result).toMatchObject({ durationMs: 0, outputText: '' })
+    expect(context.steps[0]).toMatchObject({ status: 'error', task_id: '', description: 'invalid subtask input' })
   })
 
   it('returns an error result when the session id is missing', async () => {
@@ -409,50 +369,34 @@ describe('createSubtask', () => {
     )
   })
 
-  it('truncates output beyond the shared character limit with a marker', async () => {
-    const prompt = vi.fn()
-      .mockResolvedValueOnce({ data: { info: {}, parts: [{ type: 'text', text: 'a'.repeat(MAX_STEP_OUTPUT_CHARS - 1) }] } })
-      .mockResolvedValueOnce({ data: { info: {}, parts: [{ type: 'text', text: 'a'.repeat(MAX_STEP_OUTPUT_CHARS) }] } })
-      .mockResolvedValueOnce({ data: { info: {}, parts: [{ type: 'text', text: 'a'.repeat(MAX_STEP_OUTPUT_CHARS + 1) }] } })
+  it('returns a long output whole without a truncation marker', async () => {
+    const long = 'a'.repeat(10_000)
+    const prompt = vi.fn(async () => ({ data: { info: {}, parts: [{ type: 'text', text: long }] } }))
     const subtask = createSubtask(makeContext(createClient({ prompt })))
 
-    const under = await subtask('under')
-    const exact = await subtask('exact')
-    const over = await subtask('over')
+    const result = await subtask('long')
 
-    expect(under).toMatchObject({ outputText: 'a'.repeat(MAX_STEP_OUTPUT_CHARS - 1), truncated: false })
-    expect(exact).toMatchObject({ outputText: 'a'.repeat(MAX_STEP_OUTPUT_CHARS), truncated: false })
-    expect(over.outputText).toBe(`${'a'.repeat(MAX_STEP_OUTPUT_CHARS)}\n…[truncated 1 chars]`)
-    expect(over.truncated).toBe(true)
+    expect(result.outputText).toBe(long)
+    expect(Object.hasOwn(result, 'truncated')).toBe(false)
   })
 
-  it('bounds Promise.all fan-out to maxConcurrent', async () => {
-    let active = 0
-    let highWater = 0
+  it('runs every subtask in a Promise.all fan-out', async () => {
     const prompt = vi.fn(async ({ signal }: { signal?: AbortSignal } = {}) => {
-      active += 1
-      highWater = Math.max(highWater, active)
-      try {
-        await delay(15, signal)
-      }
-      finally {
-        active -= 1
-      }
+      await delay(15, signal)
       return { data: { info: {}, parts: [{ type: 'text', text: 'OUT' }] } }
     })
     const client = createClient({ prompt })
-    const context = makeContext(client, { maxConcurrent: 2 })
+    const context = makeContext(client)
     const subtask = createSubtask(context)
 
     const results = await Promise.all(Array.from({ length: 8 }, () => subtask('work')))
 
     expect(results.map(result => result.status)).toEqual(Array.from({ length: 8 }, () => 'ok'))
-    expect(highWater).toBeLessThanOrEqual(2)
     expect(client.session.create).toHaveBeenCalledTimes(8)
   })
 
   it('records steps and caps them at MAX_MAX_SUBTASKS_CAP', async () => {
-    const context = makeContext(createClient(), { maxSubtasks: 100, maxConcurrent: 1 })
+    const context = makeContext(createClient(), { maxSubtasks: 100 })
     const subtask = createSubtask(context)
 
     const results = await Promise.all(
@@ -466,7 +410,6 @@ describe('createSubtask', () => {
     expect(context.steps[0]).toMatchObject({
       description: 'task 0',
       status: 'ok',
-      truncated: false,
     })
   })
 })
@@ -827,5 +770,65 @@ describe('createSubtask error normalization and options', () => {
 
     expect(result.status).toBe('aborted')
     expect(abort).toHaveBeenCalled()
+  })
+})
+
+describe('createSubtask duration, cleanup, and bookkeeping', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const runAt = async (advanceMs: number): Promise<SubtaskResult> => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(1_700_000_000_000))
+    const prompt = vi.fn(async () => {
+      vi.setSystemTime(new Date(1_700_000_000_000 + advanceMs))
+      return { data: { info: {}, parts: [{ type: 'text', text: 'OUT' }] } }
+    })
+    return createSubtask(makeContext(createClient({ prompt })))('do work')
+  }
+
+  it.each([1500, 0])('reports durationMs %i from the clock delta', async (advanceMs) => {
+    const result = await runAt(advanceMs)
+
+    expect(result).toMatchObject({ status: 'ok', durationMs: advanceMs })
+  })
+
+  it('clears the timer and the parent listener once the attempt settles', async () => {
+    vi.useFakeTimers()
+    const controller = new AbortController()
+    const abort = vi.fn(async () => true)
+    const result = await createSubtask(makeContext(createClient({ abort }), { signal: controller.signal }))({
+      prompt: 'work',
+      description: 'run work',
+      timeout_minutes: 1,
+    })
+
+    controller.abort()
+    await vi.advanceTimersByTimeAsync(2 * 60_000)
+
+    expect(result.status).toBe('ok')
+    expect(abort).not.toHaveBeenCalled()
+  })
+
+  it('backfills startedAt from the clock at creation time', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(1_700_000_000_000))
+    const context = makeContext(createClient())
+
+    createSubtask(context)
+
+    expect(context.startedAt).toBe(1_700_000_000_000)
+  })
+
+  it('rethrows a BudgetExceededError raised mid-attempt without recording a step', async () => {
+    const prompt = vi.fn(async () => {
+      throw new BudgetExceededError('child budget exceeded')
+    })
+    const context = makeContext(createClient({ prompt }))
+
+    await expect(createSubtask(context)('do work')).rejects.toBeInstanceOf(BudgetExceededError)
+    await expect(createSubtask(context)('do work')).rejects.toThrow('child budget exceeded')
+    expect(context.steps).toHaveLength(0)
   })
 })

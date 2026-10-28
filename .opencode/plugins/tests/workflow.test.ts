@@ -1,4 +1,4 @@
-import { Effect, Fiber, Logger, Stream } from 'effect'
+import { Effect, Exit, Fiber, Logger, Stream } from 'effect'
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 
@@ -39,11 +39,22 @@ const entryClient = vi.hoisted(() => ({
 vi.mock('@plugins/helpers/instruction-entry-client', () => ({
   writeEntry: entryClient.writeEntry,
   removeEntry: entryClient.removeEntry,
-  entryValueBytes: (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8'),
-  get MAX_ENTRY_VALUE_BYTES() { return 256 * 1024 },
 }))
 
+const subtaskFactory = vi.hoisted(() => ({ createSubtask: vi.fn() }))
+
+vi.mock('@plugins/helpers/workflow-subtask', () => ({ createSubtask: subtaskFactory.createSubtask }))
+
+vi.mock('@plugins/helpers/subtask-ls', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@plugins/helpers/subtask-ls')>()
+  return { ...actual, listSubtasksFromSessions: vi.fn(actual.listSubtasksFromSessions) }
+})
+
 import { createWorkflowClient } from '@plugins/helpers/workflow-client-adapter'
+
+import { listSubtasksFromSessions } from '@plugins/helpers/subtask-ls'
+
+import { recordTailOutput } from '@plugins/helpers/subtask-tail'
 
 import plugin, { handleSessionEvent, isWorkflowSessionEvent, loadWorkflowInstructions, WORKFLOW_INSTRUCTIONS_SENTINEL } from '@plugins/workflow'
 
@@ -68,7 +79,7 @@ const collectLogger = (logs: Harness['logs']): Logger.Logger<unknown, void> =>
     logs.push(Array.isArray(message) ? message : [message])
   })
 
-const makeHarness = (events: SessionEventPayload[] = []): Harness => {
+const makeHarness = (events: SessionEventPayload[] = [], session: Record<string, unknown> = {}): Harness => {
   const tools: Array<Record<string, unknown>> = []
   const logs: Array<ReadonlyArray<unknown>> = []
   let subscriptions = 0
@@ -102,6 +113,7 @@ const makeHarness = (events: SessionEventPayload[] = []): Harness => {
       context: () => Effect.succeed([]),
       interrupt: () => Effect.succeed(undefined),
       update: () => Effect.succeed(undefined),
+      ...session,
     },
   } as unknown as Context
 
@@ -121,7 +133,6 @@ const emitSessionEvent = async (
   const effect = handleSessionEvent(event, options ?? {
     agentAllowlist: new Set(['rug', 'rug-swe']),
     block: 'BLOCK-BODY',
-    entryBytes: 10,
   })
 
   await Effect.runPromise(Effect.withLogger(collectLogger(logs))(effect))
@@ -132,6 +143,12 @@ const register = async (h: Harness): Promise<void> => {
   const effect = Effect.scoped(plugin.effect(h.context))
 
   await Effect.runPromise(Effect.withLogger(collectLogger(h.logs))(effect))
+}
+
+const executeTool = async <T>(tool: Record<string, unknown>, input: unknown, sessionID = 'ses_parent'): Promise<T> => {
+  const execute = tool.execute as (toolInput: unknown, toolContext: { sessionID: string }) => Effect.Effect<T>
+
+  return await Effect.runPromise(execute(input, { sessionID }))
 }
 
 describe('workflow (v2)', () => {
@@ -153,6 +170,163 @@ describe('workflow (v2)', () => {
     const names = h.tools.map(tool => tool.name)
 
     expect(names).not.toContain('workflow')
+  })
+
+  it('accepts only task_id on subtask_tail', async () => {
+    const h = makeHarness()
+
+    await register(h)
+
+    const input = h.tools[2].input as { properties: Record<string, unknown>, additionalProperties: boolean }
+
+    expect(Object.keys(input.properties)).toEqual(['task_id', 'count'])
+    expect(input.additionalProperties).toBe(false)
+  })
+
+  it('offers only ok and error as subtask_ls status filters', async () => {
+    const h = makeHarness()
+
+    await register(h)
+
+    const input = h.tools[0].input as { properties: { status: { enum: string[] } } }
+
+    expect(input.properties.status.enum).toEqual(['ok', 'error'])
+  })
+
+  it('propagates a throwing registration instead of swallowing it', async () => {
+    const h = makeHarness()
+    const tool = h.context.tool as unknown as {
+      transform: (callback: (editor: unknown) => void) => Effect.Effect<unknown>
+    }
+
+    tool.transform = (callback) => {
+      callback({
+        add: () => {
+          throw new Error('add exploded')
+        },
+      })
+      return Effect.succeed({ dispose: Effect.void })
+    }
+
+    const exit = await Effect.runPromiseExit(Effect.scoped(plugin.effect(h.context)))
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(h.tools).toHaveLength(0)
+  })
+})
+
+describe('workflow tool handlers', () => {
+  beforeEach(() => {
+    subtaskFactory.createSubtask.mockReset()
+  })
+
+  it('returns the entries the sessions reader supplied for subtask_ls', async () => {
+    const list = vi.fn(() => [
+      { id: 'ses_child_1', title: '[ok] first task', time: { created: 1000, updated: 1500 }, outcome: 'succeeded' },
+      { id: 'ses_child_2', title: 'second task', time: { created: 2000, updated: 2400 }, outcome: 'failed' },
+    ])
+    const h = makeHarness([], { list })
+
+    await register(h)
+
+    const result = await executeTool<{ content: string, metadata: { title: string } }>(h.tools[0], { count: 10 })
+
+    expect(list).toHaveBeenCalledWith({ parentID: 'ses_parent' })
+    expect(listSubtasksFromSessions).toHaveBeenCalledWith(expect.anything(), 'ses_parent', { count: 10, status: undefined })
+    expect(JSON.parse(result.content)).toEqual([
+      { description: 'first task', durationMs: 500, task_id: 'ses_child_1', status: 'ok' },
+      { description: 'second task', durationMs: 400, task_id: 'ses_child_2', status: 'error' },
+    ])
+    expect(result.metadata.title).toBe('subtask_ls: 2 subtask(s)')
+
+    const filtered = await executeTool<{ content: string }>(h.tools[0], { count: 1, status: 'ok' })
+
+    expect(listSubtasksFromSessions).toHaveBeenLastCalledWith(expect.anything(), 'ses_parent', { count: 1, status: 'ok' })
+    expect(JSON.parse(filtered.content)).toEqual([
+      { description: 'first task', durationMs: 500, task_id: 'ses_child_1', status: 'ok' },
+    ])
+  })
+
+  it('returns an empty list when the reader list call throws', async () => {
+    const h = makeHarness([], {
+      list: () => {
+        throw new Error('list unavailable')
+      },
+    })
+
+    await register(h)
+
+    const result = await executeTool<{ content: string, metadata: { title: string } }>(h.tools[0], {})
+
+    expect(JSON.parse(result.content)).toEqual([])
+    expect(result.metadata.title).toBe('subtask_ls: 0 subtask(s)')
+  })
+
+  it('returns an empty array for a task id with no stored output', async () => {
+    const h = makeHarness()
+
+    await register(h)
+
+    const result = await executeTool<{ content: string, metadata: { title: string } }>(h.tools[2], { task_id: 'task_missing' })
+
+    expect(JSON.parse(result.content)).toEqual([])
+    expect(result.metadata.title).toBe('subtask_tail: 0 output(s)')
+  })
+
+  it('returns recorded outputs in the order they were recorded', async () => {
+    const h = makeHarness()
+
+    await register(h)
+    recordTailOutput({ outputText: 'out-0', task_id: 'task_tail_order', status: 'ok', durationMs: 1 })
+    recordTailOutput({ outputText: 'out-1', task_id: 'task_tail_order', status: 'error', durationMs: 2 })
+
+    const result = await executeTool<{ content: string, metadata: { title: string } }>(h.tools[2], { task_id: 'task_tail_order', count: 3 })
+    const entries = JSON.parse(result.content) as Array<{ outputText: string }>
+
+    expect(entries.map(entry => entry.outputText)).toEqual(['out-0', 'out-1'])
+    expect(result.metadata.title).toBe('subtask_tail: 2 output(s)')
+  })
+
+  it('passes count through to the tail helper', async () => {
+    const h = makeHarness()
+
+    await register(h)
+    recordTailOutput({ outputText: 'out-0', task_id: 'task_tail_count', status: 'ok', durationMs: 1 })
+    recordTailOutput({ outputText: 'out-1', task_id: 'task_tail_count', status: 'ok', durationMs: 2 })
+
+    const result = await executeTool<{ content: string }>(h.tools[2], { task_id: 'task_tail_count', count: 1 })
+    const entries = JSON.parse(result.content) as Array<{ outputText: string }>
+
+    expect(entries.map(entry => entry.outputText)).toEqual(['out-1'])
+  })
+
+  it('passes the documented context and parsed parameters to createSubtask', async () => {
+    const subtask = vi.fn(async () => ({ outputText: 'DONE', task_id: 'task_run_1', status: 'ok' as const, durationMs: 12 }))
+
+    subtaskFactory.createSubtask.mockReturnValue(subtask)
+
+    const h = makeHarness()
+
+    await register(h)
+
+    const result = await executeTool<{ metadata: Record<string, unknown> }>(
+      h.tools[1],
+      { prompt: 'do it', description: 'one thing', agent: 'rug', skills: ['test-design'], timeout_minutes: 5 },
+    )
+    const [context] = subtaskFactory.createSubtask.mock.calls[0] as [Record<string, unknown>]
+
+    expect(subtaskFactory.createSubtask).toHaveBeenCalledTimes(1)
+    expect(context.parentSessionID).toBe('ses_parent')
+    expect(context.directory).toBe(REPO_ROOT)
+    expect(context.defaultAgent).toBe('rug-swe')
+    expect(context.maxSubtasks).toBe(32)
+    expect(context.budget).toEqual({ used: 0 })
+    expect(context.steps).toEqual([])
+    expect(context.logs).toEqual([])
+    expect(context.active).toBeInstanceOf(Set)
+    expect(context.signal).toBeInstanceOf(AbortSignal)
+    expect(subtask).toHaveBeenCalledWith({ prompt: 'do it', description: 'one thing', agent: 'rug', skills: ['test-design'], timeout_minutes: 5 })
+    expect(result.metadata).toEqual({ title: 'subtask_run: ok', status: 'ok', task_id: 'task_run_1' })
   })
 })
 
@@ -228,34 +402,6 @@ describe('workflow instruction session events', () => {
     ])
   })
 
-  it('skips the write when the entry would exceed the size limit', async () => {
-    const logs = await emitSessionEvent(
-      { type: 'session.created', data: { sessionID: 'ses_big', agent: 'rug-swe' } },
-      { agentAllowlist: new Set(['rug', 'rug-swe']), block: 'BLOCK-BODY', entryBytes: 300_000 },
-    )
-
-    expect(logs).toContainEqual([
-      'workflow.instructions.skipped',
-      expect.objectContaining({ sessionID: 'ses_big', reason: 'entry-too-large' }),
-    ])
-    expect(entryClient.writeEntry).not.toHaveBeenCalled()
-  })
-
-  it('writes an entry that is exactly at the size limit and skips the next byte', async () => {
-    const options = { agentAllowlist: new Set(['rug', 'rug-swe']), block: 'BLOCK-BODY', entryBytes: 256 * 1024 }
-
-    await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_at_limit', agent: 'rug-swe' } }, options)
-    expect(entryClient.writeEntry).toHaveBeenCalledTimes(1)
-
-    entryClient.writeEntry.mockClear()
-
-    await emitSessionEvent(
-      { type: 'session.created', data: { sessionID: 'ses_over_limit', agent: 'rug-swe' } },
-      { ...options, entryBytes: 256 * 1024 + 1 },
-    )
-    expect(entryClient.writeEntry).not.toHaveBeenCalled()
-  })
-
   it('writes the entry once per subscribed event and ignores other event types', async () => {
     const h = makeHarness([
       { type: 'session.created', data: { sessionID: 'ses_stream_created', agent: 'rug-swe' } },
@@ -312,6 +458,28 @@ describe('workflow instruction session events', () => {
     ])
   })
 
+  it('names the remove action when the removal fails', async () => {
+    entryClient.removeEntry.mockResolvedValue({ status: 'failed', reason: 'entry missing' })
+
+    const logs = await emitSessionEvent({ type: 'session.agent.selected', data: { sessionID: 'ses_action_remove', agent: 'build' } })
+
+    expect(logs).toContainEqual([
+      'workflow.instructions.error',
+      expect.objectContaining({ message: 'workflow instructions: remove failed: entry missing' }),
+    ])
+  })
+
+  it('names the write action when the write fails', async () => {
+    entryClient.writeEntry.mockResolvedValue({ status: 'failed', reason: 'entry refused' })
+
+    const logs = await emitSessionEvent({ type: 'session.created', data: { sessionID: 'ses_action_write', agent: 'rug-swe' } })
+
+    expect(logs).toContainEqual([
+      'workflow.instructions.error',
+      expect.objectContaining({ message: 'workflow instructions: write failed: entry refused' }),
+    ])
+  })
+
   it('reports a rejected write as an error instead of swallowing it', async () => {
     entryClient.writeEntry.mockRejectedValue(new Error('write exploded'))
 
@@ -332,7 +500,7 @@ describe('workflow instruction session events', () => {
 
     const logs = await emitSessionEvent(
       { type: 'session.created', data: { sessionID: 'ses_throw', agent: 'rug-swe' } },
-      { agentAllowlist, block: 'BLOCK-BODY', entryBytes: 10 },
+      { agentAllowlist, block: 'BLOCK-BODY' },
     )
 
     expect(logs).toContainEqual(['workflow.instructions.error', expect.objectContaining({ message: 'allowlist exploded' })])
@@ -373,18 +541,6 @@ describe('workflow instruction config validation', () => {
     harness.reset()
   })
 
-  it('rejects a whitespace-only instructions path', () => {
-    harness.set({ instructions: ' '.repeat(3) })
-
-    expect(() => loadWorkflowInstructions(REPO_ROOT)).toThrow(/plugins\["workflow"\]\.instructions: missing or not a non-empty string/)
-  })
-
-  it('names the instructions config key when the path is empty', () => {
-    harness.set({ instructions: '' })
-
-    expect(() => loadWorkflowInstructions(REPO_ROOT)).toThrow(/plugins\["workflow"\]\.instructions/)
-  })
-
   it('treats a path reading "Stryker was here!" as an ordinary path', () => {
     harness.set({ instructions: 'Stryker was here!' })
 
@@ -410,16 +566,45 @@ describe('workflow instruction config validation', () => {
     }
   })
 
+  it('names the configured path and directory when the directory is unusable', () => {
+    harness.set({ instructions: 'custom/instructions.md' })
+
+    expect(() => loadWorkflowInstructions(7 as unknown as string)).toThrow(
+      'cannot resolve custom/instructions.md against 7: project directory is missing',
+    )
+  })
+
+  it('converts a non-Error configuration failure into an Error at registration', async () => {
+    Object.defineProperty(harness.config.plugins, 'workflow', {
+      configurable: true,
+      get() {
+        const failure: unknown = 'config exploded'
+        throw failure as Error
+      },
+    })
+
+    try {
+      let failure: unknown
+      try {
+        await register(makeHarness())
+      }
+      catch (error) {
+        failure = error
+      }
+
+      expect(failure).toBeInstanceOf(Error)
+      expect((failure as Error).message).toBe('config exploded')
+    }
+    finally {
+      delete (harness.config.plugins as { workflow?: unknown }).workflow
+      harness.reset()
+    }
+  })
+
   it('fails registration when the instructions file cannot be read', async () => {
     harness.set({ instructions: '/nonexistent/workflow-instructions.md' })
 
     await expect(register(makeHarness())).rejects.toThrow(/cannot read/)
-  })
-
-  it('rejects a whitespace-only agent entry at registration', async () => {
-    harness.set({ agents: ['rug', '  '] })
-
-    await expect(register(makeHarness())).rejects.toThrow(/not a non-empty string array/)
   })
 })
 

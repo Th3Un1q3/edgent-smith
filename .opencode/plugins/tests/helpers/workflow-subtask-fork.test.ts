@@ -6,13 +6,12 @@ import type { SubtaskInput, WorkflowContext } from '@plugins/helpers/workflow-ty
 // ── helpers ──────────────────────────────────────────────────────
 
 const createClient = (
-  options: { create?: any, prompt?: any, fork?: any, abort?: any, messages?: any, update?: any } = {},
+  options: { create?: any, prompt?: any, fork?: any, abort?: any, messages?: any } = {},
 ): any => ({
   session: {
     create: options.create ?? vi.fn(async () => ({ data: { id: 'ses_child' } })),
     prompt: options.prompt ?? vi.fn(async () => ({ data: { info: {}, parts: [{ type: 'text', text: 'OUT' }] } })),
     abort: options.abort ?? vi.fn(async () => true),
-    update: options.update ?? vi.fn(async () => ({ data: {} })),
     ...(options.fork !== undefined && { fork: options.fork }),
     ...(options.messages !== undefined && { messages: options.messages }),
   },
@@ -47,7 +46,6 @@ const makeContext = (client: any, partial: Partial<WorkflowContext> = {}): Workf
   parentSessionID: 'ses_parent',
   signal: new AbortController().signal,
   defaultAgent: 'rug-swe',
-  maxConcurrent: 4,
   maxSubtasks: 32,
   budget: { used: 0 },
   steps: [],
@@ -322,29 +320,22 @@ describe('createSubtask fork_from', () => {
     expect(fork).toHaveBeenCalledTimes(1)
     expect(fork).toHaveBeenCalledWith({ sessionID: 'ses_source' })
   })
+})
 
-  it('titles the forked child running then terminal, never the source title', async () => {
-    const titles: string[] = []
-    const update = vi.fn(async (argument: { body: { title: string } }) => {
-      titles.push(argument.body.title)
-      return { data: {} }
-    })
-    const fork = vi.fn(async () => ({ data: { id: 'ses_fork' } }))
-    const client = createClient({ fork, update })
+// ── createSubtask: documented fork failure messages ─────────────
 
-    const result = await createSubtask(makeContext(client))({
-      prompt: 'audit A',
-      description: 'forked work',
-      fork_from: 'ses_source',
-    })
+describe('createSubtask fork failure messages', () => {
+  const input = { prompt: 'audit A', description: 'audit A', fork_from: 'ses_source' }
 
-    expect(result.status).toBe('ok')
-    expect(client.session.create).not.toHaveBeenCalled()
-    expect(titles[0]).toMatch(/^wf#[0-9a-f]{6} · \[running\] forked work$/)
-    // Derive the dynamic run id from the first title so both compare against the
-    // same id the runner generated rather than a literal.
-    const runId = titles[0].slice(0, titles[0].indexOf(' · '))
-    expect(titles).toEqual([`${runId} · [running] forked work`, `${runId} · [ok] forked work`])
-    expect(titles).not.toContain('ses_source')
+  it.each([
+    ['an unsupported session.fork', undefined, 'session.fork is unsupported'],
+    ['an absent data.id', async () => ({ data: {} }), 'no session id returned'],
+    ['a blank data.id', async () => ({ data: { id: '' } }), 'no session id returned'],
+  ])('reports the documented error for %s', async (_label, fork, reason) => {
+    const result = await createSubtask(makeContext(createClient({ fork })))(input)
+
+    expect(result.status).toBe('error')
+    expect(result.error).toBe(`failed to fork subtask session ses_source: ${reason}`)
+    expect(result.outputText).toBe('')
   })
 })

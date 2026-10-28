@@ -17,28 +17,20 @@ import type { SessionID } from '@opencode/schema/session-id'
 const workflowConfig = vi.hoisted(() => ({
   instructions: '.agents/skills/task-delegation/SKILL.md',
   agents: ['rug-swe'],
-  missing: false,
 }))
 
 vi.mock('@plugins/config/harness.config', () => ({
-  harnessConfig: {
-    plugins: {
-      get workflow() { return workflowConfig.missing ? undefined : workflowConfig },
-    },
-  },
+  harnessConfig: { plugins: { workflow: workflowConfig } },
 }))
 
 const entryClient = vi.hoisted(() => ({
   writeEntry: vi.fn(),
   removeEntry: vi.fn(),
-  limits: { max: 256 * 1024 },
 }))
 
 vi.mock('@plugins/helpers/instruction-entry-client', () => ({
   writeEntry: entryClient.writeEntry,
   removeEntry: entryClient.removeEntry,
-  entryValueBytes: (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8'),
-  get MAX_ENTRY_VALUE_BYTES() { return entryClient.limits.max },
 }))
 
 import { handleSessionEvent, loadWorkflowInstructions, WORKFLOW_INSTRUCTIONS_SENTINEL } from '@plugins/workflow'
@@ -127,7 +119,6 @@ describe('workflow instructions', () => {
   beforeEach(() => {
     workflowConfig.instructions = CONFIGURED_INSTRUCTIONS
     workflowConfig.agents = ['rug-swe']
-    workflowConfig.missing = false
     entryClient.writeEntry.mockReset().mockResolvedValue({ status: 'written' })
     entryClient.removeEntry.mockReset().mockResolvedValue({ status: 'absent' })
   })
@@ -199,51 +190,7 @@ describe('workflow instructions', () => {
     })
   })
 
-  describe('configuration and content guards', () => {
-    const harnessWithInstructions = (): Harness => {
-      const directory = makeDirectory()
-
-      writeInstructions(directory, '# Body\n')
-      workflowConfig.instructions = 'instructions.md'
-      return makeHarness(directory)
-    }
-
-    it('names the instructions key when the workflow section is absent', () => {
-      workflowConfig.missing = true
-
-      expect(() => loadWorkflowInstructions(makeDirectory())).toThrow('harnessConfig.plugins["workflow"].instructions')
-    })
-
-    it('names the instructions key when the configured value is not a string', () => {
-      workflowConfig.instructions = 42 as unknown as string
-
-      expect(() => loadWorkflowInstructions(makeDirectory())).toThrow('harnessConfig.plugins["workflow"].instructions')
-    })
-
-    it('rejects an agents value that is not an array', async () => {
-      workflowConfig.agents = 'rug' as unknown as string[]
-
-      await expect(register(harnessWithInstructions())).rejects.toThrow('.agents: missing or not a non-empty string array')
-    })
-
-    it('rejects an empty agents list', async () => {
-      workflowConfig.agents = []
-
-      await expect(register(harnessWithInstructions())).rejects.toThrow('.agents: missing or not a non-empty string array')
-    })
-
-    it('rejects a blank agent name', async () => {
-      workflowConfig.agents = ['rug', '']
-
-      await expect(register(harnessWithInstructions())).rejects.toThrow('.agents: missing or not a non-empty string array')
-    })
-
-    it('rejects a non-string agent name', async () => {
-      workflowConfig.agents = [42] as unknown as string[]
-
-      await expect(register(harnessWithInstructions())).rejects.toThrow('.agents: missing or not a non-empty string array')
-    })
-
+  describe('content guards', () => {
     it('rejects a blank project directory', () => {
       expect(() => loadWorkflowInstructions(' '.repeat(3))).toThrow('project directory is missing')
     })
@@ -287,7 +234,6 @@ describe('workflow instructions', () => {
       const effect = handleSessionEvent(event, {
         agentAllowlist: new Set(workflowConfig.agents),
         block: entryValue,
-        entryBytes: Buffer.byteLength(JSON.stringify(entryValue), 'utf8'),
       })
 
       await Effect.runPromise(Effect.withLogger(collectLogger(h.logs))(effect))

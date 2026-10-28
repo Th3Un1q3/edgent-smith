@@ -17,11 +17,11 @@ const harness = vi.hoisted(() => {
 
 vi.mock('@plugins/config/harness.config', () => ({ harnessConfig: harness.config }))
 
-const runMock = vi.hoisted(() => ({
-  runStandaloneSubtask: vi.fn(async () => ({ outputText: 'OUT', task_id: 'ses_child', status: 'ok', durationMs: 10, truncated: false })),
+const subtaskMock = vi.hoisted(() => ({
+  createSubtask: vi.fn(() => async () => ({ outputText: 'OUT', task_id: 'ses_child', status: 'ok', durationMs: 10 })),
 }))
 
-vi.mock('@plugins/helpers/subtask-run', () => runMock)
+vi.mock('@plugins/helpers/workflow-subtask', () => subtaskMock)
 
 const entryClient = vi.hoisted(() => ({
   writeEntry: vi.fn(async () => ({ status: 'written' })),
@@ -77,7 +77,7 @@ const register = async (h: ReturnType<typeof makeHarness>): Promise<void> => {
 
 describe('standalone trio tool registration', () => {
   beforeEach(() => {
-    runMock.runStandaloneSubtask.mockClear()
+    subtaskMock.createSubtask.mockClear()
   })
 
   it('registers the standalone trio (subtask_ls/run/tail)', async () => {
@@ -110,7 +110,7 @@ describe('standalone trio tool registration', () => {
       ),
     ) as unknown as Record<string, unknown>
 
-    expect(runMock.runStandaloneSubtask).toHaveBeenCalledTimes(1)
+    expect(subtaskMock.createSubtask).toHaveBeenCalledTimes(1)
     expect(String(result.content)).toContain('"status":"ok"')
     expect((result.metadata as { title: string }).title).toContain('subtask_run')
   })
@@ -136,8 +136,7 @@ describe('standalone trio tool registration', () => {
       task_id: 'ses_child',
       status: 'ok',
       durationMs: 10,
-      truncated: false,
     }))
-    expect(result.metadata).toMatchObject({ status: 'ok', task_id: 'ses_child', truncated: false })
+    expect(result.metadata).toMatchObject({ status: 'ok', task_id: 'ses_child' })
   })
 })

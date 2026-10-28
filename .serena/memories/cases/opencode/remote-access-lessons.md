@@ -28,6 +28,7 @@ A quick tunnel against the loopback server loads the page but never updates: qui
 - A loopback-bound server is unreachable from a sibling container: use a shared network namespace (`network_mode: service:devcontainer`) or bind 0.0.0.0.
 - A quick tunnel's hostname changes on every restart, so links and allow-lists break with it.
 - The tunnel daemon was run as a compose sidecar under its own profile.
+- `opencode serve --service` is usually the same process that hosts the current agent session, so restarting it to change its password or environment terminates the session; for a service already running, align the credential you hold to the value that service uses, which it keeps in `~/.local/state/opencode/service.json` (mode 0600, its `pid` field identifies the live process), and verify with an authenticated `GET /api/event` expecting `200 text/event-stream` — observed: the listener's pid was an ancestor of the probe's own shell, and replacing the `.env` password with the service's stored value was what made the API return 200 and stream frames.
 
 ## Sources
 

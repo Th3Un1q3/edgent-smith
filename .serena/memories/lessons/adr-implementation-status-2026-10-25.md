@@ -32,7 +32,7 @@ implementation task. Evidence lines are pointers, not quotes.
 | ADR-011 | accepted / PARTIAL | keyed `instr-task-skills-<skill>` entry missing at .opencode/plugins/helpers/workflow-subtask.ts:951, per docs/plan/2026-10-20-adr-011-instruction-entries/migration-plan.md:532,537 |
 | ADR-012 | ~~proposed / PARTIAL~~ → accepted / IMPLEMENTED (2026-10-25) | code half in .opencode/plugins/workflow.ts:308/324/359; no `workflow` tool registered; see Status update |
 | ADR-016 | proposed / NOT-IMPLEMENTED | .agents/skills/INDEX.md absent |
-| ADR-017 | proposed / NOT-IMPLEMENTED | workflow-runner.ts 641 + workflow-script.ts 194 lines still present |
+| ADR-017 | ~~proposed / NOT-IMPLEMENTED~~ → accepted / IMPLEMENTED (2026-10-28) | 13 increments landed, gates green; exclusions in Status update 2026-10-28 |
 
 ## Implemented (5)
 
@@ -98,3 +98,17 @@ gap. It is the only accepted ADR with one located anchor.
 
 An inert permission grant and present-tense prose are drift, not a live
 misroute. Verify that a cited harm actually changes behaviour before ranking it.
+
+## Status update (2026-10-28)
+
+### ADR-017 — accepted / IMPLEMENTED
+
+`mem:architecture/adr/ADR-017-prune-plugin-suite-to-hook-core` is `status: accepted` with an appended
+`## Implementation (2026-10-28)` section: 13 increments, gates (36 files / 900 tests pass (corrected 2026-10-28: 816 was pre-mutation-campaign; see the ADR's Mutation verification subsection), typecheck
+passes, lint 0 errors and one pre-existing warning), and three exclusions —
+`rug.md` fork-promise and `truncated === false` guidance (user-owned, untouched), adapter messages and
+parent-model inheritance (its own ADR), `harness.config` literal hoist (deferred).
+
+`workflow-runner.ts`, `workflow-script.ts` and the `subtask-run` module are absent from
+`.opencode/plugins/helpers`; the semaphore, dynamic titles, fork listing, snapshot fallback,
+4000-char step cap and `max_concurrent`/envelope/`stats` fields are gone. The row above is historical.

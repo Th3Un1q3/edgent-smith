@@ -2,13 +2,11 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import {
-  createRunId,
   DEFAULT_PER_SUBTASK_TIMEOUT_MINUTES,
   MAX_DESCRIPTION_CHARS,
   MAX_LOGS,
   MAX_LOG_CHARS,
   MAX_MAX_SUBTASKS_CAP,
-  MAX_STEP_OUTPUT_CHARS,
 } from './workflow-types'
 import type {
   LogFunction,
@@ -28,50 +26,6 @@ export class BudgetExceededError extends Error {
     super(message)
     this.name = 'BudgetExceededError'
   }
-}
-
-export const createSemaphore = (
-  limit: number,
-): { run: <T>(function_: () => Promise<T>) => Promise<T> } => {
-  if (limit < 1) {
-    throw new RangeError(`semaphore limit must be at least 1 (got ${limit})`)
-  }
-
-  let active = 0
-  const queue: Array<() => void> = []
-
-  const release = (): void => {
-    active -= 1
-    const next = queue.shift()
-    if (next !== undefined) {
-      next()
-    }
-  }
-
-  const acquire = (): Promise<void> =>
-    new Promise((resolve) => {
-      if (active < limit) {
-        active += 1
-        resolve()
-        return
-      }
-      queue.push(() => {
-        active += 1
-        resolve()
-      })
-    })
-
-  const run = async <T>(function_: () => Promise<T>): Promise<T> => {
-    await acquire()
-    try {
-      return await function_()
-    }
-    finally {
-      release()
-    }
-  }
-
-  return { run }
 }
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -167,7 +121,7 @@ const normalizeAgent = (value: unknown): string | undefined => {
 // shared `SubtaskParameters` marks it optional for callers: normalization always
 // fills it, so downstream code can drop unreachable fallbacks without widening
 // the shared interface.
-export interface NormalizedSubtaskParameters extends SubtaskParameters {
+interface NormalizedSubtaskParameters extends SubtaskParameters {
   description: string
 }
 
@@ -208,17 +162,6 @@ export const extractOutputText = (
     .filter((part): part is { text: string } => part.type === 'text' && typeof part.text === 'string')
     .map(part => part.text)
     .join('\n')
-
-const truncateOutput = (
-  text: string,
-  limit: number,
-): { outputText: string, truncated: boolean } => {
-  if (text.length <= limit) {
-    return { outputText: text, truncated: false }
-  }
-  const removed = text.length - limit
-  return { outputText: `${text.slice(0, limit)}\n…[truncated ${removed} chars]`, truncated: true }
-}
 
 export interface ParsedStructured {
   usable: boolean
@@ -407,6 +350,7 @@ export const resolveParentModel = async (
       log(message)
     }
   }
+  // TODO: DEFERRED (owned by the adapter messages/parent-model inheritance follow-up ADR) rewrite the parent-model read in `resolveParentModel` below, from its `session.messages` check to the end of the function, to use the adapter's V2-native message shape instead of the V1 `info.providerID`/`info.modelID` shim; deferred because it changes `WorkflowSdkClient`, the adapter, and the engine, which needs that separate ADR.
   // Call the method on its receiver directly: the generated SDK methods rely on
   // `this._client`, so extracting `messages` into a bare const detaches `this`
   // and throws on every call, silently disabling model inheritance.
@@ -432,7 +376,7 @@ const makeResult = (
   status: SubtaskStatus,
   taskID: string,
   durationMs: number,
-  options: { outputText?: string, error?: string, truncated?: boolean, data?: unknown } = {},
+  options: { outputText?: string, error?: string, data?: unknown } = {},
 ): SubtaskResult => {
   const result: SubtaskResult = {
     outputText: options.outputText ?? '',
@@ -440,7 +384,6 @@ const makeResult = (
     status,
     error: options.error,
     durationMs,
-    truncated: options.truncated ?? false,
   }
   return options.data === undefined ? result : { ...result, data: options.data }
 }
@@ -451,10 +394,7 @@ const toStep = (description: string, result: SubtaskResult): StepRecord => ({
   status: result.status,
   durationMs: result.durationMs,
   error: result.error,
-  truncated: result.truncated,
 })
-
-export const formatElapsed = (ms: number): string => `${(Math.max(0, ms) / 1000).toFixed(1)}s`
 
 // The subtask timeout error names the configured limit, not the elapsed wall
 // time, so it reads in the unit the caller sets: minutes. A fractional minute
@@ -462,116 +402,10 @@ export const formatElapsed = (ms: number): string => `${(Math.max(0, ms) / 1000)
 export const formatTimeoutMinutes = (minutes: number): string =>
   `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
 
-// Live child-session titles. The marker encodes the subtask's lifecycle so the
-// title itself is the status signal (the `context.metadata` transport is a
-// proven dead end). `[error]` is the catch-all for a settled non-ok, non-aborted
-// turn (error/empty/timeout).
-const STATUS_MARKERS: Record<SubtaskStatus, string> = {
-  ok: '[ok]',
-  error: '[error]',
-  empty: '[error]',
-  timeout: '[error]',
-  aborted: '[aborted]',
-}
-
-const childSessionTitle = (runId: string, marker: string, description: string): string =>
-  `${runId} · ${marker} ${description.slice(0, MAX_DESCRIPTION_CHARS)}`
-
-// Upper bound on a child-title write. `session.update` is best-effort: a slow or
-// hung call must never stall the subtask past this bound — in particular it must
-// never leave the subtask unguarded by its per-subtask timer and parent-abort
-// link, nor orphan the child session behind a never-settling promise.
-const TITLE_UPDATE_TIMEOUT_MS = 2000
-
-// Resolve when either `promise` settles or `ms` elapses, whichever comes first.
-// The timer is always cleared; a hung `promise` is abandoned, never awaited.
-const settleWithin = async (promise: Promise<unknown>, ms: number): Promise<void> => {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const bound = new Promise<void>((resolve) => {
-    timer = setTimeout(resolve, ms)
-  })
-  try {
-    await Promise.race([promise, bound])
-  }
-  finally {
-    if (timer !== undefined) {
-      clearTimeout(timer)
-    }
-  }
-}
-
-// Best-effort title write through the v1 SDK (`path.id`). A missing method, a
-// synchronous throw, a rejected promise, or a never-settling call must never
-// fail or stall the subtask, so every failure is logged and swallowed and the
-// write is bounded.
-const updateChildSessionTitle = async (
-  context: WorkflowContext,
-  sessionID: string,
-  title: string,
-): Promise<void> => {
-  if (sessionID === '') {
-    return
-  }
-  const session = context.client.session
-  if (session.update === undefined) {
-    return
-  }
-  try {
-    await settleWithin(
-      session.update.call(session, { path: { id: sessionID }, body: { title } }),
-      TITLE_UPDATE_TIMEOUT_MS,
-    )
-  }
-  catch (error) {
-    pushLog(context.logs, `failed to update child session title: ${toErrorMessage(error)}`)
-  }
-}
-
-// Milestone batching: small runs report per-subtask so quick runs stay legible,
-// while a large fan-out only reports every `MILESTONE_INTERVAL`-th completion so
-// it cannot spam one toast per subtask. The terminal toast is always emitted by
-// the runner regardless.
-const MILESTONE_INTERVAL = 5
-const MILESTONE_SMALL_RUN = 5
-
-const shouldEmitMilestone = (total: number): boolean =>
-  total <= MILESTONE_SMALL_RUN || total % MILESTONE_INTERVAL === 0
-
-// One info milestone per (batched) completed subtask: `<status> <ok>/<N> ·
-// <runId> · <description>`, where <status> is `ok` when the step that just
-// settled succeeded and its failing status (`error`, `empty`, `timeout`,
-// `aborted`) otherwise, N counts the steps recorded so far, and the description
-// names that step. A missing or throwing sink is swallowed.
-const emitMilestone = (context: WorkflowContext, step: StepRecord): void => {
-  const notify = context.notify
-  if (notify === undefined) {
-    return
-  }
-  const total = context.steps.length
-  if (!shouldEmitMilestone(total)) {
-    return
-  }
-  const ok = context.steps.filter(entry => entry.status === 'ok').length
-  const status = step.status === 'ok' ? 'ok' : step.status
-  try {
-    notify({
-      title: 'workflow',
-      message: `${status} ${ok}/${total} · ${context.runId ?? ''} · ${step.description}`,
-      variant: 'info',
-    })
-  }
-  catch (error) {
-    pushLog(context.logs, `milestone notify failed: ${toErrorMessage(error)}`)
-  }
-}
-
 const recordStep = (context: WorkflowContext, step: StepRecord): void => {
-  // Milestone reporting lives at the single point that sees the final
-  // StepRecord, so no settle path can forget it.
   if (context.steps.length < MAX_MAX_SUBTASKS_CAP) {
     context.steps.push(step)
   }
-  emitMilestone(context, step)
 }
 
 // The single minutes→ms boundary for subtasks: caller-facing `timeout_minutes`
@@ -718,12 +552,9 @@ const forkSession = async (client: WorkflowSdkClient, sourceID: string): Promise
   return forkedID
 }
 
-// The only deliberate title path is `updateChildSessionTitle`: the child moves to
-// `[running] <description>` before the first prompt and to its terminal marker
-// afterwards. `session.create` must still pass a title (the SDK requires one),
-// but it is only the initial seed for a brand-new session. A forked session gets
-// no seed at all and is moved to `[running]` immediately, so it never surfaces
-// the source session's title.
+// `session.create` requires a title, so the description seeds a brand-new
+// session. A forked session gets no seed, so it never surfaces the source
+// session's title.
 const resolveSessionID = async (
   client: WorkflowSdkClient,
   parameters: NormalizedSubtaskParameters,
@@ -773,11 +604,10 @@ const classifyResponse = (
   if (errorInfo) {
     return makeResult('error', sessionID, durationMs, { error: toErrorMessage(errorInfo) })
   }
-  const { outputText, truncated } = truncateOutput(extractOutputText(response.data), MAX_STEP_OUTPUT_CHARS)
+  const outputText = extractOutputText(response.data)
   if (outputText.trim() === '') {
     return makeResult('empty', sessionID, durationMs, {
       outputText,
-      truncated,
       error: 'subtask produced no output',
     })
   }
@@ -785,12 +615,11 @@ const classifyResponse = (
   if (parsedState !== undefined && !parsedState.usable) {
     return makeResult('error', sessionID, durationMs, {
       outputText,
-      truncated,
       error: 'subtask did not return valid JSON matching the schema',
     })
   }
   const data = parsedState === undefined ? undefined : parsedState.value
-  return makeResult('ok', sessionID, durationMs, { outputText, truncated, data })
+  return makeResult('ok', sessionID, durationMs, { outputText, data })
 }
 
 interface ErrorContext {
@@ -853,7 +682,6 @@ const finalizeAttempt = (
   child: AbortController,
   onParentAbort: (() => void) | undefined,
   timer: ReturnType<typeof setTimeout> | undefined,
-  running: Map<AbortController, string>,
 ): void => {
   if (timer !== undefined) {
     clearTimeout(timer)
@@ -862,25 +690,108 @@ const finalizeAttempt = (
     context.signal.removeEventListener('abort', onParentAbort)
   }
   context.active.delete(child)
-  // Retire the in-flight registration; the live signal now rides the child
-  // session title, not the (dead) `context.metadata` running event.
-  running.delete(child)
 }
 
 const hasSkills = (skills: string[] | undefined): boolean =>
   skills !== undefined && skills.length > 0
 
+const runAttempt = async (
+  context: WorkflowContext,
+  parameters: NormalizedSubtaskParameters,
+  resolveModelOnce: () => Promise<ParentModel | undefined>,
+): Promise<SubtaskResult> => {
+  const startedAt = Date.now()
+  const { timeoutMs, timeoutMinutes, label } = attemptConfig(parameters)
+  const child = new AbortController()
+  // Register before session creation so the runner's timeout grace sees an
+  // in-flight subtask even while `session.create` is still pending; otherwise
+  // the grace is skipped and the step is dropped. Always removed in `finally`.
+  context.active.add(child)
+  let sessionID = ''
+  let resolved: ResolvedSession | undefined
+  let isTimedOut = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let onParentAbort: (() => void) | undefined
+
+  try {
+    resolved = await resolveSessionID(context.client, parameters, context.parentSessionID)
+    sessionID = resolved.sessionID
+    if (sessionID === '') {
+      const result = makeResult('error', '', Date.now() - startedAt, {
+        error: 'failed to create subtask session',
+      })
+      recordStep(context, toStep(label, result))
+      return result
+    }
+    const forkedFrom = resolved.forkedFrom
+
+    const finalPrompt = hasSkills(parameters.skills)
+      ? await injectSkills(parameters.prompt, parameters.skills, context.directory, createLogger(context.logs))
+      : parameters.prompt
+
+    let isSessionAborted = false
+    const abortChildSession = (): void => {
+      if (isSessionAborted) {
+        return
+      }
+      isSessionAborted = true
+      void abortSessionSilently(context.client, sessionID)
+    }
+
+    onParentAbort = linkParentAbort(context.signal, child, abortChildSession)
+
+    timer = setTimeout(() => {
+      isTimedOut = true
+      child.abort()
+      abortChildSession()
+    }, timeoutMs)
+
+    const model = await resolveModelOnce()
+    const turn = await runTurn(context, sessionID, child, parameters, finalPrompt, model, () => isTimedOut)
+
+    // Clear before classifying so a timer that fires after the turn already
+    // completed cannot retroactively flip a success into a timeout.
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+
+    const classified = classifyResponse(turn.response, sessionID, startedAt, {
+      timedOut: isTimedOut,
+      parentAborted: context.signal.aborted,
+      timeoutMinutes,
+      parsed: turn.parsed,
+    })
+    // Provenance only for a session actually forked on this attempt.
+    const result = forkedFrom === undefined ? classified : { ...classified, forked_from: forkedFrom }
+    recordStep(context, toStep(label, result))
+    return result
+  }
+  catch (error) {
+    if (error instanceof BudgetExceededError) {
+      throw error
+    }
+    const result = classifyError(error, {
+      child,
+      parentAborted: context.signal.aborted,
+      timeoutMinutes,
+      timedOut: isTimedOut,
+      sessionID,
+      // Only a fork that already returned an id reaches the catch with
+      // `forkedFrom` set; a failed fork leaves it undefined.
+      forkedFrom: resolved?.forkedFrom,
+      startedAt,
+    })
+    recordStep(context, toStep(label, result))
+    return result
+  }
+  finally {
+    finalizeAttempt(context, child, onParentAbort, timer)
+  }
+}
+
 export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
-  const semaphore = createSemaphore(Math.max(1, context.maxConcurrent))
-  // Backfill the in-flight registry so a directly constructed context still
-  // reports running membership; `createContext` normally initializes it.
-  // Captured as a local so the closure holds a non-optional map.
-  const running = (context.running ??= new Map<AbortController, string>())
   context.startedAt ??= Date.now()
-  // Backfill the run id so a directly constructed context still produces
-  // run-tagged titles and milestones; the runner normally generates it once per
-  // run and threads it through. Captured as a local for the non-optional type.
-  const runId = (context.runId ??= createRunId())
 
   // Memoized so a workflow run probes the parent history at most once, even
   // when many subtasks resolve their model concurrently.
@@ -912,114 +823,6 @@ export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
       return result
     }
 
-    return semaphore.run(async (): Promise<SubtaskResult> => {
-      const startedAt = Date.now()
-      const { timeoutMs, timeoutMinutes, label } = attemptConfig(parameters)
-      const child = new AbortController()
-      // Register before session creation so the runner's timeout grace sees an
-      // in-flight subtask even while `session.create` is still pending; otherwise
-      // the grace is skipped and the step is dropped. Always removed in `finally`.
-      context.active.add(child)
-      running.set(child, label)
-      let sessionID = ''
-      let resolved: ResolvedSession | undefined
-      let isTimedOut = false
-      let timer: ReturnType<typeof setTimeout> | undefined
-      let onParentAbort: (() => void) | undefined
-
-      try {
-        resolved = await resolveSessionID(context.client, parameters, context.parentSessionID)
-        sessionID = resolved.sessionID
-        if (sessionID === '') {
-          const result = makeResult('error', '', Date.now() - startedAt, {
-            error: 'failed to create subtask session',
-          })
-          recordStep(context, toStep(label, result))
-          return result
-        }
-        const forkedFrom = resolved.forkedFrom
-
-        // Mark the child running before the prompt so the live title moves even
-        // while the turn is in flight.
-        await updateChildSessionTitle(
-          context,
-          sessionID,
-          childSessionTitle(runId, '[running]', label),
-        )
-
-        const finalPrompt = hasSkills(parameters.skills)
-          ? await injectSkills(parameters.prompt, parameters.skills, context.directory, createLogger(context.logs))
-          : parameters.prompt
-
-        let isSessionAborted = false
-        const abortChildSession = (): void => {
-          if (isSessionAborted) {
-            return
-          }
-          isSessionAborted = true
-          void abortSessionSilently(context.client, sessionID)
-        }
-
-        onParentAbort = linkParentAbort(context.signal, child, abortChildSession)
-
-        timer = setTimeout(() => {
-          isTimedOut = true
-          child.abort()
-          abortChildSession()
-        }, timeoutMs)
-
-        const model = await resolveModelOnce()
-        const turn = await runTurn(context, sessionID, child, parameters, finalPrompt, model, () => isTimedOut)
-
-        // Clear before classifying so a timer that fires after the turn already
-        // completed cannot retroactively flip a success into a timeout.
-        if (timer !== undefined) {
-          clearTimeout(timer)
-          timer = undefined
-        }
-
-        const classified = classifyResponse(turn.response, sessionID, startedAt, {
-          timedOut: isTimedOut,
-          parentAborted: context.signal.aborted,
-          timeoutMinutes,
-          parsed: turn.parsed,
-        })
-        // Provenance only for a session actually forked on this attempt.
-        const result = forkedFrom === undefined ? classified : { ...classified, forked_from: forkedFrom }
-        recordStep(context, toStep(label, result))
-        await updateChildSessionTitle(
-          context,
-          sessionID,
-          childSessionTitle(runId, STATUS_MARKERS[result.status], label),
-        )
-        return result
-      }
-      catch (error) {
-        if (error instanceof BudgetExceededError) {
-          throw error
-        }
-        const result = classifyError(error, {
-          child,
-          parentAborted: context.signal.aborted,
-          timeoutMinutes,
-          timedOut: isTimedOut,
-          sessionID,
-          // Only a fork that already returned an id reaches the catch with
-          // `forkedFrom` set; a failed fork leaves it undefined.
-          forkedFrom: resolved?.forkedFrom,
-          startedAt,
-        })
-        recordStep(context, toStep(label, result))
-        await updateChildSessionTitle(
-          context,
-          sessionID,
-          childSessionTitle(runId, STATUS_MARKERS[result.status], label),
-        )
-        return result
-      }
-      finally {
-        finalizeAttempt(context, child, onParentAbort, timer, running)
-      }
-    })
+    return runAttempt(context, parameters, resolveModelOnce)
   }
 }

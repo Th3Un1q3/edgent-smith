@@ -79,6 +79,7 @@ export const createWorkflowClient = (session: Session, directory?: string): Work
       const info = assistant?.error === undefined ? undefined : { error: assistant.error }
       return { data: { info, parts: assistantTextParts(messages) } }
     },
+    // TODO: DEFERRED (owned by the adapter messages/parent-model inheritance follow-up ADR) replace the V2->V1 mapping in this `messages` method with the V2-native message shape and move parent-model extraction into the adapter; deferred because it changes `WorkflowSdkClient`, the subtask engine, and inheritance, which needs that separate ADR.
     messages: async ({ path }) => {
       const messages = await run(session.context({ sessionID: path.id as never }))
       const data = (messages as ReadonlyArray<V2Message>).map(message => ({
@@ -89,9 +90,6 @@ export const createWorkflowClient = (session: Session, directory?: string): Work
         },
       }))
       return { data: data as never }
-    },
-    update: async ({ path, body }) => {
-      await run(session.update({ sessionID: path.id as never, title: body.title }))
     },
     abort: async ({ path }) => {
       await run(session.interrupt({ sessionID: path.id as never }))

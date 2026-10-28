@@ -10,6 +10,7 @@ import type { GateConfig } from '../types/quality-gate'
 import type { GoalEnforcementConfig } from '../types/goal-enforcement'
 import type { ToolLimitConfig } from '../types/tool-limit'
 
+// TODO: DEFERRED (owned by the config-literals follow-up ADR, additive only) hoist the settings literals in this file, from the `qualityGates` section through the `harnessConfig` object, into `as const` declarations; deferred because ADR-017 declares this file read-only and every plugin reads these sections, so the change only lands as an additive follow-up.
 /**
  * Declared as a typed `GateConfig[]` (not an inline literal) so the `as const`
  * on `harnessConfig` does not widen it into a `readonly` tuple, which would not
