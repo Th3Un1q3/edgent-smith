@@ -15,8 +15,8 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.0.0"
-  delta: "1.0.0 — extracted the edit-discipline half of rug-swe.md into a stackable pack: scope as a contract, minimal diffs, no unrelated refactors or formatting churn, anchor verification, per-file re-read proof, and the path/gate/scope failure modes. The software method itself stays in the method packs."
+  version: "1.0.1"
+  delta: "1.0.1 — scope covers the set of items an edit affects, so a wildcard, glob, or prefix that matches an item the caller did not name is a widening even inside an allowed file; enumerate the matched set before and after and require an empty delta. 1.0.0 — extracted the edit-discipline half of rug-swe.md into a stackable pack: scope as a contract, minimal diffs, no unrelated refactors or formatting churn, anchor verification, per-file re-read proof, and the path/gate/scope failure modes. The software method itself stays in the method packs."
   author: Th3Un1qu3
 ---
 
@@ -59,6 +59,7 @@ The `scope:` field in the task contract is a promise to the caller: these artifa
 - Drive-by allowance: fix in the same edit only when it is the same file, the same line region, the same class of defect (a typo, a dangling reference, a missing guard on the line you already touch), and it adds no behaviour. Cost test: if the fix needs its own verification, it is out of scope.
 - When the task cannot be done inside the promised scope, change the promise first: state the new scope, get it into the contract, then edit. Silent widening is the failure this pack exists to stop.
 - A scope you did not write is not yours to interpret loosely. Narrow it only with the caller's agreement; widen it never.
+- Scope is a set of affected items, not only a list of paths: an edit to an allowed file still promises which items it touches. A wildcard, glob, prefix, or default that matches an item the caller did not name is a widening, however narrow the file — enumerate the matched items before and after, and a delta outside the request means the rule is too broad. "It may be needed later" does not enter the enumeration: restrict the rule to the named set, and the caller adds coverage when the item exists.
 
 ## Smallest Correct Diff
 

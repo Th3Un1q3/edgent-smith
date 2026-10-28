@@ -85,6 +85,7 @@
             "rtk curl *": "deny",
         },
         "gateway_*": "allow",
+        "gateway_tavily_research": "deny",
         "gateway_execute_shell_command": "deny",
         "gateway_mcp-exec": "deny",
         "gateway_code-mode": "deny",

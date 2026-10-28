@@ -65,6 +65,31 @@ inspect-session session_id="":
     echo "== while sleep 2 tail (Ctrl-C to stop): rg job_output/status =="
     echo 'hint: while sleep 2; do rg -a "job_output|isError|status.*failed|subagent run failed" .dsh/sessions --no-heading | tail -20; jq . experiments/manual.state.json | tail -20; done'
 
+SERVE_HOST := env_var_or_default("OPENCODE_SERVE_HOST", "127.0.0.1")
+SERVE_PORT := env_var_or_default("OPENCODE_SERVE_PORT", "49374")
+
+# Replaces the hand-typed runbook command; the password is read from the repo-root .env and never echoed.
+# Override host/port with `just scripts::serve-web <host> <port>` or OPENCODE_SERVE_HOST / OPENCODE_SERVE_PORT.
+# Serve the OpenCode web UI + API on 127.0.0.1:49374, the address the .devcontainer tunnel sidecar targets.
+serve-web host=SERVE_HOST port=SERVE_PORT:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ] && [ -r .env ]; then
+        OPENCODE_SERVER_PASSWORD="$(sed -nE 's/^[[:space:]]*(export[[:space:]]+)?OPENCODE_SERVER_PASSWORD[[:space:]]*=[[:space:]]*//p' .env | tail -n 1 | sed -E "s/^\"(.*)\"$/\1/; s/^'(.*)'$/\1/")"
+        export OPENCODE_SERVER_PASSWORD
+    fi
+    if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ]; then
+        echo "error: OPENCODE_SERVER_PASSWORD is missing — add it to the repo-root .env" >&2
+        exit 1
+    fi
+    listener="$(ss -ltnpH "sport = :{{ port }}" 2>/dev/null | head -n 1)"
+    if [ -n "$listener" ]; then
+        echo "error: {{ host }}:{{ port }} is already in use by: $listener" >&2
+        echo "error: refusing to start a second opencode serve — stop that listener or pass another port" >&2
+        exit 1
+    fi
+    exec opencode serve --hostname "{{ host }}" --port "{{ port }}"
+
 # Self-iteration loop: run-experiment + watch-worker until pass or max attempts.
 # Usage: just iterate-experiment "your prompt" 3  — loops run → watch --once → check STATE
 iterate-experiment prompt max_attempts="3":

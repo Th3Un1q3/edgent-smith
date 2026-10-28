@@ -5,9 +5,9 @@ description: >
 license: MIT
 compatibility: Requires OpenCode
 metadata:
-  version: "1.9.4"
+  version: "1.9.5"
   author: "edgent-smith team"
-  delta: "1.9.4 — the timeout passage states the omit, extend, then tail-and-resume rule with no recorded-run evidence; the per-turn budget fact moves behind a SKILL.md pointer; the tool-limit citation names the code that computes the threshold. 1.9.3 — the budgets table no longer implies an uncapped per-child timeout: the row and the prose both say omit by default and set a value only for an expected overrun. 1.9.2 — one statement per topic: resume (task_id) is the default and a fresh child is reserved for wrong context, a different specialist or fresh judgement; gate commands are named while implementation commands and step order stay with the child; provenance has two homes — this version delta for skill-file edits, the report or commit for work artifacts."
+  delta: "1.9.5 — a character cap is provisional until the item count is known, and a denied VCS read makes the re-read by a non-author the attribution evidence. 1.9.4 — the timeout passage states the omit, extend, then tail-and-resume rule with no recorded-run evidence; the per-turn budget fact moves behind a SKILL.md pointer; the tool-limit citation names the code that computes the threshold. 1.9.3 — the budgets table no longer implies an uncapped per-child timeout: the row and the prose both say omit by default and set a value only for an expected overrun. 1.9.2 — one statement per topic: resume (task_id) is the default and a fresh child is reserved for wrong context, a different specialist or fresh judgement; gate commands are named while implementation commands and step order stay with the child; provenance has two homes — this version delta for skill-file edits, the report or commit for work artifacts."
 ---
 
 # Task Delegation Workflow
@@ -58,6 +58,7 @@ When a task cannot be decomposed further, the prompt must include a **resume pla
 - **Leave `timeout_minutes` unset unless this task is expected to outrun the default.** The default is 15 minutes per subtask and 90 for the workflow (`.opencode/plugins/workflow.ts:228`, `.opencode/plugins/helpers/workflow-types.ts:160`). Set `timeout_minutes` only to extend a task you expect to run longer than that, such as a full test suite, a gate or CI run, or a large enumeration, and raise the enclosing workflow's `timeout_minutes` above the child's when you do. Never set it to shorten a task, and never size it per dispatch. When a child does expire, `subtask_tail({ task_id })` shows its progress and a `task_id` resume continues the same child with a fresh budget; re-dispatching with a larger guessed value spends a fresh child on work the resume already holds. The retired `timeout_seconds` key is rejected: divide a legacy seconds value by 60 and rename it to `timeout_minutes`. Budget arithmetic, per-turn and not a hard block: [Child Budget Accounting](../SKILL.md#child-budget-accounting).
 - Keep the reducer under about 2KB. Return only counts, statuses and key data. Never return full transcripts, long evidence strings, or whole file contents; oversized reducers are truncated at about 8KB (logs dropped first, then result, then steps), which loses data and forces re-runs.
 - Capture `steps[].task_id` and, on a truncated or empty result, resume that session for a compact status instead of re-running the work.
+- **Size the cap from a counted inventory, or mark it provisional.** When the dispatch cannot know the item count, the character cap is provisional: the child returns the count and the rows that fit, and the orchestrator sizes or splits the remainder from that count. A cap fixed before the enumeration runs meets a one-row-per-unit rule at 118 units and cuts the tail, sentinel included.
 
 ### Mandatory Split Gate
 
@@ -164,6 +165,7 @@ A diff alone cannot say who changed what, because the tree may already carry edi
 - Record the files already modified or untracked before the first subtask launches (`git status --porcelain`, `git diff --numstat`).
 - Hand that list to the validator as "pre-existing at t0". Only files and hunks absent from the baseline are producer edits; a pre-existing dirty file is not a scope violation, whatever its subject.
 - A scope FAIL names its baseline delta. When no baseline was taken, the validator reads the hunks and their subject before calling them out of scope, and the orchestrator reports the ambiguity instead of accepting the FAIL or fixing files it did not change.
+- When the session denies the VCS read (`git status`, `git diff`), the baseline does not exist: attribute the change to the edit call, have a session that made no edit re-read the changed region, and report the denial as the reason no diff is cited. A diff is one form of that re-read, not the only proof of a change.
 
 ### Validation Checklist
 
