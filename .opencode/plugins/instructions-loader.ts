@@ -15,8 +15,7 @@ import { Effect } from 'effect'
 import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
 import { createIndex } from './helpers/instruction-indexer'
 import { InstructionContextHelper } from './helpers/instruction-context-helper'
-import {
-  buildSteeringMessage,
+import { buildSteeringMessage,
   formatInstruction,
   instructionCollisions,
   instructionDescriptionKey,
@@ -25,7 +24,7 @@ import {
   instructionSlugFor,
   instructionSlugFromKey,
 } from './helpers/instruction-payload'
-import { MAX_ENTRY_VALUE_BYTES, entryValueBytes, listEntries } from './helpers/instruction-entry-client'
+import { MAX_ENTRY_VALUE_BYTES, entryValueBytes, listEntries, removeEntry } from './helpers/instruction-entry-client'
 import type { InstructionEntry, InstructionValueObject } from './helpers/instruction-entry-client'
 import {
   InstructionCarrierUnavailableError,
@@ -43,7 +42,6 @@ const TARGETED_TOOLS = new Set(['edit', 'write', 'read'])
 const FULL_BODY_BUDGET = 5
 
 const tokenKey = (sessionID: string): string => 'idempotency/' + sessionID
-const pendingKey = (sessionID: string): string => 'pending/' + sessionID
 // Synthetic seeding lists the native entries once per session; the marker lives
 // in the same storage so a repeated synthetic touch does not re-list.
 const seededKey = (sessionID: string): string => 'native-seed/' + sessionID
@@ -372,7 +370,22 @@ const seedSyntheticExclusions = (
   storage: Context['storage'],
 ): Effect.Effect<ReadonlySet<string>> => Effect.gen(function* () {
   if ((yield* storage.get(seededKey(sessionID))) === true) return new Set<string>()
-  const seeded = yield* seededFromList(sessionID, directory, helper, 'synthetic')
+  // Drain native entries from an upgrading session so they stop rendering in
+  // the system array alongside the appended messages (one-time migration).
+  const listed = yield* attempt(() => listEntries(sessionID, directory))
+  if (listed._tag === 'Success') {
+    for (const entry of listed.success) {
+      if (entry.key.startsWith('instr-')) {
+        yield* attempt(() => removeEntry(sessionID, entry.key, undefined, directory))
+      }
+    }
+  }
+  else {
+    yield* Effect.logWarning(TAG + `synthetic seeding list failed (${classifyEntryFailure(listed.failure)})`)
+  }
+  const seeded = listed._tag === 'Success'
+    ? seededIdentities(listed.success, helper)
+    : new Set<string>()
   yield* storage.set(seededKey(sessionID), true)
   return seeded
 })
@@ -480,7 +493,7 @@ const plugin: Plugin = {
         if (seeded.size > 0) yield* context.storage.set(tokenKey(event.sessionID), tokens)
         const isAlreadyInjected = (identity: string): boolean => {
           const base = 'instruction_load:' + identity
-          return Object.hasOwn(tokens, base) || Object.hasOwn(tokens, `${base}:full`) || Object.hasOwn(tokens, `${base}:ref`)
+          return [base, `${base}:full`, `${base}:ref`].some(key => Object.hasOwn(tokens, key))
         }
         const nonSent = instructions.filter((instruction) => {
           const identity = instruction.path ?? instruction.description
@@ -496,16 +509,41 @@ const plugin: Plugin = {
           return { instruction, isReference }
         })
 
-        const blocks = flagged.map(entry => formatInstruction(entry.instruction, entry.isReference)).join('\n\n')
-        const message = buildSteeringMessage(blocks)
-        yield* context.session.prompt({ sessionID: event.sessionID, text: message, resume: false })
-        yield* context.storage.set(pendingKey(event.sessionID), message)
+        // Size guard: degrade full bodies to :ref while the rendered message exceeds the 256 KiB ceiling, then skip the append entirely if a single body still exceeds it.
+        let blocks = flagged.map(entry => formatInstruction(entry.instruction, entry.isReference)).join('\n\n')
+        let message = buildSteeringMessage(blocks)
+        if (entryValueBytes(message) > MAX_ENTRY_VALUE_BYTES) {
+          const degraded = flagged.map(entry => ({ instruction: entry.instruction, isReference: true }))
+          blocks = degraded.map(entry => formatInstruction(entry.instruction, entry.isReference)).join('\n\n')
+          message = buildSteeringMessage(blocks)
+        }
+        if (entryValueBytes(message) > MAX_ENTRY_VALUE_BYTES) {
+          yield* Effect.logWarning(TAG + 'instruction body exceeds MAX_ENTRY_VALUE_BYTES; skipping append')
+          return
+        }
 
-        const recorded = Object.fromEntries(flagged.map(entry => [
-          `instruction_load:${entry.instruction.path}:${entry.isReference ? 'ref' : 'full'}`,
-          new Date().toISOString(),
-        ]))
-        yield* context.storage.set(tokenKey(event.sessionID), { ...tokens, ...recorded })
+        yield* Effect.gen(function* () {
+          const firstIdentity = nonSent[0].path ?? nonSent[0].description
+          // The id field is omitted: SessionMessage.ID requires a "msg_" prefix (schema
+          // check at runtime), so a correlation key cannot be carried there. The runtime
+          // generates the id; correlation lives in metadata and idempotency is enforced
+          // loader-side by the token map (ADR-022).
+          const syntheticResult = yield* Effect.result(context.session.synthetic({
+            sessionID: event.sessionID,
+            text: message, description: firstIdentity,
+            metadata: { instruction_load: firstIdentity },
+          }))
+          if (syntheticResult._tag === 'Failure') {
+            yield* Effect.logWarning(TAG + 'synthetic append failed', { error: String(syntheticResult.failure) })
+            return
+          }
+
+          const recorded = Object.fromEntries(flagged.map(entry => [
+            `instruction_load:${entry.instruction.path}:${['full', 'ref'][Number(entry.isReference)]}`,
+            new Date().toISOString(),
+          ]))
+          yield* context.storage.set(tokenKey(event.sessionID), { ...tokens, ...recorded })
+        })
       })
 
       let seeded: ReadonlySet<string> = new Set<string>()
@@ -538,13 +576,12 @@ const plugin: Plugin = {
       yield* runSynthetic(seeded)
     }).pipe(Effect.orDie))
 
-    yield* context.session.hook('context', event => Effect.gen(function* () {
-      const pending = (yield* context.storage.get(pendingKey(event.sessionID))) as string | undefined
-      if (!pending) return
-      event.system.push({ type: 'text', text: pending })
-      yield* context.storage.remove(pendingKey(event.sessionID))
+    yield* context.session.hook('compaction', event => Effect.gen(function* () {
+      const sid = (event as { sessionID?: string }).sessionID ?? event.sessionID
+      yield* context.storage.remove(seededKey(sid))
+      yield* context.storage.remove(tokenKey(sid))
+      yield* Effect.logInfo(TAG + 'compaction: re-seeded token map for ' + sid)
     }))
-
     yield* Effect.logInfo(TAG + 'registered')
   }),
 }

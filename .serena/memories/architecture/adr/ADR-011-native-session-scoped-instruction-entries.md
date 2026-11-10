@@ -1,7 +1,8 @@
 ---
 id: ADR-011
 title: Native session-scoped instruction entries for instruction injection
-status: accepted
+status: superseded
+superseded-by: ADR-022
 date: 2026-10-20
 scope: OpenCode RUG harness — instruction injection carrier for .opencode/plugins
 ---

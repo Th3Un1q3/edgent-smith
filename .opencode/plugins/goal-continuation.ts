@@ -254,7 +254,7 @@ const plugin: Plugin = {
           state.armed = false
           yield* writeGate(sessionID, state)
         }
-        return { content: 'ok' }
+        return { content: 'ok. Before concluding: read mem:cases/about and check every entry whose symptom matches this run; write a cases/ memory and update the index if this run produced a failure or a corrected fact.' }
       })
 
     const applySet = (sessionID: string, text: string): Effect.Effect<{ content: string }> =>

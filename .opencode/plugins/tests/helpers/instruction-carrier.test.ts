@@ -92,23 +92,23 @@ describe('resolveInjectionCarrier', () => {
     expect(disjoint).toBe(true)
   })
 
-  it('defaults to native when the flag is unset or empty', () => {
-    expect(resolveInjectionCarrier({}, 'build')).toBe('native')
-    expect(resolveInjectionCarrier({ INSTRUCTION_INJECTION: '' }, 'build')).toBe('native')
+  it('defaults to synthetic when the flag is unset or empty', () => {
+    expect(resolveInjectionCarrier({}, 'build')).toBe('synthetic')
+    expect(resolveInjectionCarrier({ INSTRUCTION_INJECTION: '' }, 'build')).toBe('synthetic')
   })
 
   it('reads the flag on every call', () => {
     expect(resolveInjectionCarrier({ INSTRUCTION_INJECTION: 'synthetic' }, 'build')).toBe('synthetic')
     expect(resolveInjectionCarrier({ INSTRUCTION_INJECTION: 'native' }, 'build')).toBe('native')
-    expect(resolveInjectionCarrier({}, 'build')).toBe('native')
+    expect(resolveInjectionCarrier({}, 'build')).toBe('synthetic')
   })
 
-  it('warns once per distinct rejected value and always resolves to native', () => {
-    expect(resolveInjectionCarrier({ INSTRUCTION_INJECTION: 'mystery-a' }, 'build')).toBe('native')
-    expect(resolveInjectionCarrier({ INSTRUCTION_INJECTION: 'mystery-a' }, 'build')).toBe('native')
+  it('warns once per distinct rejected value and always resolves to synthetic', () => {
+    expect(resolveInjectionCarrier({ INSTRUCTION_INJECTION: 'mystery-a' }, 'build')).toBe('synthetic')
+    expect(resolveInjectionCarrier({ INSTRUCTION_INJECTION: 'mystery-a' }, 'build')).toBe('synthetic')
     expect(emitted.filter(message => message.includes('mystery-a'))).toHaveLength(1)
 
-    expect(resolveInjectionCarrier({ INSTRUCTION_INJECTION: 'mystery-b' }, 'build')).toBe('native')
+    expect(resolveInjectionCarrier({ INSTRUCTION_INJECTION: 'mystery-b' }, 'build')).toBe('synthetic')
     expect(emitted.filter(message => message.includes('mystery-b'))).toHaveLength(1)
   })
 })

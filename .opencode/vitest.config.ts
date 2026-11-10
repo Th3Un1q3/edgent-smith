@@ -1,13 +1,19 @@
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
-// Use process.cwd() so aliases resolve correctly in both normal dev
-// and Stryker's sandbox (where the working dir is the sandbox root).
+// Resolve aliases, setup files and the cache against this config's directory,
+// never the caller's cwd. An ad-hoc `vitest` run from the repo root used to
+// point them at /workspace/plugins and write a stray /workspace/node_modules.
+const configDir = fileURLToPath(new URL('.', import.meta.url))
+
 function p(mod: string) {
-  return resolve(process.cwd(), mod)
+  return resolve(configDir, mod)
 }
 
 export default defineConfig({
+  root: configDir,
+  cacheDir: resolve(configDir, 'node_modules/.vite'),
   resolve: {
     conditions: ['node', 'development'],
     alias: {
@@ -19,7 +25,7 @@ export default defineConfig({
     },
   },
   test: {
-    setupFiles: ['./plugins/tests/vitest-bun-polyfill.setup.ts'],
+    setupFiles: [resolve(configDir, 'plugins/tests/vitest-bun-polyfill.setup.ts')],
     mockReset: true,
     environment: 'node',
     globals: true,

@@ -141,6 +141,13 @@ Hot reload is active: `dist/source.node.js` appends `__opencode_reload=<generati
 
 Logs: `~/.local/share/opencode/log/opencode.log`. `--print-logs` writes to stderr and needs `--standalone`.
 
+## Branded values and attribution
+
+- **Check the schema of every value a hook passes into a client call, not only the tool's `input`.** `context.session.synthetic` takes `SessionMessage.ID`, whose runtime check requires the string to open with `msg_`; a correlation key such as `instruction_load:<path>` fails validation there. Pass the key in `metadata` and let the runtime generate the id. Read the branded type from `dist/effect/session.d.ts` before choosing any id, key, or token value.
+- **A hook that throws fails the caller's tool for exactly the inputs the hook matches.** A tool failing for a subset of paths is a report about the hook's matcher — its `applyTo` glob, its `TARGETED_TOOLS` set — not about the tool's own schema. Enumerate the failing inputs and compare that set with each hook's match condition; the hook whose match set equals the failing set is the suspect.
+- **Attribute before editing anything.** Disable the plugin entry point (or the single hook) and repeat the same failing input. When the call passes disabled and fails enabled, the plugin owns the failure, and no harness-level, permission-level, or file-type claim is admissible. Restore it only after the failing input is explained.
+- **Read the error's origin before its wording.** A schema failure raised inside a plugin call and one raised while validating a tool's `input` carry the same text and different owners; name the throwing call from the stack, then fix that call.
+
 ## Avoid
 
 | Don't | Symptom |
@@ -157,6 +164,8 @@ Logs: `~/.local/share/opencode/log/opencode.log`. `--print-logs` writes to stder
 | Assume cwd or absolute paths | The server cwd is `context.location.directory`; imports resolve relative to the source file. |
 | Reproduce the event union from memory | The union is large and not exhaustively verified here; read `dist/effect/event.d.ts`. |
 | Edit a live plugin before typechecking | Hot reload applies the broken module to the running session. |
+| Pass a non-`msg_` value as a session-message id | Schema validation fails inside the plugin call and surfaces as the target tool's error for every file the hook matches. |
+| Blame the harness for a failure a plugin can produce | The failing set tracks the plugin's `applyTo` globs; disable the hook and repeat one failing input before any harness claim. |
 
 ## Naming and lint rules
 

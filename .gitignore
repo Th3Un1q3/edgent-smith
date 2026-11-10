@@ -115,3 +115,5 @@ docs/node_modules/
 # Experiment state & baseline artifacts (machine-generated)
 experiments/*.state.json
 auto_research*.json
+# No root package.json exists; a root node_modules is always a stray test-cache artifact.
+/node_modules/

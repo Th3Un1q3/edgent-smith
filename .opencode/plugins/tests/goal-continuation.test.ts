@@ -110,7 +110,7 @@ describe('goal-continuation (v2)', () => {
         return
       }
 
-      expect(exit.value).toEqual({ content: 'ok' })
+      expect(exit.value).toEqual({ content: 'ok. Before concluding: read mem:cases/about and check every entry whose symptom matches this run; write a cases/ memory and update the index if this run produced a failure or a corrected fact.' })
     })
 
     it('preserves nudges when the same goal text is set again', async () => {

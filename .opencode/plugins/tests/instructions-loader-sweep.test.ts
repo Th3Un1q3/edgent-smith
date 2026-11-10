@@ -45,6 +45,7 @@ const registerAndTouch = async (h: Harness): Promise<void> => {
 }
 
 beforeEach(() => {
+  process.env.INSTRUCTION_INJECTION = 'native'
   serviceClient.getClient.mockReset()
   indexerMock.create.mockReset()
   indexerMock.create.mockImplementation(indexerMock.actual)

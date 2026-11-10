@@ -22,6 +22,7 @@ export interface Store {
 export interface Harness {
   context: Context
   prompts: Array<{ sessionID: string, text: string }>
+  synthetics: Array<Record<string, unknown>>
   logs: Array<ReadonlyArray<unknown>>
   directory: string
   store: Store
@@ -32,6 +33,7 @@ export interface Harness {
   register: () => Promise<void>
   before: (event: unknown) => Promise<void>
   injectContext: (event: unknown) => Promise<void>
+  hasHook: (name: string) => boolean
 }
 
 export const SRC_TOUCH = { tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } }
@@ -58,6 +60,7 @@ export const makeHarness = (): Harness => {
   const directory = mkdtempSync(path.join(tmpdir(), 'instr-'))
   const storage = new Map<string, unknown>()
   const prompts: Array<{ sessionID: string, text: string }> = []
+  const synthetics: Array<Record<string, unknown>> = []
   const logs: Array<ReadonlyArray<unknown>> = []
   const hooks: Record<string, (event: unknown) => AnyEffect> = {}
   const entries: Array<{ key: string, value: unknown }> = []
@@ -97,6 +100,10 @@ export const makeHarness = (): Harness => {
         prompts.push(input)
         return Effect.succeed(undefined)
       }),
+      synthetic: vi.fn((input: Record<string, unknown>) => {
+        synthetics.push(input)
+        return Effect.succeed(undefined)
+      }),
     },
     storage: {
       get: (key: string) => Effect.succeed(storage.get(key)),
@@ -115,6 +122,7 @@ export const makeHarness = (): Harness => {
   return {
     context,
     prompts,
+    synthetics,
     logs,
     directory,
     store,
@@ -132,6 +140,7 @@ export const makeHarness = (): Harness => {
       const callback = hooks['session:context']
       if (callback) await run(callback(event))
     },
+    hasHook: (name: string) => hooks[name] !== undefined || hooks['session:' + name] !== undefined,
   }
 }
 

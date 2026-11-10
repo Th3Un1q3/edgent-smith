@@ -89,11 +89,12 @@ export const resolveInjectionCarrier = (
 ): InjectionCarrier => {
   const value = environment.INSTRUCTION_INJECTION
   if (value === 'synthetic') return 'synthetic'
-  if (value !== undefined && value !== '' && value !== 'native' && !rejectedFlagValues.has(value)) {
+  if (value === 'native') return 'native'
+  if (value !== undefined && value !== '' && !rejectedFlagValues.has(value)) {
     rejectedFlagValues.add(value)
-    warn(`unknown INSTRUCTION_INJECTION value "${value}" for agent ${agent}; using native`)
+    warn(`unknown INSTRUCTION_INJECTION value "${value}" for agent ${agent}; using synthetic`)
   }
-  return 'native'
+  return 'synthetic'
 }
 
 export interface InstructionReferenceDraft {

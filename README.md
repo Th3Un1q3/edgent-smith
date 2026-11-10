@@ -317,7 +317,7 @@ Inspect the effective config with `dsh --dump-config`. Plugins are added per pro
 | Config | `~/.config/opencode/` | `~/.dsh/` — done |
 | Plugins | `.opencode/plugins/` | Cordis plugins — implemented: `agent-instructions`, `tool-todo`, `tool-skill`, sessions; configured: MCP client (inert); deferred: quality gates, skill-usage tracking, tool budgets, agents port, commands port; dropped: `afk-enforcer`, `rtk`, opencode-specific instructions, notifier |
 | MCP | `opencode.json` `mcp` servers | configured — gateway bridge to the repo's MCP gateway (serena + 9 catalog servers); NO auth header (matches the header-less opencode gateway); inactive pending upstream `dsh.bundle` |
-| Provider | `provider.local` — 8 models, `http://host.docker.internal:1289/v1` | dsh `llm-pi-ai` `local` provider (8 models, mirrors `provider.local`), plus `openrouter` and `opencode-go` — done; default model is `local/qwen3.6-28b-reap20-a3b` (smoke-verified; the gateway serves 5 of the 8 declared models, so local runs require a served model id + the dummy `LOCAL_GATEWAY_API_KEY` credential) |
+| Provider | `provider.local` — 3 models (`qwen3.6-28b-reap20-a3b`, `spark-x2.5-4b`, `google/gemma-4-12b-qat`), `http://host.docker.internal:1289/v1` | dsh `llm-pi-ai` `local` provider (8 models), plus `openrouter` and `opencode-go` — done; default model is `local/qwen3.6-28b-reap20-a3b` (smoke-verified; the gateway serves 5 of the 8 declared models, so local runs require a served model id + the dummy `LOCAL_GATEWAY_API_KEY` credential) |
 | Compaction | `{auto: true, prune: false, reserved: 10000}` | `compaction-basic` enabled — auto, thresholdRatio 0.8, retainRatio 0.16, reserved≈10000 (per-model ratios for the 128k/256k-ctx models) — done |
 | Instructions | AGENTS.md | ✓ (both) |
 

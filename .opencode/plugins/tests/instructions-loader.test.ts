@@ -76,7 +76,7 @@ describe('instructions-loader (v2)', () => {
       writeInstruction(h.directory, 'alpha.instructions.md', 'name: alpha\ndescription: Alpha rule\napplyTo: "src/**/*.ts"', 'ALPHA BODY')
       await register(h)
       await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
-      expect(h.prompts.map(prompt => prompt.text)).toEqual([expect.stringContaining('ALPHA BODY')])
+      expect(h.synthetics.map(prompt => prompt.text)).toEqual([expect.stringContaining('ALPHA BODY')])
     })
 
     it('does not re-send an instruction already injected in the session', async () => {
@@ -86,7 +86,7 @@ describe('instructions-loader (v2)', () => {
       await register(h)
       await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
       await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
-      expect(h.prompts).toHaveLength(1)
+      expect(h.synthetics).toHaveLength(1)
     })
 
     it('sends at most 5 full contents; further matches are references', async () => {
@@ -97,7 +97,7 @@ describe('instructions-loader (v2)', () => {
       await register(h)
       await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
 
-      const text = h.prompts[0].text
+      const text = h.synthetics[0].text as string
 
       expect((text.match(/<instruction>/g) || []).length).toBe(6)
       expect((text.match(/<content>/g) || []).length).toBe(5)
@@ -108,6 +108,7 @@ describe('instructions-loader (v2)', () => {
       const h = makeHarness()
 
       writeInstruction(h.directory, 'alpha.instructions.md', 'description: Alpha\napplyTo: "**/*.ts"', 'ALPHA BODY')
+
       await register(h)
       await h.before({ tool: 'bash', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
       expect(h.prompts).toHaveLength(0)
@@ -122,19 +123,6 @@ describe('instructions-loader (v2)', () => {
       expect(h.prompts).toHaveLength(0)
     })
 
-    it('injects the pending instructions into the model request system prompt', async () => {
-      const h = makeHarness()
-
-      writeInstruction(h.directory, 'alpha.instructions.md', 'description: Alpha\napplyTo: "**/*.ts"', 'ALPHA BODY')
-      await register(h)
-      await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
-
-      const event = { sessionID: 'ses_1', agent: 'build', system: [], messages: [], model: {}, options: {} }
-
-      await h.injectContext(event)
-      expect(JSON.stringify(event.system)).toContain('ALPHA BODY')
-    })
-
     it('reads the file path from filePath when path is absent', async () => {
       const h = makeHarness()
 
@@ -142,7 +130,7 @@ describe('instructions-loader (v2)', () => {
       await register(h)
       await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { filePath: 'src/a.ts' } })
 
-      expect(h.prompts.map(prompt => prompt.text)).toEqual([expect.stringContaining('ALPHA BODY')])
+      expect(h.synthetics.map(prompt => prompt.text)).toEqual([expect.stringContaining('ALPHA BODY')])
     })
 
     it('ignores a touch whose path is empty', async () => {
@@ -180,35 +168,34 @@ describe('instructions-loader (v2)', () => {
       await register(h)
       await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
 
-      expect(h.prompts).toHaveLength(1)
-      expect(h.prompts[0].text).toContain('DESC BODY')
-      expect(h.prompts[0].text).toContain('ORPHAN BODY')
+      expect(h.synthetics).toHaveLength(1)
+      expect(h.synthetics[0].text).toContain('DESC BODY')
+      expect(h.synthetics[0].text).toContain('ORPHAN BODY')
     })
   })
 
-  it('an empty pending value leaves the system prompt untouched', async () => {
-    const h = makeHarness()
-
-    await register(h)
-
-    const event = { sessionID: 'ses_none', agent: 'build', system: [], messages: [], model: {}, options: {} }
-
-    await h.injectContext(event)
-
-    expect(event.system).toEqual([])
-  })
-
   describe('native carrier', () => {
-    it('synthetic mode still sends the steering prompt', async () => {
+    beforeEach(() => {
+      process.env.INSTRUCTION_INJECTION = 'native'
+    })
+
+    it('synthetic mode delivers once via the append', async () => {
       process.env.INSTRUCTION_INJECTION = 'synthetic'
 
       const h = makeHarness()
 
       writeInstruction(h.directory, 'alpha.instructions.md', 'description: Alpha\napplyTo: "**/*.ts"', 'ALPHA BODY')
+
       await register(h)
       await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
 
-      expect(h.prompts.map(prompt => prompt.text)).toEqual([expect.stringContaining('ALPHA BODY')])
+      expect(h.synthetics).toHaveLength(1)
+      expect(h.synthetics[0].text).toContain('<steering priority="high" reason="relevant files touched" type="instructions">')
+      expect(h.synthetics[0].text).toContain('ALPHA BODY')
+      expect(h.prompts).toHaveLength(0)
+
+      await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
+      expect(h.synthetics).toHaveLength(1)
     })
 
     it('publishes one instr- entry per matching file and sends no prompt', async () => {
@@ -236,7 +223,7 @@ describe('instructions-loader (v2)', () => {
       carrierMock.resolve.mockReturnValueOnce('synthetic')
       await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
 
-      expect(h.prompts).toHaveLength(1)
+      expect(h.synthetics).toHaveLength(1)
 
       await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
 
@@ -272,17 +259,19 @@ describe('instructions-loader (v2)', () => {
       expect(serviceClient.getClient).toHaveBeenCalledWith(undefined, h.directory)
     })
 
-    it('unset INSTRUCTION_INJECTION resolves to native', async () => {
+    it('unset INSTRUCTION_INJECTION resolves to synthetic', async () => {
       delete process.env.INSTRUCTION_INJECTION
 
       const h = makeHarness()
-      const alpha = writeInstruction(h.directory, 'alpha.instructions.md', 'description: Alpha\napplyTo: "src/**/*.ts"', 'ALPHA BODY')
+
+      writeInstruction(h.directory, 'alpha.instructions.md', 'description: Alpha\napplyTo: "src/**/*.ts"', 'ALPHA BODY')
 
       await register(h)
       await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
 
-      expect(putKeys(h)).toEqual([instructionEntryKey({ path: alpha })])
-      expect(h.prompts).toHaveLength(0)
+      expect(h.store.put).not.toHaveBeenCalled()
+      expect(h.synthetics).toHaveLength(1)
+      expect(h.synthetics[0].text).toContain('ALPHA BODY')
     })
 
     it('an unknown flag value resolves to native and warns once', async () => {
@@ -297,8 +286,9 @@ describe('instructions-loader (v2)', () => {
       await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
       await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
 
-      expect(h.prompts).toHaveLength(0)
-      expect(h.store.put).toHaveBeenCalledTimes(1)
+      expect(h.synthetics).toHaveLength(1)
+      expect(h.synthetics[0].text).toContain('ALPHA BODY')
+      expect(h.store.put).not.toHaveBeenCalled()
 
       const named = warning.mock.calls.map(call => String(call[0]))
 
@@ -384,7 +374,7 @@ describe('instructions-loader (v2)', () => {
       await register(h)
       await expect(h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })).resolves.toBeUndefined()
 
-      expect(h.prompts.map(prompt => prompt.text)).toEqual([expect.stringContaining('ALPHA BODY')])
+      expect(h.synthetics.map(message => message.text)).toEqual([expect.stringContaining('ALPHA BODY')])
     })
 
     it('an unclassifiable list failure skips the turn without a prompt', async () => {
@@ -422,7 +412,7 @@ describe('instructions-loader (v2)', () => {
       await register(h)
       await h.before({ tool: 'read', sessionID: 'ses_1', agent: 'build', input: { path: 'src/a.ts' } })
 
-      expect(h.prompts.map(prompt => prompt.text)).toEqual([expect.stringContaining('ALPHA BODY')])
+      expect(h.synthetics.map(prompt => prompt.text)).toEqual([expect.stringContaining('ALPHA BODY')])
       expect(h.store.put).not.toHaveBeenCalled()
     })
 
@@ -537,6 +527,10 @@ describe('instructions-loader (v2)', () => {
   })
 
   describe('fallback seeding (D-08)', () => {
+    beforeEach(() => {
+      process.env.INSTRUCTION_INJECTION = 'native'
+    })
+
     const forceFallback = (): void => {
       carrierMock.publish.mockResolvedValueOnce({ outcome: 'fallback', published: [], statuses: [] })
     }
@@ -561,8 +555,8 @@ describe('instructions-loader (v2)', () => {
       forceFallback()
       await touch(h)
 
-      expect(h.prompts.map(prompt => prompt.text)).toEqual([expect.stringContaining('BETA BODY')])
-      expect(h.prompts[0].text).not.toContain('ALPHA BODY')
+      expect(h.synthetics.map(message => message.text)).toEqual([expect.stringContaining('BETA BODY')])
+      expect(h.synthetics[0].text).not.toContain('ALPHA BODY')
     })
 
     it('seedExclusions suppresses entries already listed', async () => {
@@ -595,17 +589,17 @@ describe('instructions-loader (v2)', () => {
       serviceClient.getClient.mockResolvedValue({ session: { instructions: {} } })
       await touch(h)
 
-      expect(h.prompts.map(prompt => prompt.text)).toEqual([expect.stringContaining('ALPHA BODY')])
+      expect(h.synthetics.map(message => message.text)).toEqual([expect.stringContaining('ALPHA BODY')])
       expect(logLines(h).filter(line => line.includes('seeding'))).toHaveLength(1)
     })
 
-    it('a rejecting synthetic seeding list warns once, prompts once and removes nothing', async () => {
+    it('a rejecting synthetic seeding list warns once, synthetics once and removes nothing', async () => {
       process.env.INSTRUCTION_INJECTION = 'synthetic'
       h.store.list.mockRejectedValueOnce(new Error('list unavailable'))
       await touch(h)
       expect(h.store.list).toHaveBeenCalledTimes(1)
       expect(logLines(h).filter(line => line.includes('synthetic seeding list failed (unknown)'))).toHaveLength(1)
-      expect(h.prompts.map(prompt => prompt.text)).toEqual([expect.stringContaining('ALPHA BODY')])
+      expect(h.synthetics.map(message => message.text)).toEqual([expect.stringContaining('ALPHA BODY')])
       expect(h.store.remove).not.toHaveBeenCalled()
     })
 
@@ -622,11 +616,11 @@ describe('instructions-loader (v2)', () => {
       forceFallback()
       await touch(h)
 
-      expect(h.prompts).toHaveLength(1)
+      expect(h.synthetics).toHaveLength(1)
       expect(h.store.remove).not.toHaveBeenCalled()
     })
 
-    it('native to synthetic keeps the entry list intact', async () => {
+    it('native to synthetic drains native entries', async () => {
       process.env.INSTRUCTION_INJECTION = 'native'
       await touch(h)
 
@@ -636,8 +630,7 @@ describe('instructions-loader (v2)', () => {
       await touch(h)
 
       expect(published).toEqual([instructionEntryKey({ path: alpha })])
-      expect(h.store.entries.map(entry => entry.key)).toEqual(published)
-      expect(h.store.remove).not.toHaveBeenCalled()
+      expect(h.store.entries.map(entry => entry.key)).toEqual([])
       expect(h.prompts).toHaveLength(0)
     })
 
@@ -649,7 +642,7 @@ describe('instructions-loader (v2)', () => {
       process.env.INSTRUCTION_INJECTION = 'native'
       await touch(h)
 
-      const promptMentions = (h.prompts[0]?.text.match(/ALPHA BODY/gu) ?? []).length
+      const promptMentions = ((h.synthetics[0]?.text as string)?.match(/ALPHA BODY/gu) ?? []).length
       const entryWrites = putKeys(h).filter(key => key === alphaKey).length
 
       expect(promptMentions + entryWrites).toBeLessThanOrEqual(2)

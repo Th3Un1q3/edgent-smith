@@ -1,4 +1,5 @@
 ---
+L0: "Three mutant-survival causes from one scoped Stryker campaign — testFiles narrower than the full covering set, dead code kept alive by tests, unasserted call arguments — each with the rule that fixes it."
 name: mutation-campaign-scoping
 description: Three mutant-survival causes from one scoped Stryker campaign and the rule that fixes each — partial testFiles scope, dead code kept alive by tests, unasserted call arguments.
 scope: cases — three distinct causes with a fix applied, from one campaign; not preferences (no user choice) and not claims (the finding is procedural)

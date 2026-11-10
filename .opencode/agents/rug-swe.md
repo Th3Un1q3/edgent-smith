@@ -2,6 +2,7 @@
 name: rug-swe
 description: "Execute any task type, including research, writing, operations, software, skills and session work. Method comes from a loaded skill pack, while the resident contract, budget, verification and report stay fixed."
 steps: 30
+model: local/qwen3.6-28b-reap20-a3b
 permission:
   task: deny
   question: deny
@@ -13,7 +14,8 @@ permission:
   subtask_*: deny
   workflow: deny
   read:
-   ".serena/memories/*": deny
+    "*": "allow"
+    ".serena/memories/*": "deny"
 ---
 
 ## Identity

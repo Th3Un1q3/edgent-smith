@@ -52,6 +52,9 @@
                         "output": 32768
                     }
                 },
+                "google/gemma-4-12b-qat": {
+                    "name": "l-gemma-4-12b-qat"
+                },
             }
         }
     },

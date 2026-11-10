@@ -40,6 +40,7 @@ When you receive a `<steering>` message, apply these rules in order:
   </instruction>
 </steering>
 ```
+> File-visit instructions are delivered as **one appended synthetic message per visit** (`context.session.synthetic`), with no re-delivery for a repeated path. The correlation key is `instruction_load:<path>` in `metadata` (the `id` field is omitted — `SessionMessage.ID` requires a `msg_` prefix, so a correlation key cannot be carried there; the runtime generates the id), the loader enforces it through its session token map, the path is carried in `description`, and an appended message is final — there is no edit or removal path, so the size and budget limits must be satisfied before the append.
 
 ### Quality Gate Enforcer
 ```xml
@@ -57,6 +58,7 @@ Plugins MUST produce consistent steering messages. When adding a new steering me
 1. Choose the correct `priority` for your use case
 2. Include a descriptive `reason`
 3. Add the appropriate `type`
-4. Document any new `<steering>` patterns in this file
+4. Deliver steering through `context.session.synthetic(...)` — never `event.system` and never `session.prompt`; the append is the only delivery path for steering, so the author steps must name it
+5. Document any new `<steering>` patterns in this file
 
 Legacy steering messages without attributes are deprecated and must be migrated.
