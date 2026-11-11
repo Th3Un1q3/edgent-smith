@@ -116,8 +116,14 @@ export function loadWorkflowInstructions(directory: string): WorkflowInstruction
 const escapeAttribute = (value: string): string =>
   value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;')
 
+// Kept local rather than imported from ./helpers/workflow-subtask: three suites
+// mock that module for the subtask tools, and a second export breaks them.
+const LEADING_FRONTMATTER = /^---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/
+
+const stripFrontmatter = (content: string): string => content.replace(LEADING_FRONTMATTER, '')
+
 const formatWorkflowInstructions = (source: string, content: string): string =>
-  `${WORKFLOW_INSTRUCTIONS_SENTINEL} source="${escapeAttribute(source)}" version="1">\n${content}\n${WORKFLOW_INSTRUCTIONS_CLOSING}`
+  `${WORKFLOW_INSTRUCTIONS_SENTINEL} source="${escapeAttribute(source)}" version="1">\n${stripFrontmatter(content)}\n${WORKFLOW_INSTRUCTIONS_CLOSING}`
 
 const utf8Bytes = (value: string): number => Buffer.byteLength(value)
 

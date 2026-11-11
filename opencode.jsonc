@@ -1,7 +1,5 @@
 {
     "$schema": "https://opencode.ai/config.json",
-    "model": "local/qwen3.6-28b-reap20-a3b",
-    "small_model": "local/google/gemma-4-e2b",
     "logLevel": "WARN",
     "formatter": false,
     "lsp": false,
@@ -18,7 +16,9 @@
         "continue_loop_on_deny": true
     },
     "instructions": [
-        ".opencode/instructions/steering-message.md"
+        ".opencode/instructions/steering-message.md",
+        ".aidlc/onboarding.md",
+        "aidlc/active-memory/**/*.md"
     ],
     "provider": {
         "local": {
@@ -65,6 +65,8 @@
         "webfetch": "deny",
         "list_mcp_resources": "deny",
         "bash": {
+            "git push *": "ask",
+            "rm -r*": "ask",
             "*": "allow",
             "git *": "deny",
             "rtk git *": "ask",
@@ -86,13 +88,19 @@
             "rtk git log *": "allow",
             "curl *": "deny",
             "rtk curl *": "deny",
+            "aidlc engine *": "allow"
         },
         "gateway_*": "allow",
         "gateway_tavily_research": "deny",
         "gateway_execute_shell_command": "deny",
         "gateway_mcp-exec": "deny",
         "gateway_code-mode": "deny",
-        "gateway_mcp-find": "allow"
+        "gateway_mcp-find": "allow",
+        "subtask_*": "deny",
+        "edit": {
+            ".aidlc/tools/**": "ask",
+            ".aidlc/hooks/**": "ask"
+        }
     },
     "plugin": [
         "@mohak34/opencode-notifier@latest",
@@ -102,5 +110,10 @@
             "type": "remote",
             "url": "http://mcp_gateway:8080/mcp"
         },
+    },
+    "skills": {
+        "paths": [
+            ".aidlc/skills"
+        ]
     }
 }

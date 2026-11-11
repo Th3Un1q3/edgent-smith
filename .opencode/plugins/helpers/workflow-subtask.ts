@@ -1,6 +1,6 @@
-import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import { getClient } from './service-client'
 import {
   DEFAULT_PER_SUBTASK_TIMEOUT_MINUTES,
   MAX_DESCRIPTION_CHARS,
@@ -226,41 +226,168 @@ export const parseStructured = (text: string, schema: Record<string, unknown>): 
 
 const SKILL_NAME_PATTERN = /^[a-z0-9][a-z0-9_-]*$/i
 
-export const loadSkill = async (
+// Structural shape of the native `Skill.Info` record, so both the plugin skill
+// domain and the server client satisfy it without importing the schema package.
+export interface SkillRecord {
+  readonly name: string
+  readonly description?: string
+  readonly path?: string
+  readonly content: string
+}
+
+export type SkillLister = (directory?: string) => Promise<readonly SkillRecord[]>
+
+// The native skill list is the only source of injected content: nothing on this
+// path reads a SKILL.md from disk.
+const listNativeSkills: SkillLister = async (directory) => {
+  const client = await getClient(undefined, directory)
+  const response = await client.skill.list(directory === undefined ? undefined : { location: { directory } })
+  return response.data
+}
+
+const FRONTMATTER_PATTERN = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/
+
+// Only a leading YAML block is removed, so a `---` later in the body (a rule or
+// a fence) survives untouched.
+export const stripFrontmatter = (content: string): string => {
+  const match = FRONTMATTER_PATTERN.exec(content)
+  return match === null ? content : content.slice(match[0].length)
+}
+
+const FOLDED_SCALAR = /^[>|][+-]?$/
+
+const unquote = (value: string): string => {
+  const quoted = /^(['"])([\s\S]*)\1$/.exec(value)
+  return quoted === null ? value : quoted[2]
+}
+
+const foldedLines = (lines: string[], start: number): string[] => {
+  const value: string[] = []
+  for (const line of lines.slice(start)) {
+    if (line.trim() === '') {
+      continue
+    }
+    if (!/^\s/.test(line)) {
+      break
+    }
+    value.push(line.trim())
+  }
+  return value
+}
+
+const canonicalScalar = (inline: string, lines: string[], index: number): string | undefined => {
+  if (inline !== '' && !FOLDED_SCALAR.test(inline)) {
+    return unquote(inline) || undefined
+  }
+  const value = foldedLines(lines, index + 1).join(' ')
+  return value === '' ? undefined : value
+}
+
+// Fallback only: a description on the native record always wins.
+export const frontmatterDescription = (content: string): string | undefined => {
+  const block = FRONTMATTER_PATTERN.exec(content)
+  if (block === null) {
+    return
+  }
+  const lines = block[1].split(/\r?\n/)
+  const index = lines.findIndex(line => /^description\s*:/.test(line))
+  return index === -1 ? undefined : canonicalScalar(lines[index].replace(/^description\s*:\s*/, '').trim(), lines, index)
+}
+
+const collapse = (value: string): string => value.replaceAll(/\s+/g, ' ').trim()
+
+const skillDescription = (record: SkillRecord): string | undefined => {
+  const declared = record.description === undefined ? undefined : collapse(record.description)
+  if (declared !== undefined && declared !== '') {
+    return declared
+  }
+  const fallback = frontmatterDescription(record.content)
+  return fallback === undefined ? undefined : collapse(fallback)
+}
+
+const isInside = (relative: string): boolean =>
+  relative !== ''
+  && relative !== '..'
+  && !relative.startsWith(`..${path.sep}`)
+  && !path.isAbsolute(relative)
+
+// A path outside the session directory is omitted rather than emitted absolute.
+const relativeSkillPath = (
+  skillPath: string | undefined,
   directory: string | undefined,
-  name: string,
-): Promise<string | undefined> => {
-  if (directory === undefined || !SKILL_NAME_PATTERN.test(name)) {
+): string | undefined => {
+  if (skillPath === undefined || directory === undefined || !path.isAbsolute(skillPath) || !path.isAbsolute(directory)) {
     return
   }
+  const relative = path.relative(directory, skillPath)
+  return isInside(relative) ? relative.split(path.sep).join('/') : undefined
+}
+
+const formatSkillBlock = (name: string, record: SkillRecord, directory?: string): string => {
+  const lines = [`<skill name="${name}">`]
+  const description = skillDescription(record)
+  if (description !== undefined) {
+    lines.push(`description: ${description}`)
+  }
+  const relative = relativeSkillPath(record.path, directory)
+  if (relative !== undefined) {
+    lines.push(`path: ${relative}`)
+  }
+  lines.push(stripFrontmatter(record.content).trimEnd(), '</skill>')
+  return lines.join('\n')
+}
+
+export interface SkillInjectionOptions {
+  directory?: string
+  list?: SkillLister | undefined
+  log?: LogFunction
+}
+
+const listSkillRecords = async (
+  options: SkillInjectionOptions,
+): Promise<readonly SkillRecord[] | undefined> => {
   try {
-    return await readFile(path.join(directory, '.agents', 'skills', name, 'SKILL.md'), 'utf8')
+    return await (options.list ?? listNativeSkills)(options.directory)
   }
-  catch {
-    return
+  catch (error) {
+    options.log?.(`skill list failed: ${toErrorMessage(error)}`)
   }
+}
+
+const buildSkillBlocks = (
+  skills: string[],
+  records: readonly SkillRecord[],
+  directory?: string,
+  log?: LogFunction,
+): string[] => {
+  const byName = new Map(records.map(record => [record.name, record]))
+  const blocks: string[] = []
+  for (const name of skills) {
+    const record = SKILL_NAME_PATTERN.test(name) ? byName.get(name) : undefined
+    if (record === undefined) {
+      log?.(`skill not found: ${name}`)
+      continue
+    }
+    blocks.push(formatSkillBlock(name, record, directory))
+  }
+  return blocks
 }
 
 export const injectSkills = async (
   prompt: string,
   skills: string[] | undefined,
-  directory?: string,
-  log?: LogFunction,
+  options: SkillInjectionOptions = {},
 ): Promise<string> => {
   if (skills === undefined || skills.length === 0) {
     return prompt
   }
 
-  const blocks: string[] = []
-  for (const name of skills) {
-    const content = await loadSkill(directory, name)
-    if (content === undefined) {
-      log?.(`skill not found: ${name}`)
-      continue
-    }
-    blocks.push(`<skill name="${name}">\n${content}\n</skill>`)
+  const records = await listSkillRecords(options)
+  if (records === undefined) {
+    return prompt
   }
 
+  const blocks = buildSkillBlocks(skills, records, options.directory, options.log)
   return blocks.length === 0 ? prompt : `<task_skills>\n${blocks.join('\n')}\n</task_skills>\n\n${prompt}`
 }
 
@@ -695,8 +822,14 @@ const finalizeAttempt = (
 const hasSkills = (skills: string[] | undefined): boolean =>
   skills !== undefined && skills.length > 0
 
+// The plugin entry point hands the native skill domain down; a context without
+// it (tests, other callers) falls back to the server's own skill list.
+export interface SkillAwareContext extends WorkflowContext {
+  skill?: SkillLister
+}
+
 const runAttempt = async (
-  context: WorkflowContext,
+  context: SkillAwareContext,
   parameters: NormalizedSubtaskParameters,
   resolveModelOnce: () => Promise<ParentModel | undefined>,
 ): Promise<SubtaskResult> => {
@@ -726,7 +859,11 @@ const runAttempt = async (
     const forkedFrom = resolved.forkedFrom
 
     const finalPrompt = hasSkills(parameters.skills)
-      ? await injectSkills(parameters.prompt, parameters.skills, context.directory, createLogger(context.logs))
+      ? await injectSkills(parameters.prompt, parameters.skills, {
+          directory: context.directory,
+          list: context.skill,
+          log: createLogger(context.logs),
+        })
       : parameters.prompt
 
     let isSessionAborted = false
@@ -790,7 +927,7 @@ const runAttempt = async (
   }
 }
 
-export const createSubtask = (context: WorkflowContext): SubtaskFunction => {
+export const createSubtask = (context: SkillAwareContext): SubtaskFunction => {
   context.startedAt ??= Date.now()
 
   // Memoized so a workflow run probes the parent history at most once, even

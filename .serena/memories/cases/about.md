@@ -6,6 +6,16 @@ ttl: 90d
 claim_ids: []
 L0: "cases: reusable extraction cases distilled"
 L0_table:
+  - id: cases/absence-claim-from-scoped-grep
+    L0: "Absence claim from grep over one package; capability lived in a sibling package"
+  - id: cases/opencode-sdk-absence-claim
+    L0: "one-package grep 0 read as absence; emit is in @opencode/plugin"
+  - id: cases/orchestration/resume-error-empty-error-text
+    L0: "Resume returned error with an empty error and no output; relaunch fresh."
+  - id: cases/orchestration/citation-defects-four-fail-rounds
+    L0: "Four judge rounds: structural findings right, every FAIL a citation defect"
+  - id: cases/orchestration/self-graded-count-mismatch
+    L0: "Validation block said all 8 sites, enumerated 9; passed on unrecounted"
   - id: cases/ci-failure-devcontainer-setup-2026-09-04
     L0: "CI failure: devcontainer setup break, 2026-09-04"
   - id: cases/ci-markdownlint-skills-eof-heading
@@ -100,6 +110,8 @@ L0_table:
     L0: "Validators: attribute external diffs to the right producer"
   - id: cases/orchestration/must-have-criterion-category-mismatch
     L0: "Must-have criteria without a category-anchored acceptance test let a writer score a diagram tool as failing and record three false FAILs."
+  - id: cases/research/search-snippet-figure-drift
+    L0: "Search snippet figure drift: snippet figures drift from the source page"
   - id: cases/rug/empty-child-result-and-self-graded-ledger
     L0: "rug: an ok child with empty outputText is recovered from its transcript by run(); an author's own ledger does not prove compliance."
   - id: cases/serena-memory/round2-recall-friction
@@ -108,6 +120,26 @@ L0_table:
     L0: "Serena recall round 3: recall friction"
   - id: cases/serena-memory/round4-recall-friction
     L0: "Serena recall round 4: recall friction"
+  - id: cases/dispatch-handle-lost-to-restart
+    L0: "Two server restarts killed an execute mid-dispatch: the task_id lived only in the killed call, and only subtask_ls before relaunch prevented a duplicate authoring run."
+  - id: cases/loadpath-question-count-overrun
+    L0: "Loader research died at 24 calls with two answers open: six questions in one child against a three-question cap, and the dispatch procedure file never pointed at the cap."
+  - id: cases/loadpath-unsatisfiable-citation-form
+    L0: "Loader research demanded a file-and-line citation inside a 253 MB compiled binary; opencode api /command and /doc return web-app HTML, not a listing."
+  - id: cases/research-artifact-last-uncapped-fetch
+    L0: "Research child never wrote its named brief: 24 calls on robots-blocked fetches and 2 KB page slices, because the artifact ranked below six answers and no fetch surface was bounded."
+  - id: cases/trial-mechanism-prescribed-gated-actions
+    L0: "Trial brief scripted rm -rf and git add/commit as its finish line: two hard permission denials and the git variant lost, while the prescribed file list hid the singular/plural .opencode detail."
+  - id: cases/brief-omitted-test-max-lines
+    L0: "Brief named gates but not the 650-line test-file ceiling: four criteria UNVERIFIED"
+  - id: cases/criterion-widened-scope
+    L0: "Criterion wider than the request failed an out-of-scope site: quote scope words, name out-of-scope ids"
+  - id: cases/payload-shape-consumer-coupling
+    L0: "Injected <skill> shape changed and session_parts.py, which expected a path attribute after name, silently dropped delegated loads; grep every reader before changing a payload tag."
+  - id: cases/subtask-partial-before-gates
+    L0: "Implementer spent its budget on edits; partial report left gates and criteria unverified"
+  - id: cases/validator-evidence-bar-ambiguous
+    L0: "10 criteria judged by path:line; the one named command (just ci) went unrun: UNVERIFIABLE"
 ---
 
 # Cases

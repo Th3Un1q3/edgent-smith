@@ -97,6 +97,8 @@ export const myPlugin: Plugin = async ({ client }) => {
 }
 ```
 
+**A cross-suite import is checked against its mocks.** Before a suite imports an exported helper from a module that a sibling suite `vi.mock`s, grep the sibling suites for that module: either update their mock factories in the same change, or keep a local helper. State which in the change.
+
 ### Safe for Module Level
 
 Pure functions that do NOT call mocked imports are safe to define at module level:

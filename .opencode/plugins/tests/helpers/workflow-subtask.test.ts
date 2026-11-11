@@ -1,22 +1,19 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
-
-import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   BudgetExceededError,
   createSubtask,
   extractOutputText,
   injectSkills,
-  loadSkill,
   resolveParentModel,
 } from '@plugins/helpers/workflow-subtask'
+import type { SkillLister, SkillRecord } from '@plugins/helpers/workflow-subtask'
 import { MAX_LOGS, MAX_LOG_CHARS, MAX_MAX_SUBTASKS_CAP } from '@plugins/helpers/workflow-types'
 // Namespace import so a missing MAX_DESCRIPTION_CHARS export fails this test
 // cleanly instead of breaking the whole module at link time.
 import * as workflowTypes from '@plugins/helpers/workflow-types'
-import type { SubtaskInput, SubtaskResult, WorkflowContext, WorkflowSdkClient } from '@plugins/helpers/workflow-types'
+import type { SkillAwareContext } from '@plugins/helpers/workflow-subtask'
+import type { SubtaskInput, SubtaskResult, WorkflowSdkClient } from '@plugins/helpers/workflow-types'
 
 // ── helpers ──────────────────────────────────────────────────────
 
@@ -61,7 +58,7 @@ const resolveOnAbortPrompt = (data?: unknown): any =>
     }),
   )
 
-const makeContext = (client: any, partial: Partial<WorkflowContext> = {}): WorkflowContext => ({
+const makeContext = (client: any, partial: Partial<SkillAwareContext> = {}): SkillAwareContext => ({
   client,
   parentSessionID: 'ses_parent',
   signal: new AbortController().signal,
@@ -87,20 +84,36 @@ const abortablePrompt = (): any =>
     }),
   )
 
-// ── fixtures ─────────────────────────────────────────────────────
+// ── skill fixtures ───────────────────────────────────────────────
 
-const skillDirectory = await mkdtemp(path.join(tmpdir(), 'workflow-subtask-'))
+// The workspace root the injected path is relativised against. No skill file
+// exists on disk: the native surface is stubbed, which keeps the suite hermetic.
+const workspace = '/workspace/demo-repo'
 
-await mkdir(path.join(skillDirectory, '.agents', 'skills', 'demo'), { recursive: true })
-await writeFile(
-  path.join(skillDirectory, '.agents', 'skills', 'demo', 'SKILL.md'),
-  'DEMO CONTENT',
-  'utf8',
-)
+const skillList = (records: SkillRecord[]): SkillLister => async () => records
 
-afterAll(async () => {
-  await rm(skillDirectory, { recursive: true, force: true })
+const demoSkill = (overrides: Partial<SkillRecord> = {}): SkillRecord => ({
+  name: 'demo',
+  description: 'Demo skill',
+  path: `${workspace}/.agents/skills/demo/SKILL.md`,
+  content: '---\nname: demo\ndescription: Frontmatter description\n---\nDEMO BODY\n\n---\n\nlater rule\n',
+  ...overrides,
 })
+
+const render = (records: SkillRecord[], skills: string[] = ['demo']): Promise<string> =>
+  injectSkills('PROMPT', skills, { directory: workspace, list: skillList(records) })
+
+const skillCases: Array<[string, SkillRecord, string[], string[]]> = [
+  [
+    'strips the leading frontmatter, keeps the description and the relative path',
+    demoSkill(),
+    ['description: Demo skill', 'path: .agents/skills/demo/SKILL.md', 'DEMO BODY\n\n---\n\nlater rule\n</skill>'],
+    ['name: demo', 'Frontmatter description', workspace],
+  ],
+  ['falls back to the frontmatter description', demoSkill({ description: undefined }), ['description: Frontmatter description'], []],
+  ['omits a missing path', demoSkill({ path: undefined }), ['<skill name="demo">'], ['path:']],
+  ['omits a path outside the directory', demoSkill({ path: '/elsewhere/x/SKILL.md' }), [], ['path:', '/elsewhere']],
+]
 
 // ── extractOutputText ────────────────────────────────────────────
 
@@ -127,43 +140,63 @@ describe('extractOutputText', () => {
 
 // ── skills ───────────────────────────────────────────────────────
 
-describe('loadSkill', () => {
-  it('loads SKILL.md for a valid name', async () => {
-    await expect(loadSkill(skillDirectory, 'demo')).resolves.toBe('DEMO CONTENT')
-  })
-
-  it('returns undefined for a missing skill, invalid name, or no directory', async () => {
-    await expect(loadSkill(skillDirectory, 'missing')).resolves.toBeUndefined()
-    await expect(loadSkill(skillDirectory, '../secret')).resolves.toBeUndefined()
-    await expect(loadSkill(skillDirectory, 'a/b')).resolves.toBeUndefined()
-    await expect(loadSkill(undefined, 'demo')).resolves.toBeUndefined()
-  })
-})
-
 describe('injectSkills', () => {
-  it('wraps loaded skills in the task_skills block', async () => {
-    const result = await injectSkills('PROMPT', ['demo'], skillDirectory)
+  it.each(skillCases)('%s', async (_label, record, present, absent) => {
+    const result = await render([record])
+    for (const expected of present) {
+      expect(result).toContain(expected)
+    }
+    for (const unexpected of absent) {
+      expect(result).not.toContain(unexpected)
+    }
+  })
+
+  it('preserves the envelope, the element, and the requested order', async () => {
+    const records = [
+      demoSkill({ name: 'second', content: 'SECOND', path: undefined, description: 'Second skill' }),
+      demoSkill({ name: 'first', content: 'FIRST', path: undefined, description: 'First skill' }),
+    ]
+    const result = await injectSkills('PROMPT', ['first', 'second'], {
+      directory: workspace,
+      list: skillList(records),
+    })
 
     expect(result).toBe(
-      '<task_skills>\n<skill name="demo">\nDEMO CONTENT\n</skill>\n</task_skills>\n\nPROMPT',
+      '<task_skills>\n'
+      + '<skill name="first">\ndescription: First skill\nFIRST\n</skill>\n'
+      + '<skill name="second">\ndescription: Second skill\nSECOND\n</skill>\n'
+      + '</task_skills>\n\nPROMPT',
     )
   })
 
-  it('logs a warning and leaves the prompt unchanged when a skill is missing', async () => {
+  it('logs a miss for an unknown or invalid name and skips it', async () => {
     const logs: string[] = []
-    const log = (message: unknown): void => {
-      logs.push(String(message))
-    }
-
-    const result = await injectSkills('PROMPT', ['missing'], skillDirectory, log)
-
+    const result = await injectSkills('PROMPT', ['missing', '../secret'], {
+      directory: workspace,
+      list: skillList([]),
+      log: (message) => { logs.push(String(message)) },
+    })
     expect(result).toBe('PROMPT')
-    expect(logs).toEqual(['skill not found: missing'])
+    expect(logs).toEqual(['skill not found: missing', 'skill not found: ../secret'])
+  })
+
+  it('leaves the prompt unchanged and logs when the native list fails', async () => {
+    const logs: string[] = []
+    const list: SkillLister = async () => {
+      throw new Error('surface down')
+    }
+    const result = await injectSkills('PROMPT', ['demo'], {
+      directory: workspace,
+      list,
+      log: (message) => { logs.push(String(message)) },
+    })
+    expect(result).toBe('PROMPT')
+    expect(logs).toEqual(['skill list failed: surface down'])
   })
 
   it('leaves the prompt unchanged when no skills are requested', async () => {
-    await expect(injectSkills('PROMPT', undefined, skillDirectory)).resolves.toBe('PROMPT')
-    await expect(injectSkills('PROMPT', [], skillDirectory)).resolves.toBe('PROMPT')
+    await expect(injectSkills('PROMPT', undefined, { directory: workspace })).resolves.toBe('PROMPT')
+    await expect(injectSkills('PROMPT', [], { directory: workspace })).resolves.toBe('PROMPT')
   })
 })
 
@@ -360,12 +393,15 @@ describe('createSubtask', () => {
 
   it('injects skills into the prompt body', async () => {
     const client = createClient()
-    const context = makeContext(client, { directory: skillDirectory })
+    const context = makeContext(client, { directory: workspace, skill: skillList([demoSkill()]) })
 
     await createSubtask(context)({ prompt: 'PROMPT', description: 'skill work', skills: ['demo'] })
 
     expect(client.session.prompt.mock.calls[0][0].body.parts[0].text).toBe(
-      '<task_skills>\n<skill name="demo">\nDEMO CONTENT\n</skill>\n</task_skills>\n\nPROMPT',
+      '<task_skills>\n'
+      + '<skill name="demo">\ndescription: Demo skill\npath: .agents/skills/demo/SKILL.md\n'
+      + 'DEMO BODY\n\n---\n\nlater rule\n</skill>\n'
+      + '</task_skills>\n\nPROMPT',
     )
   })
 
@@ -417,66 +453,20 @@ describe('createSubtask', () => {
 // ── createSubtask: parent model inheritance ──────────────────────
 
 describe('createSubtask parent model inheritance', () => {
-  it('inherits the model from the last assistant message', async () => {
-    const messages = vi.fn(async () => ({
-      data: [{ info: { role: 'assistant', providerID: 'opencode-go', modelID: 'deepseek-v4.1-flash' } }],
-    }))
+  const modelCases: Array<[string, Array<{ info: Record<string, unknown> }>, { providerID: string, modelID: string }]> = [
+    ['the last assistant message', [{ info: { role: 'assistant', providerID: 'opencode-go', modelID: 'deepseek-v4.1-flash' } }], { providerID: 'opencode-go', modelID: 'deepseek-v4.1-flash' }],
+    ['the user-message info.model shape', [{ info: { role: 'user', model: { providerID: 'opencode-go', modelID: 'deepseek-v4.1-flash' } } }], { providerID: 'opencode-go', modelID: 'deepseek-v4.1-flash' }],
+    ['entries without a model, scanning from the end', [{ info: { providerID: 'first', modelID: 'old' } }, { info: { role: 'assistant' } }], { providerID: 'first', modelID: 'old' }],
+    ['the last message over earlier ones', [{ info: { providerID: 'first', modelID: 'old' } }, { info: { providerID: 'last', modelID: 'new' } }], { providerID: 'last', modelID: 'new' }],
+  ]
+
+  it.each(modelCases)('inherits the model from %s', async (_label, entries, expected) => {
+    const messages = vi.fn(async () => ({ data: entries }))
     const client = createClient({ messages })
 
     await createSubtask(makeContext(client))('do work')
 
-    expect(client.session.prompt.mock.calls[0][0].body.model).toEqual({
-      providerID: 'opencode-go',
-      modelID: 'deepseek-v4.1-flash',
-    })
-  })
-
-  it('inherits the model from the user-message info.model shape', async () => {
-    const messages = vi.fn(async () => ({
-      data: [{ info: { role: 'user', model: { providerID: 'opencode-go', modelID: 'deepseek-v4.1-flash' } } }],
-    }))
-    const client = createClient({ messages })
-
-    await createSubtask(makeContext(client))('do work')
-
-    expect(client.session.prompt.mock.calls[0][0].body.model).toEqual({
-      providerID: 'opencode-go',
-      modelID: 'deepseek-v4.1-flash',
-    })
-  })
-
-  it('scans messages from the end and skips entries without a model', async () => {
-    const messages = vi.fn(async () => ({
-      data: [
-        { info: { providerID: 'first', modelID: 'old' } },
-        { info: { role: 'assistant' } },
-      ],
-    }))
-    const client = createClient({ messages })
-
-    await createSubtask(makeContext(client))('do work')
-
-    expect(client.session.prompt.mock.calls[0][0].body.model).toEqual({
-      providerID: 'first',
-      modelID: 'old',
-    })
-  })
-
-  it('prefers the last message model over earlier ones', async () => {
-    const messages = vi.fn(async () => ({
-      data: [
-        { info: { providerID: 'first', modelID: 'old' } },
-        { info: { providerID: 'last', modelID: 'new' } },
-      ],
-    }))
-    const client = createClient({ messages })
-
-    await createSubtask(makeContext(client))('do work')
-
-    expect(client.session.prompt.mock.calls[0][0].body.model).toEqual({
-      providerID: 'last',
-      modelID: 'new',
-    })
+    expect(client.session.prompt.mock.calls[0][0].body.model).toEqual(expected)
   })
 
   it('resolves the parent model at most once across subtasks', async () => {
@@ -723,24 +713,11 @@ describe('createSubtask error normalization and options', () => {
 
   it('caps recorded logs at MAX_LOGS', async () => {
     const skills = Array.from({ length: MAX_LOGS + 5 }, (_value, index) => `missing-${index}`)
-    const context = makeContext(createClient(), { directory: skillDirectory })
+    const context = makeContext(createClient(), { directory: workspace, skill: skillList([]) })
 
     await createSubtask(context)({ prompt: 'P', description: 'skill work', skills })
 
     expect(context.logs).toHaveLength(MAX_LOGS)
-  })
-
-  it('injects found skills and warns about missing ones', async () => {
-    const logs: string[] = []
-    const log = (message: unknown): void => {
-      logs.push(String(message))
-    }
-
-    const result = await injectSkills('PROMPT', ['demo', 'missing'], skillDirectory, log)
-
-    expect(result).toContain('<skill name="demo">')
-    expect(result).not.toContain('missing')
-    expect(logs).toEqual(['skill not found: missing'])
   })
 
   it('reads the nested model shape and tolerates an empty response', async () => {

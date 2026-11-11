@@ -386,6 +386,46 @@ describe('workflow instructions', () => {
       expect(block).toBe(`${openingTag}\n${body}\n</workflow_instructions>`)
     })
 
+    it('strips a leading YAML frontmatter block from the injected instructions', async () => {
+      const directory = makeDirectory()
+
+      writeInstructions(directory, '---\nname: demo\ndescription: instructions\n---\n# Body\n\nLATER-MARKER\n')
+      workflowConfig.instructions = 'instructions.md'
+
+      const block = await renderBlock(directory)
+
+      expect(block.endsWith('>\n# Body\n\nLATER-MARKER\n\n</workflow_instructions>')).toBe(true)
+      expect(block).not.toContain('name: demo')
+    })
+
+    it('keeps a file without frontmatter and a later --- rule unchanged', async () => {
+      const directory = makeDirectory()
+      const body = '# Body\n\n---\n\nRULE-AFTER\n'
+
+      writeInstructions(directory, body)
+      workflowConfig.instructions = 'instructions.md'
+
+      const plain = await renderBlock(directory)
+
+      expect(plain.endsWith(`>\n${body}\n</workflow_instructions>`)).toBe(true)
+
+      writeInstructions(directory, '---\nname: demo\n---\n# Body\n\n---\n\nRULE-AFTER\n')
+
+      const frontmattered = await renderBlock(directory)
+
+      expect(frontmattered.endsWith(`>\n${body}\n</workflow_instructions>`)).toBe(true)
+    })
+
+    it('strips the frontmatter of the task-delegation skill configured for the repository', async () => {
+      workflowConfig.instructions = CONFIGURED_INSTRUCTIONS
+
+      const block = await renderBlock(REPO_ROOT)
+
+      expect(block.startsWith(`${WORKFLOW_INSTRUCTIONS_SENTINEL} source="`)).toBe(true)
+      expect(block).not.toContain('name: task-delegation')
+      expect(block).toContain('# Task Delegation Skill')
+    })
+
     it('escapes a quote in the resolved source path so the opening tag stays well formed', async () => {
       const directory = makeDirectory()
       const fileName = String.raw`inst"ruc&t<ions\.md`
