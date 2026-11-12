@@ -2,11 +2,6 @@ import type { CommandResult } from '../helpers/gate-runner'
 
 export type GateResult = 'unknown' | 'pass' | 'fail'
 
-export interface GateKVState {
-  dirty: boolean
-  status: GateResult
-}
-
 export interface GateConfig {
   name: string
   patterns: string[]
@@ -27,14 +22,6 @@ export interface GateRunOutcome {
   result: CommandResult
 }
 
-export interface GateStateEntry {
-  lastStatus: GateResult
-  lastExecutedAt: Date
-  lastStdOut: string
-  affectedSessions: string[]
-}
-
 export interface QualityGatesConfig {
   gates: GateConfig[]
-  debounceMs?: number
 }

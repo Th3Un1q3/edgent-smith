@@ -4,7 +4,7 @@ Install a CLI tool into the devcontainer so it survives rebuilds, resolves on ev
 
 **Tools:** bash, npm (for npm-distributed CLIs), the devcontainer lifecycle hook `postCreateCommand` in devcontainer.json. **Prerequisites:** write access to the repo, a running devcontainer, and the target's published versions visible via `npm view <pkg> versions`.
 
-**Order of operations:** pin → guard → install → PATH → volume → config → verify → document.
+**Order of steps:** pin → guard → install → PATH → volume → config → verify → rebuild → document.
 
 ## Step 1 — Pin the exact version, rc tags included
 
@@ -98,7 +98,18 @@ timeout 10 dsh --dump-config # bounded smoke, classified
 
 Done when: each check returns and you can state one classification per check.
 
-## Step 8 — Document the install
+## Step 8 — Prove the install and its configuration survive a rebuild
+
+Presence here is no evidence: a rebuild discards home-dir state and re-creates the container —
+[lifecycle reference](../references/devcontainer-lifecycle-and-persistence.md).
+Provisioning must be repo-tracked code; name the devcontainer setup-script line as the evidence.
+Re-create the state (rebuild, or delete the tool and config so only the repo survives), re-run the
+provisioning: tool and config return with no manual step or prompt; a second run changes nothing.
+Unverified if neither was performed, or if either left tool or config unrestored — not done.
+
+Done when: you record the provisioning line, the re-creation result, and the no-change rerun.
+
+## Step 9 — Document the install
 
 Record the pinned version, the guard, the allow-scripts whitelist, the PATH export, and the config restore in the repo's setup script comments or docs. Name env vars, never values.
 
@@ -109,6 +120,8 @@ Done when: a fresh clone plus rebuild reproduces the install from the docs alone
 - The install is pinned, guarded, idempotent, and verified — re-running setup changes nothing.
 - The tool resolves in non-interactive shells; native loads succeed; the smoke is classified.
 - Config restores from repo templates; no secret value appears in any file.
+- A rebuild, or a scoped emulation from repo code, re-creates the tool and its configuration
+  with no manual step; a current-container check does not satisfy this criterion.
 
 ## Example application: dsh MCP runner
 

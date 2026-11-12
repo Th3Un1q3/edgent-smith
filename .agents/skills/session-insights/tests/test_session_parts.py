@@ -54,6 +54,7 @@ equality assertions below would then need loosening).
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 from pathlib import Path
@@ -774,6 +775,47 @@ def test_summary_skill_load_discriminator(tmp_path: Path) -> None:
     assert sources["test-design"] == "tool"
     assert sources["context-gathering"] == "delegated"
     assert "harness-management" not in sources
+
+
+def _load_session_parts_module():
+    spec = importlib.util.spec_from_file_location("session_parts", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_skill_tags_accept_legacy_and_content_forms() -> None:
+    """Both `<skill>` forms parse; metadata lines stay out of the body, and no path still counts."""
+    module = _load_session_parts_module()
+    payload = (
+        "<task_skills>\n"
+        '<skill name="legacy" path=".agents/skills/legacy/SKILL.md">\n'
+        "LEGACY BODY\n</skill>\n"
+        '<skill name="current">\n'
+        "description: Current skill\n"
+        "path: .agents/skills/current/SKILL.md\n"
+        "CURRENT BODY\n</skill>\n"
+        '<skill name="no-path">\n'
+        "description: No path skill\n"
+        "NO PATH BODY\n</skill>\n"
+        "</task_skills>\n"
+    )
+
+    assert module.skill_tags(payload) == [
+        ("legacy", ".agents/skills/legacy/SKILL.md", "LEGACY BODY"),
+        ("current", ".agents/skills/current/SKILL.md", "CURRENT BODY"),
+        ("no-path", "", "NO PATH BODY"),
+    ]
+
+    loads = module.skill_loads(
+        [{"info": {"role": "user"}, "parts": [{"type": "text", "text": payload}]}]
+    )
+    assert [(load["name"], load["dir"]) for load in loads] == [
+        ("legacy", ".agents/skills/legacy/SKILL.md"),
+        ("current", ".agents/skills/current/SKILL.md"),
+        ("no-path", ""),
+    ]
 
 
 def test_summary_errors_step_finish_and_reasoning(tmp_path: Path) -> None:

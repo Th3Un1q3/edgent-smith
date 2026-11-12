@@ -103,6 +103,8 @@ Choose the agent based on the task's scope and required expertise. Use this deci
 
 Every subagent prompt must include six elements:
 
+Before dispatch, check the brief against [Prompts Carry Ground Truth, Not Line Numbers](../SKILL.md#prompts-carry-ground-truth-not-line-numbers): at most 3 answerable questions per child, one closing observable and the probe that settles it per question, one authoritative path with no candidate list, and an outcome with no step order. A brief that fails one check is split, not dispatched.
+
 ### Required Prompt Structure
 
 | Element | Purpose | Example |

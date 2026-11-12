@@ -35,6 +35,7 @@ import {
 } from './helpers/instruction-carrier'
 import type { CarrierStorage, InstructionEntryDraft, InstructionReferenceDraft } from './helpers/instruction-carrier'
 import { getClient } from './helpers/service-client'
+import { readFilePath } from './helpers/tool-input'
 import type { ResolvedInstruction } from './types/instructions'
 
 const TAG = '[instructions-loader] '
@@ -45,12 +46,6 @@ const tokenKey = (sessionID: string): string => 'idempotency/' + sessionID
 // Synthetic seeding lists the native entries once per session; the marker lives
 // in the same storage so a repeated synthetic touch does not re-list.
 const seededKey = (sessionID: string): string => 'native-seed/' + sessionID
-
-const readFilePath = (input: unknown): string | undefined => {
-  const arguments_ = input as { path?: unknown, filePath?: unknown } | undefined
-  const candidate = arguments_?.path ?? arguments_?.filePath
-  return typeof candidate === 'string' && candidate.length > 0 ? candidate : undefined
-}
 
 const pickAgent = (fromEvent: unknown, fromSession: unknown): string => {
   const candidate = typeof fromEvent === 'string' && fromEvent.length > 0 ? fromEvent : fromSession

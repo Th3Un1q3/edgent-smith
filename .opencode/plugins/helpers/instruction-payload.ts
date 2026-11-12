@@ -8,6 +8,8 @@ const API_PREFIX = 'api/'
 const HASH_LENGTH = 7
 const EMPTY_COLLISIONS: ReadonlySet<string> = new Set()
 
+export { buildSteeringMessage } from './steering-message'
+
 type InstructionIdentity = { readonly path?: string, readonly description?: string }
 
 export const formatInstruction = (instruction: ResolvedInstruction, isReference: boolean): string => {
@@ -33,9 +35,6 @@ export const formatInstruction = (instruction: ResolvedInstruction, isReference:
     '</instruction>',
   ].join('\n')
 }
-
-export const buildSteeringMessage = (blocks: string): string =>
-  `<steering priority="high" reason="relevant files touched" type="instructions">\n${blocks}\n</steering>`
 
 const identityOf = (instruction: InstructionIdentity): string =>
   instruction.path ?? instruction.description ?? ''

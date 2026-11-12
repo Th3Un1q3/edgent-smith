@@ -1,0 +1,7 @@
+{
+  "build-and-test": {
+    "sensors": [
+      "harness-gates"
+    ]
+  }
+}

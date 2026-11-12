@@ -39,7 +39,7 @@
   "containerEnv": {
     "BUN_INSTALL": "/home/vscode/.bun",
     "OPENCODE_DATA_DIR": "/home/vscode/.local/share/opencode",
-    "PATH": "/home/vscode/.opencode/bin:/home/vscode/.bun/bin:${localEnv:PATH}"
+    "PATH": "/home/vscode/.local/bin:/home/vscode/.opencode/bin:/home/vscode/.bun/bin:${localEnv:PATH}"
   },
   "initializeCommand": "sh .devcontainer/init.sh",
   "postCreateCommand": "bash .devcontainer/setup-dev.sh",

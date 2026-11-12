@@ -1,32 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatGateBatchResults, formatGateFailure } from '@plugins/helpers/gate-formatter'
-
-import type { CommandResult } from '@plugins/helpers/gate-runner'
+import { formatGateBatchResults } from '@plugins/helpers/gate-formatter'
 
 import type { GateConfig, GateRunOutcome } from '@plugins/types/quality-gate'
-
-describe('gate-formatter', () => {
-  it('formats failure with stdout+stderr, stdout-only, and no output', () => {
-    const both: CommandResult = { exitCode: 1, stdout: 'stdout line', stderr: 'stderr line' }
-
-    expect(formatGateFailure('lint', 'just lint', both)).toBe(
-      '<steering priority="warning" reason="file change triggered quality gate run" type="quality-gate" result="fail" gate-id="lint">Quality gate \'lint\' failed — `just lint` exited with code 1:\nstdout line\nstderr line</steering>',
-    )
-
-    const stdoutOnly: CommandResult = { exitCode: 2, stdout: 'only stdout', stderr: '' }
-
-    expect(formatGateFailure('test', 'just test', stdoutOnly)).toBe(
-      '<steering priority="warning" reason="file change triggered quality gate run" type="quality-gate" result="fail" gate-id="test">Quality gate \'test\' failed — `just test` exited with code 2:\nonly stdout</steering>',
-    )
-
-    const noOutput: CommandResult = { exitCode: 0, stdout: '', stderr: '' }
-
-    expect(formatGateFailure('test', 'just test', noOutput)).toBe(
-      '<steering priority="warning" reason="file change triggered quality gate run" type="quality-gate" result="fail" gate-id="test">Quality gate \'test\' failed — `just test` exited with code 0</steering>',
-    )
-  })
-})
 
 describe('formatGateBatchResults', () => {
   const lintGate: GateConfig = { name: 'lint', patterns: ['**/*.ts'], commands: ['just lint'] }

@@ -11,6 +11,9 @@ sudo chown -R $(id -u):$(id -g) /home/vscode/.local/
 
 # Ensure opencode bin directory is in PATH for this script
 export PATH="/home/vscode/.opencode/bin:$PATH"
+# The aidlc installer writes to ~/.local/bin. Exporting it before the guard
+# below lets a re-run detect a binary an earlier run installed.
+export PATH="/home/vscode/.local/bin:$PATH"
 
 # Install codegraph cli(required for MCP)
 
@@ -30,6 +33,63 @@ if [[ "$FAST_MODE" == false ]]; then
   if ! command -v conductor &> /dev/null; then
     echo "Installing conductor..."
     CONDUCTOR_INSTALL_FORCE=1 curl -sSfL https://aka.ms/conductor/install.sh | sh -s -- --source "git+https://github.com/microsoft/conductor.git@v0.1.18" || echo "WARNING: conductor install failed"
+  fi
+
+  # aidlc workflows (https://github.com/awslabs/aidlc-workflows). The version is
+  # pinned so a rebuild lands on the release this repo was projected with;
+  # export AIDLC_VERSION to move it deliberately.
+  AIDLC_INSTALL_URL="https://github.com/awslabs/aidlc-workflows/releases/latest/download/install.sh"
+  AIDLC_VERSION="${AIDLC_VERSION:-2.11.3}"
+  if ! command -v aidlc &> /dev/null; then
+    echo "Installing aidlc v${AIDLC_VERSION}..."
+    curl -sSfL "$AIDLC_INSTALL_URL" | sh -s -- --version "$AIDLC_VERSION" || echo "WARNING: aidlc install failed"
+  fi
+
+  # aidlc projects its agents, skills, hooks and commands into the checkout, so
+  # the projection has to run from the repository root rather than the caller's
+  # cwd, and it has to run on every setup: a fresh clone has no projection and a
+  # rebuilt container has a new home directory. --yes plus stdin from /dev/null
+  # keeps it non-interactive; a failure warns, because a stale projection should
+  # not block language and harness setup.
+  AIDLC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  if command -v aidlc &> /dev/null; then
+    if ( cd "$AIDLC_ROOT" && timeout 300 aidlc config --harness opencode --yes </dev/null ); then
+      echo "aidlc projection refreshed"
+    else
+      echo "WARNING: aidlc projection failed; harness wiring may be stale"
+    fi
+    # doctor is advisory only: it also flags uncommitted aidlc/ state, which is
+    # normal for a working container, so report the status and keep going.
+    if ( cd "$AIDLC_ROOT" && timeout 120 aidlc doctor --no-color ); then
+      echo "aidlc doctor: exit 0"
+    else
+      echo "WARNING: aidlc doctor exited non-zero (advisory; setup continues)"
+    fi
+  else
+    echo "WARNING: aidlc unavailable; skipping projection and doctor"
+  fi
+
+  # Quality-gate sensors are a plugin sourced from the checkout: the projection
+  # above neither builds its dist/ nor re-enables it, so a rebuilt container or a
+  # fresh clone would silently lose them. Every step warns instead of aborting —
+  # the sensors enhance the harness, they do not boot it.
+  QUALITY_GATES_ROOT="$AIDLC_ROOT/aidlc-plugins/quality-gates"
+  if [[ -d "$QUALITY_GATES_ROOT" && -f "$AIDLC_ROOT/.aidlc/tools/aidlc-plugin-build.ts" ]]; then
+    if ( cd "$AIDLC_ROOT" && timeout 180 bun .aidlc/tools/aidlc-plugin-build.ts aidlc-plugins/quality-gates opencode </dev/null ); then
+      if ( cd "$AIDLC_ROOT" && timeout 120 aidlc engine plugin sync --plugin-root "$QUALITY_GATES_ROOT/dist/opencode" --yes </dev/null ); then
+        if ( cd "$AIDLC_ROOT" && timeout 120 aidlc engine plugin select aidlc quality-gates </dev/null ); then
+          echo "quality-gate sensors enabled"
+        else
+          echo "WARNING: aidlc plugin select failed; quality-gate sensors not enabled"
+        fi
+      else
+        echo "WARNING: aidlc plugin sync failed; quality-gate sensors not enabled"
+      fi
+    else
+      echo "WARNING: quality-gate plugin build failed; quality-gate sensors not enabled"
+    fi
+  else
+    echo "WARNING: quality-gate plugin sources or build script missing; sensors not enabled"
   fi
 fi
 

@@ -1,4 +1,5 @@
 import type { CommandResult } from './gate-runner'
+import { buildSteeringMessage } from './steering-message'
 import type { GateRunOutcome } from '../types/quality-gate'
 
 const combineCommandOutput = (result: CommandResult): string =>
@@ -21,15 +22,6 @@ const formatOutcomeLine = (outcome: GateRunOutcome): string => {
   return line
 }
 
-export function formatGateFailure(
-  gateName: string,
-  command: string,
-  result: CommandResult,
-): string {
-  const output = combineCommandOutput(result)
-  return `<steering priority="warning" reason="file change triggered quality gate run" type="quality-gate" result="fail" gate-id="${gateName}">Quality gate '${gateName}' failed — \`${command}\` exited with code ${result.exitCode}${output ? `:\n${output}` : ''}</steering>`
-}
-
 export function formatGateBatchResults(outcomes: GateRunOutcome[], isPreChange?: boolean): string {
   if (outcomes.length === 0) return ''
 
@@ -43,6 +35,7 @@ export function formatGateBatchResults(outcomes: GateRunOutcome[], isPreChange?:
   const reason = isPreChange ? 'pre-change quality check' : 'ran quality checks on files changed since last check'
 
   const lines = outcomes.map(outcome => formatOutcomeLine(outcome))
+  const body = [`${prefix}Quality gate transitions (${passed} now passing, ${failed} now failing):`, ...lines].join('\n')
 
-  return `<steering priority="${priority}" reason="${reason}" type="quality-gate" result="${resultAttribute}">\n${[`${prefix}Quality gate transitions (${passed} now passing, ${failed} now failing):`, ...lines].join('\n')}\n</steering>`
+  return buildSteeringMessage({ priority, reason, type: 'quality-gate', result: resultAttribute }, body)
 }

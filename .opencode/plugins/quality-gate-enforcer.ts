@@ -1,10 +1,11 @@
 /**
- * quality-gate-enforcer — OpenCode v2 Effect plugin (migrated).
+ * quality-gate-enforcer — OpenCode v2 Effect plugin.
  *
- * Reworked for V2: gate state lives in `ctx.storage` (per session), reporting
- * uses `ctx.session.prompt({ resume: false })`, hooks register through
- * `ctx.tool.hook`, and gate commands run via Bun's `$` (imported directly; V2
- * exposes no shell-exec API).
+ * Gate state lives in `ctx.storage` (per session) and each hook run reports its
+ * transitions in one synthetic append. Correlation lives in `metadata`, never in
+ * a message id: `SessionMessage.ID` requires a "msg_" prefix and the runtime
+ * generates the id. Hooks register through `ctx.tool.hook`, and gate commands run
+ * via Bun's `$` (V2 exposes no shell-exec API).
  */
 import { Effect } from 'effect'
 import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
@@ -14,27 +15,17 @@ import { runGate } from './helpers/gate-runner'
 import type { Shell } from './helpers/gate-runner'
 import { isGlobMatch } from './helpers/glob-match'
 import { formatGateBatchResults } from './helpers/gate-formatter'
+import { readFilePath, relativeTo } from './helpers/tool-input'
 import type { GateConfig, GateResult, GateRunOutcome } from './types/quality-gate'
-
-// V2 tool inputs use `path` (edit/write); accept `filePath` too.
-const readFilePath = (input: unknown): string | undefined => {
-  const arguments_ = input as { path?: unknown, filePath?: unknown } | undefined
-  const candidate = arguments_?.path ?? arguments_?.filePath
-  return typeof candidate === 'string' && candidate.length > 0 ? candidate : undefined
-}
 
 const findMatchingGates = (gates: GateConfig[], filePath: string): GateConfig[] =>
   gates.filter(gate => gate.patterns.some(pattern => isGlobMatch(pattern, filePath)))
 
 const TARGETED_TOOLS = new Set(['edit', 'write'])
 
-// Tool inputs carry absolute paths; gate patterns are workspace-relative.
-const relativeTo = (directory: string, filePath: string): string => {
-  const prefix = directory.endsWith('/') ? directory : directory + '/'
-  return filePath.startsWith(prefix) ? filePath.slice(prefix.length) : filePath
-}
+const TAG = '[quality-gate-enforcer] '
 
-type SessionID = Parameters<Context['session']['prompt']>[0]['sessionID']
+type SessionID = Parameters<Context['session']['synthetic']>[0]['sessionID']
 
 const gatesKey = (sessionID: string): string => 'gates/' + sessionID
 
@@ -77,7 +68,22 @@ const plugin: Plugin = {
 
         yield* context.storage.set(gatesKey(sessionID), statuses)
         if (outcomes.length === 0) return
-        yield* context.session.prompt({ sessionID, text: formatGateBatchResults(outcomes, isPreChange), resume: false })
+
+        const transitionSummary = outcomes
+          .map(outcome => `${outcome.gate.name}: ${outcome.previousStatus} → ${outcome.newStatus}`)
+          .join(', ')
+        const appended = yield* Effect.result(context.session.synthetic({
+          sessionID,
+          text: formatGateBatchResults(outcomes, isPreChange),
+          description: `Quality gate: ${transitionSummary}`,
+          metadata: {
+            quality_gate: outcomes.map(outcome => outcome.gate.name).join(','),
+            transition: outcomes.map(outcome => `${outcome.previousStatus}->${outcome.newStatus}`).join(','),
+          },
+        }))
+        if (appended._tag === 'Failure') {
+          yield* Effect.logWarning(TAG + 'synthetic append failed', { error: String(appended.failure) })
+        }
       })
 
     yield* context.tool.hook('execute.before', event => Effect.gen(function* () {

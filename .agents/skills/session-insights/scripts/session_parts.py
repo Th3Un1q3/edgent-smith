@@ -291,7 +291,38 @@ def info_json(info):
 
 
 TASK_SKILLS_RE = re.compile(r"<task_skills>(.*?)</task_skills>", re.DOTALL)
-SKILL_TAG_RE = re.compile(r'<skill\s+name="([^"]+)"\s+path="([^"]*)"')
+SKILL_BLOCK_RE = re.compile(r"<skill\b([^>]*)>(.*?)</skill>", re.DOTALL)
+SKILL_NAME_ATTR_RE = re.compile(r'\bname="([^"]+)"')
+SKILL_PATH_ATTR_RE = re.compile(r'\bpath="([^"]*)"')
+SKILL_META_LINE_RE = re.compile(r"^(description|path)\s*:\s*(.*)$")
+
+
+def skill_tags(payload: str) -> list[tuple[str, str, str]]:
+    """(name, path, body) for each `<skill>` element in a `<task_skills>` payload.
+
+    Accepts the legacy `path` attribute and the current content-line form, where
+    `description:` / `path:` lines lead the element text; those lines are metadata
+    and never reach the body. A missing path yields an empty string, not a drop.
+    """
+    tags: list[tuple[str, str, str]] = []
+    for attributes, text in SKILL_BLOCK_RE.findall(payload):
+        name = SKILL_NAME_ATTR_RE.search(attributes)
+        if name is None:
+            continue
+        attribute_path = SKILL_PATH_ATTR_RE.search(attributes)
+        path = attribute_path.group(1) if attribute_path else ""
+        lines = text.splitlines()
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        while lines:
+            meta = SKILL_META_LINE_RE.match(lines[0].strip())
+            if meta is None:
+                break
+            if not path and meta.group(1) == "path":
+                path = meta.group(2).strip()
+            lines.pop(0)
+        tags.append((name.group(1), path, "\n".join(lines).strip()))
+    return tags
 
 
 def skill_loads(messages):
@@ -323,7 +354,7 @@ def skill_loads(messages):
                     )
             elif part.get("type") == "text" and role == "user":
                 for payload in TASK_SKILLS_RE.findall(part.get("text") or ""):
-                    for name, path in SKILL_TAG_RE.findall(payload):
+                    for name, path, _ in skill_tags(payload):
                         if name not in seen:
                             seen.add(name)
                             loads.append(

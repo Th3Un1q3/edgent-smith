@@ -40,6 +40,13 @@ timeout 10 <tool> <documented-self-check>
 
 Report one classification per check.
 
+## Rebuild-survival check
+
+Its own check, never folded into the smoke. Verified: rebuild or scoped emulation,
+provisioning re-run, tool and config restored, second run unchanged. UNVERIFIED:
+neither performed, or either leaving tool or config unrestored; presence in the
+current container is no proof. [lifecycle ref](devcontainer-lifecycle-and-persistence.md).
+
 ## Secret hygiene
 
 Store env-var NAMES in config, never values; the process reads the value at runtime (dsh `apiKeyEnv: OPENROUTER_API_KEY`). Use `!!js` template literals for header expressions that reference env vars. Name env vars in reports; print no secret values.

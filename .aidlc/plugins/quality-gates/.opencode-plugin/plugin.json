@@ -1,0 +1,8 @@
+{
+  "name": "quality-gates",
+  "version": "0.1.0",
+  "description": "Quality-gate plugin — runs the project's own existing linters, tests and quality gates as AIDLC sensors, so the workflow enforces the gates the repo already defines instead of inventing new ones.",
+  "author": {
+    "name": "AWS AIDLC"
+  }
+}

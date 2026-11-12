@@ -85,7 +85,6 @@ export const harnessConfig = {
     'tool-limit-reminder': toolLimit,
     'quality-gate-enforcer': {
       gates: qualityGates,
-      debounceMs: 1500,
     },
     'goal-continuation': goalEnforcement,
     'workflow': workflowPlugin,

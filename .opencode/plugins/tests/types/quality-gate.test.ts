@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest'
 
-import type { GateConfig, GateKVState, GateResult, GateRunOutcome } from '@plugins/types/quality-gate'
+import type { GateConfig, GateResult, GateRunOutcome } from '@plugins/types/quality-gate'
 
 import type { CommandResult } from '@plugins/helpers/gate-runner'
 
@@ -14,25 +14,6 @@ describe('GateResult', () => {
 
     // @ts-expect-error — 'running' is not a valid GateResult
     const _invalid: GateResult = 'running'
-  })
-})
-
-describe('GateKVState', () => {
-  it('has boolean dirty and GateResult status', () => {
-    expectTypeOf<GateKVState>().toHaveProperty('dirty')
-    expectTypeOf<GateKVState['dirty']>().toBeBoolean()
-    expectTypeOf<GateKVState['status']>().toEqualTypeOf<GateResult>()
-  })
-
-  it('exactly matches its declared shape', () => {
-    expectTypeOf<GateKVState>().toEqualTypeOf<{ dirty: boolean, status: GateResult }>()
-  })
-
-  it('rejects extra properties', () => {
-    expectTypeOf<GateKVState>().not.toHaveProperty('extra')
-
-    // @ts-expect-error — { dirty: boolean; status: GateResult; extra: number } is not assignable
-    const _invalid: GateKVState = { dirty: false, status: 'unknown', extra: 42 }
   })
 })
 

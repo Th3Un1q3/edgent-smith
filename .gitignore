@@ -117,3 +117,40 @@ experiments/*.state.json
 auto_research*.json
 # No root package.json exists; a root node_modules is always a stray test-cache artifact.
 /node_modules/
+
+# AI-DLC plugin build output: generated from the plugin's own sources by
+# .devcontainer/setup-dev.sh. The sources stay tracked; only the build result
+# is ignored.
+aidlc-plugins/quality-gates/dist/
+
+# AIDLC (awslabs/aidlc-workflows): only machine-local settings are ignored. The
+# `.aidlc/` engine and the root `aidlc/` shell are committed scaffold — never add them here.
+/aidlc.settings.local.json
+/.aidlc/settings.local.json
+
+# BEGIN AI-DLC:gitignore
+# AI-DLC: local working files
+aidlc/active-space
+aidlc/spaces/*/intents/active-intent
+aidlc/.aidlc-clone-id
+aidlc.settings.local.json
+aidlc/.aidlc-unit-scope.json
+aidlc/.aidlc-unit-parked
+aidlc/.aidlc-claim-generations.json
+aidlc/.aidlc-unit-participant
+aidlc/.aidlc-claim-registry.json
+aidlc/.aidlc-unit-releases/
+aidlc/.aidlc-unit-merges/
+aidlc/.aidlc-active-space-*.tmp
+aidlc/active-memory/
+aidlc/.aidlc-sessions/
+aidlc/.aidlc-request-text/
+aidlc/spaces/*/intents/.aidlc-*
+**/aidlc/spaces/*/intents/**/.aidlc-engine/
+**/aidlc/spaces/*/intents/**/.aidlc-sensors/
+aidlc/spaces/*/knowledge/documentkb/.journal/
+aidlc/spaces/*/knowledge/.sources.local.json
+aidlc/spaces/*/intents/*/runtime-graph.json
+aidlc/spaces/*/intents/*/.aidlc-*
+aidlc/diagnostics/
+# END AI-DLC:gitignore

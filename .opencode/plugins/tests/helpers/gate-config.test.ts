@@ -88,17 +88,4 @@ describe('loadQualityGates()', () => {
       expect(() => loadQualityGates()).toThrow(/expected >=5 gates, got 4/)
     })
   })
-
-  describe('when gates are valid but debounceMs is missing', () => {
-    beforeEach(() => {
-      const liveGates = harnessConfig.plugins['quality-gate-enforcer'].gates
-      configOverride.value = {
-        plugins: { 'quality-gate-enforcer': { gates: liveGates } },
-      }
-    })
-
-    it('falls back to the default 300ms debounce', () => {
-      expect(loadQualityGates().debounceMs).toBe(300)
-    })
-  })
 })

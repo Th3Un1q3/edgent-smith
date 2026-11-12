@@ -3,9 +3,12 @@ name: software-installation
 description: Install packages, software, and libraries with the full set of nuances that break naive installs in this repo's devcontainer: version pinning (incl. rc tags), idempotent version-checked install guards, npm's allow-scripts gate and native-module/ABI pitfalls, devcontainer lifecycle (Features vs postCreateCommand) and rebuild persistence, named-volume ownership, PATH/containerEnv, config-as-code, verification (introspection, smoke tests, native-load checks), and secret hygiene. Trigger on: "install a package/tool/library", "how do I install X", "npm install", "add a dependency", "setup-dev.sh", "install a CLI", "what could go wrong installing X". Not for: opencode config mechanics (customize-opencode), devcontainer.json spec authoring (devcontainers-best-practices — cross-reference it), or application code.
 license: MIT
 metadata:
-  version: "1.0.1"
+  version: "1.0.3"
   author: SWE
-  delta: "1.0.1: dropped the inventory counts from the initial-authoring note; workflows and references cover verified devcontainer install nuances (pinned rc-tag installs, version-checked guards, allow-scripts whitelists, lifecycle placement, volume ownership, config-as-code, smoke classification, secret and telemetry hygiene)."
+  delta: "1.0.3: rebuild survival is now a verification step in every install workflow — added the
+    Python install step (repo-tracked provisioning, VERIFIED vs UNVERIFIED, recorded evidence) and
+    a rebuild-survival clause in the root verification principle, on top of the 1.0.2 CLI step and
+    verification-reference check."
 ---
 
 # Software Installation
@@ -33,7 +36,7 @@ Install software so it survives this repo's devcontainer lifecycle: pinned versi
 - Whitelist npm scripts explicitly; the allow-scripts gate skips postinstall by default.
 - Resolve PATH dynamically from `npm prefix -g`; hardcoding a node-versioned path breaks on rebuild.
 - Restore config from repo templates with `cp -u`; keep user edits with newer mtimes.
-- Verify from the installed artifact: introspection, native-load checks, bounded smokes with explicit classification.
+- Verify from the installed artifact: introspection, native-load checks, bounded smokes with explicit classification, and rebuild survival (re-created from repo provisioning, second run unchanged).
 - Keep secrets out of config: store env-var names, never values.
 - Prefer disabled telemetry defaults and set opt-out env vars.
 
@@ -41,8 +44,8 @@ Install software so it survives this repo's devcontainer lifecycle: pinned versi
 
 | Need | File |
 |------|------|
-| End-to-end CLI tool install (pin → guard → allow-scripts → PATH → volume → config → verify) | [workflows/install-cli-tool.md](workflows/install-cli-tool.md) |
-| Python package installs with uv (sync, tool install, uvx, dependency groups) | [workflows/install-python-package.md](workflows/install-python-package.md) |
+| End-to-end CLI tool install (pin → guard → allow-scripts → PATH → volume → config → verify → rebuild survival) | [workflows/install-cli-tool.md](workflows/install-cli-tool.md) |
+| Python package installs with uv (sync, tool install, uvx, dependency groups → verify → rebuild survival) | [workflows/install-python-package.md](workflows/install-python-package.md) |
 | Diagnose a failing install (version vs native-load vs ABI vs permission vs schema vs external) | [workflows/debug-install-failure.md](workflows/debug-install-failure.md) |
 | Lifecycle semantics, placement, rebuild wipes, volumes, PATH, ports | [references/devcontainer-lifecycle-and-persistence.md](references/devcontainer-lifecycle-and-persistence.md) |
 | npm allow-scripts gate, native modules, ABI, global prefix, platform prebuilds | [references/npm-and-native-modules.md](references/npm-and-native-modules.md) |
