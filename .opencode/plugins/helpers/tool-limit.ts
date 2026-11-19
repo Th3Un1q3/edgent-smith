@@ -9,13 +9,13 @@ import type { ToolLimitConfig } from '../types/tool-limit'
 
 /**
 Fallback when the `tool-limit-reminder` config section is missing or partial:
-`goal` is exempt from counting, no per-agent overrides.
+`signal_send` is exempt from counting, no per-agent overrides.
 */
 export const DEFAULT_TOOL_LIMIT: ToolLimitConfig = {
   factor: 0.8,
   padding: 2,
   limits: {},
-  ignoreTools: ['goal'],
+  ignoreTools: ['signal_send'],
   review: {
     export: true,
     command: 'just agent_utils/export-opencode-session',

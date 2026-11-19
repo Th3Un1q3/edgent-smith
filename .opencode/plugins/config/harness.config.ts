@@ -7,7 +7,7 @@
  */
 
 import type { GateConfig } from '../types/quality-gate'
-import type { GoalEnforcementConfig } from '../types/goal-enforcement'
+import type { LoopStateId } from '../state-machine/core/machine'
 import type { ToolLimitConfig } from '../types/tool-limit'
 
 // TODO: DEFERRED (owned by the config-literals follow-up ADR, additive only) hoist the settings literals in this file, from the `qualityGates` section through the `harnessConfig` object, into `as const` declarations; deferred because ADR-017 declares this file read-only and every plugin reads these sections, so the change only lands as an additive follow-up.
@@ -47,16 +47,6 @@ const qualityGates: GateConfig[] = [
   },
 ]
 
-// Goal-first enforcement gate (ADR-008): enabled for the agents listed below;
-// the code default in `../types/goal-enforcement` enforces nothing.
-const goalEnforcement: GoalEnforcementConfig = {
-  enforceAll: false,
-  agents: ['rug'],
-  optOut: [],
-  readOnlyAllowlist: ['question', 'execute', 'read', 'glob', 'grep', 'skill'],
-  maxSteeringRepeats: 3,
-}
-
 /**
  * Declared as a typed `ToolLimitConfig` (not an inline literal) so the `as const`
  * on `harnessConfig` does not widen `ignoreTools`/`limits` into `readonly`,
@@ -66,7 +56,7 @@ const toolLimit: ToolLimitConfig = {
   factor: 0.8, // agent budget = floor(steps * factor)
   padding: 2, // PADDING_TILL_ERROR — extra calls for the in-flight current call
   limits: {}, // agent -> budget override; wins over floor(steps * factor)
-  ignoreTools: ['goal'], // never counted (both counters)
+  ignoreTools: ['signal_send'], // the loop's control tool is never counted (both counters)
   review: { export: true, command: 'just agent_utils/export-opencode-session', writeMarkdown: true },
 }
 
@@ -80,13 +70,21 @@ const workflowPlugin: { instructions: string, agents: string[] } = {
   agents: ['rug'],
 }
 
+const stateMachine: { readonly startStates: Readonly<Record<string, LoopStateId>> } = {
+  startStates: {
+    'rug': 'define_goal',
+    'rug-swe': 'define_goal',
+    'rug-team-coach': 'define_goal',
+  },
+}
+
 export const harnessConfig = {
   plugins: {
     'tool-limit-reminder': toolLimit,
     'quality-gate-enforcer': {
       gates: qualityGates,
     },
-    'goal-continuation': goalEnforcement,
+    'state-machine': stateMachine,
     'workflow': workflowPlugin,
   },
 } as const

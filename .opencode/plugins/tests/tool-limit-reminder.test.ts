@@ -36,7 +36,7 @@ const tlrConfig = vi.hoisted(() => ({
   factor: 0.8,
   padding: 2,
   limits: {} as Record<string, number>,
-  ignoreTools: ['goal'],
+  ignoreTools: ['signal_send'],
   review: { export: true, command: 'just agent_utils/export-opencode-session', writeMarkdown: true },
 }))
 
@@ -308,7 +308,7 @@ describe('tool-limit-reminder (v2)', () => {
     tlrConfig.factor = 0.8
     tlrConfig.padding = 2
     tlrConfig.limits = {}
-    tlrConfig.ignoreTools = ['goal']
+    tlrConfig.ignoreTools = ['signal_send']
     tlrConfig.review = { export: true, command: 'just agent_utils/export-opencode-session', writeMarkdown: true }
     shell.exitCode = 0
     shell.commands = []
@@ -615,8 +615,8 @@ describe('tool-limit-reminder (v2)', () => {
       expect(reminderSynthetics(h)).toHaveLength(1)
       expect(reminderSynthetics(h)[0].text).toContain('You\'ve made 4 tool calls which is the limit')
 
-      // The default `ignoreTools: ['goal']` keeps `goal` out of the counters.
-      await h.before(toolEvent('goal'))
+      // The default `ignoreTools: ['signal_send']` keeps the control tool out of the counters.
+      await h.before(toolEvent('signal_send'))
 
       expect(h.synthetics).toHaveLength(1)
     })
@@ -646,7 +646,7 @@ describe('tool-limit-reminder (v2)', () => {
       expect(prompt.prompt.text).toBe('<task-budget tool-calls="3" />\nhello')
     })
 
-    it('excludes ignoreTools from both counters', async () => {
+    it('exempts signal_send from both counters', async () => {
       tlrConfig.limits = { build: 1 }
       tlrConfig.padding = 1
 
@@ -655,8 +655,8 @@ describe('tool-limit-reminder (v2)', () => {
       await register(h)
 
       for (let index = 0; index < 3; index += 1) {
-        await h.before(toolEvent('goal'))
-        await h.after(afterEvent('completed', 'goal'))
+        await h.before(toolEvent('signal_send'))
+        await h.after(afterEvent('completed', 'signal_send'))
       }
 
       expect(h.synthetics).toHaveLength(0)
@@ -815,7 +815,7 @@ describe('tool-limit-reminder (v2)', () => {
 
       await register(h)
 
-      // A goal-continuation stand-in denies the call from its own `execute.before`,
+      // A gate stand-in denies the call from its own `execute.before`,
       // so no `execute.after` ever follows: the attempt still counts.
       await h.before(toolEvent('bash'))
       await h.before(toolEvent('bash'))

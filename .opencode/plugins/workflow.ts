@@ -301,6 +301,7 @@ const plugin: Plugin = {
             active: new Set<AbortController>(),
           })
           const result = yield* Effect.promise(() => subtask(parameters))
+          // TODO: review and retire tail output recording, in favor of using api to query the tail.
           recordTailOutput(result)
           return {
             content: JSON.stringify(result),
@@ -317,6 +318,21 @@ const plugin: Plugin = {
         description: SUBTASK_TAIL_TOOL_DESCRIPTION,
         input: SUBTASK_TAIL_INPUT,
         execute: input => Effect.gen(function* () {
+          // TODO: use the context to query all the latest agent outputs from a subtask. Since storing in-memory is not reliable.
+          /**
+           * Sample output:
+           * {
+           *    "task_id": "abc123", // Required
+           *    "total_messages": 5, // Nice to have
+           *    "tail_messages": [
+           *     {
+           *       "outputText": "First output", // Required
+           *       "sent_at": "2024-06-01T12:00:00Z", // Good to have
+           *       "status": "ok", // Good to have
+           *     },
+           * }
+           */
+          // TODO: When reworking you must consider creating alternative tool, not to break this one. Implement everything in the alternative tool, compare the results and only then retire this tool. And also you must update downstream documents and examples that show using this tool to be compatible and to consider using new interface over the old one.
           const arguments_ = input as SubtaskTailArguments
           const taskId = arguments_.task_id ?? ''
           const entries = taskId === '' ? [] : tailOutputs(taskId, { count: arguments_.count })

@@ -28,7 +28,7 @@ Use these in order. When a lower source disagrees with a higher one, the higher 
    The unversioned <https://opencode.ai/docs/plugins/> documents v1. Do not cite it for v2.
 4. Repo examples that compile and pass tests.
    - `.opencode/plugins/workflow.ts`: `id: 'opencode.workflow'`, `effect: context =>`, `context.tool.transform((editor) =>`, `export default plugin`. Smallest complete example.
-   - `.opencode/plugins/goal-continuation.ts`: `context.tool.transform((editor) =>`, `context.session.hook('prompt'`, `context.tool.hook('execute.before'`, `context.event.subscribe().pipe(`.
+   - `.opencode/plugins/state-machine.ts`: `context.tool.transform((editor) =>`, `context.session.hook('prompt'`, `context.tool.hook('execute.before'`, `context.event.subscribe().pipe(`.
    - `.opencode/plugins/quality-gate-enforcer.ts`: hook-only plugin, `effect: context => Effect.gen`, `context.tool.hook('execute.before'`, `context.tool.hook('execute.after'`.
    - `.opencode/plugins/tests/workflow.test.ts`: how a test drives `plugin.effect` with `Effect.scoped(plugin.effect(h.context))` and `Effect.runPromise`.
 
@@ -97,7 +97,7 @@ export default plugin
 
 Tool `options` sets exposure. `Tool.Info.options` takes `Options`: `codemode` omitted or `true` puts the tool in the Code Mode catalog, so a model calls it as `tools.<name>({ ... })` from an `execute` block, and `codemode: false` keeps it out of that catalog. `pinned` sits on the `codemode?: true` branch and is typed `pinned?: never` when `codemode` is `false`, so a tool that opts out of Code Mode cannot be pinned. The installed type is `/workspace/.opencode/node_modules/@opencode/schema/dist/tool.d.ts`.
 
-`.opencode/plugins/goal-continuation.ts` registers its goal tool with `options: { codemode: true }`, so `tools.goal({ action, text })` runs from an `execute` block. The goal-first gate is unchanged: for `rug` the gate rejects `execute` until a goal exists, so the first goal in a session still comes from the direct goal tool.
+`.opencode/plugins/state-machine.ts` registers `signal_send` with `options: { codemode: true }`, so `tools.signal_send({ type, payload })` runs from an `execute` block. For `rug`, the gate blocks every tool outside `define_goal`'s allowlist until `SET_GOAL` carries a goal.
 
 Events are a scoped stream, not a plugin key: `yield* context.event.subscribe().pipe(Stream.filter(...), Stream.runForEach(...), Effect.forkScoped)`.
 
@@ -110,6 +110,22 @@ The loader scans root `.opencode/plugins/*.ts` only. `helpers/`, `types/`, and `
 - Import types with `import type` so the compiler erases the import and no runtime package copy is pulled in.
 - Import `Effect`, `Stream`, and `Schema` from the single installed `effect` copy. A second copy under `@opencode/plugin/node_modules/effect` breaks `Effect.isEffect` and schema identity checks.
 - Keep the default export reachable. The package declares no `sideEffects`, so a bundler can drop an unused plugin object.
+
+## Effect 4.0 runtime traps
+
+The installed runtime is `effect@4.0.0-rc.112`; several names and behaviours differ from the v3 examples most material shows. Check the installed `dist/Effect.d.ts` before choosing a combinator, and treat these four as known:
+
+- **`Effect.catchAllCause` does not exist.** The v4 name is `Effect.catchCause`. A missing combinator is a synchronous `TypeError` inside the effect, so a stream handler dies and the session waits forever on the event it will never answer — the symptom is a hung prompt, not an error message.
+- **Never call `Effect.runPromise` inside a plugin effect to deduplicate work.** It starts a second runtime, detaches the effect's context, and can deadlock the caller. Use `Deferred.makeUnsafe` plus `Deferred.succeed`/`Deferred.await` per key to share one in-flight result between concurrent callers.
+- **The compiler target is ES2022.** `Array.prototype.findLast`/`findLastIndex` are typecheck errors; scan from the end with an index loop.
+- **The lint rules reject two idioms.** `unicorn/no-unsafe-string-replacement` bans a non-literal value in `String#replace` and `replaceAll`; use `split(token).join(value)`. `unicorn/import-style` wants a default import for `node:path` (`import path from 'node:path'`).
+
+## Fake Context mirrors the schema
+
+A fake `Context` that invents a payload shape keeps the suite green while the live path does nothing, because the unit test and the plugin agree on a shape the host never sends. This happened with `session.inbox.enqueued`: the plugin read `data.item.text`, the schema defines `data.item.payload.text`, and 66 green tests could not see it.
+
+- Copy every payload from the installed `@opencode/schema` type, and name the file you read in the test helper comment when the shape is not obvious.
+- When a hook or event drives a user-visible effect, prove at least one path with the live check in `live-verification.instructions.md`; unit fakes are not evidence about the host.
 
 ## Validate
 
@@ -166,6 +182,8 @@ Logs: `~/.local/share/opencode/log/opencode.log`. `--print-logs` writes to stder
 | Edit a live plugin before typechecking | Hot reload applies the broken module to the running session. |
 | Pass a non-`msg_` value as a session-message id | Schema validation fails inside the plugin call and surfaces as the target tool's error for every file the hook matches. |
 | Blame the harness for a failure a plugin can produce | The failing set tracks the plugin's `applyTo` globs; disable the hook and repeat one failing input before any harness claim. |
+| Call `Effect.runPromise` inside a plugin effect | A second runtime detaches the context and the caller can hang; share work with `Deferred` instead. |
+| Trust a fake `Context` payload shape you invented | Green tests, silent live path; copy the shape from `@opencode/schema` and run one live check. |
 
 ## Naming and lint rules
 

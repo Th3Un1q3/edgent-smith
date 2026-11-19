@@ -11,7 +11,7 @@
  * `execute.before`, right after the pre-increment read that drives all three
  * tiers — it is the only gate counter. `callsCompleted` increments in
  * `execute.after` for `status === 'completed'` calls and is the problem
- * `actual`, so a call blocked here (or denied by goal-continuation) never
+ * `actual`, so a call blocked here (or denied by the state machine's gate) never
  * inflates the report. Thresholds come from the agent budget, not either
  * counter.
  *
@@ -340,7 +340,7 @@ const plugin: Plugin = {
     }))
 
     // Tally of calls that actually ran: a call blocked here (or denied by
-    // goal-continuation) never reaches `execute.after`.
+    // the state machine's gate) never reaches `execute.after`.
     yield* context.tool.hook('execute.after', event => Effect.gen(function* () {
       if (ignoreTools.has(event.tool) || (event.status !== 'completed')) return
       const sessionID = event.sessionID as unknown as string

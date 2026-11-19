@@ -25,7 +25,7 @@ Use this change type when:
 2. Pick the existing hook that owns that event, or add a new plugin entry point.
    - `.opencode/plugins/quality-gate-enforcer.ts` runs configured gates on `edit` and `write` through `tool.execute.before` and `tool.execute.after`, then reports status transitions.
    - `.opencode/plugins/instructions-loader.ts` injects scoped instructions into the agent context.
-   - `.opencode/plugins/goal-continuation.ts` owns the `goal` tool, the goal-first enforcement gate, and the idle nudge loop (ADR-008).
+   - `.opencode/plugins/state-machine.ts` owns the `signal_send` tool, the per-state tool policy, the snapshot and the reset loop.
    - `.opencode/plugins/workflow.ts` registers the workflow tool that runs workflow envelopes.
    The full set of entry points and helper roles is in `.opencode/plugins/AGENTS.md`.
 3. Write the hook as a named-export async function that returns the registration object. Store per-session state through `helpers/kv-store.ts` (`SessionStorage`) and log through `helpers/logger.ts`. Namespace every state key so two plugins do not clobber each other.

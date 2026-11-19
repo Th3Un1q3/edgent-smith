@@ -6,140 +6,70 @@ ttl: 90d
 claim_ids: []
 L0: "cases: reusable extraction cases distilled"
 L0_table:
-  - id: cases/absence-claim-from-scoped-grep
-    L0: "Absence claim from grep over one package; capability lived in a sibling package"
-  - id: cases/opencode-sdk-absence-claim
-    L0: "one-package grep 0 read as absence; emit is in @opencode/plugin"
-  - id: cases/orchestration/resume-error-empty-error-text
-    L0: "Resume returned error with an empty error and no output; relaunch fresh."
-  - id: cases/orchestration/citation-defects-four-fail-rounds
-    L0: "Four judge rounds: structural findings right, every FAIL a citation defect"
-  - id: cases/orchestration/self-graded-count-mismatch
-    L0: "Validation block said all 8 sites, enumerated 9; passed on unrecounted"
-  - id: cases/ci-failure-devcontainer-setup-2026-09-04
-    L0: "CI failure: devcontainer setup break, 2026-09-04"
-  - id: cases/ci-markdownlint-skills-eof-heading
-    L0: "CI markdownlint: skill files missing an EOF heading"
-  - id: cases/ci-run-34761145832-dependabot-majors
-    L0: "CI run 34761145832: dependabot major bumps broke the gate"
-  - id: cases/ci-run-34774864071-gate-merge
-    L0: "CI run 34774864071: gate merge failure"
-  - id: cases/ci-stryker-incremental-cache-v2
-    L0: "Stryker CI cache v2: split dep/source hashes; test -f save gate; chmod a+rwX; tracked lockfile"
-  - id: cases/concurrent-worktree-change-attribution
-    L0: "Concurrent worktrees: attribute changed files to the right worktree"
-  - id: cases/delegation-goal-gate-and-prompt-width
-    L0: "Delegation run lost two dispatches to the goal gate, one scouting pass to a blocked re-dispatch, and a child to a 7-question prompt overrun at 26/24 calls; fixes: goal set in the dispatch body, at most 3 questions, name the closing observable."
-  - id: cases/mutation-campaign-scoping
-    L0: "Mutation campaigns: scope the run before judging survivors"
-  - id: cases/opencode-plugin-v2-effect-migration
-    L0: "OpenCode plugin v2: Effect-based migration of tool hooks"
-  - id: cases/opencode-plugin-v2-tool-and-session-adaptation
-    L0: "OpenCode plugin v2: adapt custom tools and the session API"
-  - id: cases/stryker10-vitests-separator
-    L0: "Stryker 10 with vitest: separator and command misconfiguration"
-  - id: cases/unicorn74-lint-fixes
-    L0: "unicorn 74: lint fixes that changed behavior"
-  - id: cases/browser-automation/linkedin-growth-chart
-    L0: "LinkedIn growth chart: aria-label regex extraction"
-  - id: cases/delegation/never-infer-operator-identity
-    L0: "Never infer an operator's identity or credentials: a guessed email became a duplicate dotenv key that won last, and the tunnel rejected it as an unauthorized broker assertion."
-  - id: cases/docs/prose_capability_claims_rot
-    L0: "Docs prose: capability claims rot without a check"
-  - id: cases/markdown/table-html-comment-splits-table
-    L0: "Markdown: an HTML comment between rows splits a table"
-  - id: cases/opencode/child_missing_plugin_tools
-    L0: "Subtask children do not receive plugin custom tools (subtask_run, subtask_ls, subtask_tail); validators cannot probe, so the orchestrator runs the probe and hands over raw ids and output"
-  - id: cases/opencode/fork_parentid_lineage
-    L0: "Forked sessions are not parentID children of the calling session; subtask_ls lists parentID children only, so track the returned task_id (the fork id) as the only handle"
-  - id: cases/opencode/lint_fix_rewrites_tests
-    L0: "Lint --fix rewrites test files; re-run tests after lint"
-  - id: cases/opencode/plugin_ctx_session_fork
-    L0: "Plugin ctx: fork a session through ctx, not the SDK reader"
-  - id: cases/opencode/plugin_hot_reload_safe_development
-    L0: "Plugin hot reload: develop without breaking the live harness"
-  - id: cases/opencode/quality_gate_hang_blocks_edits
-    L0: "A hanging quality gate blocks edits; guard gate timeouts"
-  - id: cases/opencode/remote-access-lessons
-    L0: "Remote access to the OpenCode server: lessons"
-  - id: cases/opencode/sdk_detached_method_this
-    L0: "SDK detached methods lose this; bind before calling"
-  - id: cases/opencode/sdk_skills_injection
-    L0: "SDK: inject skills into the session"
-  - id: cases/opencode/skill_catalog_name_mismatch
-    L0: "Verify skill catalog names against .agents/skills/"
-  - id: cases/opencode/stryker_static_mutant_amplification
-    L0: "Stryker static mutants amplify across files"
-  - id: cases/opencode/subtask_tail_process_local
-    L0: "subtask_tail reads process-local transcript state"
-  - id: cases/opencode/todowrite_removed_agent_tool_config
-    L0: "todowrite removed: agent tool config drifts from the harness"
-  - id: cases/opencode/tool_context_metadata_inert
-    L0: "Tool context metadata is inert where writers expect it to act"
-  - id: cases/opencode/workflow-instruction-injection-exposure
-    L0: "Workflow: instruction injection exposure through file content"
-  - id: cases/opencode/workflow_budget_exceeded_stats_mismatch
-    L0: "budget_exceeded stats.subtasks can exceed steps.length"
-  - id: cases/opencode/workflow_fork_from_envelope_truncation
-    L0: "Workflow reducer can exceed the ~8 KB envelope cap"
-  - id: cases/opencode/workflow_producer_unverified_tree
-    L0: "Producer can leave the tree unverified after budget exhaustion"
-  - id: cases/orchestration/child-evidence-before-verdict
-    L0: "Judge a child by its transcript not outputText; paste full verdicts; scope validators to the target path"
-  - id: cases/orchestration/delegated-report-completeness-contract
-    L0: "A delegated report with no closing sentinel and count is truncated, not complete; a sliced verdict drops the tail where sentinels and totals live."
-  - id: cases/orchestration/delegation-prompt-assumptions
-    L0: "A delegation prompt inherits orchestrator assumptions: an ADR lives in mem: rules plus the about index, not a repo file:line; a child may lack the gateway, so load it first; a citation disagreeing with the tree is corrected, never fit to a count."
-  - id: cases/orchestration/execute-body-hygiene-and-timeout-scoping
-    L0: "Execute bodies: hygiene and timeout scoping"
-  - id: cases/orchestration/incident-rules-in-orchestrator-instead-of-memory
-    L0: "Incident rules landed in the orchestrator: the retrospective had no memory-first step, so rug.md Failure Modes grew per incident; fix: lessons are cases or method rules, with mem:cases/about as the pointer."
-  - id: cases/orchestration/prompt-rule-contradicted-by-own-examples
-    L0: "A prompt rule contradicted by its own examples is ignored"
-  - id: cases/orchestration/research-not-memorized-retrospective
-    L0: "Research not memorized: retrospective of a lost finding"
-  - id: cases/orchestration/root-cause-isolation-and-branded-type-validation
-    L0: "A plugin hook that throws on a matching path fails the tool only for matched files: the failing set reveals the matcher, not the tool."
-  - id: cases/orchestration/skill-scouting-cadence-counter
-    L0: "Skill scouting: a cadence counter gates re-scouting"
-  - id: cases/orchestration/stray-root-node-modules-from-cwd-dependence
-    L0: "Stray root node_modules: ad-hoc vitest from cwd; aliases and cache resolved against the repo root"
-  - id: cases/orchestration/timeout-habit-and-proxy-judging
-    L0: "Timeout habit: judge children by proxy evidence, not liveness"
-  - id: cases/orchestration/validator-external-diff-attribution
-    L0: "Validators: attribute external diffs to the right producer"
-  - id: cases/orchestration/must-have-criterion-category-mismatch
-    L0: "Must-have criteria without a category-anchored acceptance test let a writer score a diagram tool as failing and record three false FAILs."
-  - id: cases/research/search-snippet-figure-drift
-    L0: "Search snippet figure drift: snippet figures drift from the source page"
-  - id: cases/rug/empty-child-result-and-self-graded-ledger
-    L0: "rug: an ok child with empty outputText is recovered from its transcript by run(); an author's own ledger does not prove compliance."
-  - id: cases/serena-memory/round2-recall-friction
-    L0: "Serena recall round 2: recall friction"
-  - id: cases/serena-memory/round3-recall-friction
-    L0: "Serena recall round 3: recall friction"
-  - id: cases/serena-memory/round4-recall-friction
-    L0: "Serena recall round 4: recall friction"
-  - id: cases/dispatch-handle-lost-to-restart
-    L0: "Two server restarts killed an execute mid-dispatch: the task_id lived only in the killed call, and only subtask_ls before relaunch prevented a duplicate authoring run."
-  - id: cases/loadpath-question-count-overrun
-    L0: "Loader research died at 24 calls with two answers open: six questions in one child against a three-question cap, and the dispatch procedure file never pointed at the cap."
-  - id: cases/loadpath-unsatisfiable-citation-form
-    L0: "Loader research demanded a file-and-line citation inside a 253 MB compiled binary; opencode api /command and /doc return web-app HTML, not a listing."
-  - id: cases/research-artifact-last-uncapped-fetch
-    L0: "Research child never wrote its named brief: 24 calls on robots-blocked fetches and 2 KB page slices, because the artifact ranked below six answers and no fetch surface was bounded."
-  - id: cases/trial-mechanism-prescribed-gated-actions
-    L0: "Trial brief scripted rm -rf and git add/commit as its finish line: two hard permission denials and the git variant lost, while the prescribed file list hid the singular/plural .opencode detail."
+  - id: cases/rug/empty-child-result/*
+    L0: "Grouped: 2 empty-result cases — a batched pair of long children returned empty outputText and each resumed alone succeeded, so a gate run goes alone and in the background; and a child's empty result paired with a self-graded ledger."
   - id: cases/brief-omitted-test-max-lines
-    L0: "Brief named gates but not the 650-line test-file ceiling: four criteria UNVERIFIED"
-  - id: cases/criterion-widened-scope
-    L0: "Criterion wider than the request failed an out-of-scope site: quote scope words, name out-of-scope ids"
-  - id: cases/payload-shape-consumer-coupling
-    L0: "Injected <skill> shape changed and session_parts.py, which expected a path attribute after name, silently dropped delegated loads; grep every reader before changing a payload tag."
-  - id: cases/subtask-partial-before-gates
-    L0: "Implementer spent its budget on edits; partial report left gates and criteria unverified"
+    L0:     L0: "Brief named gates but not the 650-line test-file ceiling: four criteria UNVERIFIED"
+  - id: cases/browser-automation/linkedin-growth-chart
+    L0:     L0: "LinkedIn growth chart: aria-label regex extraction"
+  - id: cases/ci-*
+    L0: "Grouped: 5 CI gate failures 2026-09 — devcontainer setup, markdownlint EOF heading, dependabot majors, gate merge, Stryker incremental cache v2."
+  - id: cases/concurrent-worktree-change-attribution
+    L0:     L0: "Concurrent worktrees: attribute changed files to the right worktree"
+  - id: cases/scope-widening/*
+    L0: "Grouped: 2 scope cases - a criterion wider than the request failed an out-of-scope site; an undefined reference let the judge read one claim against a new surface each round."
+  - id: cases/delegation/never-infer-operator-identity
+    L0:     L0: "Never infer an operator's identity or credentials: a guessed email became a duplicate dotenv key that won last, and the tunnel rejected it as an unauthorized broker assertion."
+  - id: cases/docs/prose_capability_claims_rot
+    L0:     L0: "Docs prose: capability claims rot without a check"
+  - id: cases/guessed-plugin-path
+    L0:     L0: "An implementer brief named .opencode/plugins/core/machine.ts, which does not exist; the module is plugins/state-machine/core/machine.ts. Open every allowlist path before dispatch and copy it from the discovery report."
+  - id: cases/markdown/table-html-comment-splits-table
+    L0:     L0: "Markdown: an HTML comment between rows splits a table"
+  - id: cases/one-offs-flat
+    L0: "Grouped: 12 flat delegation and validation one-offs — payload shape, subtask partials, trial mechanism, dispatch handle, research artifact, load path, absence claims."
+  - id: cases/opencode/*
+    L0: "Grouped: 21 plugin-era OpenCode cases — session and fork lineage, plugin tool exposure, SDK, skill catalog, Stryker, workflow fork and budget, instruction injection."
+  - id: cases/orchestration/* (tail)
+    L0: "Grouped: 14 earlier orchestration cases — citation defects, judge scope creep, review-criteria collisions, rename sweeps, unreachable self-arm."
+  - id: cases/orchestration/child-evidence-before-verdict
+    L0:     L0: "Judge a child by its transcript not outputText; paste full verdicts; scope validators to the target path"
+  - id: cases/orchestration/delegated-report-completeness-contract
+    L0:     L0: "A delegated report with no closing sentinel and count is truncated, not complete; a sliced verdict drops the tail where sentinels and totals live."
+  - id: cases/orchestration/delegation-prompt-assumptions
+    L0:     L0: "A delegation prompt inherits orchestrator assumptions: an ADR lives in mem: rules plus the about index, not a repo file:line; a child may lack the gateway, so load it first; a citation disagreeing with the tree is corrected, never fit to a count."
+  - id: cases/orchestration/dirty-baseline-unverifiable-no-modification
+    L0:     L0: "UNVERIFIABLE on 'no existing file modified' from a tree already dirty; pre-declare the expected path and the dirty baseline."
+  - id: cases/orchestration/execute-body-hygiene-and-timeout-scoping
+    L0:     L0: "Execute bodies: hygiene and timeout scoping"
+  - id: cases/orchestration/quantifier-claim-falsified-by-one-line
+    L0:     L0: "Absolute framing (no X exists, the only effect) falsified three times by one unenumerated line; counting words asserted a set nobody closed."
+  - id: cases/orchestration/resume-error-empty-error-text
+    L0:     L0: "Resume returned error with an empty error and no output; relaunch fresh."
+  - id: cases/orchestration/self-graded-count-mismatch
+    L0:     L0: "Validation block said all 8 sites, enumerated 9; passed on unrecounted"
+  - id: cases/orchestration/skill-scouting-cadence-counter
+    L0:     L0: "Skill scouting: a cadence counter gates re-scouting"
+  - id: cases/orchestration/unverified-length-from-stacked-edits
+    L0:     L0: "Two rounds reported an UNVERIFIED character count because edits were stacked behind one earlier measurement; measure after the last edit and print wc -c."
+  - id: cases/orchestration/validator-external-diff-attribution
+    L0:     L0: "Validators: attribute external diffs to the right producer"
+  - id: cases/research/*
+    L0: "Grouped: 2 research-claim cases - an existence-negative shipped with no level-scoped search; snippet figures drifted from the source page."
+  - id: cases/serena-memory/* (tail)
+    L0: "Grouped: 3 Serena recall-friction rounds."
+  - id: cases/serena-memory/untyped-orchestrator-supplied-id
+    L0:     L0: "Orchestrator pinned a memory id outside the nine typed scopes; content landed and read back fine, gate failed 8/9 at Typed. A dispatch saying use-exactly-this yields to the skill naming gate."
+  - id: cases/uncapped-discovery-report
+    L0:     L0: "A discovery report outran one result; a resume capped at <=1600 chars returned the usable facts. State the character cap at dispatch: the reader-budget rule already existed and was skipped."
   - id: cases/validator-evidence-bar-ambiguous
-    L0: "10 criteria judged by path:line; the one named command (just ci) went unrun: UNVERIFIABLE"
+    L0:     L0: "10 criteria judged by path:line; the one named command (just ci) went unrun: UNVERIFIABLE"
+  - id: cases/prompt-fork-decided-unasked
+    L0: "Two prompt forks (call open before machine.interrupted with no machine state; log or silently drop an unrecognised reason) were decided by the child and surfaced only after the fact."
+  - id: cases/verdict-sliced-at-display
+    L0: "A 4000-char validator verdict sliced in the orchestrator's return expression lost criteria 6-8; subtask_tail held no copy, so the tail cost a resume."
+  - id: cases/ts-excess-property-computed-keys
+    L0: "TypeScript skips excess-property checks on computed keys: a computed-key `on` map accepted a bogus event, so a mistyping experiment proves nothing there; probe the literal shape first."
 ---
 
 # Cases

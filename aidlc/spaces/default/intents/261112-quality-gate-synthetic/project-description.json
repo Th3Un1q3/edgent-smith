@@ -1,1 +1,0 @@
-"rework opencode @.opencode/plugins/quality-gate-enforcer.ts  plugin to use synthetic messages to deliver signals. Example of synthetic messages can be found in @.opencode/plugins/instructions-loader.ts . Consolidate repeated parts and improve plugins structure on the way."

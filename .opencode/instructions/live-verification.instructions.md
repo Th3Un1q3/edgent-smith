@@ -1,7 +1,7 @@
 ---
 name: live-verification
 description: "Canonical definition of a unit test versus a live check: unit tests are hermetic and free of environment-variable gates and skips; a live check is a delegated CLI/agent run with a real agent and model, never a test file. Load when adding, reviewing, or reporting tests and harness verification."
-applyTo: "{tests/**/*.py,.opencode/plugins/tests/**/*}"
+applyTo: "{tests/**/*.py,.opencode/plugins/tests/**/*,.opencode/plugins/**/*.ts}"
 excludeAgents: "rug"
 ---
 
@@ -19,6 +19,21 @@ A live check is a delegated CLI/agent run with a real agent and model. It is not
 2. When the change affects the current agent, check whether the injected instructions appear in your own context — present means working, absent means not.
 3. Asking a subagent to perform the action that should trigger the instructions and report whether it saw the consequence.
 4. For injection probes, placing a fresh random token in the instruction payload and asking the model to echo it in its reply.
+
+### Plugin hook or prompt-path changes
+
+A plugin hook only proves itself in a real session; unit fakes exercise the fake, not the host. Run one standalone session with the authenticated model and read the plugin's own log lines:
+
+```bash
+opencode run --format json --standalone --agent rug \
+  --model <provider/model> --print-logs \
+  "Read the first line of AGENTS.md and report it verbatim. Then reply exactly DONE."
+```
+
+- `--print-logs` and `--standalone` go together: logs go to stderr, so capture `2>&1`, and the plugin's `[state-machine]`/`[goal-continuation]` lines appear inline.
+- Use a model route that is actually authenticated. A provider auth failure (`HTTP 403`, key limit) means the check did not run: record the exact error and the fact that the check is unrun, never a pass.
+- Assert the observed sequence, not the prose answer: for a gate, the hook lines (`execute.before tool=…`) must show the allow after `SET_GOAL`, and `grep -c "blocked in"` on the output must be the expected count.
+- A hook change is not finished until this run is quoted in its summary with the command, agent, model and the log lines.
 
 ## Reporting
 

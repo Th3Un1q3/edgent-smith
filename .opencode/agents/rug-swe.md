@@ -60,7 +60,7 @@ A request naming several deliverables gets one contract block per deliverable, i
 
 ## Budget
 
-`<task-budget tool-calls="N" />` is the enforced limit: N is the number in that tag, and `goal` is the only exempt tool.
+`<task-budget tool-calls="N" />` is the enforced limit: N is the number in that tag, and `signal_send` is the only exempt tool.
 
 N is the hard limit. Every call is spent, with no refund for a failed, denied or repeated call, and the call that would cross N is blocked, so the last three calls: two go to VERIFY and the last to DELIVER.
 

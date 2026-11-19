@@ -15,7 +15,7 @@ metadata:
   version: "1.4.5"
   delta: |
     1.4.5 — a skill edit ends with the semantic pass the gates cannot run: a contradiction sweep pairs the statements that govern one behaviour and restates one when a pair cannot both hold, and a dead-name check resolves every tool, command, path, and config key in the tree while the agent cards stay read-only input. 1.4.4 — live-verification guidance consolidated into the canonical instruction set (self-injecting); the shell verification ledger stays distinct.
-    1.4.3 — passive-hooks.md: repointed the live hook entry-point list to the four current live plugins (quality-gate-enforcer, instructions-loader, goal-continuation, workflow); dropped the quarantined todo-enforcer, skills-loader, and session-tracker names.
+    1.4.3 — passive-hooks.md: repointed the live hook entry-point list to the current live plugins (quality-gate-enforcer, instructions-loader, state-machine, workflow); dropped the quarantined todo-enforcer, skills-loader, and session-tracker names.
     1.4.2 — replaced stale "ask for an opencode restart" claims with OpenCode v2 hot-reload facts across SKILL.md, references/placement-rules.md, and the workflow files.
     1.4.1 — repointed manage-skill.md link validation from the removed per-skill building-modular-skills/scripts path to the shared agent_utils/scripts tooling and `just agent_utils::validate-skill`.
     1.4.0 — repointed Rule 25 citations to references/guidance-process.md; renamed references/portability-checklist.md to references/harness-change-checklist.md and cross-referenced the building-modular-skills Shaping Checklist.

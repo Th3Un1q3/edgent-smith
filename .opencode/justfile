@@ -29,3 +29,19 @@ typecheck *ARGS:
 # Runs mutation tests, allows detecting parts of code that lack proper tests. Use --mutate <file-name> parameter to scope mutation to a single file. Example: --mutate plugins/tool-limit-reminder.ts.
 mutation *ARGS:
     @bun stryker {{ ARGS }}
+
+# Keep the opencode background server up: poll `service status`, restart it when stopped. Exit with Ctrl-C or SIGTERM.
+oc-service interval="5":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'echo "oc-service: signal received, exiting"; exit 0' INT TERM
+    echo "oc-service: watching every ${interval}s (Ctrl-C or SIGTERM to stop)"
+    while true; do
+      # `opencode service status` exits 0 for both states and prints a URL only while the server runs.
+      if [[ "$(opencode service status 2>&1 || true)" != http* ]]; then
+        echo "oc-service: service stopped, running 'opencode service start'"
+        opencode service start || echo "oc-service: start failed, retrying in ${interval}s"
+      fi
+      sleep "${interval}" &
+      wait $! || true
+    done

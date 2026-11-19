@@ -4,7 +4,7 @@
 
 | Path | Purpose | Naming Convention |
 |------|---------|-------------------|
-| `*.ts` (root) | Plugin entry points only | PascalCase or kebab-case plugins (`harness-plugin.ts`, `goal-continuation.ts`) |
+| `*.ts` (root) | Plugin entry points only | PascalCase or kebab-case plugins (`harness-plugin.ts`, `state-machine.ts`) |
 | `helpers/*.ts` | Shared utility modules, helpers, and discovery logic | camelCase filenames representing their domain (`kv-store.ts`, `logger.ts`, `file-discovery.ts`) |
 | `AGENTS.md` | Discoverable instruction file matched by the `**/AGENTS.md` glob | Must be capitalized — lowercase `agents.md` is not discovered |
 | `helpers/` | Shared plugin utilities (logging, KV store, session helpers) | camelCase filenames representing their domain |
@@ -34,3 +34,19 @@ Plugins ecosystem uses:
 **Import style:** Plugin source files use relative imports (`./helpers/...`).
 The `@plugins/*` and `@tests/*` aliases from `tsconfig.json` are for test files only.
 See `.opencode/instructions/opencode-plugin-interfaces.instructions.md` for details.
+
+### State machine plugin conventions
+
+The session loop lives in `state-machine.ts` and `state-machine/core/`. These invariants came from live sessions and a unit-test suite that stayed green while the host did nothing; keep them when editing it.
+
+- **The loop never speaks first.** A fresh session's entry emits are held on the machine and handed over by `wake()` on the first real user message; a state change before that drops them. Do not deliver `define_goal`'s prompt at `session.created` — the agent invents a goal from an empty chat.
+- **Only waiting states reset.** `parked` and `panic` return to `define_goal` on a real user item. The active work state does not: the message that started the turn arrives after `SET_GOAL` and would wipe the goal mid-work. A new reset arm needs a reason the goal cannot be lost.
+- **A user item opens the session first.** The message can be the first access after a hot reload; without an `ensure` the input reaches no machine and a `parked` session can never leave. `state-machine.ts` opens the session before it wakes or delivers the item.
+- **One shape per host payload.** `session.inbox.enqueued` carries `data.item.type` and `data.item.payload.text`; read them through `core/inbox.ts` rather than a hand-rolled assumption, and mirror the same shape in the test harness.
+- **Snapshots store keys, not prose.** `skill:<name>:complete` and `mem:<path>:complete|ref` are the memory markers; command results stay complete for workflows. Only goal text is capped.
+- **The gate is `rug`-only and one message.** A block names the tool and the transition that leaves the state; a state with no rule allows. A block is `Tool.Error` with `metadata = { code: 'tool_blocked', tool, state, allowed_tools }`.
+- **Signals are declared per state.** `signals` holds `describe`, an optional service-free Effect Schema and its examples; `assertSignalDeclarations` fails `createStateMachine` when a declaration and its transition arms disagree. Add the declaration and the arm together, never one without the other.
+- **Advertising is an action.** `display_signals` emits `emit.signals`; the plugin sends a separate synthetic. Do not append availability to a prompt template.
+- **A prompt names itself.** `prompt` carries a `description` declared with the action; the plugin sends it beside the synthetic. `promptDescription` falls back to `Sent synthetic message: <opening words>...` when an emit supplies none. Do not reintroduce a state-keyed description map.
+- **Refusals are errors, acceptance is neutral.** `unknown_signal`, `unavailable_signal` and `invalid_payload` are `Tool.Error` with structured `metadata`; `Signal accepted.` is the only successful result text.
+- **Prove a hook change with a live `rug` run.** See the plugin-hook section of `.opencode/instructions/live-verification.instructions.md`; unit fakes are not evidence about the host.
