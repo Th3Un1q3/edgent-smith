@@ -1,29 +1,34 @@
 /**
  * The session snapshot: one JSON value per session under `state-machine/<id>`,
  * written on every change and read once on a session's first access after a
- * reload. An expired, malformed or missing record is treated as absent; only a
+ * reload. An expired, malformed or legacy record is treated as absent; only a
  * rejected storage call is reported as such, and it creates no machine.
+ *
+ * The recorded value is the actor's own persisted snapshot, carried verbatim.
+ * The context fields, their text limit and their redaction are the machine
+ * module's declaration; this module carries the record envelope and the store
+ * without naming any context field of its own.
  */
 import { Effect } from 'effect'
 
-import { LOOP_STATE_IDS } from './machine'
+import { DEFAULT_SNAPSHOT, DEFAULT_STATE_IDS } from '../machines'
 
-import type {
-  CallbackPayload,
-  Failure,
-  InjectedMemories,
-  IntentKind,
-  LoopStateId,
-} from './machine'
+import type { LoopStateId } from './machine'
+import type { StoredSession } from '../machines/session/context'
 
 export const SNAPSHOT_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 /**
- * Only free text that a person typed is capped; memories are idempotency keys
- * (`mem:<path>:complete`, `skill:<name>:complete`) and results are kept whole so
- * a workflow can read the command output it asked for.
- */
-export const OUTPUT_LIMIT = 1024
+How one machine declares its stored context: the keys it carries, the text cap,
+and the reader that keeps the fields a payload carries and drops what it cannot
+validate.
+*/
+export interface SnapshotCodec {
+  readonly limit: number
+  readonly fields: readonly string[]
+  readonly bound: (snapshot: Readonly<Record<string, unknown>>) => Record<string, unknown>
+  readonly read: (payload: Readonly<Record<string, unknown>>, states: ReadonlySet<string>) => Record<string, unknown> | undefined
+}
 
 export interface ToolPolicyRule {
   readonly stateId: LoopStateId
@@ -31,31 +36,33 @@ export interface ToolPolicyRule {
   readonly allowedTools: readonly string[]
 }
 
-export interface SessionSnapshot {
-  readonly sessionId: string
-  readonly state: LoopStateId
-  readonly goal: string
-  readonly intent: IntentKind
-  readonly attempts: number
-  readonly idleCount: number
-  readonly memories: readonly string[]
-  readonly improvements: readonly string[]
-  readonly injectedSkills: readonly string[]
-  readonly injected: Readonly<Record<string, InjectedMemories>>
-  readonly results: Readonly<Record<string, CallbackPayload>>
-  readonly policy?: ToolPolicyRule
-  readonly failure?: Failure
-  readonly updatedAt: string
-}
+/**
+The actor's own persisted snapshot: the state library's shape, carrying `value`,
+`status`, `context` and whatever else it wrote. This store never reads a field
+of it by name.
+*/
+export type PersistedSnapshot = Readonly<Record<string, unknown>>
 
+/**
+ * The envelope: a schema version, the persisted snapshot, and when it was
+ * written and expires. Version 1 carried a flattened context in `payload`
+ * instead, and is no longer readable.
+ */
 export interface SnapshotRecord {
   readonly sessionId: string
-  readonly payload: SessionSnapshot
+  readonly v: 2
+  readonly snapshot: PersistedSnapshot
   readonly storedAt: string
   readonly expiresAt: string
 }
 
-export type AbsentReason = 'missing' | 'expired' | 'shape-invalid'
+/**
+ * The session machine's snapshot, kept as a name for callers and tests that
+ * already import it.
+ */
+export type SessionSnapshot = StoredSession
+
+export type AbsentReason = 'missing' | 'expired' | 'shape-invalid' | 'legacy'
 
 export type SnapshotRead
   = | { readonly status: 'present', readonly record: SnapshotRecord }
@@ -67,165 +74,63 @@ export const snapshotKey = (sessionId: string): string => 'state-machine/' + ses
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-const isStringArray = (value: unknown): value is readonly string[] =>
-  Array.isArray(value) && value.every(item => typeof item === 'string')
+const DEFAULT_STATES: ReadonlySet<string> = new Set(DEFAULT_STATE_IDS)
 
-const INTENT_KINDS: readonly IntentKind[] = ['none', 'improvement', 'lesson']
+const sessionIdOf = (snapshot: PersistedSnapshot): string => {
+  const context = snapshot.context
+  const sessionId = isObject(context) ? context.sessionId : undefined
 
-const isIntentKind = (value: unknown): value is IntentKind =>
-  typeof value === 'string' && (INTENT_KINDS as readonly string[]).includes(value)
+  if (typeof sessionId !== 'string' || sessionId === '') throw new Error('snapshot context carries no sessionId')
 
-const isStateId = (value: unknown): value is LoopStateId =>
-  typeof value === 'string' && (LOOP_STATE_IDS as readonly string[]).includes(value)
-
-const isInjectedMemories = (value: unknown): value is InjectedMemories =>
-  isObject(value) && isStringArray(value.full) && isStringArray(value.index)
-
-const isPolicy = (value: unknown): value is ToolPolicyRule =>
-  isObject(value)
-  && isStateId(value.stateId)
-  && typeof value.errorMessage === 'string'
-  && isStringArray(value.allowedTools)
-
-const isFailure = (value: unknown): value is Failure =>
-  isObject(value)
-  && typeof value.reason === 'string'
-  && (value.detail === undefined || typeof value.detail === 'string')
-
-const isCallbackPayload = (value: unknown): value is CallbackPayload =>
-  isObject(value)
-  && typeof value.ok === 'boolean'
-  && (value.exitCode === undefined || typeof value.exitCode === 'number')
-  && (value.output === undefined || typeof value.output === 'string')
-  && (value.value === undefined || isInjectedMemories(value.value))
-
-const readInjected = (value: unknown): Record<string, InjectedMemories> | undefined => {
-  if (!isObject(value)) return undefined
-
-  const entries = Object.entries(value)
-
-  return entries.every(([, item]) => isInjectedMemories(item))
-    ? entries.reduce<Record<string, InjectedMemories>>((all, [key, item]) => {
-        all[key] = item as InjectedMemories
-        return all
-      }, {})
-    : undefined
+  return sessionId
 }
 
-const readResults = (value: unknown): Record<string, CallbackPayload> | undefined => {
-  if (!isObject(value)) return undefined
-
-  const entries = Object.entries(value)
-
-  return entries.every(([, item]) => isCallbackPayload(item))
-    ? entries.reduce<Record<string, CallbackPayload>>((all, [key, item]) => {
-        all[key] = item as CallbackPayload
-        return all
-      }, {})
-    : undefined
-}
-
-const readSnapshot = (value: Record<string, unknown>): SessionSnapshot | undefined => {
-  if (typeof value.sessionId !== 'string' || value.sessionId === '') return undefined
-  if (!isStateId(value.state)) return undefined
-  if (typeof value.goal !== 'string') return undefined
-  if (!isIntentKind(value.intent)) return undefined
-  if (typeof value.attempts !== 'number' || typeof value.idleCount !== 'number') return undefined
-  if (!isStringArray(value.memories) || !isStringArray(value.improvements)) return undefined
-  if (!isStringArray(value.injectedSkills)) return undefined
-  if (value.policy !== undefined && !isPolicy(value.policy)) return undefined
-  if (value.failure !== undefined && !isFailure(value.failure)) return undefined
-  if (typeof value.updatedAt !== 'string') return undefined
-
-  const injected = readInjected(value.injected)
-  const results = readResults(value.results)
-
-  return injected === undefined || results === undefined
-    ? undefined
-    : {
-        sessionId: value.sessionId,
-        state: value.state,
-        goal: value.goal,
-        intent: value.intent,
-        attempts: value.attempts,
-        idleCount: value.idleCount,
-        memories: value.memories,
-        improvements: value.improvements,
-        injectedSkills: value.injectedSkills,
-        injected,
-        results,
-        ...(value.policy !== undefined && { policy: value.policy }),
-        ...(value.failure !== undefined && { failure: value.failure }),
-        updatedAt: value.updatedAt,
-      }
-}
-
-const truncate = (text: string, limit: number): string => text.length <= limit ? text : text.slice(0, limit)
-
-/**
- * Rebuilds the allowlisted snapshot. Every other key on the input, including a
- * credential accidentally added to the context, is dropped.
- */
-export const boundSnapshot = (snapshot: SessionSnapshot): SessionSnapshot => ({
-  sessionId: snapshot.sessionId,
-  state: snapshot.state,
-  goal: truncate(snapshot.goal, OUTPUT_LIMIT),
-  intent: snapshot.intent,
-  attempts: snapshot.attempts,
-  idleCount: snapshot.idleCount,
-  memories: [...snapshot.memories],
-  improvements: [...snapshot.improvements],
-  injectedSkills: [...snapshot.injectedSkills],
-  injected: Object.fromEntries(
-    Object.entries(snapshot.injected).map(([key, value]) => [key, { full: [...value.full], index: [...value.index] }]),
-  ),
-  results: Object.fromEntries(
-    Object.entries(snapshot.results).map(([key, value]) => [key, { ...value }]),
-  ),
-  policy: snapshot.policy,
-  failure: snapshot.failure === undefined
-    ? undefined
-    : {
-        reason: truncate(snapshot.failure.reason, OUTPUT_LIMIT),
-        ...(snapshot.failure.detail !== undefined && { detail: truncate(snapshot.failure.detail, OUTPUT_LIMIT) }),
-      },
-  updatedAt: snapshot.updatedAt,
-})
-
-export const createSnapshotRecord = (snapshot: SessionSnapshot, now: number): SnapshotRecord => {
+export const createSnapshotRecord = (snapshot: PersistedSnapshot, now: number): SnapshotRecord => {
+  const context = DEFAULT_SNAPSHOT.bound(isObject(snapshot.context) ? snapshot.context : {})
+  const sessionId = sessionIdOf({ context })
   const storedAt = new Date(now).toISOString()
 
   return {
-    sessionId: snapshot.sessionId,
-    payload: boundSnapshot({ ...snapshot, updatedAt: storedAt }),
+    sessionId,
+    v: 2,
+    snapshot: { ...snapshot, context },
     storedAt,
     expiresAt: new Date(now + SNAPSHOT_TTL_MS).toISOString(),
   }
 }
 
-export const isExpired = (record: SnapshotRecord, now: number): boolean => {
+export const isExpired = (record: { readonly expiresAt: string }, now: number): boolean => {
   const expiry = Date.parse(record.expiresAt)
 
   return Number.isNaN(expiry) || expiry <= now
 }
 
+export type SnapshotParse = SnapshotRecord | 'expired' | 'shape-invalid' | 'legacy'
+
 /**
- * Returns the record, or the two reasons a record is treated as absent. Only a
- * rejected storage call is a different outcome, and that is the store's.
+ * Returns the record, or the reasons it is treated as absent. A v1 envelope is
+ * reported as `legacy` so the caller can log the migration instead of losing it
+ * silently; only a rejected storage call is a different outcome, and that is
+ * the store's.
  */
 export const parseSnapshotRecord = (
   value: unknown,
   now: number,
-): SnapshotRecord | 'expired' | 'shape-invalid' => {
-  if (!isObject(value) || typeof value.sessionId !== 'string' || value.sessionId === '' || typeof value.storedAt !== 'string' || typeof value.expiresAt !== 'string' || !isObject(value.payload)) return 'shape-invalid'
+  states: ReadonlySet<string> = DEFAULT_STATES,
+  expectedSessionId?: string,
+): SnapshotParse => {
+  if (!isObject(value)) return 'shape-invalid'
+  if (value.v !== 2) return value.v === 1 || value.v === undefined ? 'legacy' : 'shape-invalid'
+  if (typeof value.sessionId !== 'string' || value.sessionId === '' || (expectedSessionId !== undefined && value.sessionId !== expectedSessionId) || typeof value.storedAt !== 'string' || typeof value.expiresAt !== 'string' || !isObject(value.snapshot) || typeof value.snapshot.status !== 'string' || !isObject(value.snapshot.context)) return 'shape-invalid'
 
-  const payload = readSnapshot(value.payload)
+  const context = DEFAULT_SNAPSHOT.read(value.snapshot.context, states)
 
-  if (payload === undefined) return 'shape-invalid'
+  if (context === undefined || context.sessionId !== value.sessionId) return 'shape-invalid'
 
   const record: SnapshotRecord = {
     sessionId: value.sessionId,
-    payload,
+    v: 2,
+    snapshot: { ...value.snapshot, context },
     storedAt: value.storedAt,
     expiresAt: value.expiresAt,
   }
@@ -240,11 +145,15 @@ export interface SnapshotStorePorts {
 }
 
 export interface SnapshotStore {
-  readonly read: (sessionId: string) => Effect.Effect<SnapshotRead>
   /**
-  `false` means the write was rejected and the previous value stands.
-  */
-  readonly write: (snapshot: SessionSnapshot) => Effect.Effect<boolean>
+   * A read validates the stored context against the states of the machine it is
+   * restoring into; a caller that passes none gets the machine entry's set.
+   */
+  readonly read: (sessionId: string, states?: ReadonlySet<string>) => Effect.Effect<SnapshotRead>
+  /**
+   * `false` means the write was rejected and the previous value stands.
+   */
+  readonly write: (snapshot: PersistedSnapshot) => Effect.Effect<boolean>
 }
 
 const describe = (cause: unknown): string => cause instanceof Error ? cause.name : 'unknown'
@@ -253,24 +162,25 @@ export const createSnapshotStore = (ports: SnapshotStorePorts): SnapshotStore =>
   const now = ports.now ?? Date.now
 
   return {
-    read: sessionId => ports.load(snapshotKey(sessionId)).pipe(
+    read: (sessionId, states = DEFAULT_STATES) => ports.load(snapshotKey(sessionId)).pipe(
       Effect.match({
         onFailure: cause => ({ status: 'rejected', reason: 'read-failed:' + describe(cause) }) as const,
         onSuccess: (value): SnapshotRead => {
           if (value === undefined || value === null) return { status: 'absent', reason: 'missing' }
 
-          const parsed = parseSnapshotRecord(value, now())
+          const parsed = parseSnapshotRecord(value, now(), states, sessionId)
 
           if (parsed === 'expired') return { status: 'absent', reason: 'expired' }
+          if (parsed === 'legacy') return { status: 'absent', reason: 'legacy' }
           return parsed === 'shape-invalid' ? { status: 'absent', reason: 'shape-invalid' } : { status: 'present', record: parsed }
         },
       }),
     ),
     write: snapshot => Effect.suspend(() => ports.save(
-      snapshotKey(snapshot.sessionId),
+      snapshotKey(sessionIdOf(snapshot)),
       createSnapshotRecord(snapshot, now()),
     )).pipe(
-      Effect.match({ onFailure: () => false, onSuccess: () => true }),
+      Effect.matchCause({ onFailure: () => false, onSuccess: () => true }),
     ),
   }
 }

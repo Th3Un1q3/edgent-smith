@@ -6,7 +6,8 @@ import { createSnapshotRecord, snapshotKey } from '@plugins/state-machine/core/s
 import { createSnapshotStore } from '@plugins/state-machine/core/snapshot'
 import { createStateMachine, loadStateMachineLibrary } from '@plugins/state-machine/core/machine'
 
-import type { SessionSnapshot, SnapshotStore } from '@plugins/state-machine/core/snapshot'
+import type { PersistedSnapshot, SnapshotRecord, SnapshotStore } from '@plugins/state-machine/core/snapshot'
+import type { StoredSession } from '@plugins/state-machine/machines/session/context'
 
 import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine-harness'
 
@@ -14,22 +15,34 @@ import type { Harness } from '@tests/helpers/state-machine-harness'
 
 const NOW = Date.parse('2026-11-16T12:00:00.000Z')
 
-const snapshotFixture = (overrides: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
+const contextFixture = (overrides: Partial<StoredSession> = {}): StoredSession => ({
   sessionId: 'ses_1',
-  state: 'work',
   goal: 'ship the snapshot',
   intent: 'none',
   attempts: 0,
-  idleCount: 0,
   memories: [],
   improvements: [],
   injectedSkills: [],
   injected: {},
   results: {},
-  policy: { stateId: 'define_goal', errorMessage: 'Call SET_GOAL first.', allowedTools: ['signal_send'] },
-  updatedAt: '2026-11-16T12:00:00.000Z',
+  policy: { stateId: 'towards_goal.define_goal', errorMessage: 'Call SET_GOAL first.', allowedTools: ['signal_send'] },
   ...overrides,
 })
+
+const WORK_STATE = { towards_goal: 'work' } as const
+
+const snapshotFixture = (
+  context: Partial<StoredSession> = {},
+  value: unknown = WORK_STATE,
+): PersistedSnapshot => ({
+  status: 'active',
+  value,
+  context: contextFixture(context),
+  children: {},
+})
+
+const statePathOf = (value: unknown): string =>
+  typeof value === 'string' ? value : Object.entries(value as Record<string, unknown>).map(([id, child]) => id + '.' + statePathOf(child)).join('.')
 
 interface Stored {
   readonly writes: Array<{ key: string, value: unknown }>
@@ -57,15 +70,14 @@ const machineWith = async (stored: Stored) => {
   const library = await loadStateMachineLibrary()
   return createStateMachine({
     library,
-    startStateFor: agent => (agent === 'rug' ? 'define_goal' : undefined),
     snapshot: storeOver(stored),
   })
 }
 
-const storedRecord = (overrides: Partial<SessionSnapshot> = {}): Stored => ({
+const storedRecord = (overrides: Partial<StoredSession> = {}, value: unknown = WORK_STATE): Stored => ({
   writes: [],
   reads: 0,
-  seed: createSnapshotRecord(snapshotFixture(overrides), NOW),
+  seed: createSnapshotRecord(snapshotFixture(overrides, value), NOW),
   failReads: false,
   failWrites: false,
 })
@@ -80,7 +92,7 @@ describe('ensure — restore on first access', () => {
     expect(started?.emits).toEqual([])
     expect(machine.get('ses_1')?.state).toBe('work')
     expect(machine.get('ses_1')?.context.goal).toBe('ship the snapshot')
-    expect(machine.get('ses_1')?.context.policy?.stateId).toBe('define_goal')
+    expect(machine.get('ses_1')?.context.policy?.stateId).toBe('towards_goal.define_goal')
   })
 
   it('starts at the agent state for an absent record', async () => {
@@ -102,15 +114,31 @@ describe('ensure — restore on first access', () => {
 
   it('starts at the agent state for a malformed record', async () => {
     const stored = storedRecord()
-    stored.seed = { sessionId: 'ses_1' }
+    stored.seed = { nope: true }
     const machine = await machineWith(stored)
     await Effect.runPromise(machine.ensure('ses_1', 'rug'))
 
     expect(machine.get('ses_1')?.state).toBe('define_goal')
   })
 
+  it('starts fresh for a v1 record and logs the legacy migration', async () => {
+    const stored = storedRecord()
+    stored.seed = { sessionId: 'ses_1', v: 1, payload: { sessionId: 'ses_1', state: 'towards_goal.work' }, storedAt: new Date(NOW).toISOString(), expiresAt: new Date(NOW + 60_000).toISOString() }
+    const machine = await machineWith(stored)
+    const logs: string[] = []
+    const collect = Logger.make<unknown, void>(({ message }) => {
+      logs.push(Array.isArray(message) ? message.map(String).join(' ') : String(message))
+    })
+
+    const started = await Effect.runPromise(Effect.withLogger(machine.ensure('ses_1', 'rug'), collect))
+
+    expect(started?.snapshot).toBe('legacy')
+    expect(machine.get('ses_1')?.state).toBe('define_goal')
+    expect(logs.join('\n')).toContain('v1 record, starting fresh')
+  })
+
   it('starts at the agent state instead of restoring a transient state', async () => {
-    const stored = storedRecord({ state: 'check' })
+    const stored = storedRecord({}, { towards_goal: 'check' })
     const machine = await machineWith(stored)
     const started = await Effect.runPromise(machine.ensure('ses_1', 'rug'))
 
@@ -164,7 +192,7 @@ describe('persist — write on change', () => {
 
     const last = stored.writes.at(-1)
     expect(last?.key).toBe(snapshotKey('ses_1'))
-    expect((last?.value as { payload: SessionSnapshot }).payload.state).toBe('check')
+    expect(statePathOf((last?.value as SnapshotRecord).snapshot.value)).toBe('towards_goal.work')
   })
 
   it('writes nothing when no machine exists', async () => {
@@ -189,16 +217,18 @@ describe('persist — write on change', () => {
 })
 
 describe('plugin wiring', () => {
-  const seed = (harness: Harness, overrides: Partial<SessionSnapshot> = {}): void => {
+  const seed = (harness: Harness, overrides: Partial<StoredSession> = {}, value: unknown = WORK_STATE): void => {
     harness.storageWrites.push({
       key: snapshotKey('ses_1'),
-      value: createSnapshotRecord(snapshotFixture(overrides), NOW),
+      value: createSnapshotRecord(snapshotFixture(overrides, value), NOW),
     })
   }
 
   it('restores a session on start and keeps the restored state', async () => {
     const harness = makeHarness()
-    seed(harness)
+    // A record carries the policy and the signals policy of the state that saved it;
+    // `work` has no tool policy but enables CLAIM_WORK.
+    seed(harness, { policy: undefined, signalsPolicy: { names: ['CLAIM_WORK'] } })
     await register(harness)
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
@@ -218,7 +248,7 @@ describe('plugin wiring', () => {
 
     const written = harness.storageWrites.filter(write => write.key === snapshotKey('ses_1'))
     expect(written.length).toBeGreaterThan(0)
-    expect((written.at(-1)?.value as { payload: SessionSnapshot }).payload.state).toBe('work')
+    expect(statePathOf((written.at(-1)?.value as SnapshotRecord).snapshot.value)).toBe('towards_goal.work')
   })
 
   it('records a failed skill injection as an outcome', async () => {
@@ -228,8 +258,8 @@ describe('plugin wiring', () => {
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } })
 
-    const payload = (harness.storageWrites.at(-1)?.value as { payload: SessionSnapshot } | undefined)?.payload
-    expect(payload?.results.skill_ready?.ok).toBe(false)
+    const context = (harness.storageWrites.at(-1)?.value as SnapshotRecord | undefined)?.snapshot.context as StoredSession | undefined
+    expect(context?.results.skill_ready?.ok).toBe(false)
   })
 
   it('records a failed memory read as an outcome', async () => {
@@ -239,8 +269,8 @@ describe('plugin wiring', () => {
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.emitUserMessage('ses_1', 'user', 'ship it')
 
-    const payload = (harness.storageWrites.at(-1)?.value as { payload: SessionSnapshot } | undefined)?.payload
-    expect(payload?.results.memories_ready?.ok).toBe(false)
+    const context = (harness.storageWrites.at(-1)?.value as SnapshotRecord | undefined)?.snapshot.context as StoredSession | undefined
+    expect(context?.results.memories_ready?.ok).toBe(false)
   })
 
   it('logs write-failed when storage rejects the snapshot write', async () => {
@@ -261,7 +291,7 @@ describe('plugin wiring', () => {
     await harness.emitUserMessage('ses_1', 'user', 'ship it')
 
     const written = harness.storageWrites.filter(write => write.key === snapshotKey('ses_1'))
-    expect((written.at(-1)?.value as { payload: SessionSnapshot }).payload.state).toBe('define_goal')
+    expect(statePathOf((written.at(-1)?.value as SnapshotRecord).snapshot.value)).toBe('towards_goal.define_goal')
     expect(harness.synthetics[0]?.text).toContain('What goal')
   })
 

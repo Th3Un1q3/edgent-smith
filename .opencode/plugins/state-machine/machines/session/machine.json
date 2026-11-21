@@ -1,0 +1,571 @@
+{
+  "id": "session",
+  "initial": "admission",
+  "on": {
+    "system_interrupted": {
+      "target": "#session.parked",
+      "guard": {
+        "type": "not_parked",
+        "params": {}
+      }
+    }
+  },
+  "states": {
+    "admission": {
+      "always": [
+        {
+          "guard": {
+            "type": "session_agent",
+            "params": {
+              "in": [
+                "rug"
+              ]
+            }
+          },
+          "target": "#session.towards_goal"
+        },
+        {
+          "target": "#session.free_work"
+        }
+      ],
+      "on": {
+        "admit": [
+          {
+            "guard": {
+              "type": "session_agent",
+              "params": {
+                "in": [
+                  "rug"
+                ]
+              }
+            },
+            "target": "#session.towards_goal",
+            "actions": [
+              {
+                "type": "admit_identity",
+                "params": {}
+              }
+            ]
+          },
+          {
+            "target": "#session.free_work",
+            "actions": [
+              {
+                "type": "admit_identity",
+                "params": {}
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "towards_goal": {
+      "initial": "define_goal",
+      "on": {
+        "system_idle": {
+          "target": "#session.towards_goal.validate",
+          "guard": {
+            "type": "not_parked",
+            "params": {}
+          }
+        }
+      },
+      "states": {
+        "define_goal": {
+          "entry": [
+            {
+              "type": "prompt",
+              "params": {
+                "template": "goal_request",
+                "description": "Ask the agent what goal this session should accomplish."
+              }
+            },
+            {
+              "type": "update_signals_policy",
+              "params": {
+                "set_enabled_signals": [
+                  "SET_GOAL"
+                ],
+                "notify_agent": true
+              }
+            },
+            {
+              "type": "request_memories",
+              "params": {
+                "namespace": "preferences/user"
+              }
+            },
+            {
+              "type": "set_tools_policy",
+              "params": {
+                "stateId": "define_goal",
+                "allowedTools": [
+                  "signal_send",
+                  "execute",
+                  "question",
+                  "skill"
+                ],
+                "errorMessage": "Tool <name> is blocked in <state>. Call signal_send with SET_GOAL and a goal to continue."
+              }
+            }
+          ],
+          "exit": [
+            {
+              "type": "clear_tools_policy",
+              "params": {}
+            }
+          ],
+          "on": {
+            "agent_sent_signal.SET_GOAL": {
+              "target": "work",
+              "actions": [
+                {
+                  "type": "record",
+                  "params": {
+                    "op": "set",
+                    "key": "goal",
+                    "source": {
+                      "from": "payload",
+                      "field": "goal"
+                    }
+                  }
+                }
+              ]
+            },
+            "callback.memories_ready": {
+              "actions": [
+                {
+                  "type": "record_callback",
+                  "params": {
+                    "reportTo": "memories_ready",
+                    "key": "preferences/user"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "work": {
+          "entry": [
+            {
+              "type": "prompt",
+              "params": {
+                "template": "work_towards_goal",
+                "description": "Remind the agent of the goal and the memories to work from."
+              }
+            },
+            {
+              "type": "update_signals_policy",
+              "params": {
+                "set_enabled_signals": [
+                  "CLAIM_WORK"
+                ],
+                "notify_agent": true
+              }
+            },
+            {
+              "type": "request_skill",
+              "params": {
+                "name": "task-delegation"
+              }
+            }
+          ],
+          "on": {
+            "agent_sent_signal.CLAIM_WORK": {
+              "target": "check"
+            },
+            "callback.skill_ready": {
+              "actions": [
+                {
+                  "type": "record_callback",
+                  "params": {
+                    "reportTo": "skill_ready"
+                  }
+                },
+                {
+                  "type": "mark_skill",
+                  "params": {
+                    "name": "task-delegation"
+                  }
+                }
+              ]
+            },
+            "callback.memories_ready": {
+              "actions": [
+                {
+                  "type": "record_callback",
+                  "params": {
+                    "reportTo": "memories_ready",
+                    "key": "preferences/user"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "check": {
+          "entry": [
+            {
+              "type": "request_shell",
+              "params": {
+                "cmd": "just opencode::typecheck",
+                "reportTo": "quality_check_ready"
+              }
+            }
+          ],
+          "on": {
+            "callback.quality_check_ready": [
+              {
+                "target": "validate",
+                "guard": {
+                  "type": "callback_ok",
+                  "params": {}
+                },
+                "actions": [
+                  {
+                    "type": "record_callback",
+                    "params": {
+                      "reportTo": "quality_check_ready"
+                    }
+                  }
+                ]
+              },
+              {
+                "target": "#session.panic",
+                "actions": [
+                  {
+                    "type": "record_callback",
+                    "params": {
+                      "reportTo": "quality_check_ready"
+                    }
+                  },
+                  {
+                    "type": "prompt",
+                    "params": {
+                      "template": "quality_check_failed",
+                      "description": "Report that the quality check failed and the loop is parked."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "validate": {
+          "entry": [
+            {
+              "type": "prompt",
+              "params": {
+                "template": "validation_self_report",
+                "description": "Ask the agent to judge whether the goal is met."
+              }
+            },
+            {
+              "type": "update_signals_policy",
+              "params": {
+                "set_enabled_signals": [
+                  "GOAL_ACHIEVED",
+                  "GOAL_INCOMPLETE"
+                ],
+                "notify_agent": true
+              }
+            }
+          ],
+          "on": {
+            "agent_sent_signal.GOAL_ACHIEVED": {
+              "target": "memorize",
+              "actions": [
+                {
+                  "type": "record",
+                  "params": {
+                    "op": "set",
+                    "key": "intent",
+                    "source": {
+                      "from": "literal",
+                      "value": "improvement"
+                    }
+                  }
+                }
+              ]
+            },
+            "agent_sent_signal.GOAL_INCOMPLETE": [
+              {
+                "target": "memorize",
+                "guard": {
+                  "type": "counter_below",
+                  "params": {
+                    "key": "attempts",
+                    "limit": {
+                      "fromContext": "maxAttempts"
+                    }
+                  }
+                },
+                "actions": [
+                  {
+                    "type": "record",
+                    "params": {
+                      "op": "increment",
+                      "key": "attempts"
+                    }
+                  },
+                  {
+                    "type": "record",
+                    "params": {
+                      "op": "set",
+                      "key": "intent",
+                      "source": {
+                        "from": "literal",
+                        "value": "lesson"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "target": "#session.panic",
+                "actions": [
+                  {
+                    "type": "fail",
+                    "params": {
+                      "reason": "attempts exhausted"
+                    }
+                  },
+                  {
+                    "type": "record",
+                    "params": {
+                      "op": "set",
+                      "key": "intent",
+                      "source": {
+                        "from": "literal",
+                        "value": "lesson"
+                      }
+                    }
+                  },
+                  {
+                    "type": "prompt",
+                    "params": {
+                      "template": "panic_escalation",
+                      "description": "Report that the attempts ran out and the loop is parked."
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "memorize": {
+          "entry": [
+            {
+              "type": "prompt",
+              "params": {
+                "template": "memorize",
+                "description": "Request a lesson to carry into the next attempt."
+              }
+            },
+            {
+              "type": "update_signals_policy",
+              "params": {
+                "set_enabled_signals": [
+                  "LESSON"
+                ],
+                "notify_agent": true
+              }
+            }
+          ],
+          "on": {
+            "agent_sent_signal.LESSON": [
+              {
+                "target": "#session.parked",
+                "guard": {
+                  "type": "improvement_lesson",
+                  "params": {}
+                },
+                "actions": [
+                  {
+                    "type": "record",
+                    "params": {
+                      "op": "push",
+                      "key": "improvements",
+                      "source": {
+                        "from": "payload",
+                        "field": "text"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "target": "work",
+                "guard": {
+                  "type": "field_present",
+                  "params": {
+                    "field": "text"
+                  }
+                },
+                "actions": [
+                  {
+                    "type": "record",
+                    "params": {
+                      "op": "push",
+                      "key": "memories",
+                      "source": {
+                        "from": "payload",
+                        "field": "text"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "parked": {
+      "entry": [
+        {
+          "type": "prompt",
+          "params": {
+            "template": "park_summary",
+            "description": "Report the reached goal and the improvements recorded."
+          }
+        }
+      ],
+      "on": {
+        "system_user_input": {
+          "target": "#session.towards_goal.define_goal",
+          "actions": [
+            {
+              "type": "record",
+              "params": {
+                "op": "set",
+                "key": "goal",
+                "source": {
+                  "from": "literal",
+                  "value": ""
+                }
+              }
+            },
+            {
+              "type": "record",
+              "params": {
+                "op": "set",
+                "key": "intent",
+                "source": {
+                  "from": "literal",
+                  "value": "none"
+                }
+              }
+            },
+            {
+              "type": "record",
+              "params": {
+                "op": "set",
+                "key": "attempts",
+                "source": {
+                  "from": "literal",
+                  "value": 0
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "panic": {
+      "entry": [
+        {
+          "type": "update_signals_policy",
+          "params": {
+            "set_enabled_signals": [
+              "LESSON"
+            ],
+            "notify_agent": true
+          }
+        }
+      ],
+      "on": {
+        "agent_sent_signal.LESSON": [
+          {
+            "target": "#session.towards_goal.work",
+            "guard": {
+              "type": "field_present",
+              "params": {
+                "field": "text"
+              }
+            },
+            "actions": [
+              {
+                "type": "record",
+                "params": {
+                  "op": "push",
+                  "key": "memories",
+                  "source": {
+                    "from": "payload",
+                    "field": "text"
+                  }
+                }
+              },
+              {
+                "type": "record",
+                "params": {
+                  "op": "set",
+                  "key": "attempts",
+                  "source": {
+                    "from": "literal",
+                    "value": 0
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "system_user_input": {
+          "target": "#session.towards_goal.define_goal",
+          "actions": [
+            {
+              "type": "record",
+              "params": {
+                "op": "set",
+                "key": "goal",
+                "source": {
+                  "from": "literal",
+                  "value": ""
+                }
+              }
+            },
+            {
+              "type": "record",
+              "params": {
+                "op": "set",
+                "key": "intent",
+                "source": {
+                  "from": "literal",
+                  "value": "none"
+                }
+              }
+            },
+            {
+              "type": "record",
+              "params": {
+                "op": "set",
+                "key": "attempts",
+                "source": {
+                  "from": "literal",
+                  "value": 0
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "free_work": {
+      "on": {
+        "system_interrupted": {
+          "actions": []
+        }
+      }
+    }
+  }
+}

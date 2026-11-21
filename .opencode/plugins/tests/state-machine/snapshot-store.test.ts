@@ -5,24 +5,38 @@ import { describe, expect, it } from 'vitest'
 import { createSnapshotRecord } from '@plugins/state-machine/core/snapshot'
 import { createSnapshotStore, snapshotKey } from '@plugins/state-machine/core/snapshot'
 
-import type { SessionSnapshot } from '@plugins/state-machine/core/snapshot'
+import type { PersistedSnapshot, SnapshotRecord } from '@plugins/state-machine/core/snapshot'
+import type { StoredSession } from '@plugins/state-machine/machines/session/context'
 
 const NOW = Date.parse('2026-11-16T12:00:00.000Z')
 
-const snapshotFixture = (overrides: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
+const STATES: ReadonlySet<string> = new Set([
+  'admission', 'towards_goal', 'towards_goal.define_goal', 'towards_goal.work',
+  'towards_goal.check', 'towards_goal.validate', 'towards_goal.memorize',
+  'parked', 'panic', 'free_work',
+])
+
+const contextFixture = (overrides: Partial<StoredSession> = {}): StoredSession => ({
   sessionId: 'ses_1',
-  state: 'define_goal',
   goal: '',
   intent: 'none',
   attempts: 0,
-  idleCount: 0,
   memories: [],
   improvements: [],
   injectedSkills: [],
   injected: {},
   results: {},
-  updatedAt: '2026-11-16T12:00:00.000Z',
   ...overrides,
+})
+
+const snapshotFixture = (
+  context: Partial<StoredSession> = {},
+  value = 'towards_goal.define_goal',
+): PersistedSnapshot => ({
+  status: 'active',
+  value,
+  context: contextFixture(context),
+  children: {},
 })
 
 interface FakeStorage {
@@ -32,6 +46,9 @@ interface FakeStorage {
   failReads: boolean
   failWrites: boolean
 }
+
+const statePathOf = (value: unknown): string =>
+  typeof value === 'string' ? value : Object.entries(value as Record<string, unknown>).map(([id, child]) => id + '.' + statePathOf(child)).join('.')
 
 const fakeStorage = (seed: Record<string, unknown> = {}): FakeStorage => ({
   values: new Map(Object.entries(seed)),
@@ -57,9 +74,9 @@ const storeOver = (storage: FakeStorage) => createSnapshotStore({
 
 describe('SnapshotStore.read', () => {
   it('reads only the session key and returns the present record', async () => {
-    const snapshot = snapshotFixture({ state: 'work', goal: 'ship it' })
+    const snapshot = snapshotFixture({ goal: 'ship it' }, 'towards_goal.work')
     const storage = fakeStorage({ [snapshotKey('ses_1')]: createSnapshotRecord(snapshot, NOW) })
-    const result = await Effect.runPromise(storeOver(storage).read('ses_1'))
+    const result = await Effect.runPromise(storeOver(storage).read('ses_1', STATES))
 
     expect(result.status).toBe('present')
     expect(storage.reads).toEqual(['state-machine/ses_1'])
@@ -67,7 +84,7 @@ describe('SnapshotStore.read', () => {
 
   it('returns absent for a missing key', async () => {
     const storage = fakeStorage()
-    const result = await Effect.runPromise(storeOver(storage).read('ses_1'))
+    const result = await Effect.runPromise(storeOver(storage).read('ses_1', STATES))
 
     expect(result).toEqual({ status: 'absent', reason: 'missing' })
   })
@@ -80,22 +97,31 @@ describe('SnapshotStore.read', () => {
       save: () => Effect.void,
       now: () => NOW + 31 * 24 * 60 * 60 * 1000,
     })
-    const result = await Effect.runPromise(store.read('ses_1'))
+    const result = await Effect.runPromise(store.read('ses_1', STATES))
 
     expect(result).toEqual({ status: 'absent', reason: 'expired' })
   })
 
   it('returns absent with the shape-invalid reason for a malformed value', async () => {
-    const storage = fakeStorage({ [snapshotKey('ses_1')]: { nope: true } })
-    const result = await Effect.runPromise(storeOver(storage).read('ses_1'))
+    const storage = fakeStorage({ [snapshotKey('ses_1')]: { v: 3 } })
+    const result = await Effect.runPromise(storeOver(storage).read('ses_1', STATES))
 
     expect(result).toEqual({ status: 'absent', reason: 'shape-invalid' })
+  })
+
+  it('returns absent with the legacy reason for a v1 record', async () => {
+    const storage = fakeStorage({
+      [snapshotKey('ses_1')]: { sessionId: 'ses_1', v: 1, payload: { sessionId: 'ses_1' }, storedAt: '2026-11-16T12:00:00.000Z', expiresAt: '2026-12-16T12:00:00.000Z' },
+    })
+    const result = await Effect.runPromise(storeOver(storage).read('ses_1', STATES))
+
+    expect(result).toEqual({ status: 'absent', reason: 'legacy' })
   })
 
   it('returns rejected when the load effect fails', async () => {
     const storage = fakeStorage()
     storage.failReads = true
-    const result = await Effect.runPromise(storeOver(storage).read('ses_1'))
+    const result = await Effect.runPromise(storeOver(storage).read('ses_1', STATES))
 
     expect(result.status).toBe('rejected')
   })
@@ -105,7 +131,7 @@ describe('SnapshotStore.read', () => {
       'goal/ses_1': { text: 'old goal', nudges: 0 },
       'goal-gate/ses_1': { blocked: false },
     })
-    const result = await Effect.runPromise(storeOver(storage).read('ses_1'))
+    const result = await Effect.runPromise(storeOver(storage).read('ses_1', STATES))
 
     expect(result.status).toBe('absent')
     expect(storage.reads).toEqual(['state-machine/ses_1'])
@@ -115,19 +141,19 @@ describe('SnapshotStore.read', () => {
 describe('SnapshotStore.write', () => {
   it('writes one bounded record under the session key', async () => {
     const storage = fakeStorage()
-    const ok = await Effect.runPromise(storeOver(storage).write(snapshotFixture({ state: 'work' })))
+    const ok = await Effect.runPromise(storeOver(storage).write(snapshotFixture({}, 'towards_goal.work')))
 
     expect(ok).toBe(true)
     expect(storage.writes).toHaveLength(1)
     expect(storage.writes[0]?.key).toBe('state-machine/ses_1')
-    expect((storage.writes[0]?.value as { payload: SessionSnapshot }).payload.state).toBe('work')
+    expect(statePathOf((storage.writes[0]?.value as SnapshotRecord).snapshot.value)).toBe('towards_goal.work')
   })
 
   it('reports a rejected write and keeps the previous value', async () => {
-    const existing = createSnapshotRecord(snapshotFixture({ state: 'define_goal' }), NOW)
+    const existing = createSnapshotRecord(snapshotFixture(), NOW)
     const storage = fakeStorage({ [snapshotKey('ses_1')]: existing })
     storage.failWrites = true
-    const ok = await Effect.runPromise(storeOver(storage).write(snapshotFixture({ state: 'work' })))
+    const ok = await Effect.runPromise(storeOver(storage).write(snapshotFixture({}, 'towards_goal.work')))
 
     expect(ok).toBe(false)
     expect(storage.values.get(snapshotKey('ses_1'))).toBe(existing)

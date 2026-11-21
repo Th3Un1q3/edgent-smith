@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createStateMachine, loadStateMachineLibrary, SESSION_LOOP } from '@plugins/state-machine/core/machine'
 
-import type { LoopContext, LoopEvent, LoopStateId, StateMachineLibrary } from '@plugins/state-machine/core/machine'
+import type { LoopContext, LoopDefinition, LoopEvent, LoopStateId, StateMachineLibrary } from '@plugins/state-machine/core/machine'
 
 const fakeLibrary = (startState: LoopStateId): {
   readonly sent: LoopEvent[]
@@ -16,8 +16,9 @@ const fakeLibrary = (startState: LoopStateId): {
       createActor: (_loop, starting, context) => ({
         send: (event) => { sent.push(event) },
         state: () => startState,
-        context: () => context,
+        context: () => ({ ...context, signalsPolicy: { names: ['SET_GOAL'] } }),
         takeEmits: () => [],
+        persistedSnapshot: () => ({}),
       }),
     },
   }
@@ -31,7 +32,6 @@ const context = (overrides: Partial<LoopContext> = {}): LoopContext => ({
   goal: '',
   intent: 'none',
   attempts: 0,
-  idleCount: 0,
   memories: [],
   improvements: [],
   injectedSkills: [],
@@ -40,25 +40,30 @@ const context = (overrides: Partial<LoopContext> = {}): LoopContext => ({
   ...overrides,
 })
 
+const loopAt = (leaf: string): LoopDefinition => ({
+  ...SESSION_LOOP,
+  states: { ...SESSION_LOOP.states, towards_goal: { ...SESSION_LOOP.states.towards_goal, initial: leaf } },
+})
+
 describe('signal payloads', () => {
   it('sends SET_GOAL with the payload nested', () => {
     const fake = fakeLibrary('define_goal')
     const machine = createStateMachine({
       library: fake.library,
-      startStateFor: () => 'define_goal',
     })
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: '  ship  ' } }, 'ses_1')
 
     expect(fake.sent).toEqual([
+      { type: 'admit', agent: 'rug', parentID: undefined },
       { type: 'agent_sent_signal.SET_GOAL', payload: { goal: 'ship' } },
     ])
   })
 
   it('records SET_GOAL from the nested payload', async () => {
     const library = await loadStateMachineLibrary()
-    const actor = library.createActor(SESSION_LOOP, 'define_goal', context())
+    const actor = library.createActor(loopAt('define_goal'), 'towards_goal', context())
 
     actor.send({ type: 'agent_sent_signal.SET_GOAL', payload: { goal: 'ship' } })
 
@@ -68,7 +73,7 @@ describe('signal payloads', () => {
 
   it('pushes a lesson from the nested payload', async () => {
     const library = await loadStateMachineLibrary()
-    const actor = library.createActor(SESSION_LOOP, 'memorize', context({ intent: 'lesson' }))
+    const actor = library.createActor(loopAt('memorize'), 'towards_goal', context({ intent: 'lesson' }))
 
     actor.send({ type: 'agent_sent_signal.LESSON', payload: { text: 'lesson' } })
 
@@ -87,7 +92,7 @@ describe('signal payloads', () => {
 
   it('keeps callback payloads working', async () => {
     const library = await loadStateMachineLibrary()
-    const actor = library.createActor(SESSION_LOOP, 'check', context())
+    const actor = library.createActor(loopAt('check'), 'towards_goal', context())
 
     actor.send({ type: 'callback.quality_check_ready', payload: { ok: true } })
 

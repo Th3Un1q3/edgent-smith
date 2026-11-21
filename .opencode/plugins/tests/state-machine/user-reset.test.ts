@@ -2,42 +2,54 @@ import { Exit, Option } from 'effect'
 
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
-import { createStateMachine, LOOP_STATE_IDS, loadStateMachineLibrary, SESSION_LOOP } from '@plugins/state-machine/core/machine'
+import { createStateMachine, loadStateMachineLibrary, SESSION_LOOP } from '@plugins/state-machine/core/machine'
 import { createSnapshotRecord, snapshotKey } from '@plugins/state-machine/core/snapshot'
 
-import type { Actor, InterruptReason, LoopContext, LoopStateId, StateMachine } from '@plugins/state-machine/core/machine'
-import type { SessionSnapshot } from '@plugins/state-machine/core/snapshot'
+import type { Actor, InterruptReason, LoopContext, LoopDefinition, LoopState, LoopStateId, StateMachine } from '@plugins/state-machine/core/machine'
+import type { PersistedSnapshot, SnapshotRecord } from '@plugins/state-machine/core/snapshot'
+import type { StoredSession } from '@plugins/state-machine/machines/session/context'
 
 const NOW = Date.parse('2026-11-16T12:00:00.000Z')
 
-const seeded = (overrides: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
+const contextFixture = (overrides: Partial<StoredSession> = {}): StoredSession => ({
   sessionId: 'ses_1',
-  state: 'work',
   goal: 'old goal',
   intent: 'lesson',
   attempts: 2,
-  idleCount: 1,
   memories: ['keep this lesson'],
   improvements: ['keep this improvement'],
   injectedSkills: ['task-delegation'],
   injected: { 'preferences/user': { full: ['be brief'], index: ['tone'] } },
   results: {},
-  updatedAt: '2026-11-16T12:00:00.000Z',
   ...overrides,
+})
+
+const seeded = (context: Partial<StoredSession> = {}, value = 'towards_goal.work'): PersistedSnapshot => ({
+  status: 'active',
+  value,
+  context: contextFixture(context),
+  children: {},
 })
 
 import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine-harness'
 
 import type { Harness } from '@tests/helpers/state-machine-harness'
 
+const statePathOf = (value: unknown): string =>
+  typeof value === 'string' ? value : Object.entries(value as Record<string, unknown>).map(([id, child]) => id + '.' + statePathOf(child)).join('.')
+
 const goalRequests = (harness: Harness): number =>
   harness.synthetics.filter(message => message.text.includes('What goal')).length
 
 const lastState = (harness: Harness): string | undefined => {
   const writes = harness.storageWrites.filter(write => write.key === 'state-machine/ses_1')
-  const last = writes.at(-1)?.value as { payload?: SessionSnapshot } | undefined
-  return last?.payload?.state
+  const last = writes.at(-1)?.value as SnapshotRecord | undefined
+
+  return last === undefined ? undefined : statePathOf(last.snapshot.value)
 }
+
+const goalState = (id: string): LoopState =>
+  (SESSION_LOOP.states.towards_goal.states as unknown as Record<string, LoopState>)[id]
 
 const startInWork = async (): Promise<Harness> => {
   const harness = makeHarness()
@@ -52,13 +64,13 @@ describe('the loop matrix', () => {
     const target = (state: 'parked' | 'panic'): unknown =>
       (SESSION_LOOP.states[state].on as Record<string, { target?: string }>).system_user_input?.target
 
-    expect(target('parked')).toBe('define_goal')
-    expect(target('panic')).toBe('define_goal')
+    expect(target('parked')).toBe('#session.towards_goal.define_goal')
+    expect(target('panic')).toBe('#session.towards_goal.define_goal')
   })
 
   it('never resets from work, define_goal, check, validate or memorize', () => {
     const isHandled = (state: 'work' | 'define_goal' | 'check' | 'validate' | 'memorize'): boolean =>
-      (SESSION_LOOP.states[state].on as Record<string, unknown>).system_user_input !== undefined
+      (goalState(state).on as Record<string, unknown>).system_user_input !== undefined
 
     expect(isHandled('work')).toBe(false)
     expect(isHandled('define_goal')).toBe(false)
@@ -76,12 +88,12 @@ describe('a real user message', () => {
     await harness.emitUserMessage('ses_1', 'user', 'new direction')
 
     expect(goalRequests(harness)).toBe(before)
-    expect(lastState(harness)).toBe('work')
+    expect(lastState(harness)).toBe('towards_goal.work')
   })
 
   it('leaves parked on a follow-up message', async () => {
     const harness = makeHarness()
-    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({ state: 'parked' }), NOW) })
+    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, 'parked'), NOW) })
     await register(harness)
     await harness.emit(sessionCreated('ses_1', 'rug'))
 
@@ -95,7 +107,7 @@ describe('a real user message', () => {
 
   it('leaves parked when the first message after a reload arrives', async () => {
     const harness = makeHarness()
-    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({ state: 'parked' }), NOW) })
+    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, 'parked'), NOW) })
     await register(harness)
 
     // A reloaded plugin has no machine in memory and receives only the message.
@@ -121,34 +133,34 @@ describe('a real user message', () => {
 
   it('clears the round and keeps what was learned', async () => {
     const harness = makeHarness()
-    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({ state: 'parked' }), NOW) })
+    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, 'parked'), NOW) })
     await register(harness)
     await harness.emit(sessionCreated('ses_1', 'rug'))
 
     await harness.emitUserMessage('ses_1', 'user', 'new direction')
 
     const writes = harness.storageWrites.filter(write => write.key === snapshotKey('ses_1'))
-    const payload = (writes.at(-1)?.value as { payload: SessionSnapshot }).payload
+    const record = writes.at(-1)?.value as SnapshotRecord
+    const context = record.snapshot.context as StoredSession
 
-    expect(payload.state).toBe('define_goal')
-    expect(payload.goal).toBe('')
-    expect(payload.intent).toBe('none')
-    expect(payload.attempts).toBe(0)
-    expect(payload.idleCount).toBe(0)
-    expect(payload.memories).toEqual(['keep this lesson'])
-    expect(payload.improvements).toEqual(['keep this improvement'])
-    expect(payload.injectedSkills).toEqual(['task-delegation'])
+    expect(statePathOf(record.snapshot.value)).toBe('towards_goal.define_goal')
+    expect(context.goal).toBe('')
+    expect(context.intent).toBe('none')
+    expect(context.attempts).toBe(0)
+    expect(context.memories).toEqual(['keep this lesson'])
+    expect(context.improvements).toEqual(['keep this improvement'])
+    expect(context.injectedSkills).toEqual(['task-delegation'])
   })
 
   it('persists the reset before the next call', async () => {
     const harness = makeHarness()
-    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({ state: 'parked' }), NOW) })
+    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, 'parked'), NOW) })
     await register(harness)
     await harness.emit(sessionCreated('ses_1', 'rug'))
 
     await harness.emitUserMessage('ses_1', 'user', 'new direction')
 
-    expect(lastState(harness)).toBe('define_goal')
+    expect(lastState(harness)).toBe('towards_goal.define_goal')
     const result = await harness.runTool({ type: 'CLAIM_WORK' })
 
     if (Exit.isSuccess(result)) throw new Error('expected a refusal')
@@ -168,7 +180,7 @@ describe('a real user message', () => {
     await harness.emitUserMessage('ses_1', 'synthetic', 'plugin prompt')
 
     expect(goalRequests(harness)).toBe(before)
-    expect(lastState(harness)).toBe('work')
+    expect(lastState(harness)).toBe('towards_goal.work')
   })
 
   it('ignores a compaction and a move item', async () => {
@@ -177,23 +189,27 @@ describe('a real user message', () => {
     await harness.emitUserMessage('ses_1', 'compaction', '')
     await harness.emitUserMessage('ses_1', 'move', '')
 
-    expect(lastState(harness)).toBe('work')
+    expect(lastState(harness)).toBe('towards_goal.work')
   })
 
-  it('is a no-op for a session whose agent is unmapped', async () => {
+  it('admits an unmapped agent to free_work and leaves it there', async () => {
     const harness = makeHarness()
     harness.sessionAgents.set('ses_missing', 'unmapped-agent')
     await register(harness)
 
     await harness.emitUserMessage('ses_missing', 'user', 'hello')
 
-    expect(harness.storageWrites).toHaveLength(0)
     expect(harness.synthetics).toHaveLength(0)
+    const result = await harness.runTool({ type: 'CLAIM_WORK' }, 'ses_missing', 'unmapped-agent')
+    const error = Exit.isSuccess(result) ? Option.none() : Exit.findErrorOption(result)
+
+    expect(Option.isSome(error) && (error.value as { message: string }).message)
+      .toContain('CLAIM_WORK is not available in free_work')
   })
 
   it('keeps the reset in memory when the snapshot write fails', async () => {
     const harness = makeHarness()
-    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({ state: 'parked' }), NOW) })
+    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, 'parked'), NOW) })
     await register(harness)
     await harness.emit(sessionCreated('ses_1', 'rug'))
     harness.failStorageWrites = true
@@ -212,7 +228,6 @@ const loopContext = (): LoopContext => ({
   goal: 'ship it',
   intent: 'none',
   attempts: 0,
-  idleCount: 0,
   memories: [],
   improvements: [],
   injectedSkills: [],
@@ -222,7 +237,16 @@ const loopContext = (): LoopContext => ({
 
 const actorAt = async (state: LoopStateId): Promise<Actor> => {
   const library = await loadStateMachineLibrary()
-  return library.createActor(SESSION_LOOP, state, loopContext())
+  const [, leaf] = state.split('.') as [LoopStateId, string | undefined]
+
+  if (leaf === undefined) return library.createActor(SESSION_LOOP, state, loopContext())
+
+  const loop: LoopDefinition = {
+    ...SESSION_LOOP,
+    states: { ...SESSION_LOOP.states, towards_goal: { ...SESSION_LOOP.states.towards_goal, initial: leaf } },
+  }
+
+  return library.createActor(loop, 'towards_goal', loopContext())
 }
 
 const interrupt = (actor: Actor, reason: InterruptReason = 'user'): void => {
@@ -235,7 +259,7 @@ describe('an interruption', () => {
   })
 
   it('parks work', async () => {
-    const actor = await actorAt('work')
+    const actor = await actorAt('towards_goal.work')
     actor.takeEmits()
 
     interrupt(actor)
@@ -244,7 +268,7 @@ describe('an interruption', () => {
   })
 
   it('parks validate', async () => {
-    const actor = await actorAt('validate')
+    const actor = await actorAt('towards_goal.validate')
     actor.takeEmits()
 
     interrupt(actor, 'superseded')
@@ -270,14 +294,18 @@ describe('an interruption', () => {
     expect(actor.takeEmits()).toEqual([])
   })
 
-  it('is declared at the top level, not in any state', () => {
-    const declared = LOOP_STATE_IDS.filter(state => 'system_interrupted' in SESSION_LOOP.states[state].on)
+  it('is declared on the machine root, not in any leaf', () => {
+    expect(SESSION_LOOP.on?.system_interrupted)
+      .toMatchObject({ target: '#session.parked', guard: { type: 'not_parked' } })
+    expect(Object.keys(SESSION_LOOP.states.towards_goal.on)).toEqual(['system_idle'])
 
-    expect(declared).toEqual([])
+    for (const id of ['define_goal', 'work', 'check', 'validate', 'memorize']) {
+      expect('system_interrupted' in goalState(id).on).toBe(false)
+    }
   })
 
   it('parks every state but parked through the one top-level arm', async () => {
-    for (const state of LOOP_STATE_IDS) {
+    for (const state of ['towards_goal.define_goal', 'towards_goal.work', 'towards_goal.check', 'towards_goal.validate', 'towards_goal.memorize', 'panic']) {
       const actor = await actorAt(state)
       actor.takeEmits()
 
@@ -288,7 +316,7 @@ describe('an interruption', () => {
   })
 
   it('parks a work session through the public entry point', async () => {
-    const machine = await machineAt('work')
+    const machine = await machineAt('towards_goal.work')
 
     const emits = machine.interrupted('ses_api', 'user')
 
@@ -309,7 +337,11 @@ describe('an interruption', () => {
 })
 
 const machineAt = async (state: LoopStateId): Promise<StateMachine> => {
-  const machine = createStateMachine({ library: await loadStateMachineLibrary(), startStateFor: () => state })
+  const machine = createStateMachine({ library: await loadStateMachineLibrary() })
   machine.start('ses_api', 'rug')
+
+  if (state === 'towards_goal.work') machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_api')
+  else machine.interrupted('ses_api', 'user')
+
   return machine
 }

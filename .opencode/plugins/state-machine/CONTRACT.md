@@ -1,8 +1,19 @@
 # Contract: self-improving loop machine
 
-The binding shape of the machine in `.opencode/plugins/state-machine/core/machine.ts` and the plugin that
-drives it in `.opencode/plugins/state-machine.ts`. Tests in `.opencode/plugins/tests/state-machine.test.ts`
-hold the same claims.
+The binding shape of the session machine lives with the machine, in `machines/session/`: `machine.json` carries
+the definition, `signals.manifest.json` the signal declarations, `definitions.ts` the action and guard bodies,
+the template texts, the signal codecs and the machine's own helpers, and `context.ts` the context shape, its
+defaults, the snapshot field allowlist and its limits. `machines/index.ts` is the registry (`MachineModule`,
+`MACHINES`, `DEFAULT_MACHINE`), where each entry carries `{ id, definition, manifest, transientStates,
+definitions, contexts }`, and the module also exports the default snapshot codec, the default state ids and the
+callback names. `core/` holds the assembler `core/machine.ts` and the generic signal engine `core/signals.ts`,
+plus generic infrastructure shared across machines; it defines no session field, state, signal, template,
+callback or machine id. The plugin that drives the loop is `.opencode/plugins/state-machine.ts`.
+
+The structure is extensible by addition: a new machine is a directory under `machines/` holding `machine.json`,
+`signals.manifest.json`, `definitions.ts` and `context.ts`, plus one registry entry in `machines/index.ts` that
+wires all four. `core/` is not edited to add a machine.
+Tests in `.opencode/plugins/tests/state-machine.test.ts` hold the same claims.
 
 ## 1. Effects have three dispositions
 
@@ -28,7 +39,7 @@ later arms and for diagnostics.
 - `emit.*` — raised by actions, never by the model: `prompt{text}`, `dispatch{agent, text}`, `shell{cmd,
   reportTo}`, `skill{name, reportTo}`, `memories{namespace, reportTo}`, `signals{signal_keys?}`.
 - `callback.*` — sent by the plugin after its async work: `callback.quality_check_ready`, `callback.skill_ready`,
-  `callback.memories_ready`, each with `{ok, exitCode?, output?, value?}`.
+  `callback.memories_ready`, the machine's `CALLBACK_NAMES` from `context.ts`, each with `{ok, exitCode?, output?, value?}`.
 - Host events: `system_idle`, `system_user_input`, `system_interrupted{reason}` where `reason` is one of `user`,
   `shutdown`, `superseded` or `inactivity`.
 
@@ -37,12 +48,14 @@ signal in the current state. `emit.*`, `callback.*` and `system_*` are not reach
 
 ## 3. Context
 
+`context.ts` declares `LoopContext`, the fresh and restored defaults and the snapshot field list; core treats the
+context as an opaque record and reads no field by name.
+
 | key | written by | read by |
 |---|---|---|
 | `goal` | `SET_GOAL` record | work, park and panic prompts |
 | `intent` | validate, memorize, panic arms | memorize prompt, improvement guard |
 | `attempts` | `GOAL_INCOMPLETE` under the limit | `counter_below` in validate |
-| `idleCount` | idle arms | idle guard and park text |
 | `memories` | lessons from work, memorize and panic | work prompt |
 | `improvements` | the improvement lesson | park summary |
 | `injectedSkills` | `mark_skill` after `callback.skill_ready` | `request_skill` |
@@ -58,16 +71,17 @@ There is no final state. Every transition is evented; there is no `always` and n
 
 | state | entry | transitions |
 |---|---|---|
-| `define_goal` | prompt `goal_request`; `display_signals`; request `preferences/user` memories; install the tool policy | `SET_GOAL` → `work` (records `payload.goal`); `callback.memories_ready` → self (records value) |
-| `work` | prompt `work_towards_goal`; `display_signals`; request `task-delegation` when absent | `CLAIM_WORK` → `check`; `callback.skill_ready` → self (records, marks skill); `callback.memories_ready` → self; `system_idle` → self (counts, nudges, displays signals) |
+| `define_goal` | prompt `goal_request`; `update_signals_policy`; request `preferences/user` memories; install the tool policy | `SET_GOAL` → `work` (records `payload.goal`); `callback.memories_ready` → self (records value) |
+| `work` | prompt `work_towards_goal`; `update_signals_policy`; request `task-delegation` when absent | `CLAIM_WORK` → `check`; `callback.skill_ready` → self (records, marks skill); `callback.memories_ready` → self |
 | `check` | run `just opencode::typecheck` | `callback.quality_check_ready` [`callback_ok`] → `validate`; otherwise → `panic` with the failure |
 | `validate` | prompt `validation_self_report`; the loop agent answers with one of the signals | `GOAL_ACHIEVED` → `memorize` (intent improvement); `GOAL_INCOMPLETE` [`counter_below`] → `memorize` (attempt + 1, intent lesson); otherwise → `panic` (attempts exhausted) |
-| `memorize` | prompt by intent; `display_signals` | `LESSON` [improvement] → `parked` (push improvement); `LESSON` [text present] → `work` (push lesson); `system_idle` → self (counts, nudges, displays signals) |
+| `memorize` | prompt by intent; `update_signals_policy` | `LESSON` [improvement] → `parked` (push improvement); `LESSON` [text present] → `work` (push lesson) |
 | `parked` | prompt `park_summary` | `system_user_input` → `define_goal` (reset goal, intent, attempts, idle count) |
-| `panic` | entering arm prompts with the failure; entry `display_signals` | `LESSON` [text present] → `work` (push lesson, reset attempts); `system_user_input` → `define_goal` (reset) |
+| `panic` | entering arm prompts with the failure; entry `update_signals_policy` | `LESSON` [text present] → `work` (push lesson, reset attempts); `system_user_input` → `define_goal` (reset) |
 
-`check` is transient: it exists only between `CLAIM_WORK` and the shell callback. `parked` waits silently — it has no
-idle arm, because there is nothing to nudge.
+`check` is transient: it exists only between `CLAIM_WORK` and the shell callback. `system_idle` is one arm on the machine root, not a per-state
+arm: it targets `validate` under `not_parked`, so an idle in any working state reaches goal evaluation, `check` included, while an idle in
+`parked` neither changes state nor emits.
 
 `system_interrupted` → `parked` is a single arm on the machine root, guarded by "not already in `parked`", so
 `define_goal`, `work`, `check`, `validate`, `memorize` and `panic` all park on it, `panic` included, because taking
@@ -79,7 +93,7 @@ control is not a failure. In `parked` the guard fails, so the event there neithe
 | action | disposition | params |
 |---|---|---|
 | `prompt` | emits `emit.prompt` with its description | `{ template, description }` |
-| `display_signals` | emits `emit.signals` with the selected keys | `{ signal_keys? }` |
+| `update_signals_policy` | sets the enabled signal set for `stateId`; emits `emit.signals` with those keys only when `notify_agent` is true | `{ stateId, set_enabled_signals, notify_agent }` |
 | `request_dispatch` | emits `emit.dispatch` | `{ agent }` |
 | `record` | assigns `set`, `increment` or capped `push` from a payload field or a literal | `{ op, key, source }` |
 | `request_shell` | emits `emit.shell` | `{ cmd, reportTo }` |
@@ -91,6 +105,12 @@ control is not a failure. In `parked` the guard fails, so the event there neithe
 | `clear_tools_policy` | clears `policy` | none |
 | `fail` | records a `failure` | `{ reason, detail? }` |
 
+`update_signals_policy` enables each manifest signal named in `set_enabled_signals`, or maps a new name to
+`{ description, schema }`, where `schema` names the manifest signal whose codec validates it. `stateId` is supplied
+by the workflow definition because XState forbids reading the actor snapshot while it initialises. An explicit empty
+`set_enabled_signals` enables no signal for that state, while a state that sets no policy at all falls back to the
+signals its `on` arms declare.
+
 `request_skill` carries its own absence check because `entry` actions cannot be guarded. The guard rule still holds
 everywhere a transition can express the condition.
 
@@ -99,7 +119,7 @@ everywhere a transition can express the condition.
 | guard | tests | params |
 |---|---|---|
 | `field_present` | the named payload field is a nonblank string | `{ field: 'goal' \| 'text' }` |
-| `counter_below` | a context counter is under a limit, which may be another context field | `{ key: 'attempts' \| 'idleCount', limit }` |
+| `counter_below` | a context counter is under a limit, which may be another context field | `{ key: 'attempts', limit }` |
 | `improvement_lesson` | the intent is `improvement`; the `LESSON` schema has already refused blank text | none |
 | `callback_ok` | the callback event reports success | none |
 | `not_parked` | the machine is not in `parked` | none |
@@ -142,7 +162,9 @@ the emits. An interruption for a session the loop never opened is dropped rather
 
 ## 8. Snapshot persistence
 
-`core/snapshot.ts` owns one JSON value per session under `state-machine/<sessionId>`:
+`core/snapshot.ts` persists one JSON value per session under `state-machine/<sessionId>`; the session's
+`context.ts` owns what that value may contain. `snapshotCodec` (exported as `DEFAULT_SNAPSHOT`) supplies the
+allowlisted field set and the text limit, and the store binds and reads through it without naming a field.
 
 - `createSnapshotRecord` writes the allowlisted field set plus `storedAt` and `expiresAt` (30 days). Memories are
   idempotency keys (`mem:<path>:complete`, `mem:<path>:ref`, `skill:<name>:complete`), results are stored whole so a
@@ -211,10 +233,10 @@ the index, list bullets the full entries.
 
 ## 12. Decisions
 
-- **An attempt is a `GOAL_INCOMPLETE` reaching `validate`.** Idle nudges never touch `attempts`. The fourth failure
-  enters `panic` with `failure.reason = 'attempts exhausted'`.
-- **Panic is diagnostic.** It is entered by attempts exhausted, a failed quality check, and idle exhaustion. Each arm
-  records the reason before prompting. `panic` is not a dead end: a lesson retries, user input starts over.
+- **An attempt is a `GOAL_INCOMPLETE` reaching `validate`.** Only that signal, under the limit, increments `attempts`; an idle routes to
+  `validate` with no action, so it adds no attempt. The fourth failure enters `panic` with `failure.reason = 'attempts exhausted'`.
+- **Panic is diagnostic.** It is entered by attempts exhausted and a failed quality check; an idle cannot enter it, because idle routes to
+  `validate`. Each arm records the reason before prompting. `panic` is not a dead end: a lesson retries, user input starts over.
 - **Parking replaces ending.** An improvement lesson parks the loop; the summary is sent once; the next user input
   resets the round and returns to `define_goal`.
 - **Skills and memories are events, not local state.** The context keeps only what came back: `injectedSkills` and
@@ -225,14 +247,18 @@ the index, list bullets the full entries.
   module receives the library.
 - **The state surface is the library's own.** States and transitions use the library's `MachineConfig` and
   `TransitionConfig`, so a state naming an unknown event or an arm carrying a rejected key fails the typecheck. Action
-  and guard payloads stay local unions (`ActionSpec`, `GuardSpec`), because the actions are registered inline in the
-  loader and their parameterised types would need `setup` at module scope.
-- **Signals are declared per state.** `signals` carries `describe`, an optional service-free `Schema`, and examples.
+  and guard payloads stay local unions (`ActionSpec`, `GuardSpec`), because their bodies live in `machines/session/definitions.ts`
+  and are registered through `createActions` and `createGuards`; naming the setup maps' parameterised types here
+  would need `setup` at module scope.
+- **Signals are derived per state.** No state config carries a `signals` block: the table comes from the signals the
+  state's `on` arms carry, described by that machine's own `signals.manifest.json` beside its `machine.json`, plus any
+  set `update_signals_policy` enables.
   `validateSignal` enforces shape, vocabulary, declaration and payload; `assertSignalDeclarations` fails
   `createStateMachine` when a declaration and its transition arms disagree.
 - **Refusals are errors; acceptance is neutral.** A refusal is `Tool.Error` with `message` and `metadata`. An
   accepted signal returns `Signal accepted.`; the next prompt carries the guidance.
-- **Advertising is explicit.** `display_signals` emits `emit.signals`; the plugin sends a separate synthetic.
+- **Advertising is explicit.** `update_signals_policy` emits `emit.signals` only when `notify_agent` is true; the
+  plugin sends a separate synthetic.
   Undeclared `signal_keys` are omitted at render time. `TOOL_SIGNALS` lives in `core/signals.ts` and is re-exported
   by `core/machine.ts`.
 - **The verdict is self-reported.** `validate` prompts the loop agent for `GOAL_ACHIEVED` or `GOAL_INCOMPLETE`; it

@@ -2,12 +2,14 @@ import { Effect, Exit, Logger, Option } from 'effect'
 
 import { describe, expect, it } from 'vitest'
 
-import { createStateMachine, loadStateMachineLibrary, LOOP_STATE_IDS, SESSION_LOOP } from '@plugins/state-machine/core/machine'
+import { createStateMachine, loadStateMachineLibrary, SESSION_LOOP } from '@plugins/state-machine/core/machine'
 import { decide, GATE_AGENT, renderPolicyMessage } from '@plugins/state-machine/core/policy'
 import { createSnapshotRecord, snapshotKey } from '@plugins/state-machine/core/snapshot'
 
-import type { ActionSpec, LoopStateId } from '@plugins/state-machine/core/machine'
-import type { SessionSnapshot, ToolPolicyRule } from '@plugins/state-machine/core/snapshot'
+import type { ActionSpec as MachineActionSpec, LoopState, LoopStateId } from '@plugins/state-machine/core/machine'
+import type { PersistedSnapshot, ToolPolicyRule } from '@plugins/state-machine/core/snapshot'
+import type { StoredSession } from '@plugins/state-machine/machines/session/context'
+import type { ActionSpec } from '@plugins/state-machine/machines/session/definitions'
 
 import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine-harness'
 
@@ -15,15 +17,28 @@ import type { Harness } from '@tests/helpers/state-machine-harness'
 
 const NOW = Date.parse('2026-11-16T12:00:00.000Z')
 
-const actionsOf = (state: LoopStateId): readonly ActionSpec[] => [
-  ...(SESSION_LOOP.states[state].entry ?? []),
-  ...(SESSION_LOOP.states[state].exit ?? []),
+const stateAt = (path: LoopStateId): LoopState => {
+  const [root, child] = path.split('.') as [LoopStateId, string | undefined]
+  const node = SESSION_LOOP.states[root]
+  return child === undefined ? node : (node.states as Readonly<Record<string, LoopState>> | undefined)?.[child] as LoopState
+}
+
+const statePaths = (states: Readonly<Record<string, LoopState>>, prefix = ''): LoopStateId[] =>
+  Object.entries(states).flatMap(([id, config]) => {
+    const path = prefix === '' ? id : prefix + '.' + id
+    const children = config.states as Readonly<Record<string, LoopState>> | undefined
+    return children === undefined ? [path] : [path, ...statePaths(children, path)]
+  })
+
+const actionsOf = (state: LoopStateId): readonly MachineActionSpec[] => [
+  ...(stateAt(state).entry ?? []),
+  ...(stateAt(state).exit ?? []),
 ]
 
 const setPolicyAction = (): Extract<ActionSpec, { type: 'set_tools_policy' }> => {
-  const action = SESSION_LOOP.states.define_goal.entry?.find(candidate => candidate.type === 'set_tools_policy')
+  const action = stateAt('towards_goal.define_goal').entry?.find(candidate => candidate.type === 'set_tools_policy')
   if (action?.type !== 'set_tools_policy') throw new Error('define_goal declares no set_tools_policy action')
-  return action
+  return action as Extract<ActionSpec, { type: 'set_tools_policy' }>
 }
 
 const defineGoalRule = (): ToolPolicyRule => {
@@ -31,20 +46,24 @@ const defineGoalRule = (): ToolPolicyRule => {
   return { stateId: params.stateId, errorMessage: params.errorMessage, allowedTools: params.allowedTools }
 }
 
-const snapshotFixture = (overrides: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
+const contextFixture = (overrides: Partial<StoredSession> = {}): StoredSession => ({
   sessionId: 'ses_1',
-  state: 'define_goal',
   goal: '',
   intent: 'none',
   attempts: 0,
-  idleCount: 0,
   memories: [],
   improvements: [],
   injectedSkills: [],
   injected: {},
   results: {},
-  updatedAt: '2026-11-16T12:00:00.000Z',
   ...overrides,
+})
+
+const snapshotFixture = (context: Partial<StoredSession> = {}): PersistedSnapshot => ({
+  status: 'active',
+  value: { towards_goal: 'define_goal' },
+  context: contextFixture(context),
+  children: {},
 })
 
 const hookOf = (harness: Harness): ((payload: unknown) => Effect.Effect<void, unknown>) => {
@@ -79,14 +98,14 @@ const toolErrorOf = (exit: Exit.Exit<void, unknown>): {
 
 describe('the declared policy', () => {
   it('sets it on define_goal entry and clears it on exit', () => {
-    const types = actionsOf('define_goal').map(action => action.type)
+    const types = actionsOf('towards_goal.define_goal').map(action => action.type)
 
     expect(types).toContain('set_tools_policy')
     expect(types).toContain('clear_tools_policy')
   })
 
   it('declares it in no other state', () => {
-    const others = LOOP_STATE_IDS.filter(state => state !== 'define_goal')
+    const others = statePaths(SESSION_LOOP.states).filter(state => state !== 'towards_goal.define_goal')
     const declared = others.flatMap(state => actionsOf(state).filter(action =>
       action.type === 'set_tools_policy' || action.type === 'clear_tools_policy'))
 
@@ -135,8 +154,9 @@ describe('decide', () => {
 
 describe('the loop', () => {
   it('carries no policy in work and re-reads it when a user message re-enters define_goal', async () => {
-    const machine = createStateMachine({ library: await loadStateMachineLibrary(), startStateFor: () => 'work' })
+    const machine = createStateMachine({ library: await loadStateMachineLibrary() })
     machine.start('ses_policy', 'rug')
+    machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_policy')
 
     expect(machine.policy('ses_policy')).toBeUndefined()
 
@@ -217,6 +237,7 @@ describe('the hook', () => {
       key: snapshotKey('ses_1'),
       value: createSnapshotRecord(snapshotFixture({
         policy: { stateId: 'define_goal', errorMessage: 'Tool <name> is blocked in <state>.', allowedTools: ['signal_send'] },
+        signalsPolicy: { names: ['SET_GOAL'] },
       }), NOW),
     })
     await register(harness)
@@ -233,7 +254,7 @@ describe('the hook', () => {
     harness.storageWrites.push({
       key: snapshotKey('ses_1'),
       value: createSnapshotRecord(snapshotFixture({
-        policy: { stateId: 'define_goal', errorMessage: 'Snapshot blocks <name> in <state>.', allowedTools: ['signal_send'] },
+        policy: { stateId: 'towards_goal.define_goal', errorMessage: 'Snapshot blocks <name> in <state>.', allowedTools: ['signal_send'] },
       }), NOW),
     })
     await register(harness)
@@ -242,10 +263,10 @@ describe('the hook', () => {
     const exit = await runHook(harness, { tool: 'edit', agent: 'rug', sessionID: 'ses_1' })
 
     expect(Exit.isFailure(exit)).toBe(true)
-    expect(messageOf(exit)).toContain('Snapshot blocks edit in define_goal')
+    expect(messageOf(exit)).toContain('Snapshot blocks edit in towards_goal.define_goal')
   })
 
-  it('gates a restored define_goal that carries no stored policy', async () => {
+  it('allows a restored define_goal whose record predates the stored policy', async () => {
     const harness = makeHarness()
     harness.storageWrites.push({
       key: snapshotKey('ses_1'),
@@ -256,7 +277,7 @@ describe('the hook', () => {
 
     const exit = await runHook(harness, { tool: 'edit', agent: 'rug', sessionID: 'ses_1' })
 
-    expect(Exit.isFailure(exit)).toBe(true)
+    expect(Exit.isSuccess(exit)).toBe(true)
   })
 
   it('blocks edit in define_goal when no event has opened the session yet', async () => {

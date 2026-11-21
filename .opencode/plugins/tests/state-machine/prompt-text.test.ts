@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { createStateMachine, loadStateMachineLibrary, readStartConfig } from '@plugins/state-machine/core/machine'
+import { createStateMachine, loadStateMachineLibrary } from '@plugins/state-machine/core/machine'
 
 import type { EmitRequest } from '@plugins/state-machine/core/machine'
 
 import { makeHarness, register, sessionCreated, sessionIdle } from '@tests/helpers/state-machine-harness'
 
 const GOAL_REQUEST = 'Ask the agent what goal this session should accomplish.'
-const NUDGE_PROMPT = 'Remind the agent that the loop is still waiting to move on.'
+const VALIDATOR_PROMPT = 'Ask the agent to judge whether the goal is met.'
 
 const boot = async () => {
   const harness = makeHarness()
@@ -18,9 +18,7 @@ const boot = async () => {
 
 const withMachine = async () => {
   const library = await loadStateMachineLibrary()
-  const config = readStartConfig({ rug: 'define_goal' })
-
-  return createStateMachine({ library, startStateFor: config.startStateFor })
+  return createStateMachine({ library })
 }
 
 const emittedText = (emits: readonly EmitRequest[]): string => {
@@ -42,17 +40,17 @@ describe('synthetic prompt descriptions', () => {
     expect(harness.synthetics[0]?.description).toBe(GOAL_REQUEST)
   })
 
-  it('describes the idle nudge differently from the goal request', async () => {
+  it('describes the validation prompt it sends on idle', async () => {
     const harness = await boot()
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
     await harness.emit(sessionIdle('ses_1'))
 
-    const nudge = harness.synthetics.find(message => message.text.includes('still in work'))
+    const verdict = harness.synthetics.find(message => message.text.includes('Verdict'))
 
-    expect(nudge?.description).toBe(NUDGE_PROMPT)
-    expect(nudge?.description).not.toBe(GOAL_REQUEST)
+    expect(verdict?.description).toBe(VALIDATOR_PROMPT)
+    expect(verdict?.description).not.toBe(GOAL_REQUEST)
   })
 
   it('gives every synthetic prompt a sentence describing what the loop is doing', async () => {

@@ -14,8 +14,12 @@ L0_table:
     L0:     L0: "LinkedIn growth chart: aria-label regex extraction"
   - id: cases/ci-*
     L0: "Grouped: 5 CI gate failures 2026-09 — devcontainer setup, markdownlint EOF heading, dependabot majors, gate merge, Stryker incremental cache v2."
+  - id: cases/composition-contract-entry-path-unopened
+    L0: "Composition contract named the glue entry plugins/state-machine/state-machine.ts; the entry is the sibling file plugins/state-machine.ts. Open an interface path before writing it into a contract, and never derive an entry from its directory name."
   - id: cases/concurrent-worktree-change-attribution
     L0:     L0: "Concurrent worktrees: attribute changed files to the right worktree"
+  - id: cases/criterion-universal-unmeasured
+    L0: "A criterion required {type, params} on every action and guard; three parameterless guards carried {type} only, as the source always had. Measure a shape universal against the existing items, then name the exception."
   - id: cases/scope-widening/*
     L0: "Grouped: 2 scope cases - a criterion wider than the request failed an out-of-scope site; an undefined reference let the judge read one claim against a new surface each round."
   - id: cases/delegation/never-infer-operator-identity
@@ -32,6 +36,12 @@ L0_table:
     L0: "Grouped: 21 plugin-era OpenCode cases — session and fork lineage, plugin tool exposure, SDK, skill catalog, Stryker, workflow fork and budget, instruction injection."
   - id: cases/orchestration/* (tail)
     L0: "Grouped: 14 earlier orchestration cases — citation defects, judge scope creep, review-criteria collisions, rename sweeps, unreachable self-arm."
+  - id: cases/opencode/lint-gate-run-after-behaviour
+    L0: "lint failed on three rules only after tests were green, because the gate ran after the behaviour. Run the lint gate with each increment that moves code, not after tests pass."
+  - id: cases/opencode/signals-tool-signals-closed-over
+    L0: "The slice owning definitions.ts and machine.ts left signals.ts closing over TOOL_SIGNALS, so the user's ad-hoc signal was stored but neither accepted nor advertised. Trace a datum to every definition site before slicing."
+  - id: cases/opencode/state-machine-snapshot-read-during-init
+    L0: "Reading self.getSnapshot().value inside the action threw xstate's initialization error and failed 66 tests. Carry the state id in action params as set_tools_policy does, and assert it matches its containing state."
   - id: cases/orchestration/child-evidence-before-verdict
     L0:     L0: "Judge a child by its transcript not outputText; paste full verdicts; scope validators to the target path"
   - id: cases/orchestration/delegated-report-completeness-contract
@@ -68,8 +78,18 @@ L0_table:
     L0: "Two prompt forks (call open before machine.interrupted with no machine state; log or silently drop an unrecognised reason) were decided by the child and surfaced only after the fact."
   - id: cases/verdict-sliced-at-display
     L0: "A 4000-char validator verdict sliced in the orchestrator's return expression lost criteria 6-8; subtask_tail held no copy, so the tail cost a resume."
+  - id: cases/spec-field-list-omits-invariant
+    L0: "A manifest spec listed fields per signal but not the rule that every signal carries a JSON schema; three schema-less signals shipped though the request named schemas. A data spec states per-item fields plus cross-item invariants."
   - id: cases/ts-excess-property-computed-keys
     L0: "TypeScript skips excess-property checks on computed keys: a computed-key `on` map accepted a bogus event, so a mistyping experiment proves nothing there; probe the literal shape first."
+  - id: cases/opencode/guard-proliferation-to-one-policy-guard
+    L0: "Two admission guards plus a stateId assertion collapsed to one guard with params {in:[...]} and an unguarded fallback; the stateId assertion only fed per-state arm derivation."
+  - id: cases/opencode/homebrew-persistence-vs-library-snapshot
+    L0: "A field allowlist, copier map, dotted-path converter and restore registry were replaced by XState's persisted snapshot plus one context boundary."
+  - id: cases/opencode/green-unit-suite-live-bug-present
+    L0: "The unit suite was green while a live probe still showed a subagent receiving its own loop; the probe had to be repeated before it was believed."
+  - id: cases/opencode/duplicate-arm-was-the-named-requirement
+    L0: "An always pair identical in effect to an on.admit pair was deleted as a duplicate, then restored because the requirement named always."
 ---
 
 # Cases

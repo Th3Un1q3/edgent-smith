@@ -2,196 +2,87 @@
  * The session state machine: one cohesive module for the loop, the machines, and
  * the messages they send. The entry file only registers this with opencode.
  */
-import { Deferred, Effect, Schema } from 'effect'
-import type { MachineConfig, TransitionConfig } from 'xstate'
+import { Deferred, Effect } from 'effect'
+import type { ActionFunction, GuardPredicate, MachineConfig, TransitionConfig } from 'xstate'
 
-import { skillKey } from './memory'
-import { assertSignalDeclarations, refusalMessage, renderSignals, TOOL_SIGNALS, validateSignal } from './signals'
-import type { SignalRefusal, SignalSpec, ToolSignal } from './signals'
-import type { SessionSnapshot, SnapshotStore, ToolPolicyRule } from './snapshot'
+import { DEFAULT_MACHINE } from '../machines'
+import type { MachineModule } from '../machines'
+import type { CallbackPayload, InjectedMemories, LoopContext } from '../machines/session/context'
 
-export { TOOL_SIGNALS } from './signals'
-export type { ToolSignal } from './signals'
+export type { CallbackPayload, Failure, InjectedMemories, IntentKind, LoopContext } from '../machines/session/context'
+import { manifestCodec, refusalMessage, renderSignals, stateLeaf, stateValuePath, validateSignal } from './signals'
+import type { SignalRefusal, SignalSpec, SignalSources, SignalTable } from './signals'
+import type { PersistedSnapshot, SnapshotStore, ToolPolicyRule } from './snapshot'
 
-export const LOOP_STATE_IDS = ['define_goal', 'work', 'check', 'validate', 'memorize', 'parked', 'panic'] as const
-export type LoopStateId = (typeof LOOP_STATE_IDS)[number]
+export type ActionSpec = {
+  readonly type: string
+  readonly params: unknown
+}
+
+export type GuardSpec = {
+  readonly type: string
+  readonly params: unknown
+}
+
+/**
+The one-line description a prompt emit carries, or its opening words when the
+emit supplies none.
+*/
+export const promptDescription = (emit: Pick<PromptEmit, 'text' | 'description'>): string =>
+  emit.description !== undefined && emit.description !== ''
+    ? emit.description
+    : 'Sent synthetic message: ' + emit.text.slice(0, 20) + '...'
+
+/**
+The signals the default machine's manifest declares, in manifest order.
+*/
+export const TOOL_SIGNALS: readonly string[] = Object.freeze(
+  Object.keys((DEFAULT_MACHINE.manifest as { readonly signals?: Readonly<Record<string, unknown>> }).signals ?? {}),
+)
+
+export type ToolSignal = string
+
+export type LoopStateId = string
 
 /**
 Events the machine accepts from the host rather than from the model.
 */
-export type LoopEventType = `agent_sent_signal.${ToolSignal}` | 'system_idle' | 'system_user_input'
-export const signalEvent = <S extends ToolSignal>(signal: S): `agent_sent_signal.${S}` =>
+export type LoopEventType = `agent_sent_signal.${string}` | 'system_idle' | 'system_user_input'
+export const signalEvent = <S extends string>(signal: S): `agent_sent_signal.${S}` =>
   `agent_sent_signal.${signal}`
 export const callbackEvent = <N extends CallbackName>(name: N): `callback.${N}` => `callback.${name}`
 
 /**
-Idle follow-ups allowed before the loop parks itself for debugging.
+A callback name a machine module declares; core carries it as an opaque string.
 */
-export const MAX_IDLE_FOLLOW_UPS = 3
+export type CallbackName = string
 
 /**
-Incomplete goals allowed before the loop escalates to `panic`.
+The context core manipulates: session identity and the two policies it installs,
+plus whatever the machine module keeps in its own context.
 */
-export const MAX_ATTEMPTS = 3
-
-/**
-Lessons kept in `memories`; the oldest drop first.
-*/
-export const MEMORY_LIMIT = 20
-
-export type CallbackName = 'quality_check_ready' | 'skill_ready' | 'memories_ready'
-export type IntentKind = 'none' | 'improvement' | 'lesson'
-
-export interface InjectedMemories {
-  readonly full: readonly string[]
-  readonly index: readonly string[]
-}
-
-export interface CallbackPayload {
-  readonly ok: boolean
-  readonly exitCode?: number
-  readonly output?: string
-  readonly value?: InjectedMemories
-}
-
-export interface Failure {
-  readonly reason: string
-  readonly detail?: string
-}
-
-export interface LoopContext {
+export type MachineContext = Record<string, unknown> & {
   readonly sessionId: string
   readonly agent: string
-  readonly maxAttempts: number
-  readonly memoryLimit: number
-  goal: string
-  intent: IntentKind
-  attempts: number
-  idleCount: number
-  memories: string[]
-  improvements: string[]
-  injectedSkills: string[]
-  injected: Record<string, InjectedMemories>
-  results: Record<string, CallbackPayload>
   policy?: ToolPolicyRule
-  failure?: Failure
+  signalsPolicy?: SignalsPolicy
+}
+
+/**
+The signals the current policy enables, in the order it set them. The policy is
+machine state, not a per-state property, so a state that sets no policy keeps
+the one already in force.
+*/
+export interface SignalsPolicy {
+  readonly names: readonly string[]
 }
 
 /**
  * A state the loop passes through while it waits for a callback. Restoring into
  * one would leave the session waiting for a reply that no longer exists, so a
  * stored transient state is treated as absent and the loop starts at the
- * agent's start state instead.
+ * agent's start state instead. The module names its own transient states.
  */
-const TRANSIENT_STATES: ReadonlySet<LoopStateId> = new Set(['check'])
-
-export type TemplateId
-  = | 'goal_request'
-    | 'state_follow_up'
-    | 'idle_park'
-    | 'quality_check_failed'
-    | 'validation_self_report'
-    | 'memorize'
-    | 'panic_escalation'
-    | 'park_summary'
-    | 'work_towards_goal'
-
-export type PromptTemplate
-  = | { readonly template: 'goal_request' }
-    | { readonly template: 'state_follow_up', readonly state: LoopStateId }
-    | { readonly template: 'idle_park' }
-    | { readonly template: 'quality_check_failed' }
-    | { readonly template: 'validation_self_report' }
-    | { readonly template: 'memorize' }
-    | { readonly template: 'panic_escalation' }
-    | { readonly template: 'park_summary' }
-    | { readonly template: 'work_towards_goal' }
-
-export type PromptParameters = PromptTemplate & { readonly description: string }
-
-export type RecordSource
-  = | { readonly from: 'payload', readonly field: string }
-    | { readonly from: 'literal', readonly value: string | number }
-
-export type RecordParameters
-  = | { readonly op: 'set', readonly key: 'goal' | 'attempts' | 'idleCount' | 'intent', readonly source: RecordSource }
-    | { readonly op: 'increment', readonly key: 'attempts' | 'idleCount' }
-    | { readonly op: 'push', readonly key: 'memories' | 'improvements', readonly source: RecordSource }
-
-export interface ShellParameters {
-  readonly cmd: string
-  readonly reportTo: CallbackName
-}
-
-export interface DispatchParameters {
-  readonly agent: string
-}
-
-export interface SkillParameters {
-  readonly name: string
-}
-
-export interface MemoriesParameters {
-  readonly namespace: string
-}
-
-export interface DisplaySignalsParameters {
-  readonly signal_keys?: readonly ToolSignal[]
-}
-
-export interface MarkSkillParameters {
-  readonly name: string
-}
-
-export interface RecordCallbackParameters {
-  readonly reportTo: CallbackName
-  readonly key?: string
-}
-
-export interface FailParameters {
-  readonly reason: string
-  readonly detail?: string
-}
-
-/**
-The rule a state installs on entry and clears on exit: the tool names it allows
-and the message the gate shows for any other tool.
-*/
-export interface ToolsPolicyParameters {
-  readonly stateId: LoopStateId
-  readonly allowedTools: readonly string[]
-  readonly errorMessage: string
-}
-
-export type ActionSpec
-  = | { readonly type: 'prompt', readonly params: PromptParameters }
-    | { readonly type: 'record', readonly params: RecordParameters }
-    | { readonly type: 'request_shell', readonly params: ShellParameters }
-    | { readonly type: 'request_dispatch', readonly params: DispatchParameters }
-    | { readonly type: 'request_skill', readonly params: SkillParameters }
-    | { readonly type: 'request_memories', readonly params: MemoriesParameters }
-    | { readonly type: 'display_signals', readonly params: DisplaySignalsParameters }
-    | { readonly type: 'record_callback', readonly params: RecordCallbackParameters }
-    | { readonly type: 'mark_skill', readonly params: MarkSkillParameters }
-    | { readonly type: 'set_tools_policy', readonly params: ToolsPolicyParameters }
-    | { readonly type: 'clear_tools_policy', readonly params: Record<string, never> }
-    | { readonly type: 'fail', readonly params: FailParameters }
-
-export interface CounterBelowParameters {
-  readonly key: 'idleCount' | 'attempts'
-  readonly limit: number | { readonly fromContext: 'maxAttempts' }
-}
-
-export interface FieldPresentParameters {
-  readonly field: 'goal' | 'text'
-}
-
-export type GuardSpec
-  = | { readonly type: 'counter_below', readonly params: CounterBelowParameters }
-    | { readonly type: 'field_present', readonly params: FieldPresentParameters }
-    | { readonly type: 'improvement_lesson', readonly params: unknown }
-    | { readonly type: 'callback_ok', readonly params: unknown }
-    | { readonly type: 'not_parked', readonly params: unknown }
 
 /**
 The loop's state and transition surface in the state library's own config types,
@@ -202,7 +93,7 @@ would need `setup` at module scope, and the lazy import exists so a broken
 install has one origin.
 */
 type NativeLoopConfig = MachineConfig<
-  LoopContext,
+  MachineContext,
   LoopEvent,
   never,
   ActionSpec,
@@ -219,7 +110,7 @@ type NativeStateConfig = NonNullable<NonNullable<NativeLoopConfig['states']>[Loo
 type NativeTransitions = NonNullable<NativeStateConfig['on']>
 
 export type LoopArm = TransitionConfig<
-  LoopContext,
+  MachineContext,
   LoopEvent,
   LoopEvent,
   never,
@@ -234,7 +125,6 @@ export type LoopOn = Readonly<{ [K in keyof NativeTransitions]: LoopArm | readon
 export type LoopState = Omit<NativeStateConfig, 'entry' | 'exit' | 'on'> & {
   readonly entry?: readonly ActionSpec[]
   readonly exit?: readonly ActionSpec[]
-  readonly signals: Readonly<Partial<Record<ToolSignal, SignalSpec>>>
   readonly on: LoopOn
 }
 
@@ -284,19 +174,10 @@ export interface MemoriesEmit {
 
 export interface SignalsEmit {
   readonly type: 'emit.signals'
-  readonly signal_keys?: readonly ToolSignal[]
+  readonly signal_keys?: readonly string[]
 }
 
 export type EmitRequest = PromptEmit | ShellEmit | DispatchEmit | SkillEmit | MemoriesEmit | SignalsEmit
-
-const PROMPT_FALLBACK = 'Sent synthetic message: '
-
-/**
-The line a person sees beside a synthetic prompt. A prompt action supplies it;
-an emit without one is named by the opening words of its text.
-*/
-export const promptDescription = (emit: Pick<PromptEmit, 'text' | 'description'>): string =>
-  emit.description ?? PROMPT_FALLBACK + emit.text.slice(0, 20) + '...'
 
 export interface SessionMachine {
   readonly sessionId: string
@@ -306,7 +187,11 @@ export interface SessionMachine {
 }
 
 export interface SignalRequest {
-  readonly type: `agent_sent_signal.${ToolSignal}`
+  /**
+  A policy may enable a name the definition carries no arm for, so the event type
+  is not limited to `TOOL_SIGNALS`.
+  */
+  readonly type: `agent_sent_signal.${string}`
   readonly payload?: unknown
 }
 
@@ -329,6 +214,7 @@ export type LoopEvent
     | SystemInterrupted
     | { readonly type: 'system_idle' }
     | { readonly type: 'system_user_input', readonly text: string }
+    | { readonly type: 'admit', readonly agent: string, readonly parentID?: string }
     | { readonly type: CallbackEventType, readonly payload: CallbackPayload }
 
 /**
@@ -337,314 +223,313 @@ One started machine, as the state library exposes it. Emits are collected during
 */
 export interface Actor {
   send: (event: LoopEvent) => void
+  /**
+  The leaf name every public surface reports, so a compound state reads `validate`.
+  */
   state: () => LoopStateId
-  context: () => LoopContext
+  /**
+  The full dotted path, for a reader that must address a compound state.
+  */
+  statePath?: () => LoopStateId
+  context: () => MachineContext
   takeEmits: () => readonly EmitRequest[]
+  /**
+  The state library's own persisted snapshot, stored verbatim so a restore
+  replays the actor rather than a hand-built record.
+  */
+  persistedSnapshot: () => PersistedSnapshot
+  /**
+  False when a stored snapshot was refused and the actor started at the initial
+  state instead.
+  */
+  readonly restored?: boolean
 }
 
 export interface StateMachineLibrary {
-  createActor: (loop: LoopDefinition, startState: LoopStateId, context: LoopContext) => Actor
+  /**
+  A fourth argument restores the actor from a stored snapshot. The live context
+  replaces the snapshot's before the library sees it, so a session identity is
+  never taken from the record.
+  */
+  createActor: (
+    loop: LoopDefinition,
+    startState: LoopStateId,
+    context: MachineContext,
+    restored?: PersistedSnapshot,
+  ) => Actor
 }
 
-const goalRequestText = (): string =>
-  'This session runs a state machine. What goal should it accomplish?'
+/**
+The name→spec table for one policy: only the names it enables, each resolved
+through the one registry. A session with no policy leaves nothing available.
+*/
+const policyTable = (registry: Readonly<Record<string, SignalSpec>>, policy: SignalsPolicy | undefined): SignalTable => {
+  // A null prototype keeps an inherited name (`constructor`, `__proto__`) out of
+  // the table, so only a name the registry declares can be enabled.
+  const table: Record<string, SignalSpec> = Object.create(null) as Record<string, SignalSpec>
 
-const followUpText = (state: LoopStateId): string =>
-  'This session is still in ' + state + '. Call signal_send to move on.'
+  for (const name of policy?.names ?? []) {
+    const spec = Object.hasOwn(registry, name) ? registry[name] : undefined
 
-const parkText = (count: number): string =>
-  'This session went idle ' + count + ' times without progress, so it is parked in panic for debugging.'
-  + ' Available from here: none.'
+    if (spec !== undefined) table[name] = spec
+  }
 
-const qualityCheckFailedText = (context: LoopContext): string =>
-  'Quality check failed: ' + (context.failure?.reason ?? 'unknown')
-  + (context.failure?.detail === undefined ? '' : ' (' + context.failure.detail + ')')
-  + '. Parked in panic for investigation.'
+  return table
+}
 
-const validationSelfReportText = (): string =>
-  'Verdict: call signal_send with type GOAL_ACHIEVED when the goal is met,'
-  + ' or GOAL_INCOMPLETE when it is not.'
+interface NestedStates<T> {
+  readonly states?: Readonly<Record<string, T>>
+}
 
-const memorizeText = (context: LoopContext): string => context.intent === 'improvement'
-  ? 'Name one improvement.'
-  : 'Name what to change next attempt.'
+type RawStateConfig = NestedStates<RawStateConfig> & {
+  readonly [key: string]: unknown
+  readonly on?: Readonly<Record<string, LoopArm | readonly LoopArm[]>>
+  readonly always?: LoopArm | readonly LoopArm[]
+}
 
-const panicEscalationText = (context: LoopContext): string =>
-  'Parked for investigation: ' + (context.failure?.reason ?? 'unknown')
-  + (context.failure?.detail === undefined ? '' : ' (' + context.failure.detail + ')')
+interface MachineDefinitionData extends NestedStates<RawStateConfig> {
+  readonly id: string
+  readonly initial?: string
+  readonly on?: LoopOn
+  readonly states: Readonly<Record<string, RawStateConfig>>
+}
 
-const sentence = (text: string): string => /[.!?]$/.test(text) ? text : text + '.'
+/**
+Every declared state as a dotted path, compound states included, so a stored
+snapshot value and a target can both be checked against the whole tree.
+*/
+const statePathsOf = (states: Readonly<Record<string, NestedStates<unknown>>>, prefix = ''): string[] =>
+  Object.entries(states).flatMap(([id, config]) => {
+    const path = prefix === '' ? id : prefix + '.' + id
+    const children = config.states as Readonly<Record<string, NestedStates<unknown>>> | undefined
 
-const parkSummaryText = (context: LoopContext): string =>
-  'Goal reached: ' + sentence(context.goal)
-  + ' Improvements: ' + sentence(context.improvements.join(' | ') || 'none')
-  + ' Waiting for your next instruction.'
+    return children === undefined ? [path] : [path, ...statePathsOf(children, path)]
+  })
 
-const workTowardsGoalText = (context: LoopContext): string =>
-  'Work towards: ' + context.goal
-  + '. Memories: ' + (context.memories.join(' | ') || 'none')
-  + '. Preferences: ' + (context.injected['preferences/user']?.full.join(' | ') || 'none')
+const hasStatePath = (states: Readonly<Record<string, NestedStates<unknown>>>, path: string): boolean => {
+  let level: Readonly<Record<string, NestedStates<unknown>>> | undefined = states
 
-const renderTemplate = (parameters: PromptTemplate, context: LoopContext): string => {
-  switch (parameters.template) {
-    case 'goal_request': {
-      return goalRequestText()
-    }
-    case 'state_follow_up': {
-      return followUpText(parameters.state)
-    }
-    case 'idle_park': {
-      return parkText(context.idleCount)
-    }
-    case 'quality_check_failed': {
-      return qualityCheckFailedText(context)
-    }
-    case 'validation_self_report': {
-      return validationSelfReportText()
-    }
-    case 'memorize': {
-      return memorizeText(context)
-    }
-    case 'panic_escalation': {
-      return panicEscalationText(context)
-    }
-    case 'park_summary': {
-      return parkSummaryText(context)
-    }
-    case 'work_towards_goal': {
-      return workTowardsGoalText(context)
+  for (const segment of path.split('.')) {
+    const config: NestedStates<unknown> | undefined = level?.[segment]
+
+    if (config === undefined) return false
+
+    level = config.states as Readonly<Record<string, NestedStates<unknown>>> | undefined
+  }
+
+  return true
+}
+
+/**
+A deep clone of the declaration with the metadata that is ours (`signals`) removed,
+so `initial`, nested states and `always` arms reach the state library as written.
+*/
+const withoutSignals = (config: RawStateConfig): RawStateConfig => {
+  const clone = structuredClone(config) as unknown as Record<string, unknown>
+
+  delete clone.signals
+
+  if (clone.states !== undefined) {
+    clone.states = Object.fromEntries(
+      Object.entries(clone.states as Readonly<Record<string, RawStateConfig>>)
+        .map(([id, child]) => [id, withoutSignals(child)]),
+    )
+  }
+
+  return clone as unknown as RawStateConfig
+}
+
+const definitionOf = (module: MachineModule): MachineDefinitionData => {
+  const raw = module.definition
+
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new Error('machine ' + module.id + ' carries no definition object')
+  }
+
+  const definition = withoutSignals(raw as RawStateConfig)
+
+  if (typeof definition.id !== 'string' || definition.id === '') {
+    throw new Error('machine ' + module.id + ' declares no id')
+  }
+
+  if (typeof definition.states !== 'object' || definition.states === null || Array.isArray(definition.states)) {
+    throw new Error('machine ' + definition.id + ' declares no states')
+  }
+
+  if (Object.keys(definition.states).length === 0) throw new Error('machine ' + definition.id + ' declares no states')
+
+  return definition as unknown as MachineDefinitionData
+}
+
+/**
+One machine module, assembled once: its definition in the state library's shape,
+the signal registry its policies resolve against, and the declarations the
+actions read.
+*/
+export interface AssembledMachine {
+  readonly loop: LoopDefinition
+  readonly registry: Readonly<Record<string, SignalSpec>>
+  readonly sources: SignalSources
+  readonly transientStates: ReadonlySet<string>
+}
+
+const sourcesOf = (module: MachineModule): SignalSources => {
+  const manifest = module.manifest
+
+  if (typeof manifest !== 'object' || manifest === null || Array.isArray(manifest)) {
+    throw new Error('machine ' + module.id + ' carries no signal manifest')
+  }
+
+  const signals = (manifest as { readonly signals?: unknown }).signals
+
+  if (typeof signals !== 'object' || signals === null || Array.isArray(signals)) {
+    throw new Error('machine ' + module.id + ' declares no signals')
+  }
+
+  const declared = signals as SignalSources['signals']
+  const codecs: Record<string, SignalSpec['schema']> = {}
+
+  for (const [name, signal] of Object.entries(declared)) {
+    const codec = manifestCodec(signal)
+
+    if (codec !== undefined) codecs[name] = codec
+  }
+
+  return { signals: declared, codecs }
+}
+
+interface ModuleDefinitions {
+  readonly createSignalRegistry?: (definition: unknown, sources: SignalSources) => Readonly<Record<string, SignalSpec>>
+}
+
+/**
+Builds the signal registry from the manifest when the module supplies no registry
+builder of its own. A module that needs ad-hoc aliases supplies one in its
+definitions.
+*/
+const registryOf = (
+  module: MachineModule,
+  definition: MachineDefinitionData,
+  sources: SignalSources,
+): Readonly<Record<string, SignalSpec>> => {
+  const supplied = (module.definitions as unknown as ModuleDefinitions).createSignalRegistry
+
+  if (typeof supplied === 'function') return supplied(definition, sources)
+
+  const registry: Record<string, SignalSpec> = {}
+
+  for (const [name, signal] of Object.entries(sources.signals)) {
+    const schema = sources.codecs[name]
+
+    registry[name] = schema === undefined ? { describe: signal.describe } : { describe: signal.describe, schema }
+  }
+
+  return registry
+}
+
+const stateEntriesOf = (
+  states: Readonly<Record<string, RawStateConfig>>,
+  prefix = '',
+): ReadonlyArray<readonly [string, RawStateConfig]> =>
+  Object.entries(states).flatMap(([id, config]) => {
+    const path = prefix === '' ? id : prefix + '.' + id
+    const children = config.states === undefined ? [] : stateEntriesOf(config.states, path)
+
+    return [[path, config] as const, ...children]
+  })
+
+const parentPath = (path: string): string => {
+  const cut = path.lastIndexOf('.')
+
+  return cut === -1 ? '' : path.slice(0, cut)
+}
+
+const childPath = (parent: string, key: string): string => parent === '' ? key : parent + '.' + key
+
+/**
+A target may name a sibling, a dotted path, or an id (`#session.towards_goal.validate`).
+*/
+const hasTarget = (declared: ReadonlySet<string>, rootId: string, path: string, target: string): boolean => {
+  if (target.startsWith('#')) {
+    const prefix = '#' + rootId + '.'
+
+    return target === '#' + rootId || (target.startsWith(prefix) && declared.has(target.slice(prefix.length)))
+  }
+
+  return target.startsWith('.') ? declared.has(childPath(parentPath(path), target.slice(1))) : declared.has(childPath(parentPath(path), target)) || declared.has(target)
+}
+
+const armsOf = (config: RawStateConfig): readonly LoopArm[] => {
+  const on = Object.values(config.on ?? {}).flatMap(arm => Array.isArray(arm) ? arm : [arm])
+  const always = config.always === undefined ? [] : (Array.isArray(config.always) ? config.always : [config.always])
+
+  return [...on, ...always]
+}
+
+/**
+A transition into a state the definition does not declare would fail on arrival
+rather than at load, so every assembled machine is checked once, here.
+*/
+const assertTargets = (definition: MachineDefinitionData): void => {
+  const declared = new Set(statePathsOf(definition.states))
+
+  for (const [path, config] of stateEntriesOf(definition.states)) {
+    for (const arm of armsOf(config)) {
+      const target = arm.target
+
+      if (typeof target === 'string' && !hasTarget(declared, definition.id, path, target)) {
+        throw new Error('machine ' + definition.id + ' state ' + path + ' targets ' + target + ', which it does not declare')
+      }
     }
   }
 }
 
 /**
-The idle arm: count this idle and nudge, until the allowance is used up; then
-park in panic with the count that got us here and reset it for any later round.
+Builds the loop and the registry for one module, so core holds no machine of its
+own: the state ids, the transitions and the ad-hoc signals all come from the
+module. The consistency checks run per assembled machine.
 */
-const idleArms = (state: LoopStateId): readonly LoopArm[] => [
-  {
-    guard: { type: 'counter_below', params: { key: 'idleCount', limit: MAX_IDLE_FOLLOW_UPS } },
-    actions: [
-      { type: 'record', params: { op: 'increment', key: 'idleCount' } },
-      { type: 'prompt', params: { template: 'state_follow_up', state, description: 'Remind the agent that the loop is still waiting to move on.' } },
-      { type: 'display_signals', params: {} },
-    ],
-  },
-  {
-    target: 'panic',
-    actions: [
-      { type: 'prompt', params: { template: 'idle_park', description: 'Report that repeated idle turns parked the session for debugging.' } },
-      { type: 'record', params: { op: 'set', key: 'idleCount', source: { from: 'literal', value: 0 } } },
-    ],
-  },
-]
+export const assembleMachine = (module: MachineModule): AssembledMachine => {
+  const definition = definitionOf(module)
 
-const resetRound: readonly ActionSpec[] = [
-  { type: 'record', params: { op: 'set', key: 'goal', source: { from: 'literal', value: '' } } },
-  { type: 'record', params: { op: 'set', key: 'intent', source: { from: 'literal', value: 'none' } } },
-  { type: 'record', params: { op: 'set', key: 'attempts', source: { from: 'literal', value: 0 } } },
-  { type: 'record', params: { op: 'set', key: 'idleCount', source: { from: 'literal', value: 0 } } },
-]
+  assertTargets(definition)
 
-export const SESSION_LOOP: LoopDefinition = {
-  id: 'session',
-  /**
-  An interruption parks the loop from every state. `parked` is excluded because
-  entering it again would repeat the park summary for an event that changed nothing.
-  */
-  on: {
-    system_interrupted: { target: '.parked', guard: { type: 'not_parked' } },
-  },
-  states: {
-    define_goal: {
-      entry: [
-        { type: 'prompt', params: { template: 'goal_request', description: 'Ask the agent what goal this session should accomplish.' } },
-        { type: 'display_signals', params: {} },
-        { type: 'request_memories', params: { namespace: 'preferences/user' } },
-        {
-          type: 'set_tools_policy',
-          params: {
-            stateId: 'define_goal',
-            allowedTools: ['signal_send', 'execute', 'question', 'skill'],
-            errorMessage: 'Tool <name> is blocked in <state>. Call signal_send with SET_GOAL and a goal to continue.',
-          },
-        },
-      ],
-      exit: [{ type: 'clear_tools_policy', params: {} }],
-      signals: {
-        SET_GOAL: {
-          describe: 'State the goal this session must accomplish, in payload.goal.',
-          schema: Schema.Struct({ goal: Schema.Trim.check(Schema.isMinLength(1)) }).annotate({ examples: [{ goal: 'ship the parser' }] }),
-        },
-      },
-      on: {
-        [signalEvent('SET_GOAL')]: {
-          target: 'work',
-          actions: [{ type: 'record', params: { op: 'set', key: 'goal', source: { from: 'payload', field: 'goal' } } }],
-        },
-        [callbackEvent('memories_ready')]: {
-          actions: [{ type: 'record_callback', params: { reportTo: 'memories_ready', key: 'preferences/user' } }],
-        },
-      },
-    },
-    work: {
-      entry: [
-        { type: 'prompt', params: { template: 'work_towards_goal', description: 'Remind the agent of the goal and the memories to work from.' } },
-        { type: 'display_signals', params: {} },
-        { type: 'request_skill', params: { name: 'task-delegation' } },
-      ],
-      signals: {
-        CLAIM_WORK: { describe: 'Say the work is done and ready for the quality check.' },
-      },
-      on: {
-        [signalEvent('CLAIM_WORK')]: { target: 'check' },
-        [callbackEvent('skill_ready')]: {
-          actions: [
-            { type: 'record_callback', params: { reportTo: 'skill_ready' } },
-            { type: 'mark_skill', params: { name: 'task-delegation' } },
-          ],
-        },
-        [callbackEvent('memories_ready')]: {
-          actions: [{ type: 'record_callback', params: { reportTo: 'memories_ready', key: 'preferences/user' } }],
-        },
-        system_idle: idleArms('work'),
-      },
-    },
-    check: {
-      entry: [{
-        type: 'request_shell',
-        params: { cmd: 'just opencode::typecheck', reportTo: 'quality_check_ready' },
-      }],
-      signals: {},
-      on: {
-        [callbackEvent('quality_check_ready')]: [
-          {
-            guard: { type: 'callback_ok' },
-            target: 'validate',
-            actions: [{ type: 'record_callback', params: { reportTo: 'quality_check_ready' } }],
-          },
-          {
-            target: 'panic',
-            actions: [
-              { type: 'record_callback', params: { reportTo: 'quality_check_ready' } },
-              { type: 'prompt', params: { template: 'quality_check_failed', description: 'Report that the quality check failed and the loop is parked.' } },
-            ],
-          },
-        ],
-      },
-    },
-    validate: {
-      entry: [{ type: 'prompt', params: { template: 'validation_self_report', description: 'Ask the agent to judge whether the goal is met.' } }],
-      signals: {
-        GOAL_ACHIEVED: { describe: 'Report that the goal is met.' },
-        GOAL_INCOMPLETE: { describe: 'Report that the goal is not met.' },
-      },
-      on: {
-        [signalEvent('GOAL_ACHIEVED')]: {
-          target: 'memorize',
-          actions: [{ type: 'record', params: { op: 'set', key: 'intent', source: { from: 'literal', value: 'improvement' } } }],
-        },
-        [signalEvent('GOAL_INCOMPLETE')]: [
-          {
-            guard: {
-              type: 'counter_below',
-              params: { key: 'attempts', limit: { fromContext: 'maxAttempts' } },
-            },
-            target: 'memorize',
-            actions: [
-              { type: 'record', params: { op: 'increment', key: 'attempts' } },
-              { type: 'record', params: { op: 'set', key: 'intent', source: { from: 'literal', value: 'lesson' } } },
-            ],
-          },
-          {
-            target: 'panic',
-            actions: [
-              { type: 'fail', params: { reason: 'attempts exhausted' } },
-              { type: 'record', params: { op: 'set', key: 'intent', source: { from: 'literal', value: 'lesson' } } },
-              { type: 'prompt', params: { template: 'panic_escalation', description: 'Report that the attempts ran out and the loop is parked.' } },
-            ],
-          },
-        ],
-        system_idle: idleArms('validate'),
-      },
-    },
-    memorize: {
-      entry: [
-        { type: 'prompt', params: { template: 'memorize', description: 'Request a lesson to carry into the next attempt.' } },
-        { type: 'display_signals', params: {} },
-      ],
-      signals: {
-        LESSON: {
-          describe: 'Name the improvement or next attempt in payload.text.',
-          schema: Schema.Struct({ text: Schema.Trim.check(Schema.isMinLength(1)) }).annotate({ examples: [{ text: 'run typecheck before claiming done' }] }),
-        },
-      },
-      on: {
-        [signalEvent('LESSON')]: [
-          {
-            guard: { type: 'improvement_lesson' },
-            target: 'parked',
-            actions: [{
-              type: 'record',
-              params: { op: 'push', key: 'improvements', source: { from: 'payload', field: 'text' } },
-            }],
-          },
-          {
-            guard: { type: 'field_present', params: { field: 'text' } },
-            target: 'work',
-            actions: [{
-              type: 'record',
-              params: { op: 'push', key: 'memories', source: { from: 'payload', field: 'text' } },
-            }],
-          },
-        ],
-        system_idle: idleArms('memorize'),
-      },
-    },
-    parked: {
-      entry: [{ type: 'prompt', params: { template: 'park_summary', description: 'Report the reached goal and the improvements recorded.' } }],
-      signals: {},
-      on: {
-        system_user_input: { target: 'define_goal', actions: resetRound },
-      },
-    },
-    panic: {
-      entry: [{ type: 'display_signals', params: {} }],
-      signals: {
-        LESSON: {
-          describe: 'Name what to change next attempt in payload.text.',
-          schema: Schema.Struct({ text: Schema.Trim.check(Schema.isMinLength(1)) }).annotate({ examples: [{ text: 'run typecheck before claiming done' }] }),
-        },
-      },
-      on: {
-        [signalEvent('LESSON')]: [
-          {
-            guard: { type: 'field_present', params: { field: 'text' } },
-            target: 'work',
-            actions: [
-              {
-                type: 'record',
-                params: { op: 'push', key: 'memories', source: { from: 'payload', field: 'text' } },
-              },
-              { type: 'record', params: { op: 'set', key: 'attempts', source: { from: 'literal', value: 0 } } },
-            ],
-          },
-        ],
-        system_user_input: { target: 'define_goal', actions: resetRound },
-      },
-    },
-  },
+  // Already a clone with our metadata stripped: the library receives the tree whole.
+  const loop = definition as unknown as LoopDefinition
+  const sources = sourcesOf(module)
+
+  return {
+    loop,
+    registry: registryOf(module, definition, sources),
+    sources,
+    transientStates: new Set(module.transientStates),
+  }
 }
 
-export const acceptedTransitions = (state: LoopStateId): ToolSignal[] =>
-  TOOL_SIGNALS.filter(signal => SESSION_LOOP.states[state].on[signalEvent(signal)] !== undefined)
+export const SESSION_MACHINE: AssembledMachine = assembleMachine(DEFAULT_MACHINE)
+
+export const SESSION_LOOP: LoopDefinition = SESSION_MACHINE.loop
+
+export const LOOP_STATE_IDS: readonly LoopStateId[] = Object.keys(SESSION_LOOP.states) as LoopStateId[]
+
+export const LOOP_STATE_PATHS: readonly LoopStateId[] = statePathsOf(
+  SESSION_LOOP.states as unknown as Readonly<Record<string, NestedStates<unknown>>>,
+)
+
+export const acceptedTransitions = (state: LoopStateId): readonly string[] => {
+  const on = (SESSION_LOOP.states[state] as { readonly on?: Readonly<Record<string, unknown>> } | undefined)?.on
+
+  return TOOL_SIGNALS.filter(signal => on?.[signalEvent(signal)] !== undefined)
+}
 
 /**
  * The agent-to-starting-state mapping, read once. An entry naming a state the
- * loop does not declare is left out rather than defaulted, so its agent gets no
- * machine at all.
+ * loop does not declare is reported rather than defaulted.
  */
-export const readStartConfig = (startStates: Readonly<Record<string, string>>): {
+export const readStartConfig = (
+  startStates: Readonly<Record<string, string>>,
+  stateIds: ReadonlySet<string> = new Set(LOOP_STATE_PATHS),
+): {
   readonly startStateFor: (agent: string) => LoopStateId | undefined
   readonly invalidAgents: readonly string[]
 } => {
@@ -652,221 +537,51 @@ export const readStartConfig = (startStates: Readonly<Record<string, string>>): 
   const invalidAgents: string[] = []
 
   for (const [agent, state] of Object.entries(startStates)) {
-    const declared = LOOP_STATE_IDS.find(candidate => candidate === state)
-
-    if (declared === undefined) invalidAgents.push(agent)
-    else mapped.set(agent, declared)
+    if (stateIds.has(state)) {
+      mapped.set(agent, state)
+    }
+    else { invalidAgents.push(agent) }
   }
 
   return { startStateFor: agent => mapped.get(agent), invalidAgents }
 }
 
-const readPayloadField = (event: LoopEvent, field: string): string => {
-  const payload = (event as { payload?: unknown }).payload
-  const value = isObject(payload) ? payload[field] : undefined
-  return typeof value === 'string' ? value : ''
-}
-
-const INTENT_KINDS: readonly IntentKind[] = ['none', 'improvement', 'lesson']
-
-const isIntentKind = (value: unknown): value is IntentKind =>
-  typeof value === 'string' && (INTENT_KINDS as readonly string[]).includes(value)
-
-const readSource = (event: LoopEvent, source: RecordSource): string | number =>
-  source.from === 'literal' ? source.value : readPayloadField(event, source.field)
-
-const applyRecord = (context: LoopContext, event: LoopEvent, parameters: RecordParameters): Partial<LoopContext> => {
-  if (parameters.op === 'increment') {
-    return parameters.key === 'attempts'
-      ? { attempts: context.attempts + 1 }
-      : { idleCount: context.idleCount + 1 }
-  }
-
-  const value = readSource(event, parameters.source)
-
-  if (parameters.op === 'push') {
-    if (typeof value !== 'string') return {}
-
-    const list = parameters.key === 'memories' ? context.memories : context.improvements
-    const next = context.memoryLimit > 0 ? [...list, value].slice(-context.memoryLimit) : []
-
-    return parameters.key === 'memories' ? { memories: next } : { improvements: next }
-  }
-
-  if (parameters.key === 'intent') return { intent: isIntentKind(value) ? value : context.intent }
-  if (parameters.key === 'attempts') return { attempts: typeof value === 'number' ? value : context.attempts }
-  return parameters.key === 'idleCount' ? { idleCount: typeof value === 'number' ? value : context.idleCount } : { goal: typeof value === 'string' ? value : context.goal }
-}
-
-const applyFail = (parameters: FailParameters): Partial<LoopContext> => ({
-  failure: { reason: parameters.reason, detail: parameters.detail },
-})
-
-const isStringArray = (value: unknown): value is readonly string[] =>
-  Array.isArray(value) && value.every(item => typeof item === 'string')
-
-const isInjectedMemories = (value: unknown): value is InjectedMemories =>
-  isObject(value) && isStringArray(value.full) && isStringArray(value.index)
-
-const readCallback = (event: LoopEvent): CallbackPayload => {
-  const payload = (event as { payload?: unknown }).payload
-
-  return isObject(payload)
-    ? {
-        ok: payload.ok === true,
-        exitCode: typeof payload.exitCode === 'number' ? payload.exitCode : undefined,
-        output: typeof payload.output === 'string' ? payload.output : undefined,
-        value: isInjectedMemories(payload.value) ? payload.value : undefined,
-      }
-    : { ok: false }
-}
-
-const applyRecordCallback = (
-  context: LoopContext,
-  event: LoopEvent,
-  parameters: RecordCallbackParameters,
-): Partial<LoopContext> => {
-  const payload = readCallback(event)
-  const results = { ...context.results, [parameters.reportTo]: payload }
-
-  if (!payload.ok) {
-    return { results, failure: { reason: parameters.reportTo + ' failed', detail: payload.output } }
-  }
-
-  return payload.value !== undefined && parameters.key !== undefined ? { results, injected: { ...context.injected, [parameters.key]: payload.value } } : { results }
-}
-
-interface LoopTransitionTable {
-  readonly entry?: readonly ActionSpec[]
-  readonly exit?: readonly ActionSpec[]
-  readonly on: LoopOn
-}
-
-/**
-The state config handed to XState: declaration data is stripped here.
-*/
-type NativeState = Omit<LoopState, 'signals'>
-
-const isArmList = (arm: LoopArm | readonly LoopArm[]): arm is readonly LoopArm[] => Array.isArray(arm)
-
-const toSingleArm = (arm: LoopArm): LoopArm => ({
-  ...(arm.target !== undefined && { target: arm.target }),
-  ...(arm.guard !== undefined && { guard: arm.guard }),
-  ...(arm.actions !== undefined && { actions: [...(arm.actions as readonly ActionSpec[])] }),
-})
-
-const toArm = (arm: LoopArm | readonly LoopArm[]): LoopArm | readonly LoopArm[] =>
-  isArmList(arm) ? arm.map(candidate => toSingleArm(candidate)) : toSingleArm(arm)
-
-const toStateConfig = (definition: LoopTransitionTable): NativeState => ({
-  ...(definition.entry !== undefined && { entry: [...definition.entry] }),
-  ...(definition.exit !== undefined && { exit: [...definition.exit] }),
-  on: Object.fromEntries(Object.entries(definition.on).map(([type, arm]) => [type, toArm(arm)])),
-})
-
-/**
- * The state table for one definition, rebuilt for the definition the caller hands
- * `createActor`, so a definition with its own states is honoured.
- */
-const statesFor = (definition: LoopDefinition): Readonly<Record<string, NativeState>> =>
-  Object.fromEntries(
-    LOOP_STATE_IDS.map(state => [state, toStateConfig(definition.states[state])]),
-  )
+type LoopActionMap = Record<string, ActionFunction<MachineContext, LoopEvent, LoopEvent, unknown, never, never, never, never, EmitRequest>>
+type LoopGuardMap = Record<string, GuardPredicate<MachineContext, LoopEvent, unknown, never>>
 
 /**
  * The one place the state library is named. The entry calls it under guard; the
  * rest of the module receives the result, so a broken install has one origin.
  */
-export const loadStateMachineLibrary = async (): Promise<StateMachineLibrary> => {
+export const loadStateMachineLibrary = async (module: MachineModule = DEFAULT_MACHINE): Promise<StateMachineLibrary> => {
   const { assign, createActor, emit, enqueueActions, not, setup, stateIn } = await import('xstate')
+
+  const runtime = { assign, emit, enqueueActions, not, stateIn }
 
   const machine = setup({
     types: {
-      context: {} as LoopContext,
+      context: {} as MachineContext,
       events: {} as LoopEvent,
       emitted: {} as EmitRequest,
     },
-    actions: {
-      prompt: emit(({ context }, parameters: PromptParameters) => ({
-        type: 'emit.prompt' as const,
-        text: renderTemplate(parameters, context),
-        description: parameters.description,
-      })),
-      record: assign(({ context, event }, parameters: RecordParameters) => applyRecord(context, event, parameters)),
-      request_shell: emit((_arguments, parameters: ShellParameters) => ({
-        type: 'emit.shell' as const,
-        cmd: parameters.cmd,
-        reportTo: parameters.reportTo,
-      })),
-      request_dispatch: emit(({ context }, parameters: DispatchParameters) => ({
-        type: 'emit.dispatch' as const,
-        agent: parameters.agent,
-        text: renderTemplate({ template: 'validation_self_report' }, context),
-      })),
-      request_skill: enqueueActions(({ context, enqueue }, parameters: SkillParameters) => {
-        if (context.injectedSkills.includes(skillKey(parameters.name))) return
-
-        enqueue.emit({ type: 'emit.skill', name: parameters.name, reportTo: 'skill_ready' })
-      }),
-      request_memories: emit((_arguments, parameters: MemoriesParameters) => ({
-        type: 'emit.memories' as const,
-        namespace: parameters.namespace,
-        reportTo: 'memories_ready' as const,
-      })),
-      display_signals: emit((_arguments, parameters: DisplaySignalsParameters) => ({
-        type: 'emit.signals' as const,
-        ...(parameters.signal_keys !== undefined && { signal_keys: parameters.signal_keys }),
-      })),
-      mark_skill: assign(({ context }, parameters: MarkSkillParameters) => ({
-        injectedSkills: context.injectedSkills.includes(skillKey(parameters.name))
-          ? context.injectedSkills
-          : [...context.injectedSkills, skillKey(parameters.name)],
-      })),
-      record_callback: assign(({ context, event }, parameters: RecordCallbackParameters) =>
-        applyRecordCallback(context, event, parameters)),
-      fail: assign((_arguments, parameters: FailParameters) => applyFail(parameters)),
-      set_tools_policy: assign(({ context }, parameters: ToolsPolicyParameters) =>
-        // A restored session's snapshot rule wins; this fills a record that predates it.
-        context.policy === undefined
-          ? {
-              policy: {
-                stateId: parameters.stateId,
-                errorMessage: parameters.errorMessage,
-                allowedTools: [...parameters.allowedTools],
-              },
-            }
-          : {}),
-      clear_tools_policy: assign(() => ({ policy: undefined })),
-    },
-    guards: {
-      counter_below: ({ context }, parameters: CounterBelowParameters) => {
-        const limit = typeof parameters.limit === 'number'
-          ? parameters.limit
-          : context[parameters.limit.fromContext]
-
-        return context[parameters.key] < limit
-      },
-      field_present: ({ event }, parameters: FieldPresentParameters) =>
-        readPayloadField(event, parameters.field).trim() !== '',
-      /**
-      The LESSON schema has already refused blank text, so only the intent decides
-      whether this lesson improves the loop or starts another attempt.
-      */
-      improvement_lesson: ({ context }) => context.intent === 'improvement',
-      callback_ok: ({ event }) => readCallback(event).ok,
-      not_parked: not(stateIn('parked')),
-    },
+    actions: module.definitions.createActions(runtime, assembleMachine(module).sources) as unknown as LoopActionMap,
+    guards: module.definitions.createGuards(runtime) as unknown as LoopGuardMap,
   })
 
   return {
-    createActor: (loop, startState, context) => {
-      const actor = createActor(machine.createMachine({
-        id: loop.id,
-        initial: startState,
-        context,
-        on: { ...loop.on },
-        states: statesFor(loop),
-      }))
+    createActor: (loop, startState, context, restored) => {
+      // The supplied definition reaches the library whole: only our `signals`
+      // metadata is removed, so its root `on` and every other root key survive.
+      const definition = structuredClone(loop) as LoopDefinition & { signals?: unknown }
+      delete definition.signals
+      const created = machine.createMachine({ ...definition, initial: startState, context })
+      const candidate = restored === undefined
+        ? undefined
+        : createActor(created, { snapshot: { ...restored, context } as never })
+
+      // A payload the library cannot place comes back as an error actor rather
+      // than a throw, so the session falls back to its initial state here.
+      const actor = candidate !== undefined && candidate.getSnapshot().status !== 'error' ? candidate : createActor(created)
       const emitted: EmitRequest[] = []
 
       actor.on('*', (event) => {
@@ -876,9 +591,12 @@ export const loadStateMachineLibrary = async (): Promise<StateMachineLibrary> =>
 
       return {
         send: event => actor.send(event),
-        state: () => actor.getSnapshot().value as unknown as LoopStateId,
+        state: () => stateLeaf(actor.getSnapshot().value),
+        statePath: () => stateValuePath(actor.getSnapshot().value),
         context: () => actor.getSnapshot().context,
         takeEmits: () => emitted.splice(0),
+        persistedSnapshot: () => actor.getPersistedSnapshot() as PersistedSnapshot,
+        restored: actor === candidate,
       }
     },
   }
@@ -886,12 +604,9 @@ export const loadStateMachineLibrary = async (): Promise<StateMachineLibrary> =>
 
 const NO_MACHINE_MESSAGE = 'No state machine is running for this session.'
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-
 interface StateMachineOptions {
   readonly library: StateMachineLibrary
-  readonly startStateFor: (agent: string) => LoopStateId | undefined
+  readonly machine?: MachineModule
   readonly maxAttempts?: number
   readonly memoryLimit?: number
   readonly snapshot?: SnapshotStore
@@ -905,7 +620,7 @@ export interface SessionStart {
   How the machine came to exist: restored from a snapshot, fresh at the agent's
   start state, or a read that was rejected and left the session without one.
   */
-  readonly snapshot?: 'restored' | 'fresh' | 'read-failed' | 'expired' | 'shape-invalid'
+  readonly snapshot?: 'restored' | 'fresh' | 'read-failed' | 'expired' | 'shape-invalid' | 'legacy'
 }
 
 export interface SignalResult {
@@ -931,7 +646,7 @@ export type LoadMemories = (namespace: string) => Effect.Effect<InjectedMemories
 
 export interface StateMachine {
   /**
-  Creates the session's machine when its agent is mapped; never on a signal.
+  Creates the session's machine at admission; never on a signal.
   */
   start: (sessionId: string, agent: string) => SessionStart | undefined
   /**
@@ -976,9 +691,9 @@ export interface StateMachine {
   */
   status: (sessionId: string) => string
   /**
-  The rendered signal list for the session's current state.
+  The rendered signal list for the session's policy.
   */
-  signalLine: (sessionId: string, signal_keys?: readonly ToolSignal[]) => string
+  signalLine: (sessionId: string, signal_keys?: readonly string[]) => string
   idle: (sessionId: string) => Effect.Effect<readonly EmitRequest[]>
 }
 
@@ -994,79 +709,64 @@ interface MachineEntry {
 }
 
 export const createStateMachine = (options: StateMachineOptions): StateMachine => {
-  assertSignalDeclarations(SESSION_LOOP)
-
+  const module = options.machine ?? DEFAULT_MACHINE
+  const assembly = assembleMachine(module)
+  const stateIds: ReadonlySet<string> = new Set(
+    statePathsOf(assembly.loop.states as unknown as Readonly<Record<string, NestedStates<unknown>>>),
+  )
+  const initialState: LoopStateId
+    = (assembly.loop.initial as LoopStateId | undefined) ?? (Object.keys(assembly.loop.states)[0] as LoopStateId)
   const machines = new Map<string, MachineEntry>()
   const waiting = new Map<string, Deferred.Deferred<SessionStart | undefined>>()
+
+  /**
+  A transient state is left behind on restore whether the module declares it at
+  the root or inside a compound state.
+  */
+  const isTransient = (state: LoopStateId): boolean =>
+    assembly.transientStates.has(state) || assembly.transientStates.has(state.slice(state.lastIndexOf('.') + 1))
 
   /**
   The actor's own context: the tool policy lives there, installed by the entry
   action and cleared by the exit action, so a transition keeps it in step.
   */
-  const liveContext = (entry: MachineEntry): LoopContext => entry.actor.context()
+  const liveContext = (entry: MachineEntry): MachineContext => entry.actor.context()
 
   const view = (entry: MachineEntry): SessionMachine => ({
     sessionId: entry.sessionId,
     agent: entry.agent,
     state: entry.actor.state(),
-    context: liveContext(entry),
+    context: liveContext(entry) as unknown as LoopContext,
   })
 
-  const freshContext = (sessionId: string, agent: string): LoopContext => ({
-    sessionId,
-    agent,
-    maxAttempts: options.maxAttempts ?? MAX_ATTEMPTS,
-    memoryLimit: options.memoryLimit ?? MEMORY_LIMIT,
-    goal: '',
-    intent: 'none',
-    attempts: 0,
-    idleCount: 0,
-    memories: [],
-    improvements: [],
-    injectedSkills: [],
-    injected: {},
-    results: {},
-  })
+  const contextFor = (sessionId: string, agent: string, parentID: string | undefined): MachineContext =>
+    module.contexts.fresh({ sessionId, agent, parentID, maxAttempts: options.maxAttempts, memoryLimit: options.memoryLimit })
 
-  const contextFromSnapshot = (snapshot: SessionSnapshot, agent: string): LoopContext => ({
-    ...freshContext(snapshot.sessionId, agent),
-    goal: snapshot.goal,
-    intent: snapshot.intent,
-    attempts: snapshot.attempts,
-    idleCount: snapshot.idleCount,
-    memories: [...snapshot.memories],
-    improvements: [...snapshot.improvements],
-    injectedSkills: [...snapshot.injectedSkills],
-    injected: { ...snapshot.injected },
-    results: { ...snapshot.results },
-    ...(snapshot.policy !== undefined && { policy: snapshot.policy }),
-    ...(snapshot.failure !== undefined && { failure: snapshot.failure }),
-  })
+  const restoredContext = (stored: Readonly<Record<string, unknown>>, agent: string, parentID: string | undefined): MachineContext =>
+    module.contexts.restore(stored, {
+      sessionId: String(stored.sessionId),
+      agent,
+      parentID,
+      maxAttempts: options.maxAttempts,
+      memoryLimit: options.memoryLimit,
+    })
 
   const create = (
     sessionId: string,
     agent: string,
-    startState: LoopStateId,
-    context: LoopContext,
-    isRestored: boolean,
+    context: MachineContext,
+    parentID: string | undefined,
+    restored?: PersistedSnapshot,
   ): SessionStart => {
-    const entry: MachineEntry = {
-      actor: options.library.createActor(SESSION_LOOP, startState, context),
-      sessionId,
-      agent,
-      pending: [],
-    }
+    const actor = options.library.createActor(assembly.loop, initialState, context, restored)
+    const entry: MachineEntry = { actor, sessionId, agent, pending: [] }
 
-    if (isRestored) {
-      // Entry actions do run on a restored state: their `assign`s land again, which
-      // is safe because they are idempotent (`set_tools_policy` keeps the restored
-      // rule). Only their emits are dropped, because those were delivered before the
-      // reload and takeEmits discards the replay.
-      entry.actor.takeEmits()
-    }
-    else {
-      entry.pending = [...entry.actor.takeEmits()]
-    }
+    // A session is created before its agent is known; `admit` is how `admission`
+    // leaves the state it entered while the identity was empty.
+    entry.actor.send({ type: 'admit', agent, parentID })
+
+    if (actor.restored === true) entry.actor.takeEmits()
+    else entry.pending = [...entry.actor.takeEmits()]
 
     machines.set(sessionId, entry)
 
@@ -1074,7 +774,7 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
       machine: view(entry),
       created: true,
       emits: [],
-      snapshot: isRestored ? 'restored' : 'fresh',
+      snapshot: actor.restored === true ? 'restored' : 'fresh',
     }
   }
 
@@ -1091,41 +791,44 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
     return held
   }
 
-  const start = (sessionId: string, agent: string): SessionStart | undefined => {
+  const start = (sessionId: string, agent: string, parentID?: string): SessionStart | undefined => {
     const existing = machines.get(sessionId)
 
-    if (existing !== undefined) return { machine: view(existing), created: false, emits: [] }
-
-    const startState = options.startStateFor(agent)
-
-    return startState === undefined ? undefined : create(sessionId, agent, startState, freshContext(sessionId, agent), false)
+    return existing === undefined ? create(sessionId, agent, contextFor(sessionId, agent, parentID), parentID) : { machine: view(existing), created: false, emits: [] }
   }
 
-  const load = (sessionId: string, agent: string): Effect.Effect<SessionStart | undefined> => Effect.gen(function* () {
+  const load = (sessionId: string, agent: string, parentID?: string): Effect.Effect<SessionStart | undefined> => Effect.gen(function* () {
     const snapshot = options.snapshot
 
-    if (snapshot === undefined) return start(sessionId, agent)
+    if (snapshot === undefined) return start(sessionId, agent, parentID)
 
-    const read = yield* snapshot.read(sessionId)
+    const read = yield* snapshot.read(sessionId, stateIds)
 
     if (read.status === 'rejected') return
 
-    const startState = options.startStateFor(agent)
-
-    if (startState === undefined) return
-
     if (read.status === 'absent') {
-      const started = create(sessionId, agent, startState, freshContext(sessionId, agent), false)
+      if (read.reason === 'legacy') {
+        yield* Effect.logInfo('[state-machine] snapshot state-machine/' + sessionId + ' v1 record, starting fresh')
+      }
+
+      const started = create(sessionId, agent, contextFor(sessionId, agent, parentID), parentID)
 
       return read.reason === 'missing' ? started : { ...started, snapshot: read.reason }
     }
 
-    const stored = read.record.payload
+    const stored = read.record.snapshot
+    const path = stateValuePath(stored.value)
+    const isUsable = stored.status !== 'error'
+      && path !== ''
+      && !isTransient(path)
+      && hasStatePath(assembly.loop.states as unknown as Readonly<Record<string, NestedStates<unknown>>>, path)
 
-    return TRANSIENT_STATES.has(stored.state) ? { ...create(sessionId, agent, startState, freshContext(sessionId, agent), false), snapshot: 'shape-invalid' } : create(sessionId, agent, stored.state, contextFromSnapshot(stored, agent), true)
+    return isUsable
+      ? create(sessionId, agent, restoredContext(stored.context as Readonly<Record<string, unknown>>, agent, parentID), parentID, stored)
+      : { ...create(sessionId, agent, contextFor(sessionId, agent, parentID), parentID), snapshot: 'shape-invalid' }
   })
 
-  const ensure = (sessionId: string, agent: string): Effect.Effect<SessionStart | undefined> => Effect.suspend(() => {
+  const ensure = (sessionId: string, agent: string, parentID?: string): Effect.Effect<SessionStart | undefined> => Effect.suspend(() => {
     const existing = machines.get(sessionId)
 
     if (existing !== undefined) return Effect.succeed<SessionStart | undefined>({ machine: view(existing), created: false, emits: [] })
@@ -1141,7 +844,7 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
     const settle = (value: SessionStart | undefined): Effect.Effect<SessionStart | undefined> =>
       Deferred.succeed(deferred, value).pipe(Effect.andThen(Effect.succeed(value)))
 
-    return load(sessionId, agent).pipe(
+    return load(sessionId, agent, parentID).pipe(
       Effect.flatMap(value => settle(value)),
       Effect.catchCause(() => settle(undefined)),
       Effect.ensuring(Effect.sync(() => { waiting.delete(sessionId) })),
@@ -1154,11 +857,7 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
 
     return entry === undefined || snapshot === undefined
       ? Effect.succeed('skipped' as const)
-      : snapshot.write({
-          ...liveContext(entry),
-          state: entry.actor.state(),
-          updatedAt: new Date().toISOString(),
-        }).pipe(
+      : snapshot.write(entry.actor.persistedSnapshot()).pipe(
           Effect.map(ok => ok ? 'written' as const : 'write-failed' as const),
           Effect.catchCause(() => Effect.succeed('write-failed' as const)),
         )
@@ -1170,12 +869,12 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
     if (entry === undefined) return { text: NO_MACHINE_MESSAGE, emits: [] }
 
     const state = entry.actor.state()
-    const signals = SESSION_LOOP.states[state].signals
-    const validation = validateSignal(input, state, signals)
+    const table = policyTable(assembly.registry, liveContext(entry).signalsPolicy)
+    const validation = validateSignal(input, state, table, assembly.registry)
 
     if (!validation.ok) {
       return {
-        text: refusalMessage(validation.refusal, signals),
+        text: refusalMessage(validation.refusal, table),
         emits: [],
         refusal: validation.refusal,
       }
@@ -1193,15 +892,15 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
   const status = (sessionId: string): string => {
     const entry = machines.get(sessionId)
 
-    return entry === undefined ? NO_MACHINE_MESSAGE : 'State: ' + entry.actor.state() + '.'
+    return entry === undefined ? NO_MACHINE_MESSAGE : 'State: ' + stateLeaf(entry.actor.state()) + '.'
   }
 
-  const signalLine = (sessionId: string, signal_keys?: readonly ToolSignal[]): string => {
+  const signalLine = (sessionId: string, signal_keys?: readonly string[]): string => {
     const entry = machines.get(sessionId)
 
     return entry === undefined
       ? 'Signals now: none'
-      : renderSignals(SESSION_LOOP.states[entry.actor.state()].signals, signal_keys)
+      : renderSignals(policyTable(assembly.registry, liveContext(entry).signalsPolicy), signal_keys)
   }
 
   const callback = (

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "signals": {
+    "SET_GOAL": {
+      "describe": "State the goal this session must accomplish, in payload.goal.",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "goal"
+        ],
+        "properties": {
+          "goal": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "examples": [
+          {
+            "goal": "ship the parser"
+          }
+        ]
+      }
+    },
+    "CLAIM_WORK": {
+      "describe": "Say the work is done and ready for the quality check.",
+      "schema": {
+        "description": "Constrains nothing: the runtime validates no payload shape for this signal, so any payload or no payload is accepted."
+      }
+    },
+    "GOAL_ACHIEVED": {
+      "describe": "Report that the goal is met.",
+      "schema": {
+        "description": "Constrains nothing: the runtime validates no payload shape for this signal, so any payload or no payload is accepted."
+      }
+    },
+    "GOAL_INCOMPLETE": {
+      "describe": "Report that the goal is not met.",
+      "schema": {
+        "description": "Constrains nothing: the runtime validates no payload shape for this signal, so any payload or no payload is accepted."
+      }
+    },
+    "LESSON": {
+      "describe": "Name the improvement or next attempt in payload.text.",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "examples": [
+          {
+            "text": "run typecheck before claiming done"
+          }
+        ]
+      },
+      "stateDescribes": {
+        "panic": "Name what to change next attempt in payload.text."
+      }
+    }
+  }
+}

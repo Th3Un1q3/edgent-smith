@@ -1,16 +1,8 @@
 import { Schema } from 'effect'
 import type { Issue } from 'effect/SchemaIssue'
 
-import type { LoopDefinition, LoopStateId } from './machine'
-
 /**
-The five signals the model may send. Each maps to `agent_sent_signal.<SIGNAL>`.
-*/
-export const TOOL_SIGNALS = ['SET_GOAL', 'CLAIM_WORK', 'GOAL_ACHIEVED', 'GOAL_INCOMPLETE', 'LESSON'] as const
-export type ToolSignal = (typeof TOOL_SIGNALS)[number]
-
-/**
-One signal a state accepts: the instruction the agent reads and its payload shape.
+One signal a policy can enable: the instruction the agent reads and its payload shape.
 */
 export interface SignalSpec {
   readonly describe: string
@@ -20,7 +12,23 @@ export interface SignalSpec {
   readonly schema?: Schema.Codec<unknown, unknown, never, never>
 }
 
-export type SignalTable = Readonly<Partial<Record<ToolSignal, SignalSpec>>>
+/**
+One machine's signal declarations: the manifest's prose plus the payload codecs
+JSON cannot hold.
+*/
+export interface SignalSources {
+  readonly signals: Readonly<Record<string, { readonly describe: string }>>
+  readonly codecs: Readonly<Partial<Record<string, SignalSpec['schema']>>>
+}
+
+/**
+One policy's signals by name. Names are not limited to the manifest: a policy
+may enable an ad-hoc name, and the table it builds is the authority on what is
+available.
+*/
+export type SignalTable = Readonly<Partial<Record<string, SignalSpec>>>
+
+export type ToolSignal = string
 
 export interface SchemaViolation {
   readonly path: string
@@ -28,18 +36,27 @@ export interface SchemaViolation {
 }
 
 export type SignalRefusal
-  = | { readonly code: 'unknown_signal', readonly signal: string, readonly state: LoopStateId, readonly available_signals: readonly ToolSignal[] }
-    | { readonly code: 'unavailable_signal', readonly signal: ToolSignal, readonly state: LoopStateId, readonly available_signals: readonly ToolSignal[] }
-    | {
-      readonly code: 'invalid_payload'
-      readonly signal: ToolSignal
-      readonly state: LoopStateId
-      readonly available_signals: readonly ToolSignal[]
-      readonly schema_validation_error: readonly SchemaViolation[]
-    }
+  = | {
+    readonly code: 'unknown_signal'
+    readonly signal: string
+    readonly state: string
+    readonly available_signals: readonly string[]
+  }
+  | {
+    readonly code: 'unavailable_signal'
+    readonly signal: string
+    readonly state: string
+    readonly available_signals: readonly string[]
+  }
+  | {
+    readonly code: 'invalid_payload'
+    readonly signal: string
+    readonly state: string
+    readonly schema_validation_error: readonly SchemaViolation[]
+  }
 
 export interface ValidatedSignal {
-  readonly type: `agent_sent_signal.${ToolSignal}`
+  readonly type: `agent_sent_signal.${string}`
   readonly payload?: unknown
 }
 
@@ -50,13 +67,35 @@ export type SignalValidation
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-const isToolSignal = (value: string): value is ToolSignal =>
-  (TOOL_SIGNALS as readonly string[]).includes(value)
+/**
+A state value as one name: a leaf is itself, and a compound value becomes its dotted path.
+*/
+export const stateValuePath = (value: unknown): string => {
+  if (typeof value === 'string') return value
+  if (value === null || typeof value !== 'object') return ''
 
-const eventType = (signal: ToolSignal): `agent_sent_signal.${ToolSignal}` => `agent_sent_signal.${signal}`
+  const [id, child] = Object.entries(value as Readonly<Record<string, unknown>>)[0] ?? []
 
-const availableSignals = (signals: SignalTable): ToolSignal[] =>
-  Object.keys(signals).filter(isToolSignal)
+  if (id === undefined) return ''
+
+  const path = stateValuePath(child)
+
+  return path === '' ? id : id + '.' + path
+}
+
+/**
+The leaf name a person sees: `towards_goal.validate` reads as `validate`.
+*/
+export const stateLeaf = (value: unknown): string => {
+  const path = stateValuePath(value)
+
+  return path.slice(path.lastIndexOf('.') + 1)
+}
+
+const eventType = (signal: string): `agent_sent_signal.${string}` => `agent_sent_signal.${signal}`
+
+const availableSignals = (signals: SignalTable): string[] =>
+  Object.keys(signals).filter(name => signals[name] !== undefined)
 
 const refuse = (refusal: SignalRefusal): SignalValidation => ({ ok: false, refusal })
 
@@ -134,24 +173,7 @@ const examplesOf = (spec: SignalSpec | undefined): readonly unknown[] => {
   return Array.isArray(examples) ? examples : []
 }
 
-const reservedProperties = (schema: SignalSpec['schema']): readonly string[] => {
-  const ast = schema?.ast
-
-  return ast === undefined || ast._tag !== 'Objects'
-    ? []
-    : ast.propertySignatures
-        .map(property => String(property.name))
-        .filter(name => name === 'type' || name === 'payload')
-}
-
-const ARM_PREFIX = 'agent_sent_signal.'
-
-const armSignals = (on: Readonly<Record<string, unknown>>): readonly string[] =>
-  Object.keys(on)
-    .filter(key => key.startsWith(ARM_PREFIX))
-    .map(key => key.slice(ARM_PREFIX.length))
-
-export const renderSignals = (signals: SignalTable, signal_keys?: readonly ToolSignal[]): string => {
+export const renderSignals = (signals: SignalTable, signal_keys?: readonly string[]): string => {
   const declared = availableSignals(signals)
   const names = signal_keys === undefined
     ? declared
@@ -162,41 +184,106 @@ export const renderSignals = (signals: SignalTable, signal_keys?: readonly ToolS
     : 'Signals now:\n' + names.map(name => '- ' + name + ' — ' + (signals[name]?.describe ?? '')).join('\n')
 }
 
+const renderAvailable = (signals: SignalTable): string => renderSignals(signals, availableSignals(signals))
+
 export const refusalMessage = (refusal: SignalRefusal, signals: SignalTable): string => {
   switch (refusal.code) {
     case 'unknown_signal': {
       const name = refusal.signal === '' ? 'the signal' : refusal.signal
-      return 'Unknown signal: ' + name + '.\nSignals: ' + TOOL_SIGNALS.join(', ') + '.'
+      return 'Unknown signal: ' + name + '.\n' + renderAvailable(signals)
     }
     case 'unavailable_signal': {
-      return refusal.signal + ' is not available in ' + refusal.state + '.\n' + renderSignals(signals)
+      return refusal.signal + ' is not available in ' + stateLeaf(refusal.state) + '.\n' + renderAvailable(signals)
     }
     case 'invalid_payload': {
       const lines = refusal.schema_validation_error.map(violation => '- ' + violation.path + ': expected ' + violation.expected)
-      const example = exampleOf(signals[refusal.signal])
+      const example = exampleOf(Object.hasOwn(signals, refusal.signal) ? signals[refusal.signal] : undefined)
 
-      return refusal.signal + ' payload is invalid in ' + refusal.state + '.'
+      return refusal.signal + ' payload is invalid in ' + stateLeaf(refusal.state) + '.'
         + (lines.length === 0 ? '' : '\n' + lines.join('\n'))
         + (example === undefined ? '' : '\nExample: ' + example)
     }
   }
 }
 
+const fieldCodec = (definition: unknown): Schema.Codec<unknown, unknown, never, never> | undefined => {
+  if (!isObject(definition)) return undefined
+
+  const minLength = definition['minLength']
+
+  switch (definition['type']) {
+    case 'string': {
+      return typeof minLength === 'number'
+        ? Schema.Trim.check(Schema.isMinLength(minLength))
+        : Schema.String
+    }
+    case 'number': {
+      return Schema.Number
+    }
+    case 'boolean': {
+      return Schema.Boolean
+    }
+    default: {
+      return undefined
+    }
+  }
+}
+
 /**
-Validates one agent signal against the declarations of the state it arrives in.
-The order is shape, vocabulary, declaration, payload; the first failure wins.
+Builds the payload codec a manifest signal declares. A codec cannot live in JSON,
+so the manifest's JSON Schema is the source and this reads the object-of-fields
+subset a signal declares. `undefined` means the signal validates no payload shape.
 */
-export const validateSignal = (input: unknown, state: LoopStateId, signals: SignalTable): SignalValidation => {
-  const available_signals = availableSignals(signals)
+export const manifestCodec = (declaration: unknown): SignalSpec['schema'] | undefined => {
+  if (!isObject(declaration) || !isObject(declaration['schema'])) return undefined
+
+  const schema = declaration['schema']
+
+  if (schema['type'] !== 'object' || !isObject(schema['properties'])) return undefined
+
+  const fields: Record<string, Schema.Codec<unknown, unknown, never, never>> = {}
+
+  for (const [name, definition] of Object.entries(schema['properties'])) {
+    const codec = fieldCodec(definition)
+
+    if (codec === undefined) return undefined
+    fields[name] = codec
+  }
+
+  if (Object.keys(fields).length === 0) return undefined
+
+  const examples = schema['examples']
+
+  return Schema.Struct(fields).annotate({
+    examples: Array.isArray(examples) ? examples : [],
+  }) as unknown as SignalSpec['schema']
+}
+
+/**
+Validates one agent signal against the enabled signal table and the running
+machine's registry.
+The table is the policy's authority, so an enabled ad-hoc name is accepted;
+a name the registry declares is refused as unavailable, and a name the
+registry does not declare is refused as unknown.
+*/
+export const validateSignal = (input: unknown, state: unknown, signals: SignalTable, registry: SignalTable): SignalValidation => {
+  const stateName = stateLeaf(state)
 
   if (!isObject(input) || typeof input.type !== 'string' || input.type.trim() === '') {
-    return refuse({ code: 'unknown_signal', signal: '', state, available_signals })
+    return refuse({ code: 'unknown_signal', signal: '', state: stateName, available_signals: availableSignals(signals) })
   }
 
   const signal = input.type.trim()
+  const spec = Object.hasOwn(signals, signal) ? signals[signal] : undefined
 
-  if (!isToolSignal(signal)) {
-    return refuse({ code: 'unknown_signal', signal, state, available_signals })
+  if (spec === undefined) {
+    // SignalRefusal discriminates on `code`, so the merged literal needs an assertion.
+    return refuse({
+      code: Object.hasOwn(registry, signal) ? 'unavailable_signal' : 'unknown_signal',
+      signal,
+      state: stateName,
+      available_signals: availableSignals(signals),
+    } as SignalRefusal)
   }
 
   const extra = Object.keys(input).find(key => key !== 'type' && key !== 'payload')
@@ -205,16 +292,9 @@ export const validateSignal = (input: unknown, state: LoopStateId, signals: Sign
     return refuse({
       code: 'invalid_payload',
       signal,
-      state,
-      available_signals,
+      state: stateName,
       schema_validation_error: [{ path: extra, expected: 'only type and payload' }],
     })
-  }
-
-  const spec = signals[signal]
-
-  if (spec === undefined) {
-    return refuse({ code: 'unavailable_signal', signal, state, available_signals })
   }
 
   if (spec.schema === undefined) {
@@ -230,77 +310,8 @@ export const validateSignal = (input: unknown, state: LoopStateId, signals: Sign
     ? refuse({
         code: 'invalid_payload',
         signal,
-        state,
-        available_signals,
+        state: stateName,
         schema_validation_error: issuesOf(result.failure.issue),
       })
     : { ok: true, event: { type: eventType(signal), payload: result.success } }
-}
-
-const assertSignalSpec = (state: string, name: string, spec: SignalSpec | undefined): void => {
-  if (spec === undefined) return
-
-  if (spec.describe.trim() === '') {
-    throw new Error(state + '.' + name + ' has a blank describe')
-  }
-
-  const reserved = reservedProperties(spec.schema)
-
-  if (reserved.length > 0) {
-    throw new Error(state + '.' + name + ' declares the reserved property ' + reserved.join(', '))
-  }
-
-  const [example] = examplesOf(spec)
-
-  if (example === undefined || spec.schema === undefined) return
-
-  const result = Schema.decodeUnknownResult(spec.schema)(example, { onExcessProperty: 'error' })
-
-  if (result._tag === 'Failure') {
-    throw new Error(state + '.' + name + ' example does not decode')
-  }
-}
-
-/**
-Verifies that every state's declarations match its transition arms, that the
-vocabulary is fully declared, and that every declared example decodes. Throws on
-the first violation; a mismatch fails the plugin load instead of advertising a
-signal the machine cannot handle.
-*/
-export const assertSignalDeclarations = (loop: LoopDefinition): void => {
-  const declared = new Set<string>()
-
-  for (const [state, definition] of Object.entries(loop.states)) {
-    const signals = definition.signals
-    const declaredHere = Object.keys(signals)
-
-    for (const name of declaredHere) {
-      if (!isToolSignal(name)) {
-        throw new Error(state + ' declares ' + name + ', which is not a signal in TOOL_SIGNALS')
-      }
-
-      declared.add(name)
-      assertSignalSpec(state, name, signals[name])
-    }
-
-    const arms = armSignals(definition.on as unknown as Readonly<Record<string, unknown>>)
-
-    for (const name of arms) {
-      if (!declaredHere.includes(name)) {
-        throw new Error(state + ' has an arm for ' + name + ' but no declaration')
-      }
-    }
-
-    for (const name of declaredHere) {
-      if (!arms.includes(name)) {
-        throw new Error(state + ' declares ' + name + ' but has no arm')
-      }
-    }
-  }
-
-  for (const name of TOOL_SIGNALS) {
-    if (!declared.has(name)) {
-      throw new Error(name + ' is declared by no state')
-    }
-  }
 }

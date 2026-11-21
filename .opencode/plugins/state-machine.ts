@@ -44,7 +44,7 @@ import type {
 const SIGNAL_TOOL = 'signal_send'
 const SHELL_TIMEOUT_MS = 120_000
 const SHELL_MAX_BUFFER = 4 * 1024 * 1024
-const SIGNALS_PROMPT_DESCRIPTION = 'The session loop is listing the signals this state accepts.'
+const SIGNALS_PROMPT_DESCRIPTION = 'The session loop is listing the signals the policy enables.'
 
 type PluginEvent = Stream.Success<ReturnType<Context['event']['subscribe']>>
 
@@ -58,11 +58,11 @@ const signalInput: JsonSchema.JsonSchema = {
   properties: {
     type: {
       type: 'string',
-      description: 'The signal to send. The current state advertises which ones it accepts.',
+      description: 'The signal to send. Only a name the signals policy enables is accepted.',
     },
     payload: {
       type: 'object',
-      description: 'Fields declared for that signal by the current state; omit it for a payloadless signal.',
+      description: 'Fields declared for that signal by the signals policy; omit it for a payloadless signal.',
     },
   },
 }
@@ -138,7 +138,6 @@ export const createStateMachinePlugin = (
 
     const machine = createStateMachine({
       library,
-      startStateFor: config.startStateFor,
       snapshot: createSnapshotStore({
         load: key => context.storage.get(key),
         save: (key, value) => context.storage.set(key, value as Parameters<Context['storage']['set']>[1]),
@@ -177,9 +176,17 @@ export const createStateMachinePlugin = (
         Effect.catchCause(() => Effect.void),
       )
 
-    const open = (sessionId: string, agent: string): Effect.Effect<boolean> =>
+    // The factory's `ensure` takes the session's parentID, which admission reads
+    // from the `admit` event; the `StateMachine` type does not declare it.
+    const ensureSession: (
+      sessionId: string,
+      agent: string,
+      parentID?: string,
+    ) => ReturnType<typeof machine.ensure> = machine.ensure
+
+    const open = (sessionId: string, agent: string, parentID?: string): Effect.Effect<boolean> =>
       Effect.gen(function* () {
-        const started = yield* machine.ensure(sessionId, agent)
+        const started = yield* ensureSession(sessionId, agent, parentID)
 
         if (started === undefined) {
           yield* logSnapshot(sessionId, 'read-failed')
@@ -271,7 +278,7 @@ export const createStateMachinePlugin = (
     yield* context.tool.transform((editor) => {
       editor.add({
         name: SIGNAL_TOOL,
-        description: 'Request a transition in this session\'s state machine. Names the state it moved to, or the transitions available from the current state when the request is refused.',
+        description: 'Request a transition in this session\'s state machine. A signal the policy does not enable is refused; an accepted one returns "Signal accepted."',
         input: signalInput,
         options: { codemode: true },
         execute: (input, toolContext) =>
@@ -281,7 +288,7 @@ export const createStateMachinePlugin = (
 
             if (agent === undefined) return { content: machine.status(sessionId) }
 
-            yield* open(sessionId, agent)
+            yield* open(sessionId, agent, yield* parentOf(sessionId))
 
             const result = machine.signal(input, sessionId)
 
@@ -327,7 +334,7 @@ export const createStateMachinePlugin = (
 
       if ((agent !== GATE_AGENT) || ((yield* parentOf(sessionId)) !== undefined)) return
 
-      yield* open(sessionId, agent)
+      yield* open(sessionId, agent, yield* parentOf(sessionId))
 
       const decision = decide({ agent, isChild: false, state: machine.state(sessionId), policy: machine.policy(sessionId), tool })
 
@@ -356,7 +363,7 @@ export const createStateMachinePlugin = (
 
         // The loop opens silently: its goal request is a reply to the person,
         // not a greeting into a chat that has no message yet.
-        const started = yield* machine.ensure(sessionId, agent)
+        const started = yield* ensureSession(sessionId, agent, yield* parentOf(sessionId))
 
         if (started?.snapshot === 'read-failed') yield* logSnapshot(sessionId, 'read-failed')
       })),
@@ -378,7 +385,7 @@ export const createStateMachinePlugin = (
 
         // A message can be the first access after a reload: open (or restore)
         // the session before delivering it, or the input has no machine to wake.
-        if (agent !== undefined) yield* open(sessionId, agent)
+        if (agent !== undefined) yield* open(sessionId, agent, yield* parentOf(sessionId))
 
         // The first real message wakes the loop and receives its goal request.
         yield* deliver(sessionId, machine.wake(sessionId))
@@ -400,7 +407,7 @@ export const createStateMachinePlugin = (
         const session = yield* context.session.get({ sessionID: event.data.sessionID })
         const agent = session.agent as unknown as string | undefined
 
-        if (agent !== undefined) yield* open(sessionId, agent)
+        if (agent !== undefined) yield* open(sessionId, agent, yield* parentOf(sessionId))
 
         const emits = yield* machine.idle(sessionId)
 
