@@ -76,7 +76,7 @@
             {
               "type": "prompt",
               "params": {
-                "template": "goal_request",
+                "text": "Understand the goal we work towards in this session.",
                 "description": "Ask the agent what goal this session should accomplish."
               }
             },
