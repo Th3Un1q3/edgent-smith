@@ -25,6 +25,7 @@ const fakeLibrary = (startState: LoopStateId): {
 }
 
 const context = (overrides: Partial<LoopContext> = {}): LoopContext => ({
+  nudges: 0,
   sessionId: 'ses_1',
   agent: 'rug',
   maxAttempts: 3,
@@ -76,6 +77,7 @@ describe('signal payloads', () => {
     const actor = library.createActor(loopAt('memorize'), 'towards_goal', context({ intent: 'lesson' }))
 
     actor.send({ type: 'agent_sent_signal.LESSON', payload: { text: 'lesson' } })
+    actor.send({ type: 'agent_sent_signal.RETROSPECTIVE_COMPLETE' })
 
     expect(actor.state()).toBe('work')
     expect(actor.context().memories).toEqual(['lesson'])
@@ -83,7 +85,7 @@ describe('signal payloads', () => {
 
   it('reads field_present from the nested payload', async () => {
     const library = await loadStateMachineLibrary()
-    const actor = library.createActor(SESSION_LOOP, 'panic', context())
+    const actor = library.createActor(loopAt('panic'), 'towards_goal', context())
 
     actor.send({ type: 'agent_sent_signal.LESSON', payload: { text: 'retry' } })
 

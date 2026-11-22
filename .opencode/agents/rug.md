@@ -365,7 +365,7 @@ const result = { status: 'reviewed', from: id, verdict: reviewer.outputText.trim
 - [ ] Multi-subtask work passed a fresh integration validator over the combined artifact, its `PASS` quoted; single-subtask work records that integration was skipped.
 - [ ] A dispatched child ran `just ci` and it passed — `just ci-fast` when only docs, YAML, or justfiles changed — and the output is quoted.
 - [ ] No contributing result is `truncated`, none has a status other than `ok`, and none is still empty after `settle`; every path sits inside scope.
-- [ ] Docs were updated where behavior changed, and the retrospective stage ran with its memory write confirmed by the child that wrote it; the report names anything left undone.
+- [ ] Docs were updated where behavior changed, and the retrospective stage ran through its command and closed on `RETROSPECTIVE_COMPLETE`; the report names anything left undone.
 - [ ] Every tool fact (parameter, status, cap, default) matches the [Tooling](#tooling) table; every `js` body but the envelope is statement-level with no `try`, and the envelope holds the only `try`/`catch`.
 - [ ] Every scouting pass is logged with each skill chosen or rejected and its reason, or the report says why none ran.
 
@@ -377,7 +377,7 @@ Request: <one sentence>
 Changed: <path — what changed>
 Criteria: <criterion — the forwarded verdict — evidence it named>
 Gates: <gate — result>
-Memory: <memory name>
+Retrospective: <RETROSPECTIVE_COMPLETE | skipped — reason>
 Open: <what remains, or none>
 ```
 
@@ -390,7 +390,7 @@ Open: <what remains, or none>
 | Implement | accepted decomposition | validate | fresh fix producer, then re-validate | never |
 | Validate | finished artifact | gates | feed the `FAIL` report to a fresh producer | never |
 | Integrate | every stage validator returned `PASS` | gates | fresh integration validator over the combined artifact; return to Validate on `FAIL` | one subtask only |
-| Gates and docs | integration `PASS` | retrospective stage, memory write | fix, then re-run | no behavior or doc changed |
+| Gates and docs | integration `PASS` | retrospective stage (command), `RETROSPECTIVE_COMPLETE` | fix, then re-run | no behavior or doc changed |
 
 | Event | Mandated follow-up | Extension point |
 |---|---|---|
@@ -398,54 +398,12 @@ Open: <what remains, or none>
 | `validation_failed` | fresh producer carrying the `FAIL` report; re-validate; stop at the cap | [While loop](#while-loop-ralph-loop) body |
 | `cap_hit` | shrink scope or split, then resume the same `task_id`; ask | [Rollback and revisit](#rollback-and-revisit) |
 | `denial` | one canonical retry for a format rejection; a gated denial is reported, not retried | Failure Modes → Denials |
-| `objective_complete` | retrospective stage, then return | [Retrospective stage](#retrospective-stage) |
+| `objective_complete` | retrospective stage, then return | [Retrospective: Prompt the Command](../../.agents/skills/task-delegation/workflows/task-delegation-workflow.md#retrospective-prompt-the-command) |
 | `objective_blocked` | `question` with evidence and options | Failure Modes → stop triggers |
 
-## Retrospective stage
+## Retrospective
 
-Run the retrospective stage after the last validation passes and before returning whenever behavior or docs changed; a run that changed neither skips it. Only the orchestrator observed the whole run, and each child saw only its own session.
-
-- The orchestrator owns the run record: what worked, what failed, which prompt was vague, which subtask needed a retry.
-- Children own their own experience, so the orchestrator interviews only the children that failed, were retried, or produced nothing, one at a time, asking what blocked them, what was ambiguous in their prompt, and what they would change.
-- The orchestrator collects one line per struggling child, keeps the child ids, and hands that bundle alone to one fresh `harness-management` subtask. That subtask sorts every lesson into `case` (a specific incident) or `method` (a change to how the orchestrator investigates or verifies), writes one `cases/` memory per `case` and updates `cases/about`, and applies only the `method` rules to the harness. A plan that labels an incident `method` is rejected and re-dispatched once.
-- The same subtask reads `cases/about` first so it does not duplicate an existing case, then writes and reads each memory back, so the report carries every memory name it stored and whether the index changed.
-- The memory write runs only when the bundle is non-empty; otherwise the report notes "no new lesson".
-- The implement step runs only when the plan names applicable harness changes; otherwise the report notes "no applicable changes".
-
-```js
-// body for the envelope above
-const observations = ['<orchestrator observation>']
-const struggled = ['<task_id>', '<task_id>']
-if (struggled.length === 0 && observations.length === 0) {
-  console.log('retrospective skipped: no struggling children and no observations')
-  return { stage: 'retrospective', status: 'skipped' }
-}
-const asked = 'Answer in three lines: what blocked you, what was ambiguous in your prompt, what would you change next time?'
-const bundleLines = []
-// one at a time: a long child gets its own round, never a shared fan-out
-for (const tid of struggled) {
-  const raw = await tools.subtask_tail({ task_id: tid, count: 1 })
-  const entries = typeof raw === 'string' ? JSON.parse(raw) : raw
-  const landed = (Array.isArray(entries) ? entries : []).filter((e) => e && !e.truncated && String(e.outputText || '').trim()).pop()
-  const answer = await run({ task_id: tid, description: 'interview a struggling child', prompt: landed ? `${asked}\nYour recorded output, so you need not redo the work:\n${landed.outputText.trim()}` : asked })
-  bundleLines.push(`child ${tid} (${answer.status}): ${ok(answer) ? answer.outputText.trim() : 'no recorded output; tail it for context'}`)
-}
-const bundle = bundleLines.join('\n')
-const plan = await run({ description: 'plan harness changes', skills: ['harness-management'], prompt: `Analyze these session observations.\n\nIdentify root causes of the subtask and orchestration issues.\n\nFollowing the skill, label every lesson case or method. Cases become one \`cases/\` memory each plus a \`cases/about\` update; methods become the smallest harness diff. Emit them one per line, ordered by expected impact, each citing the child id or observation it came from. End with END plan — last rule: <the plan's last rule, one line>.\n\n## Subtask issues\n${bundle}\n\n## Orchestrator issues\n${observations.join('\n')}` })
-if (!ok(plan)) return { stage: 'retrospective', status: plan.status, error: plan.error }
-let memoryNote = 'no new lesson'
-if (bundle.trim()) {
-  const memorize = await run({ task_id: plan.task_id, description: 'store the lessons', skills: ['serena-memory'], prompt: 'Store each case as one `cases/` memory in the shape the Failure Modes rule names (symptom, false hypothesis, root cause, how confirmed, prevention), update `cases/about`, and report one line per memory naming it. Apply only the method rules to the harness. End with END memories — last memory: <its name>.' })
-  memoryNote = ok(memorize) ? memorize.outputText.trim() : `memory write failed: ${memorize.status}`
-}
-let changeReport = 'no applicable changes'
-if (!/no applicable changes/i.test(plan.outputText)) {
-  const change = await run({ task_id: plan.task_id, description: 'implement the plan', prompt: 'Implement the highest-impact changes the plan names, and report each one with the file it touched.' })
-  if (!ok(change)) return { stage: 'retrospective', status: change.status, error: change.error }
-  changeReport = change.outputText.trim()
-}
-const result = { stage: 'retrospective', report: `${changeReport}\nMemory: ${memoryNote}` }
-```
+The retrospective stage is owned by [Retrospective: Prompt the Command](../../.agents/skills/task-delegation/workflows/task-delegation-workflow.md#retrospective-prompt-the-command) in the `task-delegation` workflow: it runs the retrospective command after the last validation and closes on `RETROSPECTIVE_COMPLETE`.
 
 ## Failure Modes
 

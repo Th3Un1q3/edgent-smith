@@ -22,6 +22,7 @@ const context = (overrides: Record<string, unknown> = {}): LoopContext => ({
   memoryLimit: 3,
   injected: {},
   injectedSkills: [],
+  memoryTokens: [],
   results: {},
   signalsPolicy: { names: [] },
   ...overrides,
@@ -163,6 +164,73 @@ describe('record action', () => {
 
     expect(next.injectedSkills).toEqual(['skill:task-delegation:complete'])
   })
+
+  const recall = (base: LoopContext, namespace: string): Partial<LoopContext> =>
+    call(
+      actions.record_callback,
+      { context: base, event: { type: 'x', payload: { ok: true, value: { full: ['line for ' + namespace], index: [] } } } },
+      { reportTo: 'memories_ready', key: namespace },
+    ) as Partial<LoopContext>
+
+  it('mints one memory key per recalled memory', () => {
+    const recalled = [
+      'preferences/rug_rework_principles',
+      'preferences/rug_rework_tooling',
+      'preferences/rug_rework_patterns',
+      'preferences/rug_cross_session_handover',
+      'preferences/rug_prompt_self_contained',
+    ]
+    let base = context({ memoryTokens: [] })
+    const delivered: string[] = []
+
+    for (const namespace of recalled) {
+      const next = recall(base, namespace)
+      base = { ...base, ...next } as LoopContext
+      delivered.push(...Object.keys(next.injected ?? {}).filter(key => !delivered.includes(key)))
+    }
+
+    expect(delivered).toEqual(recalled)
+    expect(base.memoryTokens).toEqual([
+      'mem:preferences/rug_rework_principles:complete',
+      'mem:preferences/rug_rework_tooling:complete',
+      'mem:preferences/rug_rework_patterns:complete',
+      'mem:preferences/rug_cross_session_handover:complete',
+      'mem:preferences/rug_prompt_self_contained:complete',
+    ])
+  })
+
+  it('mints the same key for a memory name with or without its .md suffix', () => {
+    const suffixed = recall(context({ memoryTokens: [] }), 'preferences/rug_rework_principles.md')
+    const plain = recall(context({ memoryTokens: [] }), 'preferences/rug_rework_principles')
+
+    expect(suffixed.memoryTokens).toEqual(['mem:preferences/rug_rework_principles:complete'])
+    expect(suffixed.memoryTokens).toEqual(plain.memoryTokens)
+  })
+
+  it('mints distinct keys for one file name in two namespaces', () => {
+    const tooling = recall(context({ memoryTokens: [] }), 'tooling/about.md')
+    const ai = recall(context({ memoryTokens: [] }), 'ai-engineering/about.md')
+
+    expect(tooling.memoryTokens).toEqual(['mem:tooling/about:complete'])
+    expect(ai.memoryTokens).toEqual(['mem:ai-engineering/about:complete'])
+  })
+
+  it('delivers a same-basename memory from a second namespace', () => {
+    const tooling = recall(context({ memoryTokens: [] }), 'tooling/about.md')
+    const ai = recall({ ...context(), ...tooling } as LoopContext, 'ai-engineering/about.md')
+
+    expect(ai.injected?.['ai-engineering/about.md']?.full).toEqual(['line for ai-engineering/about.md'])
+  })
+
+  it('skips a memory an earlier recall already delivered', () => {
+    const namespace = 'preferences/rug_rework_principles'
+    const first = recall(context({ memoryTokens: [] }), namespace)
+    const second = recall({ ...context(), ...first } as LoopContext, namespace)
+
+    expect(first.injected?.[namespace]?.full).toEqual(['line for ' + namespace])
+    expect(second.injected).toBeUndefined()
+    expect(second.memoryTokens).toBeUndefined()
+  })
 })
 
 describe('session_agent guard', () => {
@@ -228,8 +296,8 @@ describe('declaredPolicyParameters', () => {
       states: { a: { on: { many: [{ actions: policy }, 5] } } } },
     )
 
-    expect(single).toEqual([{ set_enabled_signals: ['CLAIM_WORK'], notify_agent: undefined }])
-    expect(many).toEqual([{ set_enabled_signals: ['CLAIM_WORK'], notify_agent: undefined }])
+    expect(single).toEqual([{ set_enabled_signals: ['CLAIM_WORK'] }])
+    expect(many).toEqual([{ set_enabled_signals: ['CLAIM_WORK'] }])
   })
 
   it('reads policy from both entry and exit lists', () => {

@@ -29,7 +29,7 @@ const validate = (input: unknown, state: LoopStateId, signals: SignalTable): Sig
   validateSignal(input, state, signals, registry)
 
 const policyOf = (...names: readonly string[]): SignalTable =>
-  specsOf({ set_enabled_signals: names, notify_agent: false })
+  specsOf({ set_enabled_signals: names })
 
 const startedContext = async (): Promise<LoopContext> => {
   const library = await loadStateMachineLibrary()
@@ -65,7 +65,6 @@ const workActor = async (parameters: UpdateSignalsPolicyParameters): Promise<Act
 
 const updateGoal: UpdateSignalsPolicyParameters = {
   set_enabled_signals: [{ UPDATE_GOAL: { description: 'update goal', schema: 'SET_GOAL' } }],
-  notify_agent: true,
 }
 
 describe('update_signals_policy', () => {
@@ -81,7 +80,7 @@ describe('update_signals_policy', () => {
   })
 
   it('enables exactly the one signal a string entry names', async () => {
-    const actor = await workActor({ set_enabled_signals: ['CLAIM_WORK'], notify_agent: true })
+    const actor = await workActor({ set_enabled_signals: ['CLAIM_WORK'] })
 
     expect(actor.takeEmits()).toEqual([{ type: 'emit.signals', signal_keys: ['CLAIM_WORK'] }])
     expect(actor.context().signalsPolicy).toEqual({ names: ['CLAIM_WORK'] })
@@ -119,13 +118,6 @@ describe('update_signals_policy', () => {
     })
   })
 
-  it('enables the set without an advert when notify_agent is false', async () => {
-    const actor = await workActor({ set_enabled_signals: ['CLAIM_WORK'], notify_agent: false })
-
-    expect(actor.takeEmits()).toEqual([])
-    expect(actor.context().signalsPolicy).toEqual({ names: ['CLAIM_WORK'] })
-  })
-
   it('keeps the policy in force when a later state sets none', async () => {
     const library = await loadStateMachineLibrary()
     const machine = createStateMachine({
@@ -144,7 +136,6 @@ describe('update_signals_policy', () => {
   it('advertises and accepts both entries of a mixed policy list', async () => {
     const mixed: UpdateSignalsPolicyParameters = {
       set_enabled_signals: ['SET_GOAL', { UPDATE_GOAL: { description: 'update goal', schema: 'SET_GOAL' } }],
-      notify_agent: true,
     }
     const actor = await workActor(mixed)
     const specs = specsOf(mixed)
@@ -181,7 +172,6 @@ describe('update_signals_policy', () => {
   it('advertises none when set_enabled_signals is empty', async () => {
     const empty: UpdateSignalsPolicyParameters = {
       set_enabled_signals: [],
-      notify_agent: true,
     }
     const actor = await workActor(empty)
     const specs = specsOf(empty)

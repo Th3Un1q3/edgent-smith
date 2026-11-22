@@ -3,11 +3,27 @@
   "initial": "admission",
   "on": {
     "system_interrupted": {
-      "target": "#session.parked",
+      "target": "#session.towards_goal.parked",
       "guard": {
         "type": "not_parked",
         "params": {}
       }
+    },
+    "callback.skill_ready": {
+      "actions": [
+        {
+          "type": "record_callback",
+          "params": {
+            "reportTo": "skill_ready"
+          }
+        },
+        {
+          "type": "mark_skill",
+          "params": {
+            "name": "task-delegation"
+          }
+        }
+      ]
     }
   },
   "states": {
@@ -62,12 +78,100 @@
     "towards_goal": {
       "initial": "define_goal",
       "on": {
-        "system_idle": {
-          "target": "#session.towards_goal.validate",
-          "guard": {
-            "type": "not_parked",
-            "params": {}
+        "system_idle": [
+          {
+            "guard": {
+              "type": "counter_below",
+              "params": {
+                "key": "nudges",
+                "limit": 3
+              }
+            },
+            "actions": [
+              {
+                "type": "record",
+                "params": {
+                  "op": "increment",
+                  "key": "nudges"
+                }
+              },
+              {
+                "type": "prompt",
+                "params": {
+                  "template": "idle_nudge",
+                  "description": "Nudge the agent to do what the active state waits for instead of idling."
+                }
+              }
+            ]
+          },
+          {
+            "target": "#session.towards_goal.panic",
+            "actions": [
+              {
+                "type": "record",
+                "params": {
+                  "op": "fail",
+                  "reason": "idle budget exhausted"
+                }
+              },
+              {
+                "type": "prompt",
+                "params": {
+                  "template": "panic_escalation",
+                  "description": "Report that the idle budget ran out and the loop is parked."
+                }
+              }
+            ]
           }
+        ],
+        "reset_goal": {
+          "target": "#session.towards_goal.define_goal",
+          "actions": [
+            {
+              "type": "record",
+              "params": {
+                "op": "set",
+                "key": "goal",
+                "source": {
+                  "from": "literal",
+                  "value": ""
+                }
+              }
+            },
+            {
+              "type": "record",
+              "params": {
+                "op": "set",
+                "key": "intent",
+                "source": {
+                  "from": "literal",
+                  "value": "none"
+                }
+              }
+            },
+            {
+              "type": "record",
+              "params": {
+                "op": "set",
+                "key": "attempts",
+                "source": {
+                  "from": "literal",
+                  "value": 0
+                }
+              }
+            },
+            {
+              "type": "record",
+              "params": {
+                "op": "set",
+                "key": "nudges",
+                "source": {
+                  "from": "literal",
+                  "value": 0
+                }
+              }
+            }
+          ]
         }
       },
       "states": {
@@ -76,7 +180,7 @@
             {
               "type": "prompt",
               "params": {
-                "text": "Understand the goal we work towards in this session.",
+                "template": "goal_request",
                 "description": "Ask the agent what goal this session should accomplish."
               }
             },
@@ -85,12 +189,11 @@
               "params": {
                 "set_enabled_signals": [
                   "SET_GOAL"
-                ],
-                "notify_agent": true
+                ]
               }
             },
             {
-              "type": "request_memories",
+              "type": "recall_memories",
               "params": {
                 "namespace": "preferences/user"
               }
@@ -111,8 +214,10 @@
           ],
           "exit": [
             {
-              "type": "clear_tools_policy",
-              "params": {}
+              "type": "set_tools_policy",
+              "params": {
+                "allowedTools": null
+              }
             }
           ],
           "on": {
@@ -159,12 +264,11 @@
               "params": {
                 "set_enabled_signals": [
                   "CLAIM_WORK"
-                ],
-                "notify_agent": true
+                ]
               }
             },
             {
-              "type": "request_skill",
+              "type": "activate_skill",
               "params": {
                 "name": "task-delegation"
               }
@@ -173,22 +277,6 @@
           "on": {
             "agent_sent_signal.CLAIM_WORK": {
               "target": "check"
-            },
-            "callback.skill_ready": {
-              "actions": [
-                {
-                  "type": "record_callback",
-                  "params": {
-                    "reportTo": "skill_ready"
-                  }
-                },
-                {
-                  "type": "mark_skill",
-                  "params": {
-                    "name": "task-delegation"
-                  }
-                }
-              ]
             },
             "callback.memories_ready": {
               "actions": [
@@ -206,7 +294,7 @@
         "check": {
           "entry": [
             {
-              "type": "request_shell",
+              "type": "run_shell",
               "params": {
                 "cmd": "just opencode::typecheck",
                 "reportTo": "quality_check_ready"
@@ -231,7 +319,7 @@
                 ]
               },
               {
-                "target": "#session.panic",
+                "target": "#session.towards_goal.panic",
                 "actions": [
                   {
                     "type": "record_callback",
@@ -261,13 +349,22 @@
               }
             },
             {
+              "type": "spawn_subagent",
+              "params": {
+                "agent": "judge",
+                "description": "Ask a judge subagent to grade the goal against the evidence.",
+                "text": "Judge whether this session's goal is met. End your answer with exactly one JSON object: {\"verdict\":\"pass\"|\"fail\",\"reason\":\"<one non-empty sentence>\"}",
+                "reportTo": "subagent_ready",
+                "timeoutMs": 120000
+              }
+            },
+            {
               "type": "update_signals_policy",
               "params": {
                 "set_enabled_signals": [
                   "GOAL_ACHIEVED",
                   "GOAL_INCOMPLETE"
-                ],
-                "notify_agent": true
+                ]
               }
             }
           ],
@@ -322,11 +419,12 @@
                 ]
               },
               {
-                "target": "#session.panic",
+                "target": "#session.towards_goal.panic",
                 "actions": [
                   {
-                    "type": "fail",
+                    "type": "record",
                     "params": {
+                      "op": "fail",
                       "reason": "attempts exhausted"
                     }
                   },
@@ -350,6 +448,57 @@
                   }
                 ]
               }
+            ],
+            "callback.subagent_ready": [
+              {
+                "target": "memorize",
+                "guard": {
+                  "type": "callback_ok",
+                  "params": {}
+                },
+                "actions": [
+                  {
+                    "type": "record_callback",
+                    "params": {
+                      "reportTo": "subagent_ready"
+                    }
+                  }
+                ]
+              },
+              {
+                "target": "#session.towards_goal.panic",
+                "guard": {
+                  "type": "field_present",
+                  "params": {
+                    "field": "verdict"
+                  }
+                },
+                "actions": [
+                  {
+                    "type": "record_callback",
+                    "params": {
+                      "reportTo": "subagent_ready"
+                    }
+                  },
+                  {
+                    "type": "prompt",
+                    "params": {
+                      "template": "quality_check_failed",
+                      "description": "Report the judge's reason and park the loop."
+                    }
+                  }
+                ]
+              },
+              {
+                "actions": [
+                  {
+                    "type": "record_callback",
+                    "params": {
+                      "reportTo": "subagent_ready"
+                    }
+                  }
+                ]
+              }
             ]
           }
         },
@@ -367,15 +516,14 @@
               "params": {
                 "set_enabled_signals": [
                   "LESSON"
-                ],
-                "notify_agent": true
+                ]
               }
             }
           ],
           "on": {
             "agent_sent_signal.LESSON": [
               {
-                "target": "#session.parked",
+                "target": "retrospective",
                 "guard": {
                   "type": "improvement_lesson",
                   "params": {}
@@ -395,7 +543,7 @@
                 ]
               },
               {
-                "target": "work",
+                "target": "retrospective",
                 "guard": {
                   "type": "field_present",
                   "params": {
@@ -418,145 +566,143 @@
               }
             ]
           }
-        }
-      }
-    },
-    "parked": {
-      "entry": [
-        {
-          "type": "prompt",
-          "params": {
-            "template": "park_summary",
-            "description": "Report the reached goal and the improvements recorded."
-          }
-        }
-      ],
-      "on": {
-        "system_user_input": {
-          "target": "#session.towards_goal.define_goal",
-          "actions": [
+        },
+        "retrospective": {
+          "entry": [
             {
-              "type": "record",
+              "type": "run_command",
               "params": {
-                "op": "set",
-                "key": "goal",
-                "source": {
-                  "from": "literal",
-                  "value": ""
-                }
+                "name": "retrospective"
               }
             },
             {
-              "type": "record",
+              "type": "update_signals_policy",
               "params": {
-                "op": "set",
-                "key": "intent",
-                "source": {
-                  "from": "literal",
-                  "value": "none"
-                }
-              }
-            },
-            {
-              "type": "record",
-              "params": {
-                "op": "set",
-                "key": "attempts",
-                "source": {
-                  "from": "literal",
-                  "value": 0
-                }
+                "set_enabled_signals": [
+                  "RETROSPECTIVE_COMPLETE"
+                ]
               }
             }
-          ]
-        }
-      }
-    },
-    "panic": {
-      "entry": [
-        {
-          "type": "update_signals_policy",
-          "params": {
-            "set_enabled_signals": [
-              "LESSON"
-            ],
-            "notify_agent": true
-          }
-        }
-      ],
-      "on": {
-        "agent_sent_signal.LESSON": [
-          {
-            "target": "#session.towards_goal.work",
-            "guard": {
-              "type": "field_present",
-              "params": {
-                "field": "text"
-              }
-            },
-            "actions": [
+          ],
+          "on": {
+            "agent_sent_signal.RETROSPECTIVE_COMPLETE": [
               {
-                "type": "record",
-                "params": {
-                  "op": "push",
-                  "key": "memories",
-                  "source": {
-                    "from": "payload",
-                    "field": "text"
-                  }
+                "target": "#session.towards_goal.parked",
+                "guard": {
+                  "type": "improvement_lesson",
+                  "params": {}
                 }
               },
               {
-                "type": "record",
-                "params": {
-                  "op": "set",
-                  "key": "attempts",
-                  "source": {
-                    "from": "literal",
-                    "value": 0
-                  }
-                }
+                "target": "work"
               }
             ]
           }
-        ],
-        "system_user_input": {
-          "target": "#session.towards_goal.define_goal",
-          "actions": [
+        },
+        "parked": {
+          "entry": [
             {
-              "type": "record",
+              "type": "prompt",
               "params": {
-                "op": "set",
-                "key": "goal",
-                "source": {
-                  "from": "literal",
-                  "value": ""
-                }
+                "template": "park_summary",
+                "description": "Report the reached goal and the improvements recorded."
               }
             },
             {
-              "type": "record",
+              "type": "update_signals_policy",
               "params": {
-                "op": "set",
-                "key": "intent",
-                "source": {
-                  "from": "literal",
-                  "value": "none"
-                }
-              }
-            },
-            {
-              "type": "record",
-              "params": {
-                "op": "set",
-                "key": "attempts",
-                "source": {
-                  "from": "literal",
-                  "value": 0
-                }
+                "set_enabled_signals": []
               }
             }
-          ]
+          ],
+          "on": {
+            "system_idle": {
+              "actions": []
+            },
+            "system_user_input": {
+              "actions": [
+                {
+                  "type": "emit_parent",
+                  "params": {
+                    "type": "reset_goal"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "panic": {
+          "entry": [
+            {
+              "type": "update_signals_policy",
+              "params": {
+                "set_enabled_signals": [
+                  "LESSON"
+                ]
+              }
+            }
+          ],
+          "on": {
+            "system_idle": {
+              "actions": []
+            },
+            "agent_sent_signal.LESSON": [
+              {
+                "target": "#session.towards_goal.work",
+                "guard": {
+                  "type": "field_present",
+                  "params": {
+                    "field": "text"
+                  }
+                },
+                "actions": [
+                  {
+                    "type": "record",
+                    "params": {
+                      "op": "push",
+                      "key": "memories",
+                      "source": {
+                        "from": "payload",
+                        "field": "text"
+                      }
+                    }
+                  },
+                  {
+                    "type": "record",
+                    "params": {
+                      "op": "set",
+                      "key": "attempts",
+                      "source": {
+                        "from": "literal",
+                        "value": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "record",
+                    "params": {
+                      "op": "set",
+                      "key": "nudges",
+                      "source": {
+                        "from": "literal",
+                        "value": 0
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "system_user_input": {
+              "actions": [
+                {
+                  "type": "emit_parent",
+                  "params": {
+                    "type": "reset_goal"
+                  }
+                }
+              ]
+            }
+          }
         }
       }
     },

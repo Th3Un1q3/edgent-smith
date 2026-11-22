@@ -43,6 +43,7 @@ const setPolicyAction = (): Extract<ActionSpec, { type: 'set_tools_policy' }> =>
 
 const defineGoalRule = (): ToolPolicyRule => {
   const { params } = setPolicyAction()
+  if (params.allowedTools === null) throw new Error('define_goal declares a clearing set_tools_policy action')
   return { stateId: params.stateId, errorMessage: params.errorMessage, allowedTools: params.allowedTools }
 }
 
@@ -51,6 +52,7 @@ const contextFixture = (overrides: Partial<StoredSession> = {}): StoredSession =
   goal: '',
   intent: 'none',
   attempts: 0,
+  nudges: 0,
   memories: [],
   improvements: [],
   injectedSkills: [],
@@ -101,13 +103,13 @@ describe('the declared policy', () => {
     const types = actionsOf('towards_goal.define_goal').map(action => action.type)
 
     expect(types).toContain('set_tools_policy')
-    expect(types).toContain('clear_tools_policy')
+    expect(stateAt('towards_goal.define_goal').exit).toEqual([{ type: 'set_tools_policy', params: { allowedTools: null } }])
   })
 
   it('declares it in no other state', () => {
     const others = statePaths(SESSION_LOOP.states).filter(state => state !== 'towards_goal.define_goal')
     const declared = others.flatMap(state => actionsOf(state).filter(action =>
-      action.type === 'set_tools_policy' || action.type === 'clear_tools_policy'))
+      action.type === 'set_tools_policy'))
 
     expect(declared).toEqual([])
   })

@@ -16,6 +16,7 @@ const contextFixture = (overrides: Partial<StoredSession> = {}): StoredSession =
   goal: 'old goal',
   intent: 'lesson',
   attempts: 2,
+  nudges: 0,
   memories: ['keep this lesson'],
   improvements: ['keep this improvement'],
   injectedSkills: ['task-delegation'],
@@ -24,7 +25,7 @@ const contextFixture = (overrides: Partial<StoredSession> = {}): StoredSession =
   ...overrides,
 })
 
-const seeded = (context: Partial<StoredSession> = {}, value = 'towards_goal.work'): PersistedSnapshot => ({
+const seeded = (context: Partial<StoredSession> = {}, value: unknown = 'towards_goal.work'): PersistedSnapshot => ({
   status: 'active',
   value,
   context: contextFixture(context),
@@ -51,6 +52,18 @@ const lastState = (harness: Harness): string | undefined => {
 const goalState = (id: string): LoopState =>
   (SESSION_LOOP.states.towards_goal.states as unknown as Record<string, LoopState>)[id]
 
+interface Arm {
+  readonly target?: string
+  readonly actions?: readonly { readonly type: string, readonly params?: { readonly key?: string } }[]
+}
+
+const armTarget = (arm: Arm | undefined): string | undefined => arm?.target
+
+const armActionTypes = (arm: Arm | undefined): string[] | undefined => arm?.actions?.map(action => action.type)
+
+const armActionKeys = (arm: Arm | undefined): (string | undefined)[] | undefined =>
+  arm?.actions?.map(action => action.params?.key)
+
 const startInWork = async (): Promise<Harness> => {
   const harness = makeHarness()
   await register(harness)
@@ -60,12 +73,18 @@ const startInWork = async (): Promise<Harness> => {
 }
 
 describe('the loop matrix', () => {
-  it('resets from parked and panic', () => {
-    const target = (state: 'parked' | 'panic'): unknown =>
-      (SESSION_LOOP.states[state].on as Record<string, { target?: string }>).system_user_input?.target
+  it('resets from parked and panic through one parent arm', () => {
+    const arm = (state: 'parked' | 'panic'): Arm | undefined =>
+      (goalState(state).on as unknown as Record<string, Arm>).system_user_input
+    const parent = SESSION_LOOP.states.towards_goal.on as unknown as Record<string, Arm>
 
-    expect(target('parked')).toBe('#session.towards_goal.define_goal')
-    expect(target('panic')).toBe('#session.towards_goal.define_goal')
+    expect(armTarget(arm('parked'))).toBeUndefined()
+    expect(armActionTypes(arm('parked'))).toEqual(['emit_parent'])
+    expect(armTarget(arm('panic'))).toBeUndefined()
+    expect(armActionTypes(arm('panic'))).toEqual(['emit_parent'])
+    expect(armTarget(parent.reset_goal)).toBe('#session.towards_goal.define_goal')
+    expect(armActionKeys(parent.reset_goal))
+      .toEqual(['goal', 'intent', 'attempts', 'nudges'])
   })
 
   it('never resets from work, define_goal, check, validate or memorize', () => {
@@ -93,7 +112,7 @@ describe('a real user message', () => {
 
   it('leaves parked on a follow-up message', async () => {
     const harness = makeHarness()
-    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, 'parked'), NOW) })
+    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, { towards_goal: 'parked' }), NOW) })
     await register(harness)
     await harness.emit(sessionCreated('ses_1', 'rug'))
 
@@ -107,7 +126,7 @@ describe('a real user message', () => {
 
   it('leaves parked when the first message after a reload arrives', async () => {
     const harness = makeHarness()
-    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, 'parked'), NOW) })
+    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, { towards_goal: 'parked' }), NOW) })
     await register(harness)
 
     // A reloaded plugin has no machine in memory and receives only the message.
@@ -133,7 +152,7 @@ describe('a real user message', () => {
 
   it('clears the round and keeps what was learned', async () => {
     const harness = makeHarness()
-    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, 'parked'), NOW) })
+    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, { towards_goal: 'parked' }), NOW) })
     await register(harness)
     await harness.emit(sessionCreated('ses_1', 'rug'))
 
@@ -154,7 +173,7 @@ describe('a real user message', () => {
 
   it('persists the reset before the next call', async () => {
     const harness = makeHarness()
-    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, 'parked'), NOW) })
+    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, { towards_goal: 'parked' }), NOW) })
     await register(harness)
     await harness.emit(sessionCreated('ses_1', 'rug'))
 
@@ -209,7 +228,7 @@ describe('a real user message', () => {
 
   it('keeps the reset in memory when the snapshot write fails', async () => {
     const harness = makeHarness()
-    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, 'parked'), NOW) })
+    harness.storageWrites.push({ key: snapshotKey('ses_1'), value: createSnapshotRecord(seeded({}, { towards_goal: 'parked' }), NOW) })
     await register(harness)
     await harness.emit(sessionCreated('ses_1', 'rug'))
     harness.failStorageWrites = true
@@ -221,6 +240,7 @@ describe('a real user message', () => {
 })
 
 const loopContext = (): LoopContext => ({
+  nudges: 0,
   sessionId: 'ses_actor',
   agent: 'rug',
   maxAttempts: 3,
@@ -237,13 +257,10 @@ const loopContext = (): LoopContext => ({
 
 const actorAt = async (state: LoopStateId): Promise<Actor> => {
   const library = await loadStateMachineLibrary()
-  const [, leaf] = state.split('.') as [LoopStateId, string | undefined]
-
-  if (leaf === undefined) return library.createActor(SESSION_LOOP, state, loopContext())
-
+  const [head, leaf] = state.split('.') as [LoopStateId, string | undefined]
   const loop: LoopDefinition = {
     ...SESSION_LOOP,
-    states: { ...SESSION_LOOP.states, towards_goal: { ...SESSION_LOOP.states.towards_goal, initial: leaf } },
+    states: { ...SESSION_LOOP.states, towards_goal: { ...SESSION_LOOP.states.towards_goal, initial: leaf ?? head } },
   }
 
   return library.createActor(loop, 'towards_goal', loopContext())
@@ -296,8 +313,8 @@ describe('an interruption', () => {
 
   it('is declared on the machine root, not in any leaf', () => {
     expect(SESSION_LOOP.on?.system_interrupted)
-      .toMatchObject({ target: '#session.parked', guard: { type: 'not_parked' } })
-    expect(Object.keys(SESSION_LOOP.states.towards_goal.on)).toEqual(['system_idle'])
+      .toMatchObject({ target: '#session.towards_goal.parked', guard: { type: 'not_parked' } })
+    expect(Object.keys(SESSION_LOOP.states.towards_goal.on)).toEqual(['system_idle', 'reset_goal'])
 
     for (const id of ['define_goal', 'work', 'check', 'validate', 'memorize']) {
       expect('system_interrupted' in goalState(id).on).toBe(false)
@@ -325,6 +342,9 @@ describe('an interruption', () => {
       type: 'emit.prompt',
       text: expect.stringContaining('Waiting for your next instruction'),
       description: 'Report the reached goal and the improvements recorded.',
+    }, {
+      type: 'emit.signals',
+      signal_keys: [],
     }])
   })
 
@@ -345,3 +365,45 @@ const machineAt = async (state: LoopStateId): Promise<StateMachine> => {
 
   return machine
 }
+
+describe('the parent raise', () => {
+  it('answers one user message in parked inside the same send', async () => {
+    const actor = await actorAt('parked')
+
+    actor.takeEmits()
+    actor.send({ type: 'system_user_input', text: 'next goal' })
+    const emits = actor.takeEmits()
+
+    expect(actor.statePath?.()).toBe('towards_goal.define_goal')
+    expect(emits.filter(emit => emit.type === 'emit.prompt')).toHaveLength(1)
+  })
+
+  it('drops a raised type that no ancestor declares', async () => {
+    const library = await loadStateMachineLibrary()
+    const work = goalState('work')
+    const custom: LoopDefinition = {
+      ...SESSION_LOOP,
+      states: {
+        ...SESSION_LOOP.states,
+        towards_goal: {
+          ...SESSION_LOOP.states.towards_goal,
+          initial: 'work',
+          states: {
+            ...SESSION_LOOP.states.towards_goal.states,
+            work: {
+              ...work,
+              on: { ...work.on, 'callback.memories_ready': { actions: [{ type: 'emit_parent', params: { type: 'unhandled_raise' } }] } },
+            },
+          },
+        },
+      },
+    }
+    const actor = library.createActor(custom, 'towards_goal', loopContext())
+
+    actor.takeEmits()
+    actor.send({ type: 'callback.memories_ready', payload: { ok: true } })
+
+    expect(actor.statePath?.()).toBe('towards_goal.work')
+    expect(actor.takeEmits()).toEqual([])
+  })
+})

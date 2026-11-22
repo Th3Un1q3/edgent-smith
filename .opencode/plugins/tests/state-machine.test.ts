@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createStateMachinePlugin } from '@plugins/state-machine'
 
-import { createStateMachine, LOOP_STATE_IDS, loadStateMachineLibrary, promptDescription, readStartConfig, SESSION_LOOP } from '@plugins/state-machine/core/machine'
+import { createStateMachine, LOOP_STATE_IDS, loadStateMachineLibrary, promptDescription, readStartConfig, RETROSPECTIVE_COMPLETE, SESSION_LOOP } from '@plugins/state-machine/core/machine'
 
 import type { EmitRequest, LoopDefinition, StateMachine } from '@plugins/state-machine/core/machine'
 
@@ -195,12 +195,16 @@ describe('transitions', () => {
     await harness.runTool({ type: 'GOAL_ACHIEVED' }, 'ses_1')
     await harness.runTool({ type: 'LESSON', payload: { text: 'faster' } }, 'ses_1')
 
+    const completed = content(await harness.runTool({ type: 'RETROSPECTIVE_COMPLETE' }, 'ses_1'))
+
+    expect(completed).toBe('Signal accepted.')
+
     const failure = failureOf(await harness.runTool({ type: 'CLAIM_WORK' }, 'ses_1'))
 
     expect(failure.metadata?.code).toBe('unavailable_signal')
-    expect(failure.metadata?.available_signals).toEqual(['LESSON'])
+    expect(failure.metadata?.available_signals).toEqual([])
     expect(failure.message).toContain('CLAIM_WORK is not available in parked.')
-    expect(failure.message).toContain('- LESSON — ')
+    expect(failure.message).toContain('Signals now: none')
   })
 
   it('refuses a signal type outside the vocabulary', async () => {
@@ -256,7 +260,7 @@ describe('transitions', () => {
 })
 
 describe('idle', () => {
-  it('moves a working session to validation on idle', async () => {
+  it('nudges a working session instead of moving it to validation', async () => {
     const harness = await boot()
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
@@ -264,39 +268,27 @@ describe('idle', () => {
 
     await harness.emit(sessionIdle('ses_1'))
 
-    const verdict = harness.synthetics.find(message => message.text.includes('Verdict'))
-    const signals = harness.synthetics.filter(message => message.text.includes('Signals now:'))
+    const nudge = harness.synthetics.find(message => message.text.includes('CLAIM_WORK'))
 
-    expect(verdict?.description).toBe(VALIDATOR_PROMPT)
-    expect(signals.some(message => message.text.includes('GOAL_ACHIEVED'))).toBe(true)
-    expect(signals.some(message => message.text.includes('GOAL_INCOMPLETE'))).toBe(true)
-    expect(harness.synthetics.some(message => message.text.includes('still in work'))).toBe(false)
-
-    const failure = failureOf(await harness.runTool({ type: 'CLAIM_WORK' }, 'ses_1'))
-
-    expect(failure.metadata).toMatchObject({
-      code: 'unavailable_signal',
-      state: 'validate',
-      available_signals: ['GOAL_ACHIEVED', 'GOAL_INCOMPLETE'],
-    })
+    expect(nudge?.text).toContain('work')
+    expect(harness.synthetics.some(message => message.text.includes('Verdict'))).toBe(false)
+    expect(content(await harness.runTool({ type: 'CLAIM_WORK' }, 'ses_1'))).toBe('Signal accepted.')
   })
 
-  it('moves define_goal to validation on idle', async () => {
+  it('nudges define_goal to send its goal instead of evaluating one', async () => {
     const harness = await boot()
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
 
     await harness.emit(sessionIdle('ses_1'))
 
-    expect(harness.synthetics[0]?.text).toContain('Verdict')
-    expect(harness.synthetics[0]?.description).toBe(VALIDATOR_PROMPT)
+    const nudge = harness.synthetics.find(message => message.text.includes('define_goal'))
 
-    const failure = failureOf(await harness.runTool({ type: 'CLAIM_WORK' }, 'ses_1'))
-
-    expect(failure.metadata?.state).toBe('validate')
+    expect(nudge?.text).toContain('SET_GOAL')
+    expect(harness.synthetics.some(message => message.text.includes('Verdict'))).toBe(false)
   })
 
-  it('ignores an idle once parked', async () => {
+  it('nudges a retrospective session without moving it on', async () => {
     const harness = await boot()
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
@@ -309,12 +301,50 @@ describe('idle', () => {
 
     await harness.emit(sessionIdle('ses_1'))
 
-    expect(harness.synthetics).toHaveLength(spoken)
+    const nudge = harness.synthetics.slice(spoken).find(message => message.text.includes('idle in `retrospective`'))
+
+    expect(nudge?.text).toContain('RETROSPECTIVE_COMPLETE')
     expect(harness.synthetics.slice(spoken).some(message => message.text.includes('Verdict'))).toBe(false)
 
     const failure = failureOf(await harness.runTool({ type: 'GOAL_ACHIEVED' }, 'ses_1'))
 
-    expect(failure.metadata?.state).toBe('parked')
+    expect(failure.metadata).toMatchObject({
+      state: 'retrospective',
+      available_signals: ['RETROSPECTIVE_COMPLETE'],
+    })
+  })
+
+  const idlePanics = (harness: Harness): string[] =>
+    harness.synthetics
+      .map(message => message.text)
+      .filter(text => text.includes('Parked for investigation: idle budget exhausted'))
+
+  it('restores the idle budget when a lesson retries a panicked round', async () => {
+    const harness = await boot()
+
+    await harness.emit(sessionCreated('ses_1', 'rug'))
+    await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+
+    for (let idle = 0; idle < 4; idle += 1) await harness.emit(sessionIdle('ses_1'))
+
+    expect(idlePanics(harness)).toHaveLength(1)
+
+    await harness.runTool({ type: 'LESSON', payload: { text: 'try differently' } }, 'ses_1')
+
+    const spoken = harness.synthetics.length
+
+    await harness.emit(sessionIdle('ses_1'))
+
+    const nudges = harness.synthetics.slice(spoken)
+
+    expect(nudges).toHaveLength(1)
+    expect(nudges[0]?.text).toContain('CLAIM_WORK')
+
+    await harness.emit(sessionIdle('ses_1'))
+    await harness.emit(sessionIdle('ses_1'))
+    await harness.emit(sessionIdle('ses_1'))
+
+    expect(idlePanics(harness)).toHaveLength(2)
   })
 
   it('stays parked when more idles arrive', async () => {
@@ -325,6 +355,7 @@ describe('idle', () => {
     await harness.runTool({ type: 'CLAIM_WORK' }, 'ses_1')
     await harness.runTool({ type: 'GOAL_ACHIEVED' }, 'ses_1')
     await harness.runTool({ type: 'LESSON', payload: { text: 'faster' } }, 'ses_1')
+    await harness.runTool({ type: RETROSPECTIVE_COMPLETE }, 'ses_1')
 
     const spoken = harness.synthetics.length
 
@@ -334,7 +365,15 @@ describe('idle', () => {
     await harness.emit(sessionIdle('ses_1'))
 
     expect(harness.synthetics).toHaveLength(spoken)
-    expect(harness.synthetics.slice(spoken).some(message => message.text.includes('Verdict'))).toBe(false)
+
+    const failure = failureOf(await harness.runTool({ type: 'GOAL_ACHIEVED' }, 'ses_1'))
+
+    expect(failure.metadata).toMatchObject({
+      code: 'unavailable_signal',
+      signal: 'GOAL_ACHIEVED',
+      state: 'parked',
+      available_signals: [],
+    })
   })
 })
 
@@ -353,12 +392,19 @@ describe('interruption', () => {
       code: 'unavailable_signal',
       signal: 'GOAL_ACHIEVED',
       state: 'parked',
-      available_signals: ['CLAIM_WORK'],
+      available_signals: [],
     })
     expect(failure.message).toContain('GOAL_ACHIEVED is not available in parked.')
-    expect(failure.message).toContain('- CLAIM_WORK — Say the work is done and ready for the quality check.')
-    expect(harness.synthetics.at(-1)?.text).toContain('Waiting for your next instruction')
-    expect(harness.synthetics.at(-1)?.description).toBe(PARKED_PROMPT)
+    expect(failure.message).toContain('Signals now: none')
+    expect(failure.message).not.toContain('CLAIM_WORK')
+
+    const parked = harness.synthetics.reduce<(typeof harness.synthetics)[number] | undefined>(
+      (last, message) => (message.description === PARKED_PROMPT ? message : last),
+      undefined,
+    )
+
+    expect(parked?.text).toContain('Waiting for your next instruction')
+    expect(parked?.description).toBe(PARKED_PROMPT)
   })
 
   it('ignores an interruption for a session the loop never opened', async () => {
@@ -421,40 +467,6 @@ describe('the emit transport', () => {
     expect(result.text).toBe('Signal accepted.')
     expect(result.emits.map(emitted => emitted.type)).toEqual(['emit.prompt', 'emit.signals', 'emit.skill'])
     expect(machine.get('ses_1')?.context.goal).toBe('ship it')
-  })
-
-  it('emits the validation prompt', async () => {
-    const machine = await withMachine()
-
-    machine.start('ses_1', 'rug')
-    machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
-
-    const emits = await Effect.runPromise(machine.idle('ses_1'))
-
-    expect(emits).toContainEqual({
-      type: 'emit.prompt',
-      text: expect.stringContaining('Verdict'),
-      description: VALIDATOR_PROMPT,
-    })
-    expect(emits).toContainEqual({ type: 'emit.signals', signal_keys: ['GOAL_ACHIEVED', 'GOAL_INCOMPLETE'] })
-    expect(machine.get('ses_1')?.state).toBe('validate')
-  })
-
-  it('never parks the machine on idle however many arrive', async () => {
-    const machine = await withMachine()
-
-    machine.start('ses_1', 'rug')
-    machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
-
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      await Effect.runPromise(machine.idle('ses_1'))
-    }
-
-    const emits = await Effect.runPromise(machine.idle('ses_1'))
-
-    expect(emittedText(emits)).toContain('Verdict')
-    expect(emittedText(emits)).not.toContain('parked in panic')
-    expect(machine.get('ses_1')?.state).toBe('validate')
   })
 
   it('requests the remembered preferences from the starting state', async () => {
@@ -525,6 +537,7 @@ describe('the emit transport', () => {
       machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
       machine.signal({ type: 'GOAL_INCOMPLETE' }, 'ses_1')
       machine.signal({ type: 'LESSON', payload: { text } }, 'ses_1')
+      machine.signal({ type: 'RETROSPECTIVE_COMPLETE' }, 'ses_1')
     }
 
     expect(machine.get('ses_1')?.context.memories).toEqual(['second', 'third'])
@@ -587,6 +600,7 @@ describe('the emit transport', () => {
   const failAttempt = (machine: StateMachine): void => {
     machine.signal({ type: 'GOAL_INCOMPLETE' }, 'ses_1')
     machine.signal({ type: 'LESSON', payload: { text: 'retry' } }, 'ses_1')
+    machine.signal({ type: 'RETROSPECTIVE_COMPLETE' }, 'ses_1')
     machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
     machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
   }
@@ -618,7 +632,9 @@ describe('the emit transport', () => {
     enterValidate(machine)
     machine.signal({ type: 'GOAL_ACHIEVED' }, 'ses_1')
 
-    const emits = machine.signal({ type: 'LESSON', payload: { text: 'faster' } }, 'ses_1').emits
+    machine.signal({ type: 'LESSON', payload: { text: 'faster' } }, 'ses_1')
+
+    const emits = machine.signal({ type: 'RETROSPECTIVE_COMPLETE' }, 'ses_1').emits
 
     expect(machine.get('ses_1')?.state).toBe('parked')
     expect(machine.get('ses_1')?.context.improvements).toEqual(['faster'])
@@ -631,6 +647,7 @@ describe('the emit transport', () => {
     enterValidate(machine)
     machine.signal({ type: 'GOAL_ACHIEVED' }, 'ses_1')
     machine.signal({ type: 'LESSON', payload: { text: 'faster' } }, 'ses_1')
+    machine.signal({ type: 'RETROSPECTIVE_COMPLETE' }, 'ses_1')
 
     const emits = machine.userInput('ses_1', 'next goal')
 
@@ -676,6 +693,7 @@ describe('the emit transport', () => {
     enterValidate(machine)
     machine.signal({ type: 'GOAL_INCOMPLETE' }, 'ses_1')
     machine.signal({ type: 'LESSON', payload: { text: 'try harder' } }, 'ses_1')
+    machine.signal({ type: 'RETROSPECTIVE_COMPLETE' }, 'ses_1')
 
     expect(machine.get('ses_1')?.state).toBe('work')
     expect(machine.get('ses_1')?.context.memories).toEqual(['try harder'])
@@ -717,21 +735,28 @@ describe('the emit transport', () => {
 
 describe('the loop definition', () => {
   it('declares seven states and their transitions', () => {
-    expect(LOOP_STATE_IDS).toEqual(['admission', 'towards_goal', 'parked', 'panic', 'free_work'])
+    expect(LOOP_STATE_IDS).toEqual(['admission', 'towards_goal', 'free_work'])
     expect(acceptedSignals('towards_goal.define_goal')).toEqual(['SET_GOAL'])
     expect(acceptedSignals('towards_goal.work')).toEqual(['CLAIM_WORK'])
     expect(acceptedSignals('towards_goal.check')).toEqual([])
     expect(acceptedSignals('towards_goal.validate')).toEqual(['GOAL_ACHIEVED', 'GOAL_INCOMPLETE'])
     expect(acceptedSignals('towards_goal.memorize')).toEqual(['LESSON'])
-    expect(acceptedSignals('parked')).toEqual([])
-    expect(acceptedSignals('panic')).toEqual(['LESSON'])
+    expect(acceptedSignals('towards_goal.retrospective')).toEqual(['RETROSPECTIVE_COMPLETE'])
+    expect(acceptedSignals('towards_goal.parked')).toEqual([])
+    expect(acceptedSignals('towards_goal.panic')).toEqual(['LESSON'])
   })
 
   it('asks for the goal from the starting state entry and routes idle from the compound state', () => {
     expect(stateAt('towards_goal.define_goal').entry).toEqual([
-      { type: 'prompt', params: { template: 'goal_request', description: GOAL_REQUEST } },
-      { type: 'update_signals_policy', params: { set_enabled_signals: ['SET_GOAL'], notify_agent: true } },
-      { type: 'request_memories', params: { namespace: 'preferences/user' } },
+      {
+        type: 'prompt',
+        params: {
+          template: 'goal_request',
+          description: GOAL_REQUEST,
+        },
+      },
+      { type: 'update_signals_policy', params: { set_enabled_signals: ['SET_GOAL'] } },
+      { type: 'recall_memories', params: { namespace: 'preferences/user' } },
       {
         type: 'set_tools_policy',
         params: {
@@ -743,16 +768,30 @@ describe('the loop definition', () => {
     ])
     expect(stateAt('towards_goal.work').entry).toEqual([
       { type: 'prompt', params: { template: 'work_towards_goal', description: WORK_PROMPT } },
-      { type: 'update_signals_policy', params: { set_enabled_signals: ['CLAIM_WORK'], notify_agent: true } },
-      { type: 'request_skill', params: { name: 'task-delegation' } },
+      { type: 'update_signals_policy', params: { set_enabled_signals: ['CLAIM_WORK'] } },
+      { type: 'activate_skill', params: { name: 'task-delegation' } },
     ])
     expect(stateAt('towards_goal.define_goal').on.system_idle).toBeUndefined()
     expect(stateAt('towards_goal.work').on.system_idle).toBeUndefined()
+    expect(stateAt('towards_goal.retrospective').on.system_idle).toBeUndefined()
 
     expect(SESSION_LOOP.on?.system_idle).toBeUndefined()
 
-    expect(SESSION_LOOP.states.towards_goal.on?.system_idle)
-      .toMatchObject({ target: '#session.towards_goal.validate', guard: { type: 'not_parked' } })
+    expect(stateAt('towards_goal.parked').on.system_idle).toEqual({ actions: [] })
+    expect(stateAt('towards_goal.panic').on.system_idle).toEqual({ actions: [] })
+
+    const idle = SESSION_LOOP.states.towards_goal.on?.system_idle as unknown as readonly Record<string, unknown>[]
+
+    expect(idle).toHaveLength(2)
+    expect(idle[0]).toMatchObject({
+      guard: { type: 'counter_below', params: { key: 'nudges', limit: 3 } },
+      actions: [
+        { type: 'record', params: { op: 'increment', key: 'nudges' } },
+        { type: 'prompt', params: { template: 'idle_nudge' } },
+      ],
+    })
+    expect(idle[0]?.target).toBeUndefined()
+    expect(idle[1]).toMatchObject({ target: '#session.towards_goal.panic' })
   })
 
   it('honours the root transitions of the definition it is given', async () => {
@@ -770,7 +809,7 @@ describe('the loop definition', () => {
 
     const custom: LoopDefinition = {
       ...SESSION_LOOP,
-      on: { system_interrupted: { target: '.panic', guard: { type: 'not_parked' } } },
+      on: { system_interrupted: { target: '#session.towards_goal.panic', guard: { type: 'not_parked' } } },
     }
     // `admission` carries no interruption arm of its own, so the supplied root
     // `on` is the only transition that can fire: the definition's root reaches the library.
@@ -804,13 +843,13 @@ describe('the loop definition', () => {
       ...SESSION_LOOP,
       states: {
         ...SESSION_LOOP.states,
-        panic: {
-          ...SESSION_LOOP.states.panic,
-          on: { ...SESSION_LOOP.states.panic.on, system_idle: { target: 'towards_goal.work' } },
+        towards_goal: {
+          ...SESSION_LOOP.states.towards_goal,
+          on: { ...SESSION_LOOP.states.towards_goal.on, system_idle: { target: '#session.towards_goal.work' } },
         },
       },
     }
-    const actor = library.createActor(custom, 'panic', context)
+    const actor = library.createActor(custom, 'towards_goal', context)
 
     actor.send({ type: 'system_idle' })
 

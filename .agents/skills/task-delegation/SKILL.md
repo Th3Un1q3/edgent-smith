@@ -12,7 +12,7 @@ metadata:
 
 # Task Delegation Skill
 
-Where a rule here and `/workspace/AGENTS.md` disagree, `AGENTS.md` wins.
+Guides on techniques for decomposing tasks and navigate solving them by delegating their parts to subagents.
 
 ## Mandatory Steps for Delegating Tasks
 

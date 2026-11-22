@@ -211,6 +211,18 @@ Validation result?
 └── All FAIL → context was wrong: launch a fresh child for the whole task with fresh instructions; do not patch partial failures
 ```
 
+## Retrospective: Prompt the Command
+
+Run the retrospective after the last validation passes and before returning whenever behavior or docs changed; a run that changed neither skips it. Only the orchestrator observed the whole run, and each child saw only its own session.
+
+- The orchestrator owns the run record: what worked, what failed, which prompt was vague, which subtask needed a retry.
+- Children own their own experience, so the orchestrator interviews only the children that failed, were retried, or produced nothing, one at a time, asking what blocked them, what was ambiguous in their prompt, and what they would change.
+- The orchestrator collects one line per struggling child, keeps the child ids, and hands that bundle alone to one fresh `harness-management` subtask prompted to run the `/sessions/retrospect` command with the bundle as its input. That subtask sorts every lesson into `case` (a specific incident) or `method` (a change to how the orchestrator investigates or verifies), writes one `cases/` memory per `case` and updates `cases/about`, and applies only the `method` rules to the harness. A plan that labels an incident `method` is rejected and re-dispatched once.
+- The same subtask reads `cases/about` first so it does not duplicate an existing case, then writes and reads each memory back, so the report carries every memory name it stored and whether the index changed.
+- The memory write runs only when the bundle is non-empty; otherwise the report notes "no new lesson".
+- The implement step runs only when the plan names applicable harness changes; otherwise the report notes "no applicable changes".
+- Close the stage with the `RETROSPECTIVE_COMPLETE` signal once the command subtask reports; a run with no struggling children and no observations closes as skipped with that reason in the report. The orchestrator sends no memory signal itself, and any other close leaves the stage incomplete.
+
 ## Agents Team Reference
 
 When working through this workflow, these are the four agents available and their routing rules:

@@ -1,13 +1,15 @@
 /**
  * The loop's behaviour: the action bodies and guard bodies the JSON workflow
- * names by type, plus the prompt templates they render. The table in
- * `machine.json` supplies the parameters; this module supplies the code.
+ * names by type, plus the values its prompt templates fill. The table in
+ * `machine.json` supplies the parameters; this module supplies the code, and
+ * `templates/` supplies the wording.
  */
 import { Schema } from 'effect'
 
 import type {
   CallbackName,
   CallbackPayload,
+  CommandEmit,
   InjectedMemories,
   IntentKind,
   LoopContext,
@@ -15,52 +17,83 @@ import type {
   LoopStateId,
   PromptEmit,
 } from '../../core/machine'
-import { skillKey } from '../../core/memory'
+import { memoryKey, skillKey } from '../../core/memory'
 import type { SignalSpec, ToolSignal } from '../../core/signals'
+import { renderTemplateFile } from './template-files'
+import type { TemplateId, TemplateValues } from './template-files'
 
-export type TemplateId
-  = | 'goal_request'
-    | 'quality_check_failed'
-    | 'validation_self_report'
-    | 'memorize'
-    | 'panic_escalation'
-    | 'park_summary'
-    | 'work_towards_goal'
+export type { TemplateId } from './template-files'
 
-export type PromptTemplate
-  = | { readonly template: 'goal_request' }
-    | { readonly template: 'quality_check_failed' }
-    | { readonly template: 'validation_self_report' }
-    | { readonly template: 'memorize' }
-    | { readonly template: 'panic_escalation' }
-    | { readonly template: 'park_summary' }
-    | { readonly template: 'work_towards_goal' }
+export type PromptTemplate = { readonly template: TemplateId }
 
-export type PromptParameters = PromptTemplate & { readonly description: string }
+/**
+A prompt names one of the templates, carries a literal line, or both. A literal
+`text` is delivered verbatim and wins over `template`; an entry with neither is
+a defect the action refuses when it runs.
+*/
+export type PromptParameters
+  = | (PromptTemplate & { readonly description: string, readonly text?: string })
+    | { readonly description: string, readonly text: string }
 
 export type RecordSource
   = | { readonly from: 'payload', readonly field: string }
     | { readonly from: 'literal', readonly value: string | number }
 
 export type RecordParameters
-  = | { readonly op: 'set', readonly key: 'goal' | 'attempts' | 'intent', readonly source: RecordSource }
-    | { readonly op: 'increment', readonly key: 'attempts' }
+  = | { readonly op: 'set', readonly key: 'goal' | 'attempts' | 'intent' | 'nudges', readonly source: RecordSource }
+    | { readonly op: 'increment', readonly key: 'attempts' | 'nudges' }
     | { readonly op: 'push', readonly key: 'memories' | 'improvements', readonly source: RecordSource }
+    | { readonly op: 'fail', readonly reason: string, readonly detail?: string }
 
-export interface ShellParameters {
+export interface RunShellParameters {
   readonly cmd: string
   readonly reportTo: CallbackName
 }
 
-export interface DispatchParameters {
+/**
+`run_command` carries the session command input without the id, which the plugin
+fills from the session the emit was raised in.
+*/
+export type RunCommandParameters = Omit<CommandEmit, 'type'>
+
+/**
+The child a spawn runs, the line shown beside it, and where its verdict returns.
+A literal `text` is delivered verbatim and wins over `template`, exactly as
+`prompt` reads its parameters; an entry carrying neither refuses when it runs.
+*/
+export interface SpawnSubagentFields {
   readonly agent: string
+  readonly description: string
+  readonly reportTo?: CallbackName
+  readonly timeoutMs?: number
 }
 
-export interface SkillParameters {
+export type SpawnSubagentParameters
+  = | (PromptTemplate & SpawnSubagentFields & { readonly text?: string })
+    | ({ readonly text: string } & SpawnSubagentFields)
+
+/**
+The callback every spawn's verdict arrives under. One name per purpose: the
+payload says whether it passed, not the name.
+*/
+export const SUBAGENT_READY: CallbackName = 'subagent_ready'
+
+/**
+The abandonment window a spawn's `timeoutMs` cannot exceed.
+*/
+export const SUBAGENT_TIMEOUT_MS = 120_000
+
+/**
+What a spawn emits. The correlation id is assigned at delivery, so the action
+stays deterministic.
+*/
+export type { SubagentEmit } from '../../core/machine'
+
+export interface ActivateSkillParameters {
   readonly name: string
 }
 
-export interface MemoriesParameters {
+export interface RecallMemoriesParameters {
   readonly namespace: string
 }
 
@@ -81,7 +114,6 @@ export type EnabledSignal = string | Readonly<Record<string, AdHocSignal>>
 
 export interface UpdateSignalsPolicyParameters {
   readonly set_enabled_signals: readonly EnabledSignal[]
-  readonly notify_agent: boolean
 }
 
 export interface MarkSkillParameters {
@@ -93,43 +125,49 @@ export interface RecordCallbackParameters {
   readonly key?: string
 }
 
-export interface FailParameters {
-  readonly reason: string
-  readonly detail?: string
-}
-
 /**
 The rule a state installs on entry and clears on exit: the tool names it allows
-and the message the gate shows for any other tool.
+and the message the gate shows for any other tool. `allowedTools: null` clears
+the rule instead.
 */
-export interface ToolsPolicyParameters {
-  readonly stateId: LoopStateId
-  readonly allowedTools: readonly string[]
-  readonly errorMessage: string
-}
+export type ToolsPolicyParameters
+  = | { readonly stateId: LoopStateId, readonly allowedTools: readonly string[], readonly errorMessage: string }
+    | { readonly allowedTools: null }
 
 export type ActionSpec
   = | { readonly type: 'prompt', readonly params: PromptParameters }
     | { readonly type: 'record', readonly params: RecordParameters }
-    | { readonly type: 'request_shell', readonly params: ShellParameters }
-    | { readonly type: 'request_dispatch', readonly params: DispatchParameters }
-    | { readonly type: 'request_skill', readonly params: SkillParameters }
-    | { readonly type: 'request_memories', readonly params: MemoriesParameters }
+    | { readonly type: 'run_shell', readonly params: RunShellParameters }
+    | { readonly type: 'run_command', readonly params: RunCommandParameters }
+    | { readonly type: 'spawn_subagent', readonly params: SpawnSubagentParameters }
+    | { readonly type: 'activate_skill', readonly params: ActivateSkillParameters }
+    | { readonly type: 'recall_memories', readonly params: RecallMemoriesParameters }
     | { readonly type: 'update_signals_policy', readonly params: UpdateSignalsPolicyParameters }
     | { readonly type: 'record_callback', readonly params: RecordCallbackParameters }
     | { readonly type: 'mark_skill', readonly params: MarkSkillParameters }
     | { readonly type: 'set_tools_policy', readonly params: ToolsPolicyParameters }
-    | { readonly type: 'clear_tools_policy', readonly params: Record<string, never> }
     | { readonly type: 'admit_identity', readonly params: Record<string, never> }
-    | { readonly type: 'fail', readonly params: FailParameters }
+    | { readonly type: 'emit_parent', readonly params: EmitParentParameters }
+
+export interface EmitParentParameters {
+  readonly type: string
+}
+
+/**
+The part of the collect-actions argument `emit_parent` reads. The enqueue object
+already carries `raise`, so the event stays on the library's internal queue.
+*/
+interface ParentRaiseArguments {
+  readonly enqueue: { raise(event: { readonly type: string }): void }
+}
 
 export interface CounterBelowParameters {
-  readonly key: 'attempts'
+  readonly key: 'attempts' | 'nudges'
   readonly limit: number | { readonly fromContext: 'maxAttempts' }
 }
 
 export interface FieldPresentParameters {
-  readonly field: 'goal' | 'text'
+  readonly field: 'goal' | 'text' | 'verdict'
 }
 
 export interface SessionAgentParameters {
@@ -147,17 +185,17 @@ export type GuardSpec
 export const ACTION_TYPES = [
   'prompt',
   'record',
-  'request_shell',
-  'request_dispatch',
-  'request_skill',
-  'request_memories',
+  'run_shell',
+  'run_command',
+  'spawn_subagent',
+  'activate_skill',
+  'recall_memories',
   'update_signals_policy',
   'record_callback',
   'mark_skill',
   'set_tools_policy',
-  'clear_tools_policy',
   'admit_identity',
-  'fail',
+  'emit_parent',
 ] as const
 
 export type ActionType = (typeof ACTION_TYPES)[number]
@@ -182,66 +220,74 @@ an emit without one is named by the opening words of its text.
 export const promptDescription = (emit: Pick<PromptEmit, 'text' | 'description'>): string =>
   emit.description ?? PROMPT_FALLBACK + emit.text.slice(0, 20) + '...'
 
-const goalRequestText = (): string =>
-  'This session runs a state machine. What goal should it accomplish?'
-
-const qualityCheckFailedText = (context: LoopContext): string =>
-  'Quality check failed: ' + (context.failure?.reason ?? 'unknown')
-  + (context.failure?.detail === undefined ? '' : ' (' + context.failure.detail + ')')
-  + '. Parked in panic for investigation.'
-
-const validationSelfReportText = (): string =>
-  'Verdict: call signal_send with type GOAL_ACHIEVED when the goal is met,'
-  + ' or GOAL_INCOMPLETE when it is not.'
-
-const memorizeText = (context: LoopContext): string => context.intent === 'improvement'
-  ? 'Name one improvement.'
-  : 'Name what to change next attempt.'
-
-const panicEscalationText = (context: LoopContext): string =>
-  'Parked for investigation: ' + (context.failure?.reason ?? 'unknown')
-  + (context.failure?.detail === undefined ? '' : ' (' + context.failure.detail + ')')
-
 const sentence = (text: string): string => /[.!?]$/.test(text) ? text : text + '.'
 
-const parkSummaryText = (context: LoopContext): string =>
-  'Goal reached: ' + sentence(context.goal)
-  + ' Improvements: ' + sentence(context.improvements.join(' | ') || 'none')
-  + ' Waiting for your next instruction.'
+/**
+The values each template fills, with the defaults and joins the wording leaves
+out. A template file names only the placeholders it uses; a key a value provider
+omits is the unknown-placeholder error, so `detail` stays present as `undefined`.
+*/
+const IDLE_STATUS: Readonly<Record<string, string>> = {
+  define_goal: 'Send SET_GOAL with the goal this session should accomplish.',
+  work: 'Call signal_send with CLAIM_WORK when the current work unit is done.',
+  check: 'The quality check is running; wait for its result instead of stopping.',
+  validate: 'Answer the validation prompt, or send GOAL_ACHIEVED or GOAL_INCOMPLETE.',
+  memorize: 'Send LESSON with what this attempt taught.',
+  retrospective: 'Run the retrospective command and send RETROSPECTIVE_COMPLETE.',
+}
 
-const workTowardsGoalText = (context: LoopContext): string =>
-  'Work towards: ' + context.goal
-  + '. Memories: ' + (context.memories.join(' | ') || 'none')
-  + '. Preferences: ' + (context.injected['preferences/user']?.full.join(' | ') || 'none')
+const TEMPLATE_VALUES: Record<TemplateId, (context: LoopContext, state: string) => TemplateValues> = {
+  goal_request: () => ({}),
+  idle_nudge: (_context, state) => ({ state, status: IDLE_STATUS[state] ?? 'Continue the work this state waits for.' }),
+  quality_check_failed: context => ({
+    reason: context.failure?.reason ?? 'unknown',
+    detail: context.failure?.detail,
+  }),
+  validation_self_report: () => ({}),
+  memorize: context => ({ improvement: context.intent === 'improvement' }),
+  panic_escalation: context => ({
+    reason: context.failure?.reason ?? 'unknown',
+    detail: context.failure?.detail,
+  }),
+  park_summary: context => ({
+    goal: sentence(context.goal),
+    improvements: sentence(context.improvements.join(' | ') || 'none'),
+  }),
+  work_towards_goal: context => ({
+    goal: context.goal,
+    memories: context.memories.join(' | ') || 'none',
+    preferences: context.injected['preferences/user']?.full.join(' | ') || 'none',
+  }),
+}
 
-export const renderTemplate = (parameters: PromptTemplate, context: LoopContext): string => {
-  switch (parameters.template) {
-    case 'goal_request': {
-      return goalRequestText()
-    }
-    case 'quality_check_failed': {
-      return qualityCheckFailedText(context)
-    }
-    case 'validation_self_report': {
-      return validationSelfReportText()
-    }
-    case 'memorize': {
-      return memorizeText(context)
-    }
-    case 'panic_escalation': {
-      return panicEscalationText(context)
-    }
-    case 'park_summary': {
-      return parkSummaryText(context)
-    }
-    case 'work_towards_goal': {
-      return workTowardsGoalText(context)
-    }
-  }
+export const renderTemplate = (parameters: PromptTemplate, context: LoopContext, state = ''): string =>
+  renderTemplateFile(parameters.template, TEMPLATE_VALUES[parameters.template](context, state))
+
+export const renderPrompt = (parameters: PromptParameters, context: LoopContext, state = ''): string => {
+  if (parameters.text !== undefined) return parameters.text
+  if (!('template' in parameters)) throw new Error('prompt action carries neither a template nor a text')
+
+  return renderTemplate(parameters, context, state)
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const leafOf = (value: unknown): string =>
+  typeof value === 'string' ? value : (isObject(value) ? leafOf(Object.values(value).at(-1)) : '')
+
+/**
+A state's entry emits before the actor has initialized, when its snapshot cannot be
+read; a template that does not name a state ignores the empty value.
+*/
+const leafState = (self: ActorSelf): string => {
+  try {
+    return leafOf(self.getSnapshot().value)
+  }
+  catch {
+    return ''
+  }
+}
 
 const readPayloadField = (event: LoopEvent, field: string): string => {
   const payload = (event as { payload?: unknown }).payload
@@ -258,8 +304,12 @@ const readSource = (event: LoopEvent, source: RecordSource): string | number =>
   source.from === 'literal' ? source.value : readPayloadField(event, source.field)
 
 const applyRecord = (context: LoopContext, event: LoopEvent, parameters: RecordParameters): Partial<LoopContext> => {
+  if (parameters.op === 'fail') {
+    return { failure: { reason: parameters.reason, detail: parameters.detail } }
+  }
+
   if (parameters.op === 'increment') {
-    return { attempts: context.attempts + 1 }
+    return parameters.key === 'nudges' ? { nudges: context.nudges + 1 } : { attempts: context.attempts + 1 }
   }
 
   const value = readSource(event, parameters.source)
@@ -274,12 +324,9 @@ const applyRecord = (context: LoopContext, event: LoopEvent, parameters: RecordP
   }
 
   if (parameters.key === 'intent') return { intent: isIntentKind(value) ? value : context.intent }
+  if (parameters.key === 'nudges') return { nudges: typeof value === 'number' ? value : context.nudges }
   return parameters.key === 'attempts' ? { attempts: typeof value === 'number' ? value : context.attempts } : { goal: typeof value === 'string' ? value : context.goal }
 }
-
-const applyFail = (parameters: FailParameters): Partial<LoopContext> => ({
-  failure: { reason: parameters.reason, detail: parameters.detail },
-})
 
 const isStringArray = (value: unknown): value is readonly string[] =>
   Array.isArray(value) && value.every(item => typeof item === 'string')
@@ -300,6 +347,19 @@ const readCallback = (event: LoopEvent): CallbackPayload => {
     : { ok: false }
 }
 
+/**
+A recalled memory is keyed by its namespace-qualified path: the `.md` extension
+drops, the `mem:` prefix and `:complete` kind stay. The directory stays in the
+key so two namespaces holding the same file name recall independently.
+*/
+const memoryToken = (namespace: string): string =>
+  memoryKey(namespace.replace(/\.md$/, ''), 'complete')
+
+/**
+Memory keys kept per session; the oldest drop first.
+*/
+const MEMORY_TOKEN_LIMIT = 200
+
 const applyRecordCallback = (
   context: LoopContext,
   event: LoopEvent,
@@ -312,7 +372,18 @@ const applyRecordCallback = (
     return { results, failure: { reason: parameters.reportTo + ' failed', detail: payload.output } }
   }
 
-  return payload.value !== undefined && parameters.key !== undefined ? { results, injected: { ...context.injected, [parameters.key]: payload.value } } : { results }
+  if (payload.value === undefined || parameters.key === undefined) return { results }
+
+  const token = memoryToken(parameters.key)
+  const tokens = context.memoryTokens ?? []
+
+  return tokens.includes(token)
+    ? { results }
+    : {
+        results,
+        injected: { ...context.injected, [parameters.key]: payload.value },
+        memoryTokens: [...tokens, token].slice(-MEMORY_TOKEN_LIMIT),
+      }
 }
 
 /**
@@ -484,7 +555,7 @@ interface SignalsPolicyArguments {
 }
 
 /**
-The part of the collect-actions argument `request_skill` reads. Outside `setup`
+The part of the collect-actions argument `activate_skill` reads. Outside `setup`
 nothing supplies the context type, so it is named here.
 */
 interface SkillArguments {
@@ -494,30 +565,48 @@ interface SkillArguments {
   }
 }
 
+/**
+The actor's own snapshot: a prompt runs inside the active child, so the leaf state it names comes from there.
+*/
+interface ActorSelf {
+  getSnapshot(): { readonly value: unknown }
+}
+
 export const createActions = (runtime: XStateRuntime, sources: SignalSources) => ({
-  prompt: runtime.emit(({ context }: { context: LoopContext }, parameters: PromptParameters) => ({
+  prompt: runtime.emit(({ context, self }: { context: LoopContext, self: ActorSelf }, parameters: PromptParameters) => ({
     type: 'emit.prompt' as const,
-    text: renderTemplate(parameters, context),
+    text: renderPrompt(parameters, context, leafState(self)),
     description: parameters.description,
   })),
   record: runtime.assign(({ context, event }: { context: LoopContext, event: LoopEvent }, parameters: RecordParameters) =>
     applyRecord(context, event, parameters)),
-  request_shell: runtime.emit((_arguments, parameters: ShellParameters) => ({
+  run_shell: runtime.emit((_arguments, parameters: RunShellParameters) => ({
     type: 'emit.shell' as const,
     cmd: parameters.cmd,
     reportTo: parameters.reportTo,
   })),
-  request_dispatch: runtime.emit(({ context }: { context: LoopContext }, parameters: DispatchParameters) => ({
-    type: 'emit.dispatch' as const,
-    agent: parameters.agent,
-    text: renderTemplate({ template: 'validation_self_report' }, context),
+  /**
+  The return annotation is the check that the emit is a `CommandEmit`; the host's
+  command facility is its only reader.
+  */
+  run_command: runtime.emit((_arguments, parameters: RunCommandParameters): CommandEmit => ({
+    type: 'emit.command',
+    ...parameters,
   })),
-  request_skill: runtime.enqueueActions(({ context, enqueue }: SkillArguments, parameters: SkillParameters) => {
+  spawn_subagent: runtime.emit(({ context }: { context: LoopContext }, parameters: SpawnSubagentParameters) => ({
+    type: 'emit.subagent' as const,
+    agent: parameters.agent,
+    text: renderPrompt(parameters, context),
+    description: parameters.description,
+    reportTo: parameters.reportTo ?? SUBAGENT_READY,
+    timeoutMs: Math.min(parameters.timeoutMs ?? SUBAGENT_TIMEOUT_MS, SUBAGENT_TIMEOUT_MS),
+  })),
+  activate_skill: runtime.enqueueActions(({ context, enqueue }: SkillArguments, parameters: ActivateSkillParameters) => {
     if (context.injectedSkills.includes(skillKey(parameters.name))) return
 
     enqueue.emit({ type: 'emit.skill', name: parameters.name, reportTo: 'skill_ready' })
   }),
-  request_memories: runtime.emit((_arguments, parameters: MemoriesParameters) => ({
+  recall_memories: runtime.emit((_arguments, parameters: RecallMemoriesParameters) => ({
     type: 'emit.memories' as const,
     namespace: parameters.namespace,
     reportTo: 'memories_ready' as const,
@@ -525,7 +614,7 @@ export const createActions = (runtime: XStateRuntime, sources: SignalSources) =>
   update_signals_policy: runtime.enqueueActions(({ enqueue }: SignalsPolicyArguments, parameters: UpdateSignalsPolicyParameters) => {
     const names = Object.keys(updateSignalsPolicySpecs(parameters, sources))
 
-    if (parameters.notify_agent) enqueue.emit({ type: 'emit.signals' as const, signal_keys: names })
+    enqueue.emit({ type: 'emit.signals' as const, signal_keys: names })
 
     enqueue.assign({ signalsPolicy: { names } })
   }),
@@ -536,10 +625,11 @@ export const createActions = (runtime: XStateRuntime, sources: SignalSources) =>
   })),
   record_callback: runtime.assign(({ context, event }: { context: LoopContext, event: LoopEvent }, parameters: RecordCallbackParameters) =>
     applyRecordCallback(context, event, parameters)),
-  fail: runtime.assign((_arguments, parameters: FailParameters) => applyFail(parameters)),
-  set_tools_policy: runtime.assign(({ context }: { context: LoopContext }, parameters: ToolsPolicyParameters) =>
+  set_tools_policy: runtime.assign(({ context }: { context: LoopContext }, parameters: ToolsPolicyParameters) => {
+    if (parameters.allowedTools === null) return { policy: undefined }
+
     // A restored session's snapshot rule wins; this fills a record that predates it.
-    context.policy === undefined
+    return context.policy === undefined
       ? {
           policy: {
             stateId: parameters.stateId,
@@ -547,10 +637,17 @@ export const createActions = (runtime: XStateRuntime, sources: SignalSources) =>
             allowedTools: [...parameters.allowedTools],
           },
         }
-      : {}),
-  clear_tools_policy: runtime.assign(() => ({ policy: undefined })),
+      : {}
+  }),
   admit_identity: runtime.assign(({ event }: { event: LoopEvent }) =>
     event.type === 'admit' ? { agent: event.agent, parentID: event.parentID } : {}),
+  /**
+  A child cannot move its parent, so it queues the event the parent declares:
+  `raise` leaves the event on the internal queue the same macrostep drains.
+  */
+  emit_parent: runtime.enqueueActions(({ enqueue }: ParentRaiseArguments, parameters: EmitParentParameters) => {
+    enqueue.raise({ type: parameters.type })
+  }),
 }) satisfies Record<ActionType, unknown>
 
 type AdmissionIdentity = { readonly agent: string, readonly parentID?: string | undefined }
@@ -580,7 +677,11 @@ export const createGuards = (runtime: XStateRuntime) => ({
   */
   improvement_lesson: ({ context }: { context: LoopContext }) => context.intent === 'improvement',
   callback_ok: ({ event }: { event: LoopEvent }) => readCallback(event).ok,
-  not_parked: runtime.not(runtime.stateIn('parked')),
+  /**
+  The id, not the leaf: a bare `parked` is compared against the whole state value,
+  which is `{ towards_goal: 'parked' }` once parked sits under the compound.
+  */
+  not_parked: runtime.not(runtime.stateIn('#session.towards_goal.parked')),
   /**
   A session a subagent created never loops, whatever agent id it runs, so the
   parent check joins the allowlist rather than replacing it.

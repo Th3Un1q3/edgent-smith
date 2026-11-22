@@ -20,6 +20,7 @@ const contextFixture = (overrides: Partial<StoredSession> = {}): StoredSession =
   goal: 'ship the snapshot',
   intent: 'none',
   attempts: 0,
+  nudges: 0,
   memories: [],
   improvements: [],
   injectedSkills: [],

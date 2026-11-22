@@ -4,6 +4,9 @@
  */
 import { Deferred, Effect } from 'effect'
 import type { ActionFunction, GuardPredicate, MachineConfig, TransitionConfig } from 'xstate'
+import type { PromptInput } from '@opencode/schema/prompt-input'
+import type { AgentAttachment } from '@opencode/schema/prompt'
+import type { SessionInbox } from '@opencode/schema/session-inbox'
 
 import { DEFAULT_MACHINE } from '../machines'
 import type { MachineModule } from '../machines'
@@ -160,6 +163,20 @@ export interface DispatchEmit {
   readonly text: string
 }
 
+/**
+A child run: the plugin creates it under the session, prompts it, and answers
+`reportTo` with one payload for whatever happened to it, so a second spawn while
+one is pending and an abandoned wait both settle rather than hang.
+*/
+export interface SubagentEmit {
+  readonly type: 'emit.subagent'
+  readonly agent: string
+  readonly text: string
+  readonly description: string
+  readonly reportTo: CallbackName
+  readonly timeoutMs: number
+}
+
 export interface SkillEmit {
   readonly type: 'emit.skill'
   readonly name: string
@@ -177,7 +194,29 @@ export interface SignalsEmit {
   readonly signal_keys?: readonly string[]
 }
 
-export type EmitRequest = PromptEmit | ShellEmit | DispatchEmit | SkillEmit | MemoriesEmit | SignalsEmit
+/**
+A command the live session runs by name. `text` is optional here because a command
+may take none, while the client input requires a string the plugin fills with ''.
+*/
+export interface CommandEmit {
+  readonly type: 'emit.command'
+  readonly name: string
+  readonly text?: string
+  readonly files?: ReadonlyArray<PromptInput.FileAttachment>
+  readonly agents?: ReadonlyArray<AgentAttachment>
+  readonly skills?: ReadonlyArray<PromptInput.SkillAttachment>
+  readonly delivery?: SessionInbox.Delivery
+}
+
+export type EmitRequest
+  = | PromptEmit
+    | ShellEmit
+    | DispatchEmit
+    | SubagentEmit
+    | SkillEmit
+    | MemoriesEmit
+    | SignalsEmit
+    | CommandEmit
 
 export interface SessionMachine {
   readonly sessionId: string
@@ -201,6 +240,12 @@ export type CallbackEventType = `callback.${CallbackName}`
 Why the host stopped a turn. A provider failure is not an interruption: it keeps
 the panic path, while a person taking control parks the loop.
 */
+/**
+The signal that ends a command's work. It is the only name that clears a pending
+command, so the state waiting on the command can be the one that answers it.
+*/
+export const RETROSPECTIVE_COMPLETE = 'RETROSPECTIVE_COMPLETE'
+
 export const INTERRUPT_REASONS = ['user', 'shutdown', 'superseded', 'inactivity'] as const
 export type InterruptReason = (typeof INTERRUPT_REASONS)[number]
 
@@ -485,11 +530,22 @@ const assertTargets = (definition: MachineDefinitionData): void => {
 }
 
 /**
+The assembly cache: session state lives in the actor and in the machine's own
+maps, so one assembly per module is safe to share. The weak key keeps a module
+that is no longer imported collectable.
+*/
+const assemblies = new WeakMap<MachineModule, AssembledMachine>()
+
+/**
 Builds the loop and the registry for one module, so core holds no machine of its
 own: the state ids, the transitions and the ad-hoc signals all come from the
-module. The consistency checks run per assembled machine.
+module. The consistency checks run once per module, on first assembly.
 */
 export const assembleMachine = (module: MachineModule): AssembledMachine => {
+  const cached = assemblies.get(module)
+
+  if (cached !== undefined) return cached
+
   const definition = definitionOf(module)
 
   assertTargets(definition)
@@ -497,13 +553,16 @@ export const assembleMachine = (module: MachineModule): AssembledMachine => {
   // Already a clone with our metadata stripped: the library receives the tree whole.
   const loop = definition as unknown as LoopDefinition
   const sources = sourcesOf(module)
-
-  return {
+  const assembled: AssembledMachine = {
     loop,
     registry: registryOf(module, definition, sources),
     sources,
     transientStates: new Set(module.transientStates),
   }
+
+  assemblies.set(module, assembled)
+
+  return assembled
 }
 
 export const SESSION_MACHINE: AssembledMachine = assembleMachine(DEFAULT_MACHINE)
@@ -863,6 +922,23 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
         )
   })
 
+  /**
+  Any event means the loop is awake: a held goal request must not arrive late.
+  */
+  const markAwake = (entry: MachineEntry): void => {
+    entry.pending = []
+  }
+
+  /**
+  The one path an event takes: sent through the actor, the held entry emits
+  cleared, then what the actor emitted drained, in that order.
+  */
+  const dispatch = (entry: MachineEntry, event: LoopEvent): readonly EmitRequest[] => {
+    entry.actor.send(event)
+    markAwake(entry)
+    return entry.actor.takeEmits()
+  }
+
   const signal = (input: unknown, sessionId: string): SignalResult => {
     const entry = machines.get(sessionId)
 
@@ -872,21 +948,16 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
     const table = policyTable(assembly.registry, liveContext(entry).signalsPolicy)
     const validation = validateSignal(input, state, table, assembly.registry)
 
-    if (!validation.ok) {
-      return {
-        text: refusalMessage(validation.refusal, table),
-        emits: [],
-        refusal: validation.refusal,
-      }
-    }
-
-    entry.actor.send(validation.event)
-    markAwake(entry)
-
-    return {
-      text: 'Signal accepted.',
-      emits: entry.actor.takeEmits(),
-    }
+    return validation.ok
+      ? {
+          text: 'Signal accepted.',
+          emits: dispatch(entry, validation.event),
+        }
+      : {
+          text: refusalMessage(validation.refusal, table),
+          emits: [],
+          refusal: validation.refusal,
+        }
   }
 
   const status = (sessionId: string): string => {
@@ -910,50 +981,27 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
   ): readonly EmitRequest[] => {
     const entry = machines.get(sessionId)
 
-    if (entry === undefined) return []
-
-    entry.actor.send({ type: callbackEvent(name), payload })
-    markAwake(entry)
-    return entry.actor.takeEmits()
+    return entry === undefined ? [] : dispatch(entry, { type: callbackEvent(name), payload })
   }
 
   const userInput = (sessionId: string, text: string): readonly EmitRequest[] => {
     const entry = machines.get(sessionId)
 
-    if (entry === undefined) return []
-
-    entry.actor.send({ type: 'system_user_input', text })
-    markAwake(entry)
-    return entry.actor.takeEmits()
+    return entry === undefined ? [] : dispatch(entry, { type: 'system_user_input', text })
   }
 
   const interrupted = (sessionId: string, reason: InterruptReason): readonly EmitRequest[] => {
     const entry = machines.get(sessionId)
 
-    if (entry === undefined) return []
-
-    entry.actor.send({ type: 'system_interrupted', reason })
-    markAwake(entry)
-    return entry.actor.takeEmits()
+    return entry === undefined ? [] : dispatch(entry, { type: 'system_interrupted', reason })
   }
 
   const idle = (sessionId: string): Effect.Effect<readonly EmitRequest[]> =>
     Effect.sync(() => {
       const entry = machines.get(sessionId)
 
-      if (entry === undefined) return []
-
-      entry.actor.send({ type: 'system_idle' })
-      markAwake(entry)
-      return entry.actor.takeEmits()
+      return entry === undefined ? [] : dispatch(entry, { type: 'system_idle' })
     })
-
-  /**
-  Any event means the loop is awake: a held goal request must not arrive late.
-  */
-  const markAwake = (entry: MachineEntry): void => {
-    entry.pending = []
-  }
 
   const stateOf = (sessionId: string): LoopStateId | undefined => machines.get(sessionId)?.actor.state()
   const policyOf = (sessionId: string): ToolPolicyRule | undefined =>

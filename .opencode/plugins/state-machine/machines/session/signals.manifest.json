@@ -28,6 +28,12 @@
         "description": "Constrains nothing: the runtime validates no payload shape for this signal, so any payload or no payload is accepted."
       }
     },
+    "RETROSPECTIVE_COMPLETE": {
+      "describe": "Report that the retrospective command raised by this session has finished.",
+      "schema": {
+        "description": "Constrains nothing: the runtime validates no payload shape for this signal, so any payload or no payload is accepted."
+      }
+    },
     "GOAL_ACHIEVED": {
       "describe": "Report that the goal is met.",
       "schema": {

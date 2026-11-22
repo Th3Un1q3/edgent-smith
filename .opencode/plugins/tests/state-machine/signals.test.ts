@@ -17,7 +17,7 @@ const specsOf = (parameters: UpdateSignalsPolicyParameters): SignalTable =>
   updateSignalsPolicySpecs(parameters, sources)
 
 const policyOf = (...names: readonly string[]): SignalTable =>
-  specsOf({ set_enabled_signals: names, notify_agent: false })
+  specsOf({ set_enabled_signals: names })
 
 const schemaOf = (spec: SignalSpec | undefined): NonNullable<SignalSpec['schema']> => {
   if (spec?.schema === undefined) throw new Error('expected a declared schema')
@@ -293,21 +293,19 @@ describe('validateSignal refusal details', () => {
 
 describe('updateSignalsPolicySpecs', () => {
   it('throws for a name the manifest does not declare', () => {
-    expect(() => specsOf({ set_enabled_signals: ['PUSH_WORK'], notify_agent: false }))
+    expect(() => specsOf({ set_enabled_signals: ['PUSH_WORK'] }))
       .toThrow('which signals.manifest.json does not declare')
   })
 
   it('throws for an ad-hoc entry with a blank description', () => {
     expect(() => specsOf({
       set_enabled_signals: [{ CUSTOM: { description: '  ' } }],
-      notify_agent: false,
     })).toThrow('a blank description')
   })
 
   it('resolves an ad-hoc entry without a schema to its description', () => {
     const specs = specsOf({
       set_enabled_signals: [{ CUSTOM: { description: 'A custom signal' } }],
-      notify_agent: false,
     })
 
     expect(specs.CUSTOM).toEqual({ describe: 'A custom signal' })
@@ -316,14 +314,12 @@ describe('updateSignalsPolicySpecs', () => {
   it('throws for an ad-hoc schema the manifest does not declare', () => {
     expect(() => specsOf({
       set_enabled_signals: [{ CUSTOM: { description: 'A custom signal', schema: 'PUSH_WORK' } }],
-      notify_agent: false,
     })).toThrow('which signals.manifest.json does not declare')
   })
 
   it('resolves a declared schema without a codec to its description', () => {
     const specs = specsOf({
       set_enabled_signals: [{ CUSTOM: { description: 'A custom signal', schema: 'CLAIM_WORK' } }],
-      notify_agent: false,
     })
 
     expect(specs.CUSTOM).toEqual({ describe: 'A custom signal' })
@@ -332,18 +328,64 @@ describe('updateSignalsPolicySpecs', () => {
   it('resolves a declared schema to the registry codec', () => {
     const specs = specsOf({
       set_enabled_signals: [{ CUSTOM: { description: 'A custom signal', schema: 'SET_GOAL' } }],
-      notify_agent: false,
     })
 
     expect(specs.CUSTOM?.schema).toBe(registry.SET_GOAL?.schema)
   })
 
   it('throws for an object entry that names no signal', () => {
-    expect(() => specsOf({ set_enabled_signals: [{}], notify_agent: false }))
+    expect(() => specsOf({ set_enabled_signals: [{}] }))
       .toThrow('names no signal')
   })
 
   it('throws for a name the registry does not resolve', () => {
     expect(() => signalSpec('PUSH_WORK', registry)).toThrow('neither signals.manifest.json nor machine.json declares')
+  })
+})
+
+describe('stateValuePath', () => {
+  it('keeps a leaf and spells a compound value as its dotted path', () => {
+    expect(signalsModule.stateValuePath('define_goal')).toBe('define_goal')
+    expect(signalsModule.stateValuePath({ towards_goal: 'validate' })).toBe('towards_goal.validate')
+  })
+
+  it('names the one key of a value whose child has no path', () => {
+    expect(signalsModule.stateValuePath({ paused: null })).toBe('paused')
+  })
+
+  it('returns an empty path for a null or empty state', () => {
+    expect(signalsModule.stateValuePath(null)).toBe('')
+    expect(signalsModule.stateValuePath({})).toBe('')
+  })
+})
+
+describe('manifestCodec', () => {
+  it('declares no codec for a declaration without an object schema', () => {
+    expect(signalsModule.manifestCodec(undefined)).toBeUndefined()
+    expect(signalsModule.manifestCodec({ schema: 'SET_GOAL' })).toBeUndefined()
+    expect(signalsModule.manifestCodec({ schema: { type: 'object', properties: {} } })).toBeUndefined()
+  })
+
+  it('validates the declared number, boolean and string fields', () => {
+    const codec = signalsModule.manifestCodec({
+      schema: {
+        type: 'object',
+        properties: {
+          count: { type: 'number' },
+          flag: { type: 'boolean' },
+          label: { type: 'string' },
+        },
+      },
+    })
+    if (codec === undefined) throw new Error('expected a declared codec')
+
+    expect(Schema.decodeUnknownSync(codec)({ count: 2, flag: true, label: 'keystone' }))
+      .toEqual({ count: 2, flag: true, label: 'keystone' })
+  })
+
+  it('declares no codec for a field type outside the manifest subset', () => {
+    expect(signalsModule.manifestCodec({
+      schema: { type: 'object', properties: { nested: { type: 'object' } } },
+    })).toBeUndefined()
   })
 })

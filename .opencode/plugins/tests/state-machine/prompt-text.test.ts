@@ -7,7 +7,7 @@ import type { EmitRequest } from '@plugins/state-machine/core/machine'
 import { makeHarness, register, sessionCreated, sessionIdle } from '@tests/helpers/state-machine-harness'
 
 const GOAL_REQUEST = 'Ask the agent what goal this session should accomplish.'
-const VALIDATOR_PROMPT = 'Ask the agent to judge whether the goal is met.'
+const NUDGE = 'Nudge the agent to do what the active state waits for instead of idling.'
 
 const boot = async () => {
   const harness = makeHarness()
@@ -36,21 +36,22 @@ describe('synthetic prompt descriptions', () => {
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.emitUserMessage('ses_1', 'user', 'ship it')
 
-    expect(harness.synthetics[0]?.text).toContain('What goal')
+    expect(harness.synthetics[0]?.text)
+      .toBe('This session runs a state machine. What goal should it accomplish?')
     expect(harness.synthetics[0]?.description).toBe(GOAL_REQUEST)
   })
 
-  it('describes the validation prompt it sends on idle', async () => {
+  it('describes the nudge it sends on idle', async () => {
     const harness = await boot()
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
     await harness.emit(sessionIdle('ses_1'))
 
-    const verdict = harness.synthetics.find(message => message.text.includes('Verdict'))
+    const nudge = harness.synthetics.find(message => message.text.includes('idle in `work`'))
 
-    expect(verdict?.description).toBe(VALIDATOR_PROMPT)
-    expect(verdict?.description).not.toBe(GOAL_REQUEST)
+    expect(nudge?.description).toBe(NUDGE)
+    expect(nudge?.description).not.toBe(GOAL_REQUEST)
   })
 
   it('gives every synthetic prompt a sentence describing what the loop is doing', async () => {
@@ -80,7 +81,9 @@ describe('the park summary', () => {
     machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
     machine.signal({ type: 'GOAL_ACHIEVED' }, 'ses_1')
 
-    const emits = machine.signal({ type: 'LESSON', payload: { text: 'read the line.' } }, 'ses_1').emits
+    machine.signal({ type: 'LESSON', payload: { text: 'read the line.' } }, 'ses_1')
+
+    const emits = machine.signal({ type: 'RETROSPECTIVE_COMPLETE' }, 'ses_1').emits
 
     expect(emittedText(emits)).toBe(
       'Goal reached: ship it. Improvements: read the line. Waiting for your next instruction.',

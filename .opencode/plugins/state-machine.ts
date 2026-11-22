@@ -26,19 +26,24 @@ import { isUserItem, readUserText } from './state-machine/core/inbox'
 import {
   createStateMachine,
   INTERRUPT_REASONS,
+  RETROSPECTIVE_COMPLETE,
   loadStateMachineLibrary,
   promptDescription,
   readStartConfig,
 } from './state-machine/core/machine'
+import type { MachineModule } from './state-machine/machines'
 import type {
   CallbackName,
   CallbackPayload,
+  CommandEmit,
   EmitRequest,
   InjectSkill,
   InterruptReason,
   LoadMemories,
   RunShell,
+  SignalsEmit,
   StateMachineLibrary,
+  SubagentEmit,
 } from './state-machine/core/machine'
 
 const SIGNAL_TOOL = 'signal_send'
@@ -50,6 +55,9 @@ type PluginEvent = Stream.Success<ReturnType<Context['event']['subscribe']>>
 
 const interruptReason = (value: unknown): InterruptReason | undefined =>
   typeof value === 'string' ? INTERRUPT_REASONS.find(reason => reason === value) : undefined
+
+const signalType = (input: unknown): unknown =>
+  typeof input === 'object' && input !== null && 'type' in input ? input.type : undefined
 
 const signalInput: JsonSchema.JsonSchema = {
   type: 'object',
@@ -95,10 +103,223 @@ const runShellCommand: RunShell = (command, cwd) =>
 The loader and the effect ports are parameters so a test can fail the load or
 answer a command, a skill and a memory read without their real implementations.
 */
+/**
+A child run: create it under the parent, prompt it, and answer one payload for
+whatever happened to it, so the caller never waits on a dead child.
+*/
+export type RunSubagent = (request: {
+  readonly parentID: string
+  readonly agent: string
+  readonly text: string
+  readonly timeoutMs: number
+}) => Effect.Effect<CallbackPayload, unknown>
+
+const SUBAGENT_IN_FLIGHT = 'spawn-in-flight'
+
+const causeText = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause)
+
+const replyText = (reply: unknown): string => typeof reply === 'string' ? reply : JSON.stringify(reply) ?? ''
+
+/**
+`verdict` is present only when the judge answered, and the machine's fail arm
+requires it. An unavailable port, a spawn the host refused and the timeout all
+settle `ok: false` without it, so they record and leave the state to its own
+self-report instead of panicking a working session.
+*/
+type JudgeVerdict = CallbackPayload & { readonly verdict?: 'pass' | 'fail' }
+
+/**
+Reads the judge's trailing `{ "verdict": "pass" | "fail", "reason": "..." }`. A
+reply with no such object is the child's failure, not the machine's.
+*/
+const readVerdict = (text: string): JudgeVerdict => {
+  const start = text.lastIndexOf('{')
+  const unreadable: JudgeVerdict = { ok: false, output: 'verdict-unreadable: ' + text.slice(0, 200) }
+
+  if (start === -1) return unreadable
+
+  try {
+    const parsed: { readonly verdict?: unknown, readonly reason?: unknown } = JSON.parse(text.slice(start))
+
+    return (parsed.verdict === 'pass' || parsed.verdict === 'fail')
+      && typeof parsed.reason === 'string' && parsed.reason !== ''
+      ? { ok: parsed.verdict === 'pass', output: parsed.reason, verdict: parsed.verdict }
+      : unreadable
+  }
+  catch {
+    return unreadable
+  }
+}
+
+/**
+The default port: the harness's own session facility. `session.wait` is not on the
+plugin's Context type, so a host that omits it is refused by name instead of
+hanging, and the read mechanism behind `wait` stays the host's business.
+*/
+const sessionSubagentPort = (context: Context): RunSubagent => request => Effect.gen(function* () {
+  const session = context.session as unknown as {
+    readonly create?: (input: { parentID: Session.ID, agent: Agent.ID }) => Effect.Effect<{ id: string }, unknown>
+    readonly prompt?: (input: { sessionID: Session.ID, text: string }) => Effect.Effect<unknown>
+    readonly wait?: (input: { sessionID: Session.ID }) => Effect.Effect<unknown>
+  }
+
+  if (session.create === undefined || session.prompt === undefined) {
+    return yield* Effect.fail(new Error('subagent-port-unavailable: session.create'))
+  }
+
+  if (session.wait === undefined) {
+    return yield* Effect.fail(new Error('subagent-port-unavailable: session.wait'))
+  }
+
+  const child = yield* session.create({ parentID: request.parentID as Session.ID, agent: request.agent as Agent.ID })
+  yield* session.prompt({ sessionID: child.id as Session.ID, text: request.text })
+
+  return readVerdict(replyText(yield* session.wait({ sessionID: child.id as Session.ID })))
+})
+
+export interface SubagentRunner {
+  readonly spawn: (
+    sessionId: string,
+    emit: SubagentEmit,
+    settle: (payload: CallbackPayload) => Effect.Effect<void>,
+  ) => Effect.Effect<void>
+  readonly pending: (sessionId: string) => string | undefined
+}
+
+/**
+One child per session: a second spawn while one is pending is refused with
+`spawn-in-flight`. A spawn is a request, not a wait: it records the pending entry,
+starts the child on its own fiber and returns, so the event that raised it completes
+before any verdict exists. The entry is cleared when that fiber ends — after the
+verdict settles, or when the run is interrupted.
+*/
+export const createSubagentRunner = (
+  context: Context,
+  port?: RunSubagent,
+): SubagentRunner => {
+  const pending = new Map<string, string>()
+  const run = port ?? sessionSubagentPort(context)
+
+  return {
+    pending: sessionId => pending.get(sessionId),
+    spawn: (sessionId, emit, settle) => Effect.suspend(() => {
+      if (pending.has(sessionId)) return settle({ ok: false, output: SUBAGENT_IN_FLIGHT })
+
+      pending.set(sessionId, sessionId)
+
+      const child = Effect.timeoutOption(
+        run({ parentID: sessionId, agent: emit.agent, text: emit.text, timeoutMs: emit.timeoutMs }),
+        emit.timeoutMs,
+      ).pipe(
+        Effect.match({
+          onFailure: cause => ({ ok: false, output: 'spawn-failed: ' + causeText(cause) }),
+          onSuccess: option => option._tag === 'None' ? { ok: false, output: 'timeout' } : option.value,
+        }),
+        Effect.flatMap(payload => settle(payload)),
+        Effect.ensuring(Effect.sync(() => { pending.delete(sessionId) })),
+      )
+
+      return Effect.forkDetach(child).pipe(Effect.asVoid)
+    }),
+  }
+}
+
+const COMMAND_IN_FLIGHT = 'command-in-flight'
+const COMMAND_PORT_UNAVAILABLE = 'command-port-unavailable: session.command'
+
+export interface CommandRequest {
+  readonly sessionID: string
+  readonly name: string
+  readonly text: string
+  readonly files?: CommandEmit['files']
+  readonly agents?: CommandEmit['agents']
+  readonly skills?: CommandEmit['skills']
+  readonly delivery?: CommandEmit['delivery']
+}
+
+export type SendCommand = (request: CommandRequest) => Effect.Effect<void, unknown>
+
+/**
+The default port: the host's session command facility. A host that omits it is
+refused by name at the raise, so no session waits on a command nobody ran.
+*/
+const sessionCommandPort = (context: Context): SendCommand | undefined => {
+  const command = (context.session as unknown as { readonly command?: SendCommand }).command
+
+  return command === undefined
+    ? undefined
+    : request => command({ ...request, sessionID: request.sessionID as Session.ID })
+}
+
+export type CommandRaise = { readonly ok: true } | { readonly ok: false, readonly output: string }
+
+export interface CommandRunner {
+  readonly raise: (sessionId: string, emit: CommandEmit) => Effect.Effect<CommandRaise>
+  readonly isPending: (sessionId: string) => boolean
+  readonly complete: (sessionId: string) => boolean
+}
+
+const commandRequest = (sessionId: string, emit: CommandEmit): CommandRequest => ({
+  sessionID: sessionId,
+  name: emit.name,
+  text: emit.text ?? '',
+  files: emit.files,
+  agents: emit.agents,
+  skills: emit.skills,
+  delivery: emit.delivery,
+})
+
+/**
+One command per session. A raise records the pending entry and returns, so the
+event that raised it finishes before the command runs; the entry clears only
+through `completeOnSignal`, never when the command is merely sent. A delivery the
+host failed to start clears it too: no command is running, so nothing will
+complete, and holding the session would hang the loop.
+*/
+export const createCommandRunner = (context: Context, port?: SendCommand): CommandRunner => {
+  const pending = new Set<string>()
+  const send = port ?? sessionCommandPort(context)
+
+  return {
+    isPending: sessionId => pending.has(sessionId),
+    complete: sessionId => pending.delete(sessionId),
+    raise: (sessionId, emit) => Effect.suspend((): Effect.Effect<CommandRaise> => {
+      if (send === undefined) return Effect.succeed({ ok: false as const, output: COMMAND_PORT_UNAVAILABLE })
+      if (pending.has(sessionId)) return Effect.succeed({ ok: false as const, output: COMMAND_IN_FLIGHT })
+
+      pending.add(sessionId)
+
+      const delivery = send(commandRequest(sessionId, emit)).pipe(
+        Effect.matchCause({
+          onFailure: cause => 'command-failed: ' + causeText(cause),
+          onSuccess: () => {},
+        }),
+        Effect.tap(message => message === undefined
+          ? Effect.void
+          : Effect.sync(() => { pending.delete(sessionId) }).pipe(
+              Effect.andThen(Effect.logError('[state-machine] emit.command refused for session ' + sessionId + ': ' + message)),
+            )),
+      )
+
+      return Effect.forkDetach(delivery).pipe(Effect.as({ ok: true as const }))
+    }),
+  }
+}
+
+/**
+The only path that clears a pending command: the completion signal arriving through
+the signal tool. Any other signal leaves the entry in place.
+*/
+export const didCompleteOnSignal = (commands: CommandRunner, sessionId: string, signal: unknown): boolean =>
+  signal === RETROSPECTIVE_COMPLETE ? commands.complete(sessionId) : false
+
 export interface PluginPorts {
   readonly runShell?: RunShell
   readonly injectSkill?: InjectSkill
   readonly loadMemories?: LoadMemories
+  readonly runSubagent?: RunSubagent
+  readonly sendCommand?: SendCommand
+  readonly machine?: MachineModule
 }
 
 export const createStateMachinePlugin = (
@@ -138,6 +359,7 @@ export const createStateMachinePlugin = (
 
     const machine = createStateMachine({
       library,
+      machine: ports.machine,
       snapshot: createSnapshotStore({
         load: key => context.storage.get(key),
         save: (key, value) => context.storage.set(key, value as Parameters<Context['storage']['set']>[1]),
@@ -157,10 +379,27 @@ export const createStateMachinePlugin = (
       )
 
     const settle = (sessionId: string, reportTo: CallbackName, payload: CallbackPayload): Effect.Effect<void> =>
-      Effect.suspend(() => deliver(sessionId, machine.callback(sessionId, reportTo, payload))).pipe(
+      Effect.suspend(() => deliver(sessionId, settleVerdict(
+        (session, name, value) => machine.callback(session, name, value),
+        subagent.pending(sessionId),
+        sessionId,
+        reportTo,
+        payload,
+      ))).pipe(
         Effect.andThen(Effect.suspend(() => persist(sessionId))),
         Effect.ignore,
       )
+
+    const commands = createCommandRunner(context, ports.sendCommand)
+
+    const offerIdle = (sessionId: string): Effect.Effect<void> => Effect.gen(function* () {
+      const emits = yield* machine.idle(sessionId)
+
+      yield* deliver(sessionId, emits)
+      yield* persist(sessionId)
+    })
+
+    const subagent = createSubagentRunner(context, ports.runSubagent)
 
     const logSnapshot = (sessionId: string, status: string): Effect.Effect<void> =>
       status === 'read-failed'
@@ -203,75 +442,71 @@ export const createStateMachinePlugin = (
         return true
       })
 
-    /**
-    Starts a validator child and prompts it. A child's signals never reach the
-    parent, so this reports nothing; a failure returns false for the fallback.
-    */
-    const startValidator = (sessionId: string, agent: string, text: string): Effect.Effect<boolean> =>
-      Effect.gen(function* () {
-        const exists = yield* context.agent.get({ agentID: agent as Agent.ID }).pipe(
-          Effect.as(true),
-          Effect.catchCause(() => Effect.succeed(false)),
-        )
+    const reportCommandRefusal = (sessionId: string, outcome: CommandRaise): Effect.Effect<void> =>
+      outcome.ok
+        ? Effect.void
+        : Effect.logWarning('[state-machine] emit.command refused for session ' + sessionId + ': ' + outcome.output)
 
-        if (!exists) return false
+    // Signals and commands settle no callback, so they take no payload and are
+    // delivered beside the switch rather than as two more cases in it.
+    const deliverNotice = (sessionId: string, emitted: SignalsEmit | CommandEmit): Effect.Effect<void> =>
+      emitted.type === 'emit.signals'
+        ? sendPrompt(sessionId, machine.signalLine(sessionId, emitted.signal_keys), SIGNALS_PROMPT_DESCRIPTION)
+        : commands.raise(sessionId, emitted).pipe(
+            Effect.tap(result => reportCommandRefusal(sessionId, result)),
+            Effect.asVoid,
+          )
 
-        const child = yield* context.session.create({
-          parentID: sessionId as Session.ID,
-          agent: agent as Agent.ID,
-        })
-
-        yield* context.session.prompt({ sessionID: child.id, text })
-        return true
-      }).pipe(Effect.catchCause(() => Effect.succeed(false)))
+    const deliverEmit = (
+      sessionId: string,
+      emitted: Exclude<EmitRequest, SignalsEmit | CommandEmit>,
+    ): Effect.Effect<void> =>
+      Effect.suspend(() => {
+        switch (emitted.type) {
+          case 'emit.subagent': {
+            return subagent.spawn(sessionId, emitted, payload => settle(sessionId, emitted.reportTo, payload))
+          }
+          case 'emit.prompt': {
+            return sendPrompt(sessionId, emitted.text, promptDescription(emitted))
+          }
+          case 'emit.dispatch': {
+            return settle(sessionId, 'subagent_ready', {
+              ok: false,
+              output: 'spawn-failed: emit.dispatch is retired in favour of emit.subagent',
+            })
+          }
+          case 'emit.shell': {
+            return runShell(emitted.cmd, context.location.directory).pipe(
+              Effect.flatMap(payload => settle(sessionId, emitted.reportTo, payload)),
+            )
+          }
+          case 'emit.skill': {
+            return injectSkill(sessionId, emitted.name).pipe(
+              Effect.match({
+                onFailure: cause => ({ ok: false, output: String(cause) }),
+                onSuccess: () => ({ ok: true }),
+              }),
+              Effect.flatMap(payload => settle(sessionId, emitted.reportTo, payload)),
+            )
+          }
+          case 'emit.memories': {
+            return loadMemories(emitted.namespace).pipe(
+              Effect.match({
+                onFailure: cause => ({ ok: false, output: String(cause) }),
+                onSuccess: value => ({ ok: true, value }),
+              }),
+              Effect.flatMap(payload => settle(sessionId, emitted.reportTo, payload)),
+            )
+          }
+        }
+      })
 
     const deliver = (sessionId: string, emits: readonly EmitRequest[]): Effect.Effect<void> =>
       Effect.forEach(
         emits,
-        emitted => Effect.suspend(() => {
-          switch (emitted.type) {
-            case 'emit.prompt': {
-              return sendPrompt(sessionId, emitted.text, promptDescription(emitted))
-            }
-            case 'emit.dispatch': {
-              return startValidator(sessionId, emitted.agent, emitted.text).pipe(
-                Effect.flatMap(started => started
-                  ? Effect.void
-                  : sendPrompt(sessionId, emitted.text, promptDescription(emitted))),
-              )
-            }
-            case 'emit.shell': {
-              return runShell(emitted.cmd, context.location.directory).pipe(
-                Effect.flatMap(payload => settle(sessionId, emitted.reportTo, payload)),
-              )
-            }
-            case 'emit.skill': {
-              return injectSkill(sessionId, emitted.name).pipe(
-                Effect.match({
-                  onFailure: cause => ({ ok: false, output: String(cause) }),
-                  onSuccess: () => ({ ok: true }),
-                }),
-                Effect.flatMap(payload => settle(sessionId, emitted.reportTo, payload)),
-              )
-            }
-            case 'emit.memories': {
-              return loadMemories(emitted.namespace).pipe(
-                Effect.match({
-                  onFailure: cause => ({ ok: false, output: String(cause) }),
-                  onSuccess: value => ({ ok: true, value }),
-                }),
-                Effect.flatMap(payload => settle(sessionId, emitted.reportTo, payload)),
-              )
-            }
-            case 'emit.signals': {
-              return sendPrompt(
-                sessionId,
-                machine.signalLine(sessionId, emitted.signal_keys),
-                SIGNALS_PROMPT_DESCRIPTION,
-              )
-            }
-          }
-        }),
+        (emitted) => {
+          return emitted.type === 'emit.signals' || emitted.type === 'emit.command' ? deliverNotice(sessionId, emitted) : deliverEmit(sessionId, emitted)
+        },
         { discard: true },
       )
 
@@ -301,6 +536,9 @@ export const createStateMachinePlugin = (
 
             yield* deliver(sessionId, result.emits)
             yield* persist(sessionId)
+
+            yield* Effect.sync(() => didCompleteOnSignal(commands, sessionId, signalType(input)))
+
             return { content: result.text }
           }),
       })
@@ -404,15 +642,13 @@ export const createStateMachinePlugin = (
       ),
       Stream.runForEach(event => Effect.gen(function* () {
         const sessionId = event.data.sessionID as unknown as string
+
         const session = yield* context.session.get({ sessionID: event.data.sessionID })
         const agent = session.agent as unknown as string | undefined
 
         if (agent !== undefined) yield* open(sessionId, agent, yield* parentOf(sessionId))
 
-        const emits = yield* machine.idle(sessionId)
-
-        yield* deliver(sessionId, emits)
-        yield* persist(sessionId)
+        yield* offerIdle(sessionId)
       })),
       Effect.forkScoped,
     )
@@ -440,5 +676,20 @@ export const createStateMachinePlugin = (
     )
   }),
 })
+
+/**
+A verdict is delivered only while its spawn is in flight; one that arrives with
+no pending spawn is dropped, with no transition and nothing recorded.
+*/
+export const settleVerdict = (
+  callback: (sessionId: string, reportTo: CallbackName, payload: CallbackPayload) => readonly EmitRequest[],
+  pendingSpawn: string | undefined,
+  sessionId: string,
+  reportTo: CallbackName,
+  payload: CallbackPayload,
+): readonly EmitRequest[] =>
+  reportTo === 'subagent_ready' && pendingSpawn === undefined
+    ? []
+    : callback(sessionId, reportTo, payload)
 
 export default createStateMachinePlugin(loadStateMachineLibrary)

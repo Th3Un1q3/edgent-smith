@@ -17,7 +17,7 @@ const NOW = Date.parse('2026-11-16T12:00:00.000Z')
 const STATES: ReadonlySet<string> = new Set([
   'admission', 'towards_goal', 'towards_goal.define_goal', 'towards_goal.work',
   'towards_goal.check', 'towards_goal.validate', 'towards_goal.memorize',
-  'parked', 'panic', 'free_work',
+  'towards_goal.parked', 'towards_goal.panic', 'free_work',
 ])
 
 const contextFixture = (overrides: Partial<StoredSession> = {}): StoredSession => ({
@@ -25,6 +25,7 @@ const contextFixture = (overrides: Partial<StoredSession> = {}): StoredSession =
   goal: 'ship the snapshot',
   intent: 'none',
   attempts: 0,
+  nudges: 0,
   memories: ['a lesson'],
   improvements: [],
   injectedSkills: ['task-delegation'],

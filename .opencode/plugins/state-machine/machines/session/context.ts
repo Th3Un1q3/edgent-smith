@@ -43,9 +43,11 @@ export type LoopContext = {
   goal: string
   intent: IntentKind
   attempts: number
+  nudges: number
   memories: string[]
   improvements: string[]
   injectedSkills: string[]
+  memoryTokens?: string[]
   injected: Record<string, InjectedMemories>
   results: Record<string, CallbackPayload>
   policy?: ToolPolicyRule
@@ -76,9 +78,11 @@ export const freshContext = (defaults: ContextDefaults): LoopContext => ({
   goal: '',
   intent: 'none',
   attempts: 0,
+  nudges: 0,
   memories: [],
   improvements: [],
   injectedSkills: [],
+  memoryTokens: [],
   injected: {},
   results: {},
 })
@@ -98,9 +102,11 @@ export const restoreContext = (
     ...(typeof previous.goal === 'string' && { goal: previous.goal }),
     ...(isIntentKind(previous.intent) && { intent: previous.intent }),
     ...(typeof previous.attempts === 'number' && { attempts: previous.attempts }),
+    ...(typeof previous.nudges === 'number' && { nudges: previous.nudges }),
     ...(isStringArray(previous.memories) && { memories: [...previous.memories] }),
     ...(isStringArray(previous.improvements) && { improvements: [...previous.improvements] }),
     ...(isStringArray(previous.injectedSkills) && { injectedSkills: [...previous.injectedSkills] }),
+    ...(isStringArray(previous.memoryTokens) && { memoryTokens: [...previous.memoryTokens] }),
     ...(isPlainObject(previous.injected) && { injected: readInjected(previous.injected) ?? {} }),
     ...(isPlainObject(previous.results) && { results: readResults(previous.results) }),
     ...(previous.policy !== undefined && { policy: previous.policy }),
@@ -112,7 +118,7 @@ export const restoreContext = (
 /**
 The callback names this machine answers. Core treats them as opaque strings.
 */
-export const CALLBACK_NAMES = ['quality_check_ready', 'skill_ready', 'memories_ready'] as const
+export const CALLBACK_NAMES = ['quality_check_ready', 'skill_ready', 'memories_ready', 'subagent_ready'] as const
 
 /**
 Characters kept for one snapshot text field; a longer result is cut, not rejected.
@@ -201,9 +207,11 @@ const readStored = (
     ...(typeof value.goal === 'string' && { goal: truncate(value.goal, SNAPSHOT_TEXT_LIMIT) }),
     ...(isIntentKind(value.intent) && { intent: value.intent }),
     ...(typeof value.attempts === 'number' && { attempts: value.attempts }),
+    ...(typeof value.nudges === 'number' && { nudges: value.nudges }),
     ...(isStringArray(value.memories) && { memories: [...value.memories] }),
     ...(isStringArray(value.improvements) && { improvements: [...value.improvements] }),
     ...(isStringArray(value.injectedSkills) && { injectedSkills: [...value.injectedSkills] }),
+    ...(isStringArray(value.memoryTokens) && { memoryTokens: [...value.memoryTokens] }),
     ...(isPlainObject(value.injected) && { injected: readInjected(value.injected) ?? {} }),
     ...(isPlainObject(value.results) && { results: readResults(value.results) }),
     ...(value.policy !== undefined && isPolicy(value.policy, states) && { policy: value.policy }),
@@ -219,9 +227,11 @@ type SnapshotField
     | 'goal'
     | 'intent'
     | 'attempts'
+    | 'nudges'
     | 'memories'
     | 'improvements'
     | 'injectedSkills'
+    | 'memoryTokens'
     | 'injected'
     | 'results'
     | 'policy'
@@ -237,9 +247,11 @@ const COPIERS: Readonly<Record<SnapshotField, (snapshot: Partial<StoredSession>)
   goal: snapshot => truncate(snapshot.goal ?? '', SNAPSHOT_TEXT_LIMIT),
   intent: snapshot => snapshot.intent,
   attempts: snapshot => snapshot.attempts,
+  nudges: snapshot => snapshot.nudges,
   memories: snapshot => [...(snapshot.memories ?? [])],
   improvements: snapshot => [...(snapshot.improvements ?? [])],
   injectedSkills: snapshot => [...(snapshot.injectedSkills ?? [])],
+  memoryTokens: snapshot => [...(snapshot.memoryTokens ?? [])],
   injected: snapshot => Object.fromEntries(
     Object.entries(snapshot.injected ?? {}).map(([key, item]) => [key, { full: [...item.full], index: [...item.index] }]),
   ),
