@@ -82,7 +82,7 @@ verify-agents:
     echo "#2 System B (harness-native DSH)"
     ls .dsh/cordis.patch.yml .dsh/child-runtime/cordis.yml
     echo "#3 OpenCode RUG"
-    ls .opencode/agents/rug.md .opencode/plugins/helpers
+    ls .opencode/agents/rug.md .opencode/plugins/helpers .opencode/plugins/instructions .opencode/plugins/gates .opencode/plugins/workflow
     echo "#4 Copilot agents"
     ls .github/agents/*.agent.md
     echo "#5 Conductor"

@@ -31,9 +31,11 @@ export const isMemoryKey = (value: string): boolean =>
 /**
  * Refuses traversal while allowing nested namespaces such as `preferences/user`.
  */
-export const isSafeNamespace = (namespace: string): boolean => {
-  return namespace === '' || namespace.startsWith('/') || namespace.includes('\\') ? false : namespace.split('/').every(segment => segment !== '' && segment !== '.' && segment !== '..')
-}
+const hasUnsafePrefix = (namespace: string): boolean =>
+  namespace === '' || namespace.startsWith('/') || namespace.includes('\\')
+
+export const isSafeNamespace = (namespace: string): boolean =>
+  !hasUnsafePrefix(namespace) && namespace.split('/').every(segment => segment !== '' && segment !== '.' && segment !== '..')
 
 export const memoryPath = (directory: string, namespace: string): string =>
   path.join(directory, MEMORY_DIRECTORY, namespace + '.md')
@@ -42,16 +44,16 @@ export const memoryPath = (directory: string, namespace: string): string =>
  * `## ` headings become index entries; `- ` bullets become full entries. Every
  * other line is ignored.
  */
+const addMemoryLine = (line: string, full: string[], index: string[]): void => {
+  if (line.startsWith('## ')) index.push(line.slice(3).trim())
+  else if (line.startsWith('- ')) full.push(line.slice(2).trim())
+}
+
 export const parseMemory = (content: string): InjectedValue => {
   const full: string[] = []
   const index: string[] = []
 
-  for (const raw of content.split('\n')) {
-    const line = raw.trim()
-
-    if (line.startsWith('## ')) index.push(line.slice(3).trim())
-    else if (line.startsWith('- ')) full.push(line.slice(2).trim())
-  }
+  for (const raw of content.split('\n')) addMemoryLine(raw.trim(), full, index)
 
   return { full, index }
 }
@@ -62,19 +64,37 @@ export type ReadFilePort = (path: string) => Promise<string>
  * A missing file is an empty value, because the loop can run without
  * preferences; any other read failure is reported, not thrown.
  */
+const classifyReadError = (error: unknown): MemoryRead =>
+  (error as { code?: unknown }).code === 'ENOENT'
+    ? { ok: true, value: EMPTY_MEMORY }
+    : { ok: false, output: error instanceof Error ? error.name : 'read-failed' }
+
+type ReadAttempt = { content: string } | { error: unknown }
+
+const tryRead = async (read: () => Promise<string>): Promise<ReadAttempt> => {
+  try {
+    return { content: await read() }
+  }
+  catch (error) {
+    return { error }
+  }
+}
+
+const readMemoryFile = async (
+  directory: string,
+  namespace: string,
+  read: ReadFilePort,
+): Promise<MemoryRead> => {
+  if (!isSafeNamespace(namespace)) return { ok: false, output: 'namespace refused' }
+
+  const attempted = await tryRead(() => read(memoryPath(directory, namespace)))
+  return 'content' in attempted
+    ? { ok: true, value: parseMemory(attempted.content) }
+    : classifyReadError(attempted.error)
+}
+
 export const readMemories = async (
   directory: string,
   namespace: string,
   read: ReadFilePort = path => readFile(path, 'utf8'),
-): Promise<MemoryRead> => {
-  if (!isSafeNamespace(namespace)) return { ok: false, output: 'namespace refused' }
-
-  try {
-    return { ok: true, value: parseMemory(await read(memoryPath(directory, namespace))) }
-  }
-  catch (error) {
-    return (error as { code?: unknown }).code === 'ENOENT'
-      ? { ok: true, value: EMPTY_MEMORY }
-      : { ok: false, output: error instanceof Error ? error.name : 'read-failed' }
-  }
-}
+): Promise<MemoryRead> => readMemoryFile(directory, namespace, read)

@@ -19,9 +19,10 @@ Every edit under `.agents/skills/**` or `.opencode/agents/*.md` passes these che
 
 ## Dead names, agent cards, and the gate
 
-7. **Resolve every name the edit introduces.** For each tool, command, path, and config key the edit names, confirm it exists in the tree; a tool absent from the agent cards' tool list is a dead name, and it is replaced rather than documented.
-8. **Read agent cards, never write them in a sweep.** `.opencode/agents/*.md` is input during a skill sweep — quote it to resolve a name — and not a write target; an agent-definition change is its own change type, routed through the `harness-management` skill.
-9. **Trust the skill gate for mechanics only.** `just agent_utils::validate-skill <name>` checks budgets, links, and fences; it cannot certify semantics, so a passing gate leaves checks 1–8 outstanding.
+7. **Resolve every name the edit introduces, and every harness path the edited file already names.** A tool, command, path, or config key resolves only when a filesystem check on it succeeds (`test -e <path>` exits 0); reading the file is not resolution. A tool absent from the agent cards' tool list is a dead name, and it is replaced rather than documented. A module deleted, renamed, or split leaves the old path stale in every file that names it, so the sweep covers `.opencode/instructions/`, `.agents/skills/`, `.opencode/agents/`, and `AGENTS.md` — not only the edited file's directory.
+8. **Close a path audit on a count, not on a reading.** Report the number of unresolved references and each one with its live replacement; 0 is the only closing value, and the number is the output of the check, not an inference from having reviewed the list. A removal assertion (`<path> is removed`) states an absence and is not a reference to resolve.
+9. **Read agent cards, never write them in a sweep.** `.opencode/agents/*.md` is input during a skill sweep — quote it to resolve a name — and not a write target; an agent-definition change is its own change type, routed through the `harness-management` skill.
+10. **Trust the skill gate for mechanics only.** `just agent_utils::validate-skill <name>` checks budgets, links, and fences; it cannot certify semantics, so a passing gate leaves checks 1–9 outstanding.
 
 ## Output Format
 

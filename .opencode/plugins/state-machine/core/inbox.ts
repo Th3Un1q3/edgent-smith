@@ -13,10 +13,9 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 
 export const isUserItem = (item: unknown): boolean => isObject(item) && item.type === 'user'
 
+const textOf = (value: unknown): string => typeof value === 'string' ? value : ''
+
 export const readUserText = (item: unknown): string => {
-  if (!isObject(item)) return ''
-
-  const payload = item.payload
-
-  return isObject(payload) && typeof payload.text === 'string' ? payload.text : ''
+  const payload = isObject(item) ? item.payload : undefined
+  return isObject(payload) ? textOf(payload.text) : ''
 }

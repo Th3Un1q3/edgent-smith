@@ -43,6 +43,8 @@ Result fields:
 
 Treat `status !== 'ok'` as a failure and decide what to do: retry, fall back, or surface it. Read `outputText` by default; read `data` only when the next step needs a machine value, such as a branch, loop, or merge.
 
+Interrupting the `subtask_run` call aborts the running child session, so the child stops instead of running to its timeout.
+
 ### Structured output
 
 Pass `schema` as a JSON Schema object to ask the child for machine-readable output alongside its normal answer.

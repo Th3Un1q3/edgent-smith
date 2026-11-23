@@ -8,9 +8,9 @@ import type { UpdateSignalsPolicyParameters } from '@plugins/state-machine/machi
 import type { Actor, LoopContext, LoopDefinition, LoopStateId } from '@plugins/state-machine/core/machine'
 import type { SignalTable, SignalValidation } from '@plugins/state-machine/core/signals'
 
-import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine-harness'
+import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine/harness'
 
-import type { Harness } from '@tests/helpers/state-machine-harness'
+import type { Harness } from '@tests/helpers/state-machine/harness'
 
 const boot = async (): Promise<Harness> => {
   const harness = makeHarness()

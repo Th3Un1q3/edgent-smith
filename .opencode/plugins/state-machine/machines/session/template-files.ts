@@ -46,18 +46,86 @@ const trimOneNewline = (content: string): string => {
 
 const lineAt = (content: string, index: number): number => content.slice(0, index).split('\n').length
 
+type SectionNode = { kind: 'section', name: string, inverted: boolean, body: Node[] }
+
+type OpenSection = { readonly node: SectionNode, readonly line: number }
+
+const closeSection = (open: OpenSection[], source: string, line: number, name: string): void => {
+  const section = open.pop()
+
+  if (section === undefined || section.node.name !== name) {
+    throw new Error(source + ':' + line + ' closes section ' + name + ', which is not open')
+  }
+}
+
+const openSection = (nodes: Node[], open: OpenSection[], source: string, line: number, name: string, isInverted: boolean): void => {
+  const enclosing = open.at(-1)
+
+  if (enclosing !== undefined) throw new Error(source + ':' + line + ' nests section ' + name + ' inside ' + enclosing.node.name)
+
+  const node: SectionNode = { kind: 'section', name, inverted: isInverted, body: [] }
+
+  nodes.push(node)
+  open.push({ node, line })
+}
+
+const innermostBody = (nodes: Node[], open: readonly OpenSection[]): Node[] => open.at(-1)?.node.body ?? nodes
+
+type Tag = { readonly marker: string, readonly name: string, readonly end: number, readonly line: number }
+
+/**
+Reads one `{{...}}` tag and rejects a tag that has no name or no closing braces.
+*/
+const readTag = (content: string, start: number, source: string): Tag => {
+  const end = content.indexOf('}}', start + 2)
+  const line = lineAt(content, start)
+
+  if (end === -1) throw new Error(source + ':' + line + ' has an unclosed tag')
+
+  const tag = content.slice(start + 2, end)
+  const marker = tag.slice(0, 1)
+  const name = tag.replace(/^[#^/]/, '')
+
+  if (!/^[A-Za-z0-9_]+$/.test(name)) throw new Error(source + ':' + line + ' has a malformed tag {{' + tag + '}}')
+
+  return { marker, name, end, line }
+}
+
+const SECTION_INVERTED = new Map<string, boolean>([['#', false], ['^', true]])
+
+const applyTag = (tag: Tag, target: Node[], nodes: Node[], open: OpenSection[], source: string): void => {
+  if (tag.marker === '/') {
+    closeSection(open, source, tag.line, tag.name)
+    return
+  }
+
+  const inverted = SECTION_INVERTED.get(tag.marker)
+
+  if (inverted === undefined) {
+    target.push({ kind: 'value', name: tag.name })
+    return
+  }
+
+  openSection(nodes, open, source, tag.line, tag.name, inverted)
+}
+
+const assertSectionsClosed = (open: readonly OpenSection[], source: string): void => {
+  const unclosed = open.at(-1)
+
+  if (unclosed !== undefined) throw new Error(source + ':' + unclosed.line + ' leaves section ' + unclosed.node.name + ' open')
+}
+
+const pushText = (nodes: Node[], open: readonly OpenSection[], text: string): void => {
+  if (text !== '') innermostBody(nodes, open).push({ kind: 'text', value: text })
+}
+
 /**
  * Parses a template into text, value and section nodes. Sections do not nest:
  * a section body may hold value tags and text only.
  */
 export const parseTemplate = (source: string, content: string): readonly Node[] => {
   const nodes: Node[] = []
-  const open: { readonly node: { kind: 'section', name: string, inverted: boolean, body: Node[] }, readonly line: number }[] = []
-  const current = (): Node[] => {
-    const section = open.at(-1)
-
-    return section === undefined ? nodes : section.node.body
-  }
+  const open: OpenSection[] = []
 
   let index = 0
 
@@ -65,57 +133,20 @@ export const parseTemplate = (source: string, content: string): readonly Node[] 
     const start = content.indexOf('{{', index)
 
     if (start === -1) {
-      current().push({ kind: 'text', value: content.slice(index) })
+      pushText(nodes, open, content.slice(index))
       break
     }
 
-    if (start > index) current().push({ kind: 'text', value: content.slice(index, start) })
+    pushText(nodes, open, content.slice(index, start))
 
-    const end = content.indexOf('}}', start + 2)
-    const line = lineAt(content, start)
+    const tag = readTag(content, start, source)
 
-    if (end === -1) throw new Error(source + ':' + line + ' has an unclosed tag')
+    applyTag(tag, innermostBody(nodes, open), nodes, open, source)
 
-    const tag = content.slice(start + 2, end)
-    const marker = tag.slice(0, 1)
-    const name = ['#', '^', '/'].includes(marker) ? tag.slice(1) : tag
-
-    if (!/^[A-Za-z0-9_]+$/.test(name)) throw new Error(source + ':' + line + ' has a malformed tag {{' + tag + '}}')
-
-    if (['#', '^', '/'].includes(marker)) {
-      if (marker === '/') {
-        const section = open.pop()
-
-        if (section === undefined || section.node.name !== name) {
-          throw new Error(source + ':' + line + ' closes section ' + name + ', which is not open')
-        }
-      }
-      else {
-        const enclosing = open.at(-1)
-
-        if (enclosing !== undefined) throw new Error(source + ':' + line + ' nests section ' + name + ' inside ' + enclosing.node.name)
-
-        const node: { kind: 'section', name: string, inverted: boolean, body: Node[] } = {
-          kind: 'section',
-          name,
-          inverted: marker === '^',
-          body: [],
-        }
-
-        nodes.push(node as Node)
-        open.push({ node, line })
-      }
-    }
-    else {
-      current().push({ kind: 'value', name })
-    }
-
-    index = end + 2
+    index = tag.end + 2
   }
 
-  const unclosed = open.at(-1)
-
-  if (unclosed !== undefined) throw new Error(source + ':' + unclosed.line + ' leaves section ' + unclosed.node.name + ' open')
+  assertSectionsClosed(open, source)
 
   return nodes
 }
@@ -131,16 +162,33 @@ const valueOf = (values: TemplateValues, name: string, source: string): Template
   return values[name]
 }
 
-export const renderNodes = (nodes: readonly Node[], values: TemplateValues, source: string): string =>
-  nodes.map((node) => {
-    if (node.kind === 'text') return node.value
-    if (node.kind === 'value') return String(valueOf(values, node.name, source) ?? '')
+type RenderSection = Extract<Node, { readonly kind: 'section' }>
 
-    return isDefined(valueOf(values, node.name, source)) === node.inverted ? '' : renderNodes(node.body, values, source)
-  }).join('')
+const renderSection = (node: RenderSection, values: TemplateValues, source: string): string =>
+  isDefined(valueOf(values, node.name, source)) === node.inverted ? '' : renderNodes(node.body, values, source)
+
+const renderValue = (name: string, values: TemplateValues, source: string): string =>
+  String(valueOf(values, name, source) ?? '')
+
+const renderNode = (node: Node, values: TemplateValues, source: string): string => {
+  if (node.kind === 'text') return node.value
+  return node.kind === 'value' ? renderValue(node.name, values, source) : renderSection(node, values, source)
+}
+
+export const renderNodes = (nodes: readonly Node[], values: TemplateValues, source: string): string =>
+  nodes.map(node => renderNode(node, values, source)).join('')
 
 const stems = (directory: URL): readonly string[] =>
   readdirSync(directory).filter(name => name.endsWith('.md')).map(name => name.slice(0, -'.md'.length))
+
+const readTemplateFile = (file: URL, source: string): string => {
+  try {
+    return readFileSync(file, 'utf8')
+  }
+  catch (error) {
+    throw new Error('template file ' + source + ' cannot be read: ' + String(error))
+  }
+}
 
 /**
  * Reads every template and refuses a directory that disagrees with
@@ -159,14 +207,7 @@ export const createTemplateLoader = (directory: URL) => {
     const file = new URL(id + '.md', directory)
     const source = fileURLToPath(file)
 
-    let content: string
-
-    try {
-      content = readFileSync(file, 'utf8')
-    }
-    catch (error) {
-      throw new Error('template file ' + source + ' cannot be read: ' + String(error))
-    }
+    const content = readTemplateFile(file, source)
 
     templates.set(id, { id, source, nodes: parseTemplate(source, trimOneNewline(content)) })
   }

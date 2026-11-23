@@ -30,7 +30,7 @@ Use these in order. When a lower source disagrees with a higher one, the higher 
    - `.opencode/plugins/workflow.ts`: `id: 'opencode.workflow'`, `effect: context =>`, `context.tool.transform((editor) =>`, `export default plugin`. Smallest complete example.
    - `.opencode/plugins/state-machine.ts`: `context.tool.transform((editor) =>`, `context.session.hook('prompt'`, `context.tool.hook('execute.before'`, `context.event.subscribe().pipe(`.
    - `.opencode/plugins/quality-gate-enforcer.ts`: hook-only plugin, `effect: context => Effect.gen`, `context.tool.hook('execute.before'`, `context.tool.hook('execute.after'`.
-   - `.opencode/plugins/tests/workflow.test.ts`: how a test drives `plugin.effect` with `Effect.scoped(plugin.effect(h.context))` and `Effect.runPromise`.
+   - `.opencode/plugins/tests/workflow/registration.test.ts`: how a test drives `plugin.effect` with `Effect.scoped(plugin.effect(h.context))` and `Effect.runPromise`.
 
 Plugin entry points at the root of `.opencode/plugins/` import `Plugin`, and `Context` when they need it, from `@opencode/plugin/effect/plugin`; the subdirectories there hold plugin modules and tests, not entry points. None imports from the documented `@opencode/plugin/effect` subpath, which exposes `Plugin` only as a namespace (`export * as Plugin`).
 
@@ -103,9 +103,9 @@ Events are a scoped stream, not a plugin key: `yield* context.event.subscribe().
 
 ## Loading and imports
 
-The loader scans root `.opencode/plugins/*.ts` only. `helpers/`, `types/`, and `tests/` are not plugin entry points. Each entry point default-exports one plugin object and may import helpers with relative paths.
+The loader scans root `.opencode/plugins/*.ts` only. Every subdirectory — `config/`, `gates/`, `helpers/`, `instructions/`, `state-machine/`, `types/`, `workflow/`, `tests/` — holds modules or tests, never an entry point. Each entry point default-exports one plugin object and may import helpers with relative paths.
 
-- Source files use relative imports (`./helpers/logger`). The runtime loads `.ts` directly and does not resolve TypeScript `paths`, so `@plugins/*` fails at load time.
+- Source files use relative imports (`./helpers/runtime/glob-match`). The runtime loads `.ts` directly and does not resolve TypeScript `paths`, so `@plugins/*` fails at load time.
 - Tests use the aliases `@plugins/*` and `@tests/*` from `.opencode/tsconfig.json`; `.opencode/vitest.config.ts` also maps `bun` to a mock.
 - Import types with `import type` so the compiler erases the import and no runtime package copy is pulled in.
 - Import `Effect`, `Stream`, and `Schema` from the single installed `effect` copy. A second copy under `@opencode/plugin/node_modules/effect` breaks `Effect.isEffect` and schema identity checks.
@@ -138,7 +138,7 @@ Run `just` targets only. They pass the Bun and istanbul flags this runtime needs
 | Coverage | `just .opencode/test --coverage` | CI, 90% branch/function/line/statement |
 | Lint | `just .opencode/lint` | CI (`scripts/ci.sh`: `run_check opencode-lint`) |
 
-A unit test builds a fake `Context`, calls `Effect.runPromise(Effect.scoped(plugin.effect(context)))`, then asserts the registrations. `.opencode/plugins/tests/workflow.test.ts` is the model.
+A unit test builds a fake `Context`, calls `Effect.runPromise(Effect.scoped(plugin.effect(context)))`, then asserts the registrations. `.opencode/plugins/tests/workflow/registration.test.ts` is the model, on the shared `tests/workflow/harness.ts`.
 
 Green unit tests do not prove the plugin works in a live session. A detached client method loses `this` and throws, so call it as a member instead of storing the function. Unit fakes exercise neither the real client nor the real event stream nor load order.
 
@@ -151,7 +151,7 @@ Prove unit behaviour here; the delegated run in the section below is where a liv
 - Proof is a completed run plus the branch log. An aborted run proves nothing.
 - `opencode session export` omits system messages and the system prompt, so read `workflow.instructions.*` from stderr or the log file.
 - `workflow.instructions.injected` is info and carries `blockBytes`, `tools`, `exposure`, and `stripped`, e.g. `blockBytes=9560 exposure=execute`. `workflow.instructions.context` and `workflow.instructions.skipped` are debug, and skipped carries only `tools`, so proving the hook did not fire requires debug logging. Correlate lines by log sink timestamp and agent. The payload carries no run id.
-- Auto-discovered plugins receive empty `options`, so repo config belongs in `harness.config.ts` under `plugins[id]`.
+- Auto-discovered plugins receive empty `options`, so repo config belongs in `harness.ts` under `plugins[id]`.
 
 Hot reload is active: `dist/source.node.js` appends `__opencode_reload=<generation>` to every local module it resolves, so a running server picks up a saved plugin. Assume hot reload for instruction files too: saving either kind of file can change live behavior immediately, and a broken save can break the agent loop before you run anything. Develop in a staging directory outside loader roots, such as `/workspace/.tmp/` or a plugin subdirectory that is not a loader entry point; typecheck before saving; keep the plugin out of the loaded set until a live check passes.
 

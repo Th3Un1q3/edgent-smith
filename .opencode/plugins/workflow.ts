@@ -4,23 +4,23 @@
  * V1 returned a `tool` map; V2 registers custom tools through
  * `ctx.tool.transform(editor => editor.add({ ... }))` with a JSON-Schema input.
  * The runner is reused through a client adapter over `ctx.session`
- * (see helpers/workflow-client-adapter.ts).
+ * (see helpers/client-adapter.ts).
  */
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 import { Cause, Effect, Stream } from 'effect'
 import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
-import { harnessConfig } from './config/harness.config'
-import { listSubtasksFromSessions } from './helpers/subtask-ls'
-import type { SessionsReader } from './helpers/subtask-ls'
-import { createSubtask } from './helpers/workflow-subtask'
-import { DEFAULT_MAX_SUBTASKS, DEFAULT_SUBTASK_AGENT } from './helpers/workflow-types'
-import type { SubtaskParameters } from './helpers/workflow-types'
-import { recordTailOutput, tailOutputs } from './helpers/subtask-tail'
-import { createWorkflowClient } from './helpers/workflow-client-adapter'
-import { writeEntry, removeEntry } from './helpers/instruction-entry-client'
-import type { EntryResult } from './helpers/instruction-entry-client'
+import { harnessConfig } from './config/harness'
+import { listSubtasksFromSessions } from './workflow/subtask-ls'
+import type { SessionsReader } from './workflow/subtask-ls'
+import { createSubtask } from './workflow/subtask'
+import { DEFAULT_MAX_SUBTASKS, DEFAULT_SUBTASK_AGENT } from './workflow/contracts'
+import type { SubtaskParameters } from './workflow/contracts'
+import { recordTailOutput, tailOutputs } from './workflow/subtask-tail'
+import { createWorkflowClient } from './workflow/client-adapter'
+import { writeEntry, removeEntry } from './helpers/instructions/entry-client'
+import type { EntryResult } from './helpers/instructions/entry-client'
 
 const WORKFLOW_INSTRUCTIONS_SENTINEL = '<workflow_instructions'
 const WORKFLOW_INSTRUCTIONS_CLOSING = '</workflow_instructions>'
@@ -70,9 +70,12 @@ const isSessionAgentSelected = (event: PluginEvent): event is Extract<PluginEven
 const workflowInstructionsError = (target: string, cause: string): Error =>
   new Error(`workflow instructions: ${target}: ${cause}`)
 
+const isMissingDirectory = (directory: unknown): boolean =>
+  typeof directory !== 'string' || directory.trim() === ''
+
 const resolveInstructionsPath = (directory: string, configured: string): string => {
   try {
-    if (typeof directory !== 'string' || directory.trim() === '') {
+    if (isMissingDirectory(directory)) {
       throw new Error('project directory is missing')
     }
     return path.resolve(directory, configured)
@@ -82,10 +85,15 @@ const resolveInstructionsPath = (directory: string, configured: string): string 
   }
 }
 
+const INVALID_INSTRUCTION_CONTENT: ReadonlyArray<readonly [string, string]> = [
+  ['\0', 'file contains a NUL byte'],
+  ['\u{FFFD}', 'file contains U+FFFD (invalid UTF-8)'],
+]
+
 const assertInstructionContent = (content: string, label: string): void => {
   if (content.trim() === '') throw workflowInstructionsError(label, 'file is empty or whitespace')
-  if (content.includes('\0')) throw workflowInstructionsError(label, 'file contains a NUL byte')
-  if (content.includes('\u{FFFD}')) throw workflowInstructionsError(label, 'file contains U+FFFD (invalid UTF-8)')
+  const invalid = INVALID_INSTRUCTION_CONTENT.find(([sequence]) => content.includes(sequence))
+  if (invalid !== undefined) throw workflowInstructionsError(label, invalid[1])
 }
 
 /**
@@ -116,7 +124,7 @@ export function loadWorkflowInstructions(directory: string): WorkflowInstruction
 const escapeAttribute = (value: string): string =>
   value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;')
 
-// Kept local rather than imported from ./helpers/workflow-subtask: three suites
+// Kept local rather than imported from ./helpers/subtask: three suites
 // mock that module for the subtask tools, and a second export breaks them.
 const LEADING_FRONTMATTER = /^---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/
 
@@ -127,11 +135,13 @@ const formatWorkflowInstructions = (source: string, content: string): string =>
 
 const utf8Bytes = (value: string): number => Buffer.byteLength(value)
 
+const entryFailureCause = (result: EntryResult): string => result.error ?? result.reason ?? 'unknown error'
+
 // The entry client names the outcome of an action; only `failed` carries a
 // cause worth surfacing, so `unchanged` and `absent` stay quiet.
 const reportEntryFailure = (action: string, result: EntryResult): Effect.Effect<void> =>
   result.status === 'failed'
-    ? Effect.logError('workflow.instructions.error', { message: `workflow instructions: ${action} failed: ${result.error ?? result.reason ?? 'unknown error'}` })
+    ? Effect.logError('workflow.instructions.error', { message: `workflow instructions: ${action} failed: ${entryFailureCause(result)}` })
     : Effect.void
 
 export const handleSessionEvent = (
@@ -288,11 +298,16 @@ const plugin: Plugin = {
         input: SUBTASK_RUN_INPUT,
         execute: (input, toolContext) => Effect.gen(function* () {
           const parameters = input as SubtaskParameters
+          // One cancellation source per call: the runner links this signal to
+          // the child controller and session, so interrupting the tool call
+          // aborts the running subtask instead of orphaning it.
+          const controller = new AbortController()
+          const abortChild = (): void => controller.abort()
           const subtask = createSubtask({
             client: createWorkflowClient(context.session, context.location.directory as unknown as string),
             parentSessionID: toolContext.sessionID as unknown as string,
             directory: context.location.directory as unknown as string,
-            signal: new AbortController().signal,
+            signal: controller.signal,
             defaultAgent: DEFAULT_SUBTASK_AGENT,
             maxSubtasks: DEFAULT_MAX_SUBTASKS,
             budget: { used: 0 },
@@ -300,7 +315,18 @@ const plugin: Plugin = {
             logs: [],
             active: new Set<AbortController>(),
           })
-          const result = yield* Effect.promise(() => subtask(parameters))
+          const result = yield* Effect.promise(async (signal) => {
+            signal.addEventListener('abort', abortChild, { once: true })
+            if (signal.aborted) {
+              abortChild()
+            }
+            try {
+              return await subtask(parameters)
+            }
+            finally {
+              signal.removeEventListener('abort', abortChild)
+            }
+          })
           // TODO: review and retire tail output recording, in favor of using api to query the tail.
           recordTailOutput(result)
           return {

@@ -67,15 +67,20 @@ export type SignalValidation
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+const isNonNullObject = (value: unknown): value is object => typeof value === 'object' && value !== null
+
+const stateEntryOf = (value: unknown): readonly [string | undefined, unknown] =>
+  isNonNullObject(value)
+    ? Object.entries(value)[0] ?? [undefined, undefined]
+    : [undefined, undefined]
+
 /**
 A state value as one name: a leaf is itself, and a compound value becomes its dotted path.
 */
-export const stateValuePath = (value: unknown): string => {
-  if (typeof value === 'string') return value
-  if (value === null || typeof value !== 'object') return ''
+export const stateValuePath = (value: unknown): string =>
+  typeof value === 'string' ? value : joinStatePath(...stateEntryOf(value))
 
-  const [id, child] = Object.entries(value as Readonly<Record<string, unknown>>)[0] ?? []
-
+const joinStatePath = (id: string | undefined, child: unknown): string => {
   if (id === undefined) return ''
 
   const path = stateValuePath(child)
@@ -99,58 +104,47 @@ const availableSignals = (signals: SignalTable): string[] =>
 
 const refuse = (refusal: SignalRefusal): SignalValidation => ({ ok: false, refusal })
 
-const expectedOf = (ast: { readonly _tag: string }): string => {
-  switch (ast._tag) {
-    case 'String': {
-      return 'string'
-    }
-    case 'Number': {
-      return 'number'
-    }
-    case 'Boolean': {
-      return 'boolean'
-    }
-    case 'Objects': {
-      return 'an object'
-    }
-    case 'Arrays': {
-      return 'an array'
-    }
-    default: {
-      return 'the declared type'
-    }
-  }
+const TAG_WORDS: Readonly<Record<string, string>> = {
+  String: 'string',
+  Number: 'number',
+  Boolean: 'boolean',
+  Objects: 'an object',
+  Arrays: 'an array',
 }
+
+const expectedOf = (ast: { readonly _tag: string }): string =>
+  Object.hasOwn(TAG_WORDS, ast._tag) ? TAG_WORDS[ast._tag] : 'the declared type'
 
 const pathOf = (path: readonly PropertyKey[]): string => ['payload', ...path.map(String)].join('.')
 
-const issuesOf = (issue: Issue, path: readonly PropertyKey[] = []): readonly SchemaViolation[] => {
-  switch (issue._tag) {
-    case 'Composite': {
-      return issue.issues.flatMap(child => issuesOf(child, path))
-    }
-    case 'Pointer': {
-      return issuesOf(issue.issue, [...path, ...issue.path])
-    }
-    case 'Encoding': {
-      return issuesOf(issue.issue, path)
-    }
-    case 'Filter': {
-      return [{ path: pathOf(path), expected: issue.filter.annotations?.expected ?? 'a valid value' }]
-    }
-    case 'UnexpectedKey': {
-      return [{ path: pathOf(path), expected: 'no excess property' }]
-    }
-    case 'MissingKey': {
-      return [{ path: pathOf(path), expected: 'required' }]
-    }
-    case 'InvalidType': {
-      return [{ path: pathOf(path), expected: expectedOf(issue.ast) }]
-    }
-    default: {
-      return [{ path: pathOf(path), expected: 'a valid value' }]
-    }
-  }
+const filterExpectation = (issue: Extract<Issue, { readonly _tag: 'Filter' }>): string =>
+  issue.filter.annotations?.expected ?? 'a valid value'
+
+const STRUCTURAL_EXPECTATIONS: Readonly<Record<string, string>> = {
+  UnexpectedKey: 'no excess property',
+  MissingKey: 'required',
+}
+
+const structuralExpectation = (issue: Issue): string | undefined =>
+  issue._tag === 'InvalidType' ? expectedOf(issue.ast) : STRUCTURAL_EXPECTATIONS[issue._tag]
+
+const leafExpectation = (issue: Issue): string => {
+  return issue._tag === 'Filter' ? filterExpectation(issue) : structuralExpectation(issue) ?? 'a valid value'
+}
+
+const leafViolation = (issue: Issue, path: readonly PropertyKey[]): SchemaViolation =>
+  ({ path: pathOf(path), expected: leafExpectation(issue) })
+
+type NestedIssue = Extract<Issue, { readonly _tag: 'Pointer' | 'Encoding' }>
+
+const isNestedIssue = (issue: Issue): issue is NestedIssue =>
+  issue._tag === 'Pointer' || issue._tag === 'Encoding'
+
+const nestedPathOf = (issue: NestedIssue): readonly PropertyKey[] => issue._tag === 'Pointer' ? issue.path : []
+
+const issuesOf = (issue: Issue, path: readonly PropertyKey[]): readonly SchemaViolation[] => {
+  if (issue._tag === 'Composite') return issue.issues.flatMap(child => issuesOf(child, path))
+  return isNestedIssue(issue) ? issuesOf(issue.issue, [...path, ...nestedPathOf(issue)]) : [leafViolation(issue, path)]
 }
 
 const exampleOf = (spec: SignalSpec | undefined): string | undefined => {
@@ -166,12 +160,13 @@ const exampleOf = (spec: SignalSpec | undefined): string | undefined => {
   }
 }
 
-const examplesOf = (spec: SignalSpec | undefined): readonly unknown[] => {
-  const annotations = spec?.schema?.ast.annotations as Record<string, unknown> | undefined
-  const examples = annotations?.['examples']
+const asList = (value: unknown): readonly unknown[] => Array.isArray(value) ? value : []
 
-  return Array.isArray(examples) ? examples : []
-}
+const annotationsOf = (spec: SignalSpec | undefined): Record<string, unknown> | undefined =>
+  spec?.schema?.ast.annotations as Record<string, unknown> | undefined
+
+const examplesOf = (spec: SignalSpec | undefined): readonly unknown[] =>
+  asList(annotationsOf(spec)?.['examples'])
 
 export const renderSignals = (signals: SignalTable, signal_keys?: readonly string[]): string => {
   const declared = availableSignals(signals)
@@ -186,47 +181,88 @@ export const renderSignals = (signals: SignalTable, signal_keys?: readonly strin
 
 const renderAvailable = (signals: SignalTable): string => renderSignals(signals, availableSignals(signals))
 
-export const refusalMessage = (refusal: SignalRefusal, signals: SignalTable): string => {
-  switch (refusal.code) {
-    case 'unknown_signal': {
-      const name = refusal.signal === '' ? 'the signal' : refusal.signal
-      return 'Unknown signal: ' + name + '.\n' + renderAvailable(signals)
-    }
-    case 'unavailable_signal': {
-      return refusal.signal + ' is not available in ' + stateLeaf(refusal.state) + '.\n' + renderAvailable(signals)
-    }
-    case 'invalid_payload': {
-      const lines = refusal.schema_validation_error.map(violation => '- ' + violation.path + ': expected ' + violation.expected)
-      const example = exampleOf(Object.hasOwn(signals, refusal.signal) ? signals[refusal.signal] : undefined)
+const invalidPayloadMessage = (
+  refusal: Extract<SignalRefusal, { readonly code: 'invalid_payload' }>,
+  signals: SignalTable,
+): string => {
+  const lines = refusal.schema_validation_error.map(violation => '- ' + violation.path + ': expected ' + violation.expected)
+  const example = exampleOf(signalSpecOf(signals, refusal.signal))
 
-      return refusal.signal + ' payload is invalid in ' + stateLeaf(refusal.state) + '.'
-        + (lines.length === 0 ? '' : '\n' + lines.join('\n'))
-        + (example === undefined ? '' : '\nExample: ' + example)
-    }
-  }
+  return refusal.signal + ' payload is invalid in ' + stateLeaf(refusal.state) + '.'
+    + (lines.length === 0 ? '' : '\n' + lines.join('\n'))
+    + (example === undefined ? '' : '\nExample: ' + example)
+}
+
+const unknownSignalMessage = (signal: string): string =>
+  signal === '' ? 'Unknown signal: the signal' : 'Unknown signal: ' + signal
+
+export const refusalMessage = (refusal: SignalRefusal, signals: SignalTable): string => {
+  if (refusal.code === 'invalid_payload') return invalidPayloadMessage(refusal, signals)
+
+  const available = renderAvailable(signals)
+
+  const problem = refusal.code === 'unknown_signal'
+    ? unknownSignalMessage(refusal.signal)
+    : refusal.signal + ' is not available in ' + stateLeaf(refusal.state)
+
+  return problem + '.\n' + available
+}
+
+const FIELD_CODECS = new Map<unknown, Schema.Codec<unknown, unknown, never, never>>([
+  ['number', Schema.Number],
+  ['boolean', Schema.Boolean],
+])
+
+const stringCodec = (definition: Record<string, unknown>): Schema.Codec<unknown, unknown, never, never> => {
+  const minLength = definition['minLength']
+
+  return typeof minLength === 'number'
+    ? Schema.Trim.check(Schema.isMinLength(minLength))
+    : Schema.String
 }
 
 const fieldCodec = (definition: unknown): Schema.Codec<unknown, unknown, never, never> | undefined => {
   if (!isObject(definition)) return undefined
 
-  const minLength = definition['minLength']
+  return definition['type'] === 'string' ? stringCodec(definition) : FIELD_CODECS.get(definition['type'])
+}
 
-  switch (definition['type']) {
-    case 'string': {
-      return typeof minLength === 'number'
-        ? Schema.Trim.check(Schema.isMinLength(minLength))
-        : Schema.String
-    }
-    case 'number': {
-      return Schema.Number
-    }
-    case 'boolean': {
-      return Schema.Boolean
-    }
-    default: {
-      return undefined
-    }
-  }
+interface ObjectSchemaFields {
+  readonly schema: Record<string, unknown>
+  readonly properties: Record<string, unknown>
+}
+
+const isObjectSchema = (value: unknown): value is Record<string, unknown> =>
+  isObject(value) && value['type'] === 'object'
+
+const objectSchemaOf = (declaration: unknown): Record<string, unknown> | undefined => {
+  if (!isObject(declaration)) return undefined
+
+  const schema = declaration['schema']
+
+  return isObjectSchema(schema) ? schema : undefined
+}
+
+const objectSchemaFields = (declaration: unknown): ObjectSchemaFields | undefined => {
+  const schema = objectSchemaOf(declaration)
+
+  if (schema === undefined) return undefined
+
+  const properties = schema['properties']
+
+  return isObject(properties) ? { schema, properties } : undefined
+}
+
+const readFieldCodecs = (
+  properties: Record<string, unknown>,
+): Record<string, Schema.Codec<unknown, unknown, never, never>> | undefined => {
+  const codecs = Object.fromEntries(
+    Object.entries(properties).map(([name, definition]) => [name, fieldCodec(definition)] as const),
+  )
+
+  return Object.keys(codecs).length === 0 || Object.values(codecs).includes(undefined)
+    ? undefined
+    : codecs as Record<string, Schema.Codec<unknown, unknown, never, never>>
 }
 
 /**
@@ -235,28 +271,19 @@ so the manifest's JSON Schema is the source and this reads the object-of-fields
 subset a signal declares. `undefined` means the signal validates no payload shape.
 */
 export const manifestCodec = (declaration: unknown): SignalSpec['schema'] | undefined => {
-  if (!isObject(declaration) || !isObject(declaration['schema'])) return undefined
+  const declared = objectSchemaFields(declaration)
 
-  const schema = declaration['schema']
+  if (declared === undefined) return undefined
 
-  if (schema['type'] !== 'object' || !isObject(schema['properties'])) return undefined
+  const fields = readFieldCodecs(declared.properties)
 
-  const fields: Record<string, Schema.Codec<unknown, unknown, never, never>> = {}
+  if (fields === undefined) return undefined
 
-  for (const [name, definition] of Object.entries(schema['properties'])) {
-    const codec = fieldCodec(definition)
-
-    if (codec === undefined) return undefined
-    fields[name] = codec
-  }
-
-  if (Object.keys(fields).length === 0) return undefined
-
-  const examples = schema['examples']
+  const examples = declared.schema['examples']
 
   return Schema.Struct(fields).annotate({
-    examples: Array.isArray(examples) ? examples : [],
-  }) as unknown as SignalSpec['schema']
+    examples: asList(examples).filter(isObject),
+  })
 }
 
 /**
@@ -266,42 +293,46 @@ The table is the policy's authority, so an enabled ad-hoc name is accepted;
 a name the registry declares is refused as unavailable, and a name the
 registry does not declare is refused as unknown.
 */
-export const validateSignal = (input: unknown, state: unknown, signals: SignalTable, registry: SignalTable): SignalValidation => {
-  const stateName = stateLeaf(state)
+const signalNameOf = (input: Record<string, unknown>): string | undefined => {
+  const type = input['type']
 
-  if (!isObject(input) || typeof input.type !== 'string' || input.type.trim() === '') {
-    return refuse({ code: 'unknown_signal', signal: '', state: stateName, available_signals: availableSignals(signals) })
-  }
+  if (typeof type !== 'string') return undefined
 
-  const signal = input.type.trim()
-  const spec = Object.hasOwn(signals, signal) ? signals[signal] : undefined
+  const name = type.trim()
 
-  if (spec === undefined) {
-    // SignalRefusal discriminates on `code`, so the merged literal needs an assertion.
-    return refuse({
-      code: Object.hasOwn(registry, signal) ? 'unavailable_signal' : 'unknown_signal',
-      signal,
-      state: stateName,
-      available_signals: availableSignals(signals),
-    } as SignalRefusal)
-  }
+  return name === '' ? undefined : name
+}
 
-  const extra = Object.keys(input).find(key => key !== 'type' && key !== 'payload')
+const signalSpecOf = (signals: SignalTable, signal: string): SignalSpec | undefined =>
+  Object.hasOwn(signals, signal) ? signals[signal] : undefined
 
-  if (extra !== undefined) {
-    return refuse({
-      code: 'invalid_payload',
-      signal,
-      state: stateName,
-      schema_validation_error: [{ path: extra, expected: 'only type and payload' }],
-    })
-  }
+const excessKeyOf = (input: Record<string, unknown>): string | undefined =>
+  Object.keys(input).find(key => key !== 'type' && key !== 'payload')
 
-  if (spec.schema === undefined) {
-    return { ok: true, event: { type: eventType(signal) } }
-  }
+const unavailableRefusal = (signal: string, state: string, available_signals: readonly string[]): SignalRefusal =>
+  ({ code: 'unavailable_signal', signal, state, available_signals })
 
-  const result = Schema.decodeUnknownResult(spec.schema)(input.payload, {
+const unknownRefusal = (signal: string, state: string, available_signals: readonly string[]): SignalRefusal =>
+  ({ code: 'unknown_signal', signal, state, available_signals })
+
+const refusalOf = (
+  registry: SignalTable,
+  signal: string,
+  state: string,
+  available_signals: readonly string[],
+): SignalRefusal => {
+  const build = Object.hasOwn(registry, signal) ? unavailableRefusal : unknownRefusal
+
+  return build(signal, state, available_signals)
+}
+
+const decodePayload = (
+  fields: Record<string, unknown>,
+  schema: NonNullable<SignalSpec['schema']>,
+  signal: string,
+  state: string,
+): SignalValidation => {
+  const result = Schema.decodeUnknownResult(schema)(fields.payload, {
     errors: 'all',
     onExcessProperty: 'error',
   })
@@ -310,8 +341,50 @@ export const validateSignal = (input: unknown, state: unknown, signals: SignalTa
     ? refuse({
         code: 'invalid_payload',
         signal,
-        state: stateName,
-        schema_validation_error: issuesOf(result.failure.issue),
+        state,
+        schema_validation_error: issuesOf(result.failure.issue, []),
       })
     : { ok: true, event: { type: eventType(signal), payload: result.success } }
+}
+
+const decodeSignalPayload = (
+  fields: Record<string, unknown>,
+  schema: SignalSpec['schema'],
+  signal: string,
+  state: string,
+): SignalValidation => {
+  const extra = excessKeyOf(fields)
+
+  if (extra !== undefined) {
+    return refuse({
+      code: 'invalid_payload',
+      signal,
+      state,
+      schema_validation_error: [{ path: extra, expected: 'only type and payload' }],
+    })
+  }
+
+  return schema === undefined
+    ? { ok: true, event: { type: eventType(signal) } }
+    : decodePayload(fields, schema, signal, state)
+}
+
+const recordOf = (value: unknown): Record<string, unknown> => isObject(value) ? value : {}
+
+export const validateSignal = (input: unknown, state: unknown, signals: SignalTable, registry: SignalTable): SignalValidation => {
+  const stateName = stateLeaf(state)
+
+  const fields = recordOf(input)
+
+  const signal = signalNameOf(fields)
+
+  if (signal === undefined) {
+    return refuse({ code: 'unknown_signal', signal: '', state: stateName, available_signals: availableSignals(signals) })
+  }
+
+  const spec = signalSpecOf(signals, signal)
+
+  return spec === undefined
+    ? refuse(refusalOf(registry, signal, stateName, availableSignals(signals)))
+    : decodeSignalPayload(fields, spec.schema, signal, stateName)
 }

@@ -32,15 +32,16 @@ const seeded = (context: Partial<StoredSession> = {}, value: unknown = 'towards_
   children: {},
 })
 
-import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine-harness'
+import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine/harness'
+import { templateRendered, templateText } from '@tests/helpers/state-machine/template-text'
 
-import type { Harness } from '@tests/helpers/state-machine-harness'
+import type { Harness } from '@tests/helpers/state-machine/harness'
 
 const statePathOf = (value: unknown): string =>
   typeof value === 'string' ? value : Object.entries(value as Record<string, unknown>).map(([id, child]) => id + '.' + statePathOf(child)).join('.')
 
 const goalRequests = (harness: Harness): number =>
-  harness.synthetics.filter(message => message.text.includes('What goal')).length
+  harness.synthetics.filter(message => message.text.includes(templateText('goal_request'))).length
 
 const lastState = (harness: Harness): string | undefined => {
   const writes = harness.storageWrites.filter(write => write.key === 'state-machine/ses_1')
@@ -102,11 +103,10 @@ describe('the loop matrix', () => {
 describe('a real user message', () => {
   it('leaves work alone, so a message mid-goal cannot wipe it', async () => {
     const harness = await startInWork()
-    const before = goalRequests(harness)
 
     await harness.emitUserMessage('ses_1', 'user', 'new direction')
 
-    expect(goalRequests(harness)).toBe(before)
+    expect(goalRequests(harness)).toBe(0)
     expect(lastState(harness)).toBe('towards_goal.work')
   })
 
@@ -194,11 +194,10 @@ describe('a real user message', () => {
 
   it('ignores a synthetic item', async () => {
     const harness = await startInWork()
-    const before = goalRequests(harness)
 
     await harness.emitUserMessage('ses_1', 'synthetic', 'plugin prompt')
 
-    expect(goalRequests(harness)).toBe(before)
+    expect(goalRequests(harness)).toBe(0)
     expect(lastState(harness)).toBe('towards_goal.work')
   })
 
@@ -340,7 +339,7 @@ describe('an interruption', () => {
     expect(machine.state('ses_api')).toBe('parked')
     expect(emits).toEqual([{
       type: 'emit.prompt',
-      text: expect.stringContaining('Waiting for your next instruction'),
+      text: expect.stringContaining(templateRendered('park_summary', { goal: 'ship it.', improvements: 'none.' })),
       description: 'Report the reached goal and the improvements recorded.',
     }, {
       type: 'emit.signals',

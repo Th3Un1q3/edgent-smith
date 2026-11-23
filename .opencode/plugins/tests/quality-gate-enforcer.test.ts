@@ -4,15 +4,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import type { Context } from '@opencode/plugin/effect/plugin'
 
-vi.mock('@plugins/helpers/gate-config', () => ({ loadQualityGates: vi.fn() }))
-vi.mock('@plugins/helpers/gate-runner', async (importOriginal) => {
+vi.mock('@plugins/gates/loader', () => ({ loadQualityGates: vi.fn() }))
+vi.mock('@plugins/gates/run', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>
   return { ...actual, runGate: vi.fn() }
 })
 
-import { loadQualityGates } from '@plugins/helpers/gate-config'
+import { loadQualityGates } from '@plugins/gates/loader'
 
-import { runGate } from '@plugins/helpers/gate-runner'
+import { runGate } from '@plugins/gates/run'
 
 import type { GateConfig } from '@plugins/types/quality-gate'
 

@@ -72,14 +72,14 @@ def test_vitest_branches_90() -> None:
 
 
 def test_harness_branches_85() -> None:
-    text = _read_text(pathlib.Path(".opencode/plugins/config/harness.config.ts"))
+    text = _read_text(pathlib.Path(".opencode/plugins/config/harness.ts"))
     # harness opencode-test gate must enforce 85 thresholds
     for key in ["branches 85", "functions 85", "lines 85", "statements 85"]:
         assert key in text, f"harness must contain '{key}'"
     # also ensure at least 5 gates defined
     gate_count = text.count("name: '")
     # qualityGates array length check - count gate entries
-    assert gate_count >= 5, f"expected >=5 gates in harness.config.ts, got {gate_count}"
+    assert gate_count >= 5, f"expected >=5 gates in harness.ts, got {gate_count}"
 
 
 def test_eslint_ban_disable() -> None:
@@ -90,20 +90,33 @@ def test_eslint_ban_disable() -> None:
     assert not re.search(r"try\s*:\s*true", text), "eslint must not contain try:true override"
 
 
+def _lowest_admitted_gate_count(text: str) -> int:
+    bounds: set[int] = set()
+    for op, raw in re.findall(r"gates\.length\s*(>=|>|<=|<)\s*(\d+)", text):
+        bounds.add(int(raw) + (1 if op in {">", "<="} else 0))
+    assert bounds, "gate-config must compare gates.length against a minimum"
+    assert len(bounds) == 1, f"gate-config must enforce one gate minimum, found {sorted(bounds)}"
+    return bounds.pop()
+
+
 def test_gate_config_fail_closed() -> None:
-    text = _read_text(pathlib.Path(".opencode/plugins/helpers/gate-config.ts"))
-    assert "section?.gates" in text
-    assert "gates.length < 5" in text, "gate-config must check gates.length < 5"
-    assert "expected >=5 gates, got" in text, (
-        "gate-config must throw with expected >=5 gates message"
+    text = _read_text(pathlib.Path(".opencode/plugins/gates/loader.ts"))
+
+    enforced = _lowest_admitted_gate_count(text)
+    assert enforced >= 5, f"gate-config must fail closed below 5 gates, admits from {enforced}"
+
+    advertised = re.search(r"expected >=(\d+) gates, got \$\{", text)
+    assert advertised is not None, (
+        "gate-config must throw a message naming the minimum and the actual gate count"
     )
-    assert "Fix source, not config." in text, "gate-config must contain Fix source, not config hint"
-    # must throw, not silently return empty
-    assert "throw new Error" in text
-    # ensure fallback `?? []` is gone (fail-closed, not fail-open)
-    # we allow debounce fallback but not gates fallback to []
-    assert "gates: section?.gates ?? []" not in text, "fail-open fallback must be removed"
-    assert "gates: section.gates" in text or "gates: section?.gates" in text
+    assert int(advertised.group(1)) == enforced, (
+        f"gate-config message advertises >={advertised.group(1)} gates but enforces {enforced}"
+    )
+    assert "throw new Error" in text, "gate-config must throw, not return empty"
+    # fail-closed: the gate list must never fall back to an empty array
+    assert not re.search(r"gates\s*:\s*[^\n,]*\?\?\s*\[\s*\]", text), (
+        "fail-open fallback for gates must not return []"
+    )
 
 
 def test_ci_has_13_gates() -> None:

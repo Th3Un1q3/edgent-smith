@@ -28,7 +28,7 @@ Use this change type when:
    - `.opencode/plugins/state-machine.ts` owns the `signal_send` tool, the per-state tool policy, the snapshot and the reset loop.
    - `.opencode/plugins/workflow.ts` registers the workflow tool that runs workflow envelopes.
    The full set of entry points and helper roles is in `.opencode/plugins/AGENTS.md`.
-3. Write the hook as a named-export async function that returns the registration object. Store per-session state through `helpers/kv-store.ts` (`SessionStorage`) and log through `helpers/logger.ts`. Namespace every state key so two plugins do not clobber each other.
+3. Write the hook as a named-export async function that returns the registration object. Store per-session state through `helpers/runtime/kv-store.ts` (`SessionStorage`) and log through `helpers/runtime/logger.ts`. Namespace every state key so two plugins do not clobber each other.
 4. Make the hook fail closed. An exception must report failure, never skip the check. `quality-gate-enforcer.ts` sets the reference: a thrown gate error becomes `{ exitCode: 1 }` (lines 89 to 96), so an errored gate counts as failed. For a new hook, trace what the caller sees when the check cannot run. If the error path allows, fix it.
 5. Add tests under `.opencode/plugins/tests/` that match the source file name, per `.opencode/plugins/AGENTS.md`.
 6. Run the plugin quality gates before declaring done.

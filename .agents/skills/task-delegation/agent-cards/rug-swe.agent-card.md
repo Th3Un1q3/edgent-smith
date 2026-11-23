@@ -57,7 +57,7 @@ Bad:
 #### Example 1
 
 ```markdown
-- Read the file using `cat`, by running bash with `cat /workspace/.opencode/plugins/tests/helpers/mock-utils.ts` to read what was already created((the read tool is blocked, use terminal commands).
+- Read the file using `cat`, by running bash with `cat /workspace/.opencode/plugins/tests/helpers/mock-utilities.ts` to read what was already created((the read tool is blocked, use terminal commands).
 ```
 
 **Why this fails:** As orchestrator you don't know the tools available to the agent. The prompt should not dictate how to read the file.
@@ -65,7 +65,7 @@ Bad:
 Instead, the prompt should focus on what needs to be done, not how to do it. The agent can figure out the implementation details. Also no need for absolute paths.
 
 ```markdown
-- Read the file .opencode/plugins/tests/helpers/mock-utils.ts to understand what was already created.
+- Read the file .opencode/plugins/tests/helpers/mock-utilities.ts to understand what was already created.
 ```
 
 #### Example 2
@@ -74,24 +74,24 @@ Instead, the prompt should focus on what needs to be done, not how to do it. The
 ## Step 1: Read all 3 test files completely
 
 
-cat /workspace/.opencode/plugins/tests/helpers/instruction-context-helper.test.ts
+cat /workspace/.opencode/plugins/tests/instructions/context-helper.test.ts
 echo "---SEPARATOR---"
-cat /workspace/.opencode/plugins/tests/helpers/instruction-indexer.test.ts  
+cat /workspace/.opencode/plugins/tests/instructions/indexer.test.ts  
 echo "---SEPARATOR---"
-cat /workspace/.opencode/plugins/tests/instructions-loader.test.ts
+cat /workspace/.opencode/plugins/tests/instructions/instructions-loader-sweep.test.ts
 ```
 
 ```markdown
 Read the following test files:
-- /workspace/.opencode/plugins/tests/helpers/instruction-context-helper.test.ts
-- /workspace/.opencode/plugins/tests/helpers/instruction-indexer.test.ts
-- /workspace/.opencode/plugins/tests/instructions-loader.test.ts
+- /workspace/.opencode/plugins/tests/instructions/context-helper.test.ts
+- /workspace/.opencode/plugins/tests/instructions/indexer.test.ts
+- /workspace/.opencode/plugins/tests/instructions/instructions-loader-sweep.test.ts
 ```
 
 #### Example 3
 
 ```markdown
-Use `cat /workspace/.opencode/plugins/tests/helpers/mock-utils.ts` to read what was already created. Also read all 4 test files using `cat`.
+Use `cat /workspace/.opencode/plugins/tests/helpers/mock-utilities.ts` to read what was already created. Also read all 4 test files using `cat`.
 
 
 ### BAD: Scope Creep

@@ -3,11 +3,12 @@ id: cases-about
 type: cases
 hotness: 1.0
 ttl: 90d
-version: 6
-freshness: 2026-11-22
+version: 8
+freshness: 2026-11-23
 claim_ids: []
-L0: "cases: 108 case memories; 26 with an L0, 3 by id, 2 superseded, 77 overflow ids."
+L0: "cases: 110 case memories; 28 with an L0, 3 by id, 2 superseded, 77 overflow ids."
 L0_table:
+  - {id: cases/complexity-ceiling-stairs, L0: "Behaviour-coupled refactor fanned out as parallel batches: per-batch verification missed a regression a per-wave status pass caught."}
   - {id: cases/composition-contract-entry-path-unopened, L0: "Composition contract named the glue entry plugins/state-machine/state-machine.ts; the entry is the sibling file plugins/state-machine.ts. Open an interface path before writing it into a contract, and never derive an entry from its directory name."}
   - {id: cases/criterion-universal-unmeasured, L0: "A criterion required {type, params} on every action and guard; three parameterless guards carried {type} only, as the source always had. Measure a shape universal against the existing items, then name the exception."}
   - {id: cases/delegation/never-infer-operator-identity, L0: "Never infer an operator's identity or credentials: a guessed email became a duplicate dotenv key that won last, and the tunnel rejected it as an unauthorized broker assertion."}
@@ -22,6 +23,7 @@ L0_table:
   - {id: cases/orchestration/rendering-read-as-artifact, L0: "wc -w counted table pipes, a citation used the gateway read prepended line (217 for 213), and a verifier nearly judged a display-truncated body. Each check read a rendering, not the artifact."}
   - {id: cases/orchestration/resume-error-empty-error-text, L0: "Resume returned error with an empty error and no output; relaunch fresh."}
   - {id: cases/orchestration/rework-answer-two-readings-one-round-late, L0: "A rework answer \"remove the contract, it's confusing\" read as drop-the-section and drop-the-concept; the disambiguating ask came one round late. Name each reading as a labelled option."}
+  - {id: cases/orchestration/rule-specificity-incident-evidence-and-undefined-role, L0: "Retrospective rule named one session's binary and its size plus an undefined role; reviewer rejected it as uninterpretable. A rule names actor, observable, pass condition; incident detail goes to a case."}
   - {id: cases/orchestration/self-graded-count-mismatch, L0: "A producer's validation block claimed 'all 8 sites' while listing 9; the mismatch reached a validator round because nobody recounted the rows against the stated total."}
   - {id: cases/orchestration/spec-gates-unchecked-for-satisfiability, L0: "The design failed its first fresh critique with five defects - an unsatisfiable gate, a void loop re-entry, a 33-16=17 ledger, six gate rows with no firing stage, a guardrail that cannot fire - because no step read two parts of the document together."}
   - {id: cases/orchestration/unverified-length-from-stacked-edits, L0: "Two rounds reported an UNVERIFIED character count because edits were stacked behind one earlier measurement; measuring after the last edit and printing wc -c removed it."}
@@ -41,7 +43,7 @@ L0_table:
 
 # Cases
 
-108 case memories; 26 entries carry an L0, 3 are listed by id because their own L0 is not quotable, 2 superseded are marked, 77 further ids are listed under Overflow.
+109 case memories; 27 entries carry an L0, 3 are listed by id because their own L0 is not quotable, 2 superseded are marked, 77 further ids are listed under Overflow.
 
 ## Superseded (audit only)
 - cases/orchestration/artifact-not-run-against-own-gates -> cases/orchestration/spec-gates-unchecked-for-satisfiability

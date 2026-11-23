@@ -6,7 +6,7 @@ import { createSubagentRunner, settleVerdict } from '@plugins/state-machine'
 
 import { createStateMachine, loadStateMachineLibrary } from '@plugins/state-machine/core/machine'
 
-import { makeHarness } from '@tests/helpers/state-machine-harness'
+import { makeHarness } from '@tests/helpers/state-machine/harness'
 
 import type { StateMachine } from '@plugins/state-machine/core/machine'
 import type { CallbackPayload } from '@plugins/state-machine/core/machine'
@@ -62,6 +62,22 @@ describe('spawn_subagent', () => {
     return { gate, runner, seen, settle, settled }
   }
 
+  const expectState = (machine: StateMachine, state: string): void => {
+    expect(machine.get('ses_1')?.state).toBe(state)
+  }
+
+  const expectNoReady = (machine: StateMachine): void => {
+    expect(machine.get('ses_1')?.context.results.subagent_ready).toBeUndefined()
+  }
+
+  const expectReadyOk = (machine: StateMachine): void => {
+    expect(machine.get('ses_1')?.context.results.subagent_ready?.ok).toBe(true)
+  }
+
+  const expectReadyOutput = (machine: StateMachine, output: string): void => {
+    expect(machine.get('ses_1')?.context.results.subagent_ready?.output).toBe(output)
+  }
+
   it('returns from the spawning event in validate with no verdict yet', async () => {
     const machine = await inValidate()
     const child = drivenBy(machine)
@@ -96,8 +112,8 @@ describe('spawn_subagent', () => {
       yield* Deferred.await(child.settled)
     }))
 
-    expect(machine.get('ses_1')?.state).toBe('memorize')
-    expect(machine.get('ses_1')?.context.results.subagent_ready?.ok).toBe(true)
+    expectState(machine, 'memorize')
+    expectReadyOk(machine)
   })
 
   it('takes the fail arm for a verdict delivered after the spawning event completed', async () => {
@@ -113,9 +129,13 @@ describe('spawn_subagent', () => {
       yield* Deferred.await(child.settled)
     }))
 
-    expect(machine.get('ses_1')?.state).toBe('panic')
-    expect(machine.get('ses_1')?.context.results.subagent_ready?.output).toBe('the change does not compile')
-    expect(machine.get('ses_1')?.context.failure?.reason).toBe('subagent_ready failed')
+    expect(machine.get('ses_1')).toMatchObject({
+      state: 'panic',
+      context: {
+        results: { subagent_ready: { output: 'the change does not compile' } },
+        failure: { reason: 'subagent_ready failed' },
+      },
+    })
     expect(child.runner.pending('ses_1')).toBeUndefined()
   })
 
@@ -147,9 +167,13 @@ describe('spawn_subagent', () => {
     }))
 
     expect(runner.pending('ses_1')).toBeUndefined()
-    expect(machine.get('ses_1')?.context.results.subagent_ready?.output).toBe('timeout')
-    expect(machine.get('ses_1')?.state).toBe('validate')
-    expect(machine.get('ses_1')?.context.failure?.reason).toBe('subagent_ready failed')
+    expect(machine.get('ses_1')).toMatchObject({
+      state: 'validate',
+      context: {
+        results: { subagent_ready: { output: 'timeout' } },
+        failure: { reason: 'subagent_ready failed' },
+      },
+    })
   })
 
   it('refuses by name when the host supplies no session facility', async () => {
@@ -189,8 +213,8 @@ describe('spawn_subagent', () => {
     )
 
     expect(dropped).toEqual([])
-    expect(machine.get('ses_1')?.state).toBe('validate')
-    expect(machine.get('ses_1')?.context.results.subagent_ready).toBeUndefined()
+    expectState(machine, 'validate')
+    expectNoReady(machine)
 
     const live = await inValidate()
     const delivered = settleVerdict(
@@ -202,7 +226,7 @@ describe('spawn_subagent', () => {
     )
 
     expect(delivered.length).toBeGreaterThan(0)
-    expect(live.get('ses_1')?.state).toBe('memorize')
+    expectState(live, 'memorize')
   })
 
   it('raises one spawn on entering validate, carrying the JSON verdict instruction', async () => {
@@ -234,9 +258,13 @@ describe('spawn_subagent', () => {
       yield* Deferred.await(settled)
     }))
 
-    expect(machine.get('ses_1')?.state).toBe('validate')
-    expect(machine.get('ses_1')?.context.results.subagent_ready?.output).toContain('subagent-port-unavailable')
-    expect(machine.get('ses_1')?.context.failure?.reason).toBe('subagent_ready failed')
+    expect(machine.get('ses_1')).toMatchObject({
+      state: 'validate',
+      context: {
+        results: { subagent_ready: { output: expect.stringContaining('subagent-port-unavailable') } },
+        failure: { reason: 'subagent_ready failed' },
+      },
+    })
     expect(runner.pending('ses_1')).toBeUndefined()
   })
 
@@ -257,7 +285,7 @@ describe('spawn_subagent', () => {
       yield* Deferred.await(child.settled)
     }))
 
-    expect(machine.get('ses_1')?.context.results.subagent_ready?.output).toBe('the goal is met')
-    expect(machine.get('ses_1')?.state).toBe('memorize')
+    expectReadyOutput(machine, 'the goal is met')
+    expectState(machine, 'memorize')
   })
 })

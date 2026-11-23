@@ -588,6 +588,10 @@ Use this skill when:
    - Final commit
 ```
 
+### Parallel Batch Safety
+
+When more than one batch edits the same file, a work-item list is not an index. Key every item as `{symbol, file, currentText}` and re-resolve the anchor immediately before each replacement: read the symbol's current text and apply only if it still matches. Row and line numbers drift under concurrent edits, and a fix applied to a drifted row lands on the wrong function.
+
 ---
 
 ## Refactoring Checklist

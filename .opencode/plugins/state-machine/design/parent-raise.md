@@ -1,4 +1,4 @@
-> **Historical design record.** Superseded by `CONTRACT.md` for anything it states about current behaviour; removed action ids appear here only as history, not as the current interface.
+> **Historical design record.** Superseded by `mem:opencode/state-machine-contract` for anything it states about current behaviour; removed action ids appear here only as history, not as the current interface.
 
 # Parent raise: `reset_goal`, `emit_parent`, and the goal-round compound
 
@@ -151,7 +151,7 @@ The new parent arm must use the absolute target, not `.define_goal`. `hasTarget`
 
 **Unreachable from the host.** `reset_goal` is not in the `LoopEvent` union as a host event, `signal_send` prefixes its `type` into `agent_sent_signal.<TYPE>`, and the only `send` sites are `signal`, `callback`, `userInput`, `interrupted` and `idle`. No entry point can carry it, so the parent arm is reachable only through the internal queue.
 
-**Effect on loop context.** The three `record` items moved from `parked` set `goal` to `""`, `intent` to `none` and `attempts` to `0`. Nothing else is written: `memories`, `improvements`, `injectedSkills`, `injected`, `results`, `policy`, `signalsPolicy` and `failure` survive, which is the reset the current arms perform and the one CONTRACT.md §10 describes.
+**Effect on loop context.** The three `record` items moved from `parked` set `goal` to `""`, `intent` to `none` and `attempts` to `0`. Nothing else is written: `memories`, `improvements`, `injectedSkills`, `injected`, `results`, `policy`, `signalsPolicy` and `failure` survive, which is the reset the current arms perform and the one mem:opencode/state-machine-contract §10 describes.
 
 **Effect on the raising child.** It exits. The arm's target is a sibling under the same compound, so `parked` or `panic` is exited, `towards_goal` is not, and `towards_goal.define_goal` is entered with its entry actions: `prompt` the goal request, `update_signals_policy` to `SET_GOAL`, `recall_memories` for `preferences/user`, `set_tools_policy` to reinstall the gate. The observable result is today's: one user message in `parked` produces the goal request, and the tool gate is back.
 
@@ -281,7 +281,7 @@ Six `record` items become three, and two copies of the target become one. Arms t
 
 **Does `mark_skill`'s `injectedSkills` write survive?** Yes, as an `assign` on `injectedSkills` in `machines/session/definitions.ts`, unchanged, now invoked from the root arm. It survives the `parked`/`panic` reset too, because `reset_goal` does not touch `injectedSkills`. What does not survive is the literal: the arm's `params.name` was `"task-delegation"`, correct only while exactly one state activated exactly one skill. At the root it must mark the skill that reported. The callback payload carries `{ ok, exitCode?, output?, value? }` and no name, so `mark_skill` gains a payload form, `{ "from": "payload" }`, and the plugin echoes `emit.skill.name` into the callback, which it already holds when it delivers `emit.skill`. Fork F2: keep the literal and accept the single-skill assumption, or add the echo. The write itself survives either way; only its key is at stake.
 
-## 7. What CONTRACT.md gains
+## 7. What mem:opencode/state-machine-contract gains
 
 > §4 gains one sentence: `towards_goal` is the goal-round compound, and `define_goal`, `work`, `check`, `validate`, `memorize`, `parked` and `panic` are its children, so the five top-level ids become `admission`, `towards_goal` and `free_work` and every goal-round path is `towards_goal.<state>`. §4 also gains one row for `states.towards_goal.on.reset_goal`, the only arm that clears a round, targeting `#session.towards_goal.define_goal` and recording `goal: ""`, `intent: "none"` and `attempts: 0`. A waiting child answers `system_user_input` by raising `reset_goal`, never by carrying the reset itself. §5 gains `emit_parent` with params `{type}`, defined as XState's `raise`: the event stays on the internal queue and is handled in the same macrostep, so one `send` still produces one `dispatch` and no port or callback is added. §5's `callback.skill_ready` row moves to the machine root, so an injection answered after its state has exited still records its result and marks its skill.
 
@@ -308,4 +308,4 @@ Two constraints fix the order inside phase 1. The `not_parked` guard must change
 
 ## 10. Scope
 
-This document settles the hierarchy, the event, the action, the two duplications and the migration. It creates no machine change: `machine.json`, `CONTRACT.md`, `definitions.ts`, `core/` and the test suite are untouched. Phase 1 is the smallest shippable slice, and it is behaviour-neutral for a live session.
+This document settles the hierarchy, the event, the action, the two duplications and the migration. It creates no machine change: `machine.json`, `mem:opencode/state-machine-contract`, `definitions.ts`, `core/` and the test suite are untouched. Phase 1 is the smallest shippable slice, and it is behaviour-neutral for a live session.

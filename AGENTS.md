@@ -25,7 +25,7 @@ flowchart TB
     end
     subgraph platform["Platform & Extensibility"]
         DevContainer["Dev Container\nPython 3.13 + Ollama"]
-        PluginSDK["Plugin SDK\n.opencode/plugins/helpers (TS)"]
+        PluginSDK["Plugin SDK\n.opencode/plugins (TS)"]
         Skills["Skill Marketplace\n.agents/skills"]
     end
     Agent["Agent (you)"] -- executes via --> OpenCode
@@ -53,7 +53,7 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 ├── .devcontainer/      # Python 3.13 + Ollama sidecar configuration
 ├── .dsh/               # DeepSeek harness: agent-presets, child-runtime/cordis.yml, cordis.patch.yml, settings.yaml
 ├── .github/            # CI (DevContainer), Custom Agents (.github/agents/*.agent.md), Prompts, Instructions
-├── .opencode/          # OpenCode RUG framework: agents/rug.md, plugins/helpers (TS SDK), instructions, skills-loader
+├── .opencode/          # OpenCode RUG framework: agents/rug.md, plugins/ (TS SDK), instructions, skills-loader
 ├── .agents/skills/     # Skill marketplace (pydantic-ai, testing, docker, etc.)
 ├── .serena/memories/   # Serena persistent typed memories — see CONVENTIONS (Serena Gateway)
 ├── mcp/catalog.yaml    # MCP Gateway catalog (tavily, serena, github, fetch, etc.)
@@ -90,7 +90,7 @@ edgent-smith is a Python 3.13 agentic system built on pydantic-ai, featuring an 
 | Evaluation / Providers | `evals/runner.py` | Edge-agent/model benchmarks, datasets, baselines (not skill evals) |
 | Evaluation design | `.agents/skills/skill-creator/references/eval-design.md` | Skill evals: scenario prompts, spectrum, assertions, fixtures |
 | Serena / MCP Gateway | `mcp/catalog.yaml`, `.serena/memories/` | MCP servers in the catalog; gateway-mediated memories |
-| Plugin SDK (TS Harness) | `.opencode/plugins/helpers/`, `*.ts` | Harness internals; not runtime code |
+| Plugin SDK (TS Harness) | `.opencode/plugins/` | Harness internals; not runtime code |
 | Skill Marketplace | `.agents/skills/` | Modular capabilities; contents in the directory |
 
 ## CODE MAP (Core)
@@ -155,7 +155,7 @@ The systems below span harnesses, runtimes, and platform layers.
 
 - **Conductor Multi-Agent Workflows**: `workflows/*.yaml` run by Conductor, Python workers in `scripts/conductor/`; skill evals use `workflows/skill_eval_workflow.yaml`; human-in-the-loop gates.
 - **Serena / MCP Gateway Ecosystem**: `mcp/catalog.yaml`, `.serena/memories/`; symbol search, gateway-mediated memory.
-- **OpenCode Plugin SDK**: `.opencode/plugins/helpers/`, `*.ts`; TypeScript harness internals; quality-gate enforcers, loaders.
+- **OpenCode Plugin SDK**: `.opencode/plugins/`; TypeScript harness internals; quality-gate enforcers, loaders.
 - **Skill Marketplace**: `.agents/skills/`; modular capabilities; see SYSTEM BOUNDARIES & OWNERSHIP below.
 
 ## SYSTEM BOUNDARIES & OWNERSHIP
@@ -170,7 +170,7 @@ The systems below span harnesses, runtimes, and platform layers.
 | 6 | CLI Service Agents | No | `cli/` | `click` + `just` recipes | Do not duplicate logic; use `cli/services/` |
 | 7 | Evaluation / Provider | No | `evals/` | `evals/runner.py` | Do not mix with `agents/` runtime |
 | 8 | Serena / MCP Gateway | Yes — Gateway | `mcp/catalog.yaml`, `.serena/` | `gateway_mcp-*` tools | See CONVENTIONS — Serena Gateway |
-| 9 | OpenCode Plugin SDK | Yes — OpenCode | `.opencode/plugins/helpers/` | TypeScript plugin API | Do not import into Python runtime |
+| 9 | OpenCode Plugin SDK | Yes — OpenCode | `.opencode/plugins/` | TypeScript plugin API | Do not import into Python runtime |
 | 10 | Skill Marketplace | No (shared) | `.agents/skills/` | `skill` loader | Do not create skill without `find-skills`; owner: `harness-management` |
 
 ## TERMINOLOGY

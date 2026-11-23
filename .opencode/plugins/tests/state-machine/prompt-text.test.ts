@@ -4,10 +4,16 @@ import { createStateMachine, loadStateMachineLibrary } from '@plugins/state-mach
 
 import type { EmitRequest } from '@plugins/state-machine/core/machine'
 
-import { makeHarness, register, sessionCreated, sessionIdle } from '@tests/helpers/state-machine-harness'
+import { makeHarness, register, sessionCreated, sessionIdle } from '@tests/helpers/state-machine/harness'
+import { templateEnd, templateStart, templateText } from '@tests/helpers/state-machine/template-text'
 
 const GOAL_REQUEST = 'Ask the agent what goal this session should accomplish.'
 const NUDGE = 'Nudge the agent to do what the active state waits for instead of idling.'
+
+const GOAL_REQUEST_TEXT = templateText('goal_request')
+const IDLE_NUDGE_START = templateStart('idle_nudge')
+const PARK_SUMMARY_START = templateStart('park_summary')
+const PARK_SUMMARY_END = templateEnd('park_summary')
 
 const boot = async () => {
   const harness = makeHarness()
@@ -21,12 +27,13 @@ const withMachine = async () => {
   return createStateMachine({ library })
 }
 
+const isTextEmit = (emitted: EmitRequest): emitted is EmitRequest & { readonly text: string } =>
+  emitted.type === 'emit.prompt' || emitted.type === 'emit.dispatch'
+
 const emittedText = (emits: readonly EmitRequest[]): string => {
   const emitted = emits[0]
 
-  return emitted !== undefined && (emitted.type === 'emit.prompt' || emitted.type === 'emit.dispatch')
-    ? emitted.text
-    : ''
+  return emitted !== undefined && isTextEmit(emitted) ? emitted.text : ''
 }
 
 describe('synthetic prompt descriptions', () => {
@@ -34,11 +41,15 @@ describe('synthetic prompt descriptions', () => {
     const harness = await boot()
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
+
+    expect(harness.synthetics).toEqual([])
+
     await harness.emitUserMessage('ses_1', 'user', 'ship it')
 
-    expect(harness.synthetics[0]?.text)
-      .toBe('This session runs a state machine. What goal should it accomplish?')
-    expect(harness.synthetics[0]?.description).toBe(GOAL_REQUEST)
+    const goalRequests = harness.synthetics.filter(message => message.text === GOAL_REQUEST_TEXT)
+
+    expect(goalRequests).toHaveLength(1)
+    expect(goalRequests[0]?.description).toBe(GOAL_REQUEST)
   })
 
   it('describes the nudge it sends on idle', async () => {
@@ -48,7 +59,7 @@ describe('synthetic prompt descriptions', () => {
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
     await harness.emit(sessionIdle('ses_1'))
 
-    const nudge = harness.synthetics.find(message => message.text.includes('idle in `work`'))
+    const nudge = harness.synthetics.find(message => message.text.startsWith(IDLE_NUDGE_START))
 
     expect(nudge?.description).toBe(NUDGE)
     expect(nudge?.description).not.toBe(GOAL_REQUEST)
@@ -84,9 +95,12 @@ describe('the park summary', () => {
     machine.signal({ type: 'LESSON', payload: { text: 'read the line.' } }, 'ses_1')
 
     const emits = machine.signal({ type: 'RETROSPECTIVE_COMPLETE' }, 'ses_1').emits
+    const text = emittedText(emits)
 
-    expect(emittedText(emits)).toBe(
-      'Goal reached: ship it. Improvements: read the line. Waiting for your next instruction.',
-    )
+    expect(text.startsWith(PARK_SUMMARY_START)).toBe(true)
+    expect(text.endsWith(PARK_SUMMARY_END)).toBe(true)
+    expect(text).toContain('ship it.')
+    expect(text).toContain('read the line.')
+    expect(text).not.toContain('..')
   })
 })

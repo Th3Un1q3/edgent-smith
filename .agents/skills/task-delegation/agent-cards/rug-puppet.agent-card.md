@@ -54,10 +54,10 @@ CONTEXT: ESLint violations have been fixed. Now I need the CURRENT contents of t
 
 TASK: Read and report the FULL contents of these 4 files (the ones with typecheck errors):
 
-1. `/workspace/.opencode/plugins/rug-team.ts`
-2. `/workspace/.opencode/plugins/tests/__utils__/kv-store.mock.ts`
-3. `/workspace/.opencode/plugins/tests/instructions-loader.test.ts`
-4. `/workspace/.opencode/plugins/tests/tool-limit-reminder.test.ts`
+1. `/workspace/.opencode/plugins/state-machine.ts`
+2. `/workspace/.opencode/plugins/tests/helpers/tool-limit-reminder-mocks.ts`
+3. `/workspace/.opencode/plugins/tests/instructions/instructions-loader-sweep.test.ts`
+4. `/workspace/.opencode/plugins/tests/tool-limit-reminder/budget-tag.test.ts`
 
 For each file, report the COMPLETE contents line by line. I need this to produce exact type fix instructions.
 ```
@@ -71,6 +71,6 @@ CONTEXT: ESLint violations have been fixed. Now I to check if the files contain 
 
 TASK: Read and report the table with the line numbers and answers for these 2 files (the ones with typecheck errors):
 
-1. `/workspace/.opencode/plugins/rug-team.ts` - quote the lines that implement session status tracking.
-2. `/workspace/.opencode/plugins/tests/__utils__/kv-store.mock.ts` - What lines are annotated with eslint ignore comment, show them in context of 2 lines before and after
+1. `/workspace/.opencode/plugins/state-machine.ts` - quote the lines that implement session status tracking.
+2. `/workspace/.opencode/plugins/tests/helpers/tool-limit-reminder-mocks.ts` - What lines are annotated with eslint ignore comment, show them in context of 2 lines before and after
 ```

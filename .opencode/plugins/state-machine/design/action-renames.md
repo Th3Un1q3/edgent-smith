@@ -1,8 +1,8 @@
-> **Historical design record.** Superseded by `CONTRACT.md` for anything it states about current behaviour; removed action ids appear here only as history, not as the current interface.
+> **Historical design record.** Superseded by `mem:opencode/state-machine-contract` for anything it states about current behaviour; removed action ids appear here only as history, not as the current interface.
 
 # Action renames, skill-callback removal, per-memory idempotency
 
-Nothing here is applied: no code, `machine.json`, `CONTRACT.md`, `SIGNALS-CONTRACT.md` or test was edited.
+Nothing here is applied: no code, `machine.json`, `mem:opencode/state-machine-contract`, `signals-contract.md` or test was edited.
 
 Sources read whole: `machines/session/definitions.ts` (600 lines), `machines/session/machine.json` (569),
 `core/memory.ts` (80), `machines/session/context.ts` (272). Partial: `state-machine.ts:90-309`,
@@ -13,7 +13,7 @@ Sources read whole: `machines/session/definitions.ts` (600 lines), `machines/ses
 
 ### Action-id strings
 
-| id | refs | `definitions.ts` | `machine.json` | `CONTRACT.md` | `tests/state-machine.test.ts` |
+| id | refs | `definitions.ts` | `machine.json` | `mem:opencode/state-machine-contract` | `tests/state-machine.test.ts` |
 |---|---|---|---|---|---|
 | `request_shell` → `run_shell` | 5 | 3 (115, 149, 509) | 1 (209) | 1 (99) | 0 |
 | `request_skill` → `activate_skill` | 9 | 4 (117, 151, 491 comment, 519) | 1 (167) | 3 (61, 100, 112) | 1 (753) |
@@ -24,7 +24,7 @@ Each `definitions.ts` id occupies three sites: an `ActionSpec` arm, an `ACTION_T
 `request_skill` adds a fourth, the `SkillArguments` doc comment at 491 ("The part of the collect-actions argument
 `request_skill` reads"). A stale name in prose is still a rename site.
 
-`CONTRACT.md` sites: the §3 context table (61), the §5 rows (99, 100, 101), the §5 prose (112).
+`mem:opencode/state-machine-contract` sites: sections 3 and 5.
 
 Two more files carry the old ids and are not part of the rename. `REFACTOR-PROPOSAL.md` has 9 (3 each) and
 describes 13 action ids, `fail` and `clear_tools_policy` included, so it is a superseded run: delete it or mark it
@@ -79,10 +79,10 @@ The chain, observed:
 | `core/machine.ts` `SkillEmit` (163-167) | drop `reportTo` |
 | `state-machine.ts` `emit.skill` case (248-256) | `injectSkill(...).pipe(Effect.ignore)`, no `settle` |
 | `context.ts` `CALLBACK_NAMES` (115) | drop `'skill_ready'` |
-| `CONTRACT.md` 41, 61, 75, §5 rows 100 and 103, 138, 225, 240 | prose: activation is fire-and-forget, `injectedSkills` written at request time |
+| `mem:opencode/state-machine-contract` sections 3 and 5 | prose: activation is fire-and-forget, `injectedSkills` written at request time |
 | `tests/state-machine.test.ts:183` | still passes, the port spy records the injection; 502 must assert the marker without `machine.callback('ses_1', 'skill_ready', ...)` |
 | `tests/state-machine/persistence.test.ts:253-263` | "records a failed skill injection as an outcome" loses its subject; replace it with an assertion that activation failure writes no `results`, or delete it |
-| `tests/helpers/state-machine-harness.ts` | `failSkillInjection` has no observable outcome left; keep it only if repurposed to assert a log line |
+| `tests/helpers/state-machine/harness.ts` | `failSkillInjection` has no observable outcome left; keep it only if repurposed to assert a log line |
 
 ### Consequences
 
@@ -173,7 +173,7 @@ One consumer-visible change, from the callback removal. The renames change no wi
 Action ids are machine-definition data: `machine.json` is read by the assembler, and an id outside `ACTION_TYPES`
 has no body (`createActions` is typed `Record<ActionType, unknown>`). No host event or tool payload carries
 `request_*`, so renaming is not a wire change, though it is a breaking change for two repo consumers,
-`CONTRACT.md` and the two test lines.
+`mem:opencode/state-machine-contract` and the two test lines.
 
 Removed strings, exactly: the event `callback.skill_ready`, the registry entry `'skill_ready'` in `CALLBACK_NAMES`,
 the result key `results.skill_ready`, the field `SkillEmit.reportTo`, the id `mark_skill` and the type
@@ -189,11 +189,11 @@ commits, one id each, are safe; "defs now, JSON later" is not.
 
 Sequence, each green on its own:
 
-1. `run_shell`, `activate_skill`, `recall_memories`, the three param interfaces, `CONTRACT.md`, the two test lines.
+1. `run_shell`, `activate_skill`, `recall_memories`, the three param interfaces, `mem:opencode/state-machine-contract`, the two test lines.
 2. Skill callback removal: the `machine.json` arm, the marker write in `activate_skill`, deleting `mark_skill`,
-   `SkillEmit.reportTo`, `CALLBACK_NAMES`, the `state-machine.ts` emit case, the tests, `CONTRACT.md`.
+   `SkillEmit.reportTo`, `CALLBACK_NAMES`, the `state-machine.ts` emit case, the tests, `mem:opencode/state-machine-contract`.
 3. Per-memory tokens: `core/memory.ts`, the `context.ts` field, the `recall_memories` params, the port filter,
-   `CallbackPayload.tokens`, the `record_callback` merge, `CONTRACT.md`.
+   `CallbackPayload.tokens`, the `record_callback` merge, `mem:opencode/state-machine-contract`.
 
 ## 5. Forks for you
 

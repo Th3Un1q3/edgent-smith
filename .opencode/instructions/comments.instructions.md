@@ -128,7 +128,7 @@ A source of truth is the one place where a fact is maintained.
 
 **What it looks like.** The same sentence sits at declaration and use, in twin files (two files that duplicate the same recipe or setting), or in an instruction file and in code.
 
-`noReply?: boolean // when set to true, the message is sent without triggering agent reply` appears twice in `.opencode/plugins/helpers/session-helpers.ts`. `opencode/justfile` repeats recipe descriptions from `.opencode/justfile`, and both files set the same effective working-directory, using different relative strings (`../.opencode` and `.`).
+`opencode/justfile` repeats recipe descriptions from `.opencode/justfile`, and both files set the same effective working-directory, using different relative strings (`../.opencode` and `.`).
 
 **Why it is a problem.** Copies become stale, and a reader cannot tell which one is authoritative.
 
@@ -229,7 +229,7 @@ Keep a non-rendered comment when it is true today, does one of the jobs in quest
 - Cross-module contract: a behavior two modules must agree on. `tests/test_long_inputs.py`: `# all numeric scores equal 1.0 (mirrors runner.case_pass_results logic).`
 - Security or platform trap: `.devcontainer/setup-dev.sh`: `# .credentials.yaml holds a real OPENCODE_GO_API_KEY: copy it, never print it,`
 - Contract for a function, whether public or used only inside its module: `.opencode/plugins/quality-gate-enforcer.ts`: `// Runs one gate and reports whether its status changed. Returns undefined when`
-- Non-obvious algorithm: `.opencode/plugins/helpers/workflow-subtask.ts`: `// opening tag at index 0 would loop forever; stop after the first one.`
+- Non-obvious algorithm: `.opencode/plugins/workflow/subtask.ts`: `// opening tag at index 0 would loop forever; stop after the first one.`
 - Required directive with its reason: `tests/test_cli_fix.py`: `# pragma: no cover - assertion-backed safety net`
 - Substantive spec or issue citation: name the section or issue that carries the rule. A bare `# see docs` fails question 2.
 

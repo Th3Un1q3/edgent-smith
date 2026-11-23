@@ -1,4 +1,4 @@
-import type { CommandResult } from '../helpers/gate-runner'
+import type { CommandResult } from '../gates/run'
 
 export type GateResult = 'unknown' | 'pass' | 'fail'
 

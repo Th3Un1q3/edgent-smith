@@ -163,3 +163,11 @@ Each `describe`/`context` block names the module or class being tested, not a sc
 
 ## Principle 7: Run Quality Gates After Every Discrete Edit, Not Just at the End
 Post-hoc validation of large refactoring batches is insufficient. When modifying test files — especially during consolidation or shared helper extraction — run quality gates (test suite + linting) after each discrete edit, not only after all changes are applied. A single-pass approach to multi-file refactoring makes it impossible to isolate which change introduced a failure, turning debugging into a binary search across dozens of edits. Validate continuously: small scope → gate → confirm → next scope → repeat.
+
+Formatting belongs to this loop, and it spans every language the change touches, not only the bulk of it. Run the formatter for each touched file type — including a test file in another language than the rest of the diff — before the final gate. One Python test file inside a TypeScript refactor turned the last gate red on formatting alone and cost an extra full gate run.
+
+## Principle 8: Prove Gate Scope With a Resolution Probe
+
+A gate, linter, or test that enumerates files by glob has a scope only if something resolves it. For each immediate subdirectory of the tree the gate claims to cover, pin one probe that asserts the glob resolves to at least one file. Pin per subdirectory, not per glob: a single catch-all assertion passes while an entire subtree is missing. A comment never states a glob's coverage; the probe is the statement of scope.
+
+A plugin complexity gate whose globs omitted one subdirectory left 26 files — 14 functions above the ceiling — uncovered while a comment claimed the whole plugin tree. A per-subdirectory probe would have reported zero matches at the first threshold ratchet, instead of after two ratchets of refactoring had built on the gap.

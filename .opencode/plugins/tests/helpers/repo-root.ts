@@ -28,22 +28,20 @@ export const isRepoRoot = (directory: string): boolean =>
  * derived from the sandbox path would silently point at the copy instead of the
  * checkout. Walking out of the sandbox finds the real root in both environments.
  */
-export const findRepoRoot = (startDirectory: string): string => {
-  let current = path.resolve(startDirectory)
+const walkUp = (current: string, startDirectory: string): string => {
+  if (isRepoRoot(current)) return current
 
-  for (;;) {
-    if (isRepoRoot(current)) return current
+  const parent = path.dirname(current)
 
-    const parent = path.dirname(current)
-
-    if (parent === current) {
-      throw new Error(
-        `cannot locate the repository root above ${startDirectory}: no ancestor contains ${ROOT_MARKERS.join(' and ')}`,
-      )
-    }
-
-    current = parent
+  if (parent === current) {
+    throw new Error(
+      `cannot locate the repository root above ${startDirectory}: no ancestor contains ${ROOT_MARKERS.join(' and ')}`,
+    )
   }
+
+  return walkUp(parent, startDirectory)
 }
+
+export const findRepoRoot = (startDirectory: string): string => walkUp(path.resolve(startDirectory), startDirectory)
 
 export const REPO_ROOT = findRepoRoot(path.dirname(fileURLToPath(import.meta.url)))

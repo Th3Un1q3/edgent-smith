@@ -16,11 +16,11 @@ Alias reference table (primary lookup):
 
 | Alias | Resolves To | Use Case |
 |---|---|---|
-| `@tests/helpers/mock-utilities` | `.opencode/plugins/tests/helpers/mock-utilities.ts` | Test helpers and utilities |
-| `@tests/__utils/kv-store.mock` | `.opencode/plugins/tests/__utils/kv-store.mock.ts` | Mock factories for KV store |
+| `@tests/helpers/shared-mocks` | `.opencode/plugins/tests/helpers/shared-mocks.ts` | Test helpers and utilities |
+| `@tests/helpers/tool-limit-reminder/mocks` | `.opencode/plugins/tests/helpers/tool-limit-reminder/mocks.ts` | Mock factories for the tool-limit-reminder plugin |
 | `@plugins/instructions-loader` | `.opencode/plugins/instructions-loader.ts` | Source module under test |
-| `@plugins/helpers/<module>` | `.opencode/plugins/helpers/<module>.ts` | Plugin helper modules (logger, session-helpers, etc.) |
-| `@plugins/rug-team` | `.opencode/plugins/rug-team.ts` | Source module under test |
+| `@plugins/helpers/<module>` | `.opencode/plugins/helpers/<module>.ts` | Plugin helper modules (service-client, steering-message, etc.) |
+| `@plugins/state-machine` | `.opencode/plugins/state-machine.ts` | Source module under test |
 | `@opencode-ai/plugin` | external SDK type package | External plugin SDK types |
 
 ## Import Order
@@ -38,17 +38,17 @@ Required patterns:
 
 ```typescript
 // Correct — alias paths in vi.mock() and stub import
-vi.mock("@plugins/helpers/kv-store", () => makeKvStoreMockFactory())
-import { kvStore } from "@plugins/helpers/kv-store"
+vi.mock("@plugins/helpers/runtime/service-client", () => ({ getClient: vi.fn() }))
+import { getClient } from "@plugins/helpers/runtime/service-client"
 
-// Correct — factory pattern for complex mocks (stored in __utils/factories/)
-vi.mocked(kvStore.createSession).mockReturnValue({ sessionId: "test-123" })
+// Correct — factory pattern for complex mocks (stored in tests/helpers/)
+vi.mocked(getClient).mockReturnValue({ sessionId: "test-123" })
 ```
 
 Rules:
 
 - All `vi.mock()` paths use aliases, never relative strings.
-- Complex mock factories live in `__utils/factories/` — import via `@tests/__utils/factories/<name>` alias.
+- Complex mock factories live in `tests/helpers/` — import via the `@tests/helpers/<name>` alias.
 - Access mock instances with `vi.mocked(module.property)` after the stub import.
 
 ## Test Helpers
@@ -57,10 +57,8 @@ Test infrastructure paths:
 
 | Helper Location | Alias Import | Purpose |
 |---|---|---|
-| `__utils/kv-store.mock.ts` | `@tests/__utils/kv-store.mock` | KV store mock factory |
-| `helpers/mock-utilities.ts` | `@tests/helpers/mock-utilities` | Shared test utilities |
-
-Note: `__utils/` has a single trailing underscore, not double. Import via the `@tests/__utils/<module>` alias.
+| `helpers/tool-limit-reminder/mocks.ts` | `@tests/helpers/tool-limit-reminder/mocks` | Mock factories for the tool-limit-reminder plugin |
+| `helpers/shared-mocks.ts` | `@tests/helpers/shared-mocks` | Shared test utilities |
 
 ## Mock-Aware Function Scoping
 

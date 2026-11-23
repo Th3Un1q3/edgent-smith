@@ -30,9 +30,15 @@ export type GateDecision
  * Order matters: the agent and child checks avoid a restore at all, a state
  * without a rule allows, and only then does the allowlist decide.
  */
+const isGatedSession = (input: GateInput): boolean =>
+  input.agent === GATE_AGENT
+  && !input.isChild
+  && input.state !== undefined
+
+const isGated = (input: GateInput): input is GateInput & { readonly policy: ToolPolicyRule } =>
+  isGatedSession(input) && input.policy !== undefined
+
 export const decide = (input: GateInput): GateDecision => {
-  if (input.agent !== GATE_AGENT) return { allowed: true }
-  if (input.isChild) return { allowed: true }
-  if (input.state === undefined || input.policy === undefined) return { allowed: true }
+  if (!isGated(input)) return { allowed: true }
   return input.policy.allowedTools.includes(input.tool) ? { allowed: true } : { allowed: false, message: renderPolicyMessage(input.policy, input.tool) }
 }

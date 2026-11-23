@@ -28,7 +28,7 @@ Break the user's request into discrete tasks. Each task should satisfy all of th
 - **Independently completable** — no task depends on another producing intermediate results that it then reads; if they do, the dependent task must receive its input as explicit parameters in the subagent prompt
 - **Bounded scope** — can be completed by a single agent invocation without requiring follow-up clarification about what to work on next
 - **Verifiable outcome** — has clear acceptance criteria that a validation subagent can check
-- **Fits the subagent budget** — completable within the target agent's tool-call threshold `floor(steps * 0.8)` (`.opencode/plugins/helpers/tool-limit.ts:37`; `rug-swe` declares `steps: 30`, so 24 calls), with calls left over for verification and the report
+- **Fits the subagent budget** — completable within the target agent's tool-call threshold `floor(steps * 0.8)` (`.opencode/plugins/tool-limit-reminder/budget.ts:37`; `rug-swe` declares `steps: 30`, so 24 calls), with calls left over for verification and the report
 
 ### Decomposition Checklist
 
@@ -44,7 +44,7 @@ Before launching any subagent, verify each task:
 
 ### Budget-Aware Task Sizing
 
-Every delegated task must fit the target agent's tool-call threshold `floor(steps * 0.8)` (`.opencode/plugins/helpers/tool-limit.ts:37`), leaving headroom for discovery and verification. Decompose further when a task has:
+Every delegated task must fit the target agent's tool-call threshold `floor(steps * 0.8)` (`.opencode/plugins/tool-limit-reminder/budget.ts:37`), leaving headroom for discovery and verification. Decompose further when a task has:
 
 - **More than 3 requirement areas** — split by area into separate tasks
 - **More than 2 phases** — investigate, write, and verify must be separate tasks
@@ -55,7 +55,7 @@ When a task cannot be decomposed further, the prompt must include a **resume pla
 
 ### Output and Timeout Budgets
 
-- **Leave `timeout_minutes` unset unless this task is expected to outrun the default.** The default is 15 minutes per subtask and 90 for the workflow (`.opencode/plugins/workflow.ts:228`, `.opencode/plugins/helpers/workflow-types.ts:160`). Set `timeout_minutes` only to extend a task you expect to run longer than that, such as a full test suite, a gate or CI run, or a large enumeration, and raise the enclosing workflow's `timeout_minutes` above the child's when you do. Never set it to shorten a task, and never size it per dispatch. When a child does expire, `subtask_tail({ task_id })` shows its progress and a `task_id` resume continues the same child with a fresh budget; re-dispatching with a larger guessed value spends a fresh child on work the resume already holds. The retired `timeout_seconds` key is rejected: divide a legacy seconds value by 60 and rename it to `timeout_minutes`. Budget arithmetic, per-turn and not a hard block: [Child Budget Accounting](../SKILL.md#child-budget-accounting).
+- **Leave `timeout_minutes` unset unless this task is expected to outrun the default.** The default is 15 minutes per subtask and 90 for the workflow (`.opencode/plugins/workflow.ts:228`, `.opencode/plugins/workflow/contracts.ts:160`). Set `timeout_minutes` only to extend a task you expect to run longer than that, such as a full test suite, a gate or CI run, or a large enumeration, and raise the enclosing workflow's `timeout_minutes` above the child's when you do. Never set it to shorten a task, and never size it per dispatch. When a child does expire, `subtask_tail({ task_id })` shows its progress and a `task_id` resume continues the same child with a fresh budget; re-dispatching with a larger guessed value spends a fresh child on work the resume already holds. The retired `timeout_seconds` key is rejected: divide a legacy seconds value by 60 and rename it to `timeout_minutes`. Budget arithmetic, per-turn and not a hard block: [Child Budget Accounting](../SKILL.md#child-budget-accounting).
 - Keep the reducer under about 2KB. Return only counts, statuses and key data. Never return full transcripts, long evidence strings, or whole file contents: the removed envelope trim no longer drops logs, result, or steps for you, so an oversized reducer arrives whole and spends the orchestrator's context before the next round starts.
 - Capture `steps[].task_id` and, on an empty or visibly incomplete result, resume that session for a compact status instead of re-running the work.
 - **Size the cap from a counted inventory, or mark it provisional.** When the dispatch cannot know the item count, the character cap is provisional: the child returns the count and the rows that fit, and the orchestrator sizes or splits the remainder from that count. A cap fixed before the enumeration runs meets a one-row-per-unit rule at 118 units and cuts the tail, sentinel included.

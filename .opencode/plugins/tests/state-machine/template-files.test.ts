@@ -15,6 +15,8 @@ import {
   templatePlaceholders,
 } from '@plugins/state-machine/machines/session/template-files'
 
+import { templateStart, templateText } from '@tests/helpers/state-machine/template-text'
+
 import type { LoopContext } from '@plugins/state-machine/core/machine'
 import type { TemplateId } from '@plugins/state-machine/machines/session/template-files'
 
@@ -33,74 +35,74 @@ const context = (overrides: Record<string, unknown> = {}): LoopContext => ({
   ...overrides,
 } as unknown as LoopContext)
 
-interface ParityCase {
+interface RenderCase {
   readonly name: TemplateId
   readonly state?: string
   readonly context: LoopContext
-  readonly expected: string
+  readonly values: readonly string[]
 }
 
-const cases: readonly ParityCase[] = [
+const cases: readonly RenderCase[] = [
   {
     name: 'goal_request',
     context: context(),
-    expected: 'This session runs a state machine. What goal should it accomplish?',
+    values: [],
   },
   {
     name: 'idle_nudge',
     state: 'work',
     context: context(),
-    expected: 'You are idle in `work`, which has not finished. Call signal_send with CLAIM_WORK when the current work unit is done. The loop stays in `work` until a signal or command moves it on, so act rather than stop.',
+    values: ['work'],
   },
   {
     name: 'validation_self_report',
     context: context(),
-    expected: 'Verdict: call signal_send with type GOAL_ACHIEVED when the goal is met, or GOAL_INCOMPLETE when it is not.',
+    values: [],
   },
   {
     name: 'quality_check_failed',
     context: context(),
-    expected: 'Quality check failed: unknown. Parked in panic for investigation.',
+    values: ['unknown'],
   },
   {
     name: 'quality_check_failed',
     context: context({ failure: { reason: 'exit 1', detail: 'type error' } }),
-    expected: 'Quality check failed: exit 1 (type error). Parked in panic for investigation.',
+    values: ['exit 1', 'type error'],
   },
   {
     name: 'quality_check_failed',
     context: context({ failure: { reason: 'exit 1', detail: '' } }),
-    expected: 'Quality check failed: exit 1 (). Parked in panic for investigation.',
+    values: ['exit 1'],
   },
   {
     name: 'panic_escalation',
     context: context(),
-    expected: 'Parked for investigation: unknown',
+    values: ['unknown'],
   },
   {
     name: 'panic_escalation',
     context: context({ failure: { reason: 'attempts exhausted', detail: 'three tries' } }),
-    expected: 'Parked for investigation: attempts exhausted (three tries)',
+    values: ['attempts exhausted', 'three tries'],
   },
   {
     name: 'memorize',
     context: context({ intent: 'improvement' }),
-    expected: 'Name one improvement.',
+    values: [],
   },
   {
     name: 'memorize',
     context: context({ intent: 'none' }),
-    expected: 'Name what to change next attempt.',
+    values: [],
   },
   {
     name: 'park_summary',
     context: context({ goal: 'ship it', improvements: ['read the line.'] }),
-    expected: 'Goal reached: ship it. Improvements: read the line. Waiting for your next instruction.',
+    values: ['ship it', 'read the line.'],
   },
   {
     name: 'park_summary',
     context: context({ goal: 'ship it.', improvements: [] }),
-    expected: 'Goal reached: ship it. Improvements: none. Waiting for your next instruction.',
+    values: ['ship it.', 'none'],
   },
   {
     name: 'work_towards_goal',
@@ -109,18 +111,41 @@ const cases: readonly ParityCase[] = [
       memories: ['a', 'b'],
       injected: { 'preferences/user': { full: ['p'], index: [] } },
     }),
-    expected: 'Work towards: ship it. Memories: a | b. Preferences: p',
+    values: ['ship it', 'a | b', 'p'],
   },
   {
     name: 'work_towards_goal',
     context: context({ goal: 'ship it', memories: [], injected: {} }),
-    expected: 'Work towards: ship it. Memories: none. Preferences: none',
+    values: ['ship it', 'none'],
   },
 ]
 
-describe('template parity with the pre-extraction output', () => {
-  it.each(cases)('renders $name byte-identically', ({ name, state, context: loop, expected }) => {
-    expect(renderTemplate({ template: name }, loop, state)).toBe(expected)
+const UNRENDERED_TAG = /\{\{[^}]*\}\}/
+
+describe('template rendering', () => {
+  it.each(cases)('renders $name from the text of its own file', ({ name, state, context: loop, values }) => {
+    const rendered = renderTemplate({ template: name }, loop, state)
+
+    expect(rendered).not.toMatch(UNRENDERED_TAG)
+    expect(rendered.startsWith(templateStart(name))).toBe(true)
+    for (const value of values) expect(rendered).toContain(value)
+  })
+
+  it('renders a template with no placeholders as its own file text', () => {
+    for (const id of TEMPLATE_IDS) {
+      if (templateText(id).includes('{{')) continue
+
+      expect(renderTemplate({ template: id }, context())).toBe(templateText(id))
+    }
+  })
+
+  it('selects the section branch the context names', () => {
+    const improvement = renderTemplate({ template: 'memorize' }, context({ intent: 'improvement' }))
+    const nextAttempt = renderTemplate({ template: 'memorize' }, context({ intent: 'none' }))
+
+    expect(improvement).not.toBe('')
+    expect(nextAttempt).not.toBe('')
+    expect(improvement).not.toBe(nextAttempt)
   })
 
   it('covers every template and every placeholder', () => {

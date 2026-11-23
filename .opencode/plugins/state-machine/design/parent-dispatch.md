@@ -1,4 +1,4 @@
-> **Historical design record.** Superseded by `CONTRACT.md` for anything it states about current behaviour; removed action ids appear here only as history, not as the current interface.
+> **Historical design record.** Superseded by `mem:opencode/state-machine-contract` for anything it states about current behaviour; removed action ids appear here only as history, not as the current interface.
 
 # Parent dispatch: inherited handlers and `emit_parent`
 
@@ -171,7 +171,7 @@ Declaring a handler on a parent makes it fire in states that did not declare it 
 - The structural cost of `waiting` is a stored-snapshot break: a session persisted in `parked` restores with a path `hasStatePath` rejects (`core/machine.ts:833-842`), so it comes back `shape-invalid` and starts fresh at `admission`. `stateLeaf` still displays `parked`.
 - Do not hoist an `agent_sent_signal.*` arm: `acceptedTransitions` (`core/machine.ts:533-537`) and the coarse policy derivation read only the state that declares the key.
 
-## 8. What CONTRACT.md gains
+## 8. What mem:opencode/state-machine-contract gains
 
 Draft, five sentences, for a new §4a after the states table:
 
@@ -207,7 +207,7 @@ The snapshot break is the one thing a revert does not undo for a session already
 ## 12. Not visible from the tree
 
 - Which argument form the installed `stateIn` accepts for a compound value.
-- Whether `towards_goal.system_idle` (`:64-72`) is the intended site: `CONTRACT.md:82-84` and `.opencode/plugins/AGENTS.md` both describe `system_idle` as sitting on the machine root, and the root `on` (`:4-12`) carries only `system_interrupted`. Both readings produce the same idle behaviour, so this design does not depend on which is right — but the drift is real and should be corrected either way.
+- Whether `towards_goal.system_idle` (`:64-72`) is the intended site: `mem:opencode/state-machine-contract` and `.opencode/plugins/AGENTS.md` both describe `system_idle` as sitting on the machine root, and the root `on` (`:4-12`) carries only `system_interrupted`. Both readings produce the same idle behaviour, so this design does not depend on which is right — but the drift is real and should be corrected either way.
 
 ## 13. Scope
 

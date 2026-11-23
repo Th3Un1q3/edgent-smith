@@ -29,8 +29,10 @@ import { Tool } from '@opencode/schema/tool'
 import { $ } from 'bun'
 import { mkdir, writeFile } from 'node:fs/promises'
 
-import { harnessConfig } from './config/harness.config'
-import { DEFAULT_TOOL_LIMIT, resolveBudget } from './helpers/tool-limit'
+import { harnessConfig } from './config/harness'
+import { namespacedStore } from './helpers/runtime/namespaced-store'
+import { appendSynthetic } from './helpers/session/synthetic-append'
+import { DEFAULT_TOOL_LIMIT, resolveBudget } from './tool-limit-reminder/budget'
 import type { ProblemStatement, ToolLimitConfig } from './types/tool-limit'
 
 const REVIEW_PREFIX = 'review/'
@@ -86,6 +88,39 @@ const agentProblemStatement = (agentName: string, expectedMax: number, actual: n
   message: `The session took ${actual} tool calls for agent '${agentName}', exceeding the agent's budget of ${expectedMax} steps. Investigate why the agent exceeded its step budget.`,
 })
 
+const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const isString = (value: unknown): value is string => typeof value === 'string'
+
+const isNumber = (value: unknown): value is number => typeof value === 'number'
+
+const PROBLEM_FIELDS: ReadonlyArray<readonly [string, (value: unknown) => boolean]> = [
+  ['source', isString],
+  ['thresholdName', isString],
+  ['message', isString],
+  ['expectedMax', isNumber],
+  ['actual', isNumber],
+]
+
+const isProblemStatement = (value: unknown): value is ProblemStatement =>
+  isObjectRecord(value) && PROBLEM_FIELDS.every(([field, isType]) => isType(value[field]))
+
+const isProblemStatementArray = (value: unknown): value is ProblemStatement[] =>
+  Array.isArray(value) && value.every(isProblemStatement)
+
+const decodeProblems = (value: unknown): ProblemStatement[] =>
+  isObjectRecord(value) && isProblemStatementArray(value.problems) ? value.problems : []
+
+const isMarkedForReview = (session: Session.Info | undefined): boolean =>
+  session?.metadata?.[NEEDS_REVIEW] === true
+
+const numberOrUndefined = (value: unknown): number | undefined =>
+  typeof value === 'number' ? value : undefined
+
+const atOrUnderBudget = (current: number, budget: number): 'remind' | 'none' =>
+  current === budget ? 'remind' : 'none'
+
 const renderProblemsMarkdown = (problems: readonly ProblemStatement[]): string => {
   if (problems.length === 0) return '# Reported Threshold Violations\n\n*None reported.*\n'
   const sections = problems.map(problem => `## ${problem.source}: ${problem.thresholdName}\n<!-- problem-id: ${problem.source}:${problem.thresholdName} -->\n${problem.message}`)
@@ -99,7 +134,7 @@ const quoteShellArgument = (value: string): string => `'${value.replaceAll('\'',
 
 /**
 Bun's `$` takes a template; a plain array carrying `raw` is the raw command form
-(no interpolation), mirroring `gate-runner.ts`.
+(no interpolation), mirroring `run.ts`.
 */
 const asTemplate = (command: string): TemplateStringsArray =>
   Object.assign([command], { raw: [command] })
@@ -127,8 +162,6 @@ const dropFromSet = (set: Set<string>, value: string): Set<string> => {
   return next
 }
 
-const reviewKey = (sessionID: string): string => REVIEW_PREFIX + sessionID
-
 /**
 `context.event.subscribe` is unary: it exposes the whole `OpenCodeEvent` union
 and takes no event-type argument, so a specific type is selected with
@@ -144,6 +177,9 @@ const isIdleEvent = (event: PluginEvent): event is IdleEvent =>
 const isAgentSelectedEvent = (event: PluginEvent): event is Extract<PluginEvent, { type: 'session.agent.selected' }> =>
   event.type === 'session.agent.selected'
 
+const resolvedParent = (session: Session.Info | undefined): string | undefined =>
+  session?.parentID || undefined
+
 const plugin: Plugin = {
   id: 'opencode.tool-limit-reminder',
   effect: context => Effect.gen(function* () {
@@ -154,6 +190,7 @@ const plugin: Plugin = {
     const padding = Math.max(0, Math.floor(config.padding))
     const ignoreTools = new Set(config.ignoreTools)
     const review = config.review
+    const reviewStore = namespacedStore(context.storage, REVIEW_PREFIX, decodeProblems)
 
     // In-memory, per-turn state. Refs keep increments atomic under parallel calls.
     const callsBefore = yield* Ref.make(new Map<string, number>())
@@ -176,8 +213,8 @@ const plugin: Plugin = {
           Effect.map(result => result.data),
           Effect.orElseSucceed(() => {}),
         )
-        const steps = info === undefined ? undefined : info.steps
-        const budget = resolveBudget(agentID, typeof steps === 'number' ? steps : undefined, config.limits, config.factor)
+        const steps = numberOrUndefined(info?.steps)
+        const budget = resolveBudget(agentID, steps, config.limits, config.factor)
         yield* Ref.update(budgetCache, map => new Map(map).set(agentID, budget))
         return budget
       })
@@ -187,19 +224,22 @@ const plugin: Plugin = {
         Effect.orElseSucceed<Session.Info | undefined>(() => {}),
       )
 
-    const readProblems = (sessionID: string): Effect.Effect<ProblemStatement[]> =>
-      Effect.map(context.storage.get(reviewKey(sessionID)), (value) => {
-        if (value === null || typeof value !== 'object' || Array.isArray(value)) return []
-        const problems = (value as { problems?: unknown }).problems
-        return Array.isArray(problems) ? (problems as ProblemStatement[]) : []
+    // `SessionHooks.prompt` carries no agent, so the tag resolves the session's
+    // own agent budget; an absent agent or budget means skip (v1 parity).
+    const sessionBudget = (sessionID: string): Effect.Effect<number | undefined> =>
+      Effect.gen(function* () {
+        const agentID = (yield* readSession(sessionID))?.agent
+        return agentID === undefined ? undefined : yield* budgetOf(agentID as unknown as string)
       })
+
+    const readProblems = (sessionID: string): Effect.Effect<ProblemStatement[]> =>
+      reviewStore.read(sessionID)
 
     const appendProblem = (sessionID: string, problem: ProblemStatement): Effect.Effect<void> =>
       Effect.gen(function* () {
         const existing = yield* readProblems(sessionID)
         if (existing.some(entry => problemIdentity(entry) === problemIdentity(problem))) return
-        const payload = { problems: [...existing, problem] } as unknown as Schema.Json
-        yield* context.storage.set(reviewKey(sessionID), payload)
+        yield* reviewStore.write(sessionID, { problems: [...existing, problem] })
       })
 
     /**
@@ -239,11 +279,9 @@ const plugin: Plugin = {
       Effect.gen(function* () {
         const cached = yield* Ref.get(parents)
         if (cached.has(sessionID)) return cached.get(sessionID) !== undefined
-        const session = yield* readSession(sessionID)
-        const parent = session?.parentID
-        const resolved = typeof parent === 'string' && parent.length > 0 ? parent : undefined
-        yield* Ref.update(parents, map => new Map(map).set(sessionID, resolved))
-        return resolved !== undefined
+        const parent = resolvedParent(yield* readSession(sessionID))
+        yield* Ref.update(parents, map => new Map(map).set(sessionID, parent))
+        return parent !== undefined
       })
 
     const exportSession = (sessionID: string): Effect.Effect<boolean> =>
@@ -263,28 +301,44 @@ const plugin: Plugin = {
         Effect.orElseSucceed(() => {}),
       )
 
+    const publishProblemsMarkdown = (
+      sessionID: string,
+      problems: readonly ProblemStatement[],
+    ): Effect.Effect<void> =>
+      review.writeMarkdown ? writeProblemsMarkdown(sessionID, problems) : Effect.void
+
     const needsReview = (sessionID: string): Effect.Effect<boolean> =>
       Effect.gen(function* () {
-        if ((yield* readProblems(sessionID)).length > 0) return true
-        const session = yield* readSession(sessionID)
-        return session?.metadata?.[NEEDS_REVIEW] === true
+        return (yield* readProblems(sessionID)).length > 0 || isMarkedForReview(yield* readSession(sessionID))
       })
 
     /**
     Export once per idle, then clear both durable records. A failed export
     retains them so the next idle retries (v1 parity).
     */
+    const needsExport = (sessionID: string): Effect.Effect<boolean> =>
+      Effect.gen(function* () {
+        return review.export ? (yield* needsReview(sessionID)) : false
+      })
+
     const exportReview = (sessionID: string): Effect.Effect<void> =>
       Effect.gen(function* () {
-        if (!review.export || !(yield* needsReview(sessionID))) return
+        if (!(yield* needsExport(sessionID))) return
         if (!(yield* exportSession(sessionID))) {
           yield* Effect.logWarning('[tool-limit-reminder] export failed for session ' + sessionID + '; review state retained')
           return
         }
         const problems = yield* readProblems(sessionID)
-        if (review.writeMarkdown) yield* writeProblemsMarkdown(sessionID, problems)
-        yield* context.storage.remove(reviewKey(sessionID))
+        yield* publishProblemsMarkdown(sessionID, problems)
+        yield* reviewStore.remove(sessionID)
         yield* clearNeedsReview(sessionID)
+      })
+
+    const exportEntries = (sessionIDs: readonly string[]): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        for (const sessionID of sessionIDs) {
+          yield* exportReview(sessionID)
+        }
       })
 
     // Idle resets the turn: counters and the tag guard go back to zero.
@@ -298,6 +352,35 @@ const plugin: Plugin = {
 
     // ── Three-tier gate ──────────────────────────────────────────────────────
 
+    const budgetTier = (current: number, budget: number): 'block' | 'review' | 'remind' | 'none' => {
+      if (current > budget + padding) return 'block'
+      return current > budget ? 'review' : atOrUnderBudget(current, budget)
+    }
+
+    const blockOverBudget = (
+      current: number,
+      budget: number,
+      agentID: string,
+      sessionID: string,
+    ): Effect.Effect<void, Tool.Error> =>
+      Effect.gen(function* () {
+        if (yield* isChild(sessionID)) return // children are exempt from blocking
+        yield* Effect.logWarning('[tool-limit-reminder] blocked ' + agentID + ' in session ' + sessionID + ' at ' + current + ' calls (limit ' + budget + ')')
+        return yield* Effect.fail(new Tool.Error({ message: BLOCK_TEXT }))
+      })
+
+    // The `actual` is completed calls, so attempts never inflate the report.
+    const recordBudgetOverrun = (
+      budget: number,
+      agentID: string,
+      sessionID: string,
+    ): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        const completed = (yield* Ref.get(callsCompleted)).get(sessionID) ?? 0
+        yield* setNeedsReview(sessionID)
+        yield* appendProblem(sessionID, agentProblemStatement(agentID, budget, completed))
+      })
+
     yield* context.tool.hook('execute.before', event => Effect.gen(function* () {
       if (ignoreTools.has(event.tool)) return
 
@@ -310,33 +393,22 @@ const plugin: Plugin = {
       // Atomic read-then-increment: the pre-increment value drives all three
       // tiers and is the only gate counter.
       const current = yield* Ref.modify(callsBefore, map => readAndBump(map, sessionID))
-
-      if (current > budget + padding) {
-        if (yield* isChild(sessionID)) return // children are exempt from blocking
-        yield* Effect.logWarning('[tool-limit-reminder] blocked ' + agentID + ' in session ' + sessionID + ' at ' + current + ' calls (limit ' + budget + ')')
-        return yield* Effect.fail(new Tool.Error({ message: BLOCK_TEXT }))
+      const synthesize = (text: string) =>
+        appendSynthetic(
+          context.session.synthetic({ sessionID: event.sessionID, text, resume: false }),
+          { _tag: 'silent' },
+        ).pipe(Effect.asVoid)
+      const tiers = {
+        none: () => Effect.void,
+        block: () => blockOverBudget(current, budget, agentID, sessionID),
+        review: () => Effect.gen(function* () {
+          yield* recordBudgetOverrun(budget, agentID, sessionID)
+          yield* synthesize(reviewSteering(current + 1, budget))
+        }),
+        remind: () => synthesize(reminderSteering(budget)),
       }
 
-      if (current > budget) {
-        // The `actual` is completed calls, so attempts never inflate the report.
-        const completed = (yield* Ref.get(callsCompleted)).get(sessionID) ?? 0
-        yield* setNeedsReview(sessionID)
-        yield* appendProblem(sessionID, agentProblemStatement(agentID, budget, completed))
-        yield* context.session.synthetic({
-          sessionID: event.sessionID,
-          text: reviewSteering(current + 1, budget),
-          resume: false,
-        }).pipe(Effect.ignore)
-        return
-      }
-
-      if (current !== budget) return // below threshold: nothing special
-
-      yield* context.session.synthetic({
-        sessionID: event.sessionID,
-        text: reminderSteering(budget),
-        resume: false,
-      }).pipe(Effect.ignore)
+      yield* tiers[budgetTier(current, budget)]()
     }))
 
     // Tally of calls that actually ran: a call blocked here (or denied by
@@ -358,10 +430,7 @@ const plugin: Plugin = {
       yield* Ref.update(callsBefore, map => dropKey(map, sessionID))
       yield* Ref.update(callsCompleted, map => dropKey(map, sessionID))
       if ((yield* Ref.get(tagged)).has(sessionID)) return
-      const session = yield* readSession(sessionID)
-      const agentID = session?.agent
-      if (agentID === undefined) return
-      const budget = yield* budgetOf(agentID as unknown as string)
+      const budget = yield* sessionBudget(sessionID)
       if (budget === undefined) return
       event.prompt.text = budgetTag(budget) + '\n' + event.prompt.text
       yield* Ref.update(tagged, set => new Set(set).add(sessionID))
@@ -387,16 +456,11 @@ const plugin: Plugin = {
     // Restart gap: a session that idled while the plugin was down emits no live
     // `session.idle`, so the durable problem records replay once at registration.
     yield* Effect.gen(function* () {
-      let after: string | undefined
+      let page = yield* reviewStore.scanPage()
       for (;;) {
-        const page = yield* context.storage.scan(
-          after === undefined ? { prefix: REVIEW_PREFIX } : { prefix: REVIEW_PREFIX, after },
-        )
-        for (const entry of page.entries) {
-          yield* exportReview(entry.key.slice(REVIEW_PREFIX.length))
-        }
+        yield* exportEntries(page.ids)
         if (page.next === undefined) break
-        after = page.next
+        page = yield* reviewStore.scanPage(page.next)
       }
     })
   }),

@@ -9,9 +9,10 @@ import { createStateMachine, loadStateMachineLibrary } from '@plugins/state-mach
 import type { PersistedSnapshot, SnapshotRecord, SnapshotStore } from '@plugins/state-machine/core/snapshot'
 import type { StoredSession } from '@plugins/state-machine/machines/session/context'
 
-import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine-harness'
+import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine/harness'
+import { templateText } from '@tests/helpers/state-machine/template-text'
 
-import type { Harness } from '@tests/helpers/state-machine-harness'
+import type { Harness } from '@tests/helpers/state-machine/harness'
 
 const NOW = Date.parse('2026-11-16T12:00:00.000Z')
 
@@ -45,6 +46,10 @@ const snapshotFixture = (
 const statePathOf = (value: unknown): string =>
   typeof value === 'string' ? value : Object.entries(value as Record<string, unknown>).map(([id, child]) => id + '.' + statePathOf(child)).join('.')
 
+// The context of the last snapshot the plugin wrote, as the two outcome cases read it.
+const lastContext = (harness: Harness): StoredSession =>
+  (harness.storageWrites.at(-1)?.value as SnapshotRecord).snapshot.context as StoredSession
+
 interface Stored {
   readonly writes: Array<{ key: string, value: unknown }>
   reads: number
@@ -75,6 +80,18 @@ const machineWith = async (stored: Stored) => {
   })
 }
 
+type RestoredMachine = Awaited<ReturnType<typeof machineWith>>
+
+const expectRestored = (machine: RestoredMachine): void => {
+  expect(machine.get('ses_1')).toMatchObject({
+    state: 'work',
+    context: {
+      goal: 'ship the snapshot',
+      policy: { stateId: 'towards_goal.define_goal' },
+    },
+  })
+}
+
 const storedRecord = (overrides: Partial<StoredSession> = {}, value: unknown = WORK_STATE): Stored => ({
   writes: [],
   reads: 0,
@@ -91,9 +108,7 @@ describe('ensure — restore on first access', () => {
 
     expect(started?.created).toBe(true)
     expect(started?.emits).toEqual([])
-    expect(machine.get('ses_1')?.state).toBe('work')
-    expect(machine.get('ses_1')?.context.goal).toBe('ship the snapshot')
-    expect(machine.get('ses_1')?.context.policy?.stateId).toBe('towards_goal.define_goal')
+    expectRestored(machine)
   })
 
   it('starts at the agent state for an absent record', async () => {
@@ -259,8 +274,7 @@ describe('plugin wiring', () => {
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } })
 
-    const context = (harness.storageWrites.at(-1)?.value as SnapshotRecord | undefined)?.snapshot.context as StoredSession | undefined
-    expect(context?.results.skill_ready?.ok).toBe(false)
+    expect(lastContext(harness).results.skill_ready?.ok).toBe(false)
   })
 
   it('records a failed memory read as an outcome', async () => {
@@ -270,8 +284,7 @@ describe('plugin wiring', () => {
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.emitUserMessage('ses_1', 'user', 'ship it')
 
-    const context = (harness.storageWrites.at(-1)?.value as SnapshotRecord | undefined)?.snapshot.context as StoredSession | undefined
-    expect(context?.results.memories_ready?.ok).toBe(false)
+    expect(lastContext(harness).results.memories_ready?.ok).toBe(false)
   })
 
   it('logs write-failed when storage rejects the snapshot write', async () => {
@@ -293,7 +306,7 @@ describe('plugin wiring', () => {
 
     const written = harness.storageWrites.filter(write => write.key === snapshotKey('ses_1'))
     expect(statePathOf((written.at(-1)?.value as SnapshotRecord).snapshot.value)).toBe('towards_goal.define_goal')
-    expect(harness.synthetics[0]?.text).toContain('What goal')
+    expect(harness.synthetics[0]?.text).toContain(templateText('goal_request'))
   })
 
   it('reports the tool a Code Mode call runs in execute.before', async () => {

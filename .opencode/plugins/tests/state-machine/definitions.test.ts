@@ -10,6 +10,8 @@ import {
 
 import { signalEvent } from '@plugins/state-machine/core/machine'
 
+import { templateEnd, templateRendered, templateStart } from '@tests/helpers/state-machine/template-text'
+
 import type { LoopContext, LoopEvent } from '@plugins/state-machine/core/machine'
 import type { XStateRuntime } from '@plugins/state-machine/machines/session/definitions'
 
@@ -48,12 +50,12 @@ const record = (parameters: unknown, event: LoopEvent, base: LoopContext = conte
 
 describe('promptDescription', () => {
   it('names an emit that supplies no description by its opening words', () => {
-    expect(promptDescription({ text: 'Verdict: call signal_send with type GOAL_ACHIEVED' }))
-      .toBe('Sent synthetic message: Verdict: call signal...')
+    expect(promptDescription({ text: 'Ask the operator for a decision' }))
+      .toBe('Sent synthetic message: Ask the operator for...')
   })
 
   it('keeps the description the action supplied', () => {
-    expect(promptDescription({ text: 'Verdict: call signal_send', description: 'Judge the goal' }))
+    expect(promptDescription({ text: 'Ask the operator for a decision', description: 'Judge the goal' }))
       .toBe('Judge the goal')
   })
 })
@@ -62,7 +64,11 @@ describe('failure templates', () => {
   it('names an unknown quality-check reason and omits a missing detail', () => {
     const text = renderTemplate({ template: 'quality_check_failed' }, context())
 
-    expect(text).toBe('Quality check failed: unknown. Parked in panic for investigation.')
+    expect(templateStart('quality_check_failed')).not.toBe('')
+    expect(text).toContain('unknown')
+    expect(text).not.toContain('undefined')
+    expect(text.startsWith(templateStart('quality_check_failed'))).toBe(true)
+    expect(text).toBe(templateRendered('quality_check_failed', { reason: 'unknown', detail: undefined }))
   })
 
   it('renders the quality-check reason and its detail when both exist', () => {
@@ -71,19 +77,33 @@ describe('failure templates', () => {
       context({ failure: { reason: 'exit 1', detail: 'type error' } }),
     )
 
-    expect(text).toBe('Quality check failed: exit 1 (type error). Parked in panic for investigation.')
+    expect(templateEnd('quality_check_failed')).not.toBe('')
+    expect(text).toContain('exit 1')
+    expect(text).toContain('type error')
+    expect(text.endsWith(templateEnd('quality_check_failed'))).toBe(true)
+    expect(text).toBe(templateRendered('quality_check_failed', { reason: 'exit 1', detail: 'type error' }))
   })
 
   it('names an unknown escalation reason and omits a missing detail', () => {
-    expect(renderTemplate({ template: 'panic_escalation' }, context()))
-      .toBe('Parked for investigation: unknown')
+    const text = renderTemplate({ template: 'panic_escalation' }, context())
+
+    expect(templateStart('panic_escalation')).not.toBe('')
+    expect(text).toContain('unknown')
+    expect(text).not.toContain('undefined')
+    expect(text.startsWith(templateStart('panic_escalation'))).toBe(true)
+    expect(text).toBe(templateRendered('panic_escalation', { reason: 'unknown', detail: undefined }))
   })
 
   it('renders the escalation reason and its detail when both exist', () => {
-    expect(renderTemplate(
+    const text = renderTemplate(
       { template: 'panic_escalation' },
       context({ failure: { reason: 'attempts exhausted', detail: 'three tries' } }),
-    )).toBe('Parked for investigation: attempts exhausted (three tries)')
+    )
+
+    expect(templateStart('panic_escalation')).not.toBe('')
+    expect(text).toContain('attempts exhausted')
+    expect(text).toContain('three tries')
+    expect(text).toBe(templateRendered('panic_escalation', { reason: 'attempts exhausted', detail: 'three tries' }))
   })
 })
 

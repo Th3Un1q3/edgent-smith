@@ -11,9 +11,9 @@ import type { PersistedSnapshot, ToolPolicyRule } from '@plugins/state-machine/c
 import type { StoredSession } from '@plugins/state-machine/machines/session/context'
 import type { ActionSpec } from '@plugins/state-machine/machines/session/definitions'
 
-import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine-harness'
+import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine/harness'
 
-import type { Harness } from '@tests/helpers/state-machine-harness'
+import type { Harness } from '@tests/helpers/state-machine/harness'
 
 const NOW = Date.parse('2026-11-16T12:00:00.000Z')
 
@@ -36,8 +36,8 @@ const actionsOf = (state: LoopStateId): readonly MachineActionSpec[] => [
 ]
 
 const setPolicyAction = (): Extract<ActionSpec, { type: 'set_tools_policy' }> => {
-  const action = stateAt('towards_goal.define_goal').entry?.find(candidate => candidate.type === 'set_tools_policy')
-  if (action?.type !== 'set_tools_policy') throw new Error('define_goal declares no set_tools_policy action')
+  const action = (stateAt('towards_goal.define_goal').entry ?? []).find(candidate => candidate.type === 'set_tools_policy')
+  if (action === undefined) throw new Error('define_goal declares no set_tools_policy action')
   return action as Extract<ActionSpec, { type: 'set_tools_policy' }>
 }
 

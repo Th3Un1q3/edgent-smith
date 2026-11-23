@@ -572,7 +572,7 @@
             {
               "type": "run_command",
               "params": {
-                "name": "retrospective"
+                "name": "sessions/retrospect"
               }
             },
             {

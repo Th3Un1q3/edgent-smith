@@ -52,6 +52,7 @@ Items with no surviving home are losses, not dedupe.
 
 - Re-run Step 1: confirm exactly one prose occurrence per rule and that every pointer resolves.
 - Run the skill gates for a skills change: `just agent_utils::validate-skill <name>`.
+- Record the baseline that proves the delta: a commit hash, or a count produced by a command on the pre-change tree. A comparison against an uncommitted working tree is not evidence — once the deleted bucket is gone, the delta cannot be re-proved by anyone, including the independent validator.
 - Record the Step 4 audit table in the change description.
 
 ## Red Flags

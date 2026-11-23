@@ -74,10 +74,10 @@ check_min "vitest lines >=90" ".opencode/vitest.config.ts" "lines[[:space:]]*:[[
 check_min "vitest statements >=90" ".opencode/vitest.config.ts" "statements[[:space:]]*:[[:space:]]*[0-9]+" 90
 
 # 3) Harness config thresholds 85 semantic >=85 (opencode test gate)
-check_min "harness branches >=85" ".opencode/plugins/config/harness.config.ts" "branches 85|branches:[[:space:]]*85" 85
-check_min "harness functions >=85" ".opencode/plugins/config/harness.config.ts" "functions 85|functions:[[:space:]]*85" 85
-check_min "harness lines >=85" ".opencode/plugins/config/harness.config.ts" "lines 85|lines:[[:space:]]*85" 85
-check_min "harness statements >=85" ".opencode/plugins/config/harness.config.ts" "statements 85|statements:[[:space:]]*85" 85
+check_min "harness branches >=85" ".opencode/plugins/config/harness.ts" "branches 85|branches:[[:space:]]*85" 85
+check_min "harness functions >=85" ".opencode/plugins/config/harness.ts" "functions 85|functions:[[:space:]]*85" 85
+check_min "harness lines >=85" ".opencode/plugins/config/harness.ts" "lines 85|lines:[[:space:]]*85" 85
+check_min "harness statements >=85" ".opencode/plugins/config/harness.ts" "statements 85|statements:[[:space:]]*85" 85
 
 # 4) Python strict + complexity semantic <=
 check_present "mypy strict=true" "pyproject.toml" "strict[[:space:]]*=[[:space:]]*true"
@@ -127,19 +127,25 @@ else
   ok "no recursive SKIP_MUTATION active assignment (outside scripts/ci.sh, export-tolerant)"
 fi
 
-# 6) ESLint: semantic complexity max <=8, no downgrades family, no overrides
+# 6) ESLint: semantic complexity max ==3, no downgrades family, no overrides
 check_absent "eslint no try:true override" ".opencode/eslint.config.js" "try[[:space:]]*:[[:space:]]*true"
 check_present "eslint ban-disable rule present" ".opencode/eslint.config.js" "no-eslint-disable"
-# complexity max <=8 semantic via numeric extraction from complexity block
-# extract the complexity rule's max value (the one under // Cyclomatic complexity)
-complexity_raw=$(awk '/complexity/ {found=1} found && /max:/ {print; exit}' .opencode/eslint.config.js 2>/dev/null || true)
-complexity_val=$(echo "$complexity_raw" | grep -oE "[0-9]+" | head -1 || true)
+# Complexity ceiling pinned to exactly 3, read from the `complexity:` rule line itself; the earlier
+# free-text scan started at the first line mentioning complexity and could capture a comment's
+# "max:" instead of the rule's.
+# Justification for the 4 -> 3 pin (tightened, not released): before/after measured with the plugin
+# lint over plugins/ on this tree — at max 4, 0 complexity findings; at max 3, 202 sites in 85 files
+# report complexity 4 (164 sites in 59 sources, 38 in 26 tests, every site exactly 4). Those fixes
+# belong to the owning agents and land in batches; the pin keeps the ceiling from being raised back
+# while they land.
+complexity_raw=$(awk '/^[[:space:]]*complexity:/ {print; exit}' .opencode/eslint.config.js 2>/dev/null || true)
+complexity_val=$(echo "$complexity_raw" | grep -oE "max:[[:space:]]*[0-9]+" | grep -oE "[0-9]+" | head -1 || true)
 if [ -z "$complexity_val" ]; then
   fail_msg "eslint complexity max present — missing max value in .opencode/eslint.config.js"
-elif awk "BEGIN{exit !($complexity_val <= 8)}"; then
-  ok "eslint complexity max <=8 ($complexity_val <= 8)"
+elif awk "BEGIN{exit !($complexity_val == 3)}"; then
+  ok "eslint complexity max == 3 ($complexity_val == 3)"
 else
-  fail_msg "eslint complexity max $complexity_val > 8 in .opencode/eslint.config.js (family downgrade)"
+  fail_msg "eslint complexity max $complexity_val != 3 in .opencode/eslint.config.js (ceiling must stay pinned at 3)"
 fi
 # also forbid any other complexity max >8 elsewhere (greedy scan for any max: N where N>8 in complexity context)
 # scan all complexity max occurrences
@@ -171,7 +177,10 @@ if [ "$count_no_explicit_any_warn" -eq 0 ]; then
 else
   fail_msg "eslint no-explicit-any warn count expected 0, got $count_no_explicit_any_warn"
 fi
-# no-non-null-assertion: allow exactly one warn for PLUGIN_TESTS, forbid off and extra warn
+# no-non-null-assertion: forbid off and warn everywhere; PLUGIN_TESTS runs it as an error.
+# Justification for the 1 -> 0 warn pin: PLUGIN_TESTS was tightened to "error" and its single
+# violation fixed, so the check got stricter, not disabled. Measured on
+# .opencode/eslint.config.js: `no-non-null-assertion.*warn` matched 1 before, 0 after.
 count_no_non_null_off=$(grep -c "no-non-null-assertion.*off" .opencode/eslint.config.js 2>/dev/null || true)
 count_no_non_null_warn=$(grep -c "no-non-null-assertion.*warn" .opencode/eslint.config.js 2>/dev/null || true)
 count_no_non_null_off=$(echo "$count_no_non_null_off" | tr -d '[:space:]')
@@ -181,16 +190,104 @@ if [ "$count_no_non_null_off" -eq 0 ]; then
 else
   fail_msg "eslint no-non-null-assertion off count expected 0, got $count_no_non_null_off"
 fi
-if [ "$count_no_non_null_warn" -eq 1 ]; then
-  ok "eslint no-non-null-assertion warn count ==1 (allowed test plugin)"
+if [ "$count_no_non_null_warn" -eq 0 ]; then
+  ok "eslint no-non-null-assertion warn count ==0 (PLUGIN_TESTS is error)"
 else
-  fail_msg "eslint no-non-null-assertion warn count expected 1, got $count_no_non_null_warn"
+  fail_msg "eslint no-non-null-assertion warn count expected 0, got $count_no_non_null_warn"
 fi
 check_absent "eslint no-unused-vars not downgraded" ".opencode/eslint.config.js" "no-unused-vars.*(off|warn)"
 # forbid overrides downgrade — any 'overrides' key is banned (would allow per-file weakening)
 check_absent "eslint no overrides key" ".opencode/eslint.config.js" "overrides"
 # duplicate ban-disable off already covered by above, but explicitly ban duplicate off string
 check_absent "eslint no duplicate ban-disable off" ".opencode/eslint.config.js" "ban-disable.*off"
+# Non-test plugin max-lines pinned to exactly 350 with both skip flags: exact `==` compare on
+# the `"max"` value extracted from the block setting `ignores: TEST_FILES`, plus a skip-flag grep;
+# a raise, a dropped flag, or a removed/commented rule all fail this one check.
+nontest_maxlines_raw=$(awk '/ignores:[[:space:]]*TEST_FILES/ {found=1} found && /^[[:space:]]*"max-lines"/ {print; exit}' .opencode/eslint.config.js 2>/dev/null || true)
+nontest_maxlines_val=$(echo "$nontest_maxlines_raw" | grep -oE '"max"[[:space:]]*:[[:space:]]*[0-9]+' | grep -oE "[0-9]+" | head -1 || true)
+if [ -z "$nontest_maxlines_val" ]; then
+  fail_msg "eslint non-test plugin max-lines present — missing rule in .opencode/eslint.config.js"
+elif awk "BEGIN{exit !($nontest_maxlines_val == 350)}" \
+  && echo "$nontest_maxlines_raw" | grep -qE '"skipBlankLines"[[:space:]]*:[[:space:]]*true' \
+  && echo "$nontest_maxlines_raw" | grep -qE '"skipComments"[[:space:]]*:[[:space:]]*true'; then
+  ok "eslint non-test plugin max-lines == 350 with skipBlankLines + skipComments ($nontest_maxlines_val)"
+else
+  fail_msg "eslint non-test plugin max-lines must be 350 with skipBlankLines + skipComments (raw: $nontest_maxlines_raw)"
+fi
+# Plugin-test max-lines pinned to exactly 450 with both skip flags: exact `==` compare on
+# the `"max"` value extracted from the block setting `files: [PLUGIN_TESTS]`, plus a skip-flag grep;
+# a raise, a dropped flag, or a removed/commented rule all fail this one check.
+# Justification for the 550 -> 450 pin (tightened, not released): before/after measured with
+# `just .opencode/lint` on this tree — at 550 zero max-lines errors, at 450 two plugin test files
+# report 501 and 547 counted lines. Those fixes belong to the plugin-test owners; the pin exists so
+# the limit cannot be raised back while they land.
+plugintest_maxlines_raw=$(awk '/files:[[:space:]]*\[PLUGIN_TESTS\]/ {found=1} found && /^[[:space:]]*"max-lines"/ {print; exit}' .opencode/eslint.config.js 2>/dev/null || true)
+plugintest_maxlines_val=$(echo "$plugintest_maxlines_raw" | grep -oE '"max"[[:space:]]*:[[:space:]]*[0-9]+' | grep -oE "[0-9]+" | head -1 || true)
+if [ -z "$plugintest_maxlines_val" ]; then
+  fail_msg "eslint plugin-test max-lines present — missing rule in .opencode/eslint.config.js"
+elif awk "BEGIN{exit !($plugintest_maxlines_val == 450)}" \
+  && echo "$plugintest_maxlines_raw" | grep -qE '"skipBlankLines"[[:space:]]*:[[:space:]]*true' \
+  && echo "$plugintest_maxlines_raw" | grep -qE '"skipComments"[[:space:]]*:[[:space:]]*true'; then
+  ok "eslint plugin-test max-lines == 450 with skipBlankLines + skipComments ($plugintest_maxlines_val)"
+else
+  fail_msg "eslint plugin-test max-lines must be 450 with skipBlankLines + skipComments (raw: $plugintest_maxlines_raw)"
+fi
+
+# 6b) ESLint complexity coverage pin — the complexity rule must RESOLVE (severity error,
+# max 3) for a probe file in every plugin subdirectory that has TypeScript sources, plus
+# the plugin root files. A glob list can silently drop a directory: plugins/state-machine/**
+# was absent while the block's comment claimed every non-test plugin file, so 26 files
+# resolved with no complexity rule and 14 functions above 7 went unreported (before/after
+# measured through the ESLint API: state-machine probe null -> [2,{"max":7}]). This pin
+# fails closed — an unreadable config, a missing node/eslint, or any subdirectory whose
+# probe does not resolve to error/max 3 fails the gate.
+complexity_cov_out=""
+complexity_cov_rc=0
+complexity_cov_out=$(cd .opencode && node --input-type=module -e '
+import { ESLint } from "eslint"
+import fs from "node:fs"
+import path from "node:path"
+const root = "plugins"
+const hasTs = (dir) =>
+  fs.readdirSync(dir, { withFileTypes: true }).some((e) =>
+    e.isFile() ? e.name.endsWith(".ts") && !e.name.endsWith(".d.ts") : e.name !== "node_modules" && hasTs(path.join(dir, e.name)))
+const pick = (dir) => {
+  const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))
+  const file = entries.find((e) => e.isFile() && e.name.endsWith(".ts") && !e.name.endsWith(".d.ts"))
+  if (file) return path.join(dir, file.name)
+  for (const e of entries) {
+    if (!e.isDirectory() || e.name === "node_modules") continue
+    const found = pick(path.join(dir, e.name))
+    if (found) return found
+  }
+  return null
+}
+const rootProbe = fs.readdirSync(root).filter((n) => n.endsWith(".ts") && !n.endsWith(".d.ts")).sort()[0]
+const probes = rootProbe ? [path.join(root, rootProbe)] : []
+for (const d of fs.readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+  if (!d.isDirectory() || d.name === "node_modules") continue
+  const dir = path.join(root, d.name)
+  const probe = hasTs(dir) ? pick(dir) : null
+  if (probe) probes.push(probe)
+}
+const eslint = new ESLint({ cwd: process.cwd() })
+let bad = 0
+for (const probe of probes) {
+  const config = await eslint.calculateConfigForFile(probe)
+  const rule = config?.rules?.complexity
+  const resolved = Array.isArray(rule) && rule[0] === 2 && rule[1]?.max === 3
+  if (!resolved) bad++
+  console.log(`${resolved ? "OK" : "MISSING"} ${probe}`)
+}
+console.log(`COVERED ${probes.length}`)
+process.exit(bad ? 1 : 0)
+' 2>/dev/null) || complexity_cov_rc=$?
+complexity_cov_dirs=$(echo "$complexity_cov_out" | grep -c '^OK ' || true)
+if [ "$complexity_cov_rc" -eq 0 ] && [ "$complexity_cov_dirs" -ge 1 ]; then
+  ok "eslint complexity resolves (error, max 3) for all $complexity_cov_dirs plugin subdirectory probes"
+else
+  fail_msg "eslint complexity unresolved for a plugin subdirectory — fix the complexity block globs in .opencode/eslint.config.js (rc=$complexity_cov_rc): $complexity_cov_out"
+fi
 
 # 7) Per-file escape bans (Ruff/mypy/ts/eslint) — scoped to source dirs, not .venv/.git/node_modules/.dsh
 # type: ignore in source python (cli, agents, evals, scripts) — fail if found

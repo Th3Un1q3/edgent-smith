@@ -74,13 +74,15 @@ export const snapshotKey = (sessionId: string): string => 'state-machine/' + ses
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value !== ''
+
 const DEFAULT_STATES: ReadonlySet<string> = new Set(DEFAULT_STATE_IDS)
 
 const sessionIdOf = (snapshot: PersistedSnapshot): string => {
   const context = snapshot.context
   const sessionId = isObject(context) ? context.sessionId : undefined
 
-  if (typeof sessionId !== 'string' || sessionId === '') throw new Error('snapshot context carries no sessionId')
+  if (!isNonEmptyString(sessionId)) throw new Error('snapshot context carries no sessionId')
 
   return sessionId
 }
@@ -113,29 +115,80 @@ export type SnapshotParse = SnapshotRecord | 'expired' | 'shape-invalid' | 'lega
  * silently; only a rejected storage call is a different outcome, and that is
  * the store's.
  */
+const absentReasonForVersion = (version: unknown): 'legacy' | 'shape-invalid' =>
+  version === 1 || version === undefined ? 'legacy' : 'shape-invalid'
+
+interface SnapshotEnvelope {
+  readonly sessionId: string
+  readonly storedAt: string
+  readonly expiresAt: string
+  readonly snapshot: Readonly<Record<string, unknown>> & {
+    readonly status: string
+    readonly context: Record<string, unknown>
+  }
+}
+
+const hasSessionIdentity = (
+  value: Record<string, unknown>,
+  expectedSessionId?: string,
+): value is Record<string, unknown> & { readonly sessionId: string } =>
+  isNonEmptyString(value.sessionId)
+  && (expectedSessionId === undefined || value.sessionId === expectedSessionId)
+
+const isSnapshotBody = (value: unknown): boolean =>
+  isObject(value) && typeof value.status === 'string' && isObject(value.context)
+
+const hasSnapshotEnvelope = (value: Record<string, unknown>): value is Record<string, unknown> & SnapshotEnvelope =>
+  typeof value.storedAt === 'string'
+  && typeof value.expiresAt === 'string'
+  && isSnapshotBody(value.snapshot)
+
+const isV2Record = (
+  value: Record<string, unknown>,
+  expectedSessionId?: string,
+): value is Record<string, unknown> & SnapshotEnvelope =>
+  value.v === 2 && hasSessionIdentity(value, expectedSessionId) && hasSnapshotEnvelope(value)
+
+const toSnapshotRecord = (
+  value: Record<string, unknown> & SnapshotEnvelope,
+  context: Record<string, unknown>,
+): SnapshotRecord => ({
+  sessionId: value.sessionId,
+  v: 2,
+  snapshot: { ...value.snapshot, context },
+  storedAt: value.storedAt,
+  expiresAt: value.expiresAt,
+})
+
+const restorableContext = (
+  value: Record<string, unknown> & SnapshotEnvelope,
+  states: ReadonlySet<string>,
+): Record<string, unknown> | undefined => {
+  const context = DEFAULT_SNAPSHOT.read(value.snapshot.context, states)
+  return context === undefined || context.sessionId !== value.sessionId ? undefined : context
+}
+
+const expiredOr = (record: SnapshotRecord, now: number): SnapshotParse =>
+  isExpired(record, now) ? 'expired' : record
+
+const snapshotFromRecord = (
+  value: Record<string, unknown> & SnapshotEnvelope,
+  states: ReadonlySet<string>,
+  now: number,
+): SnapshotParse => {
+  const context = restorableContext(value, states)
+  return context === undefined ? 'shape-invalid' : expiredOr(toSnapshotRecord(value, context), now)
+}
+
 export const parseSnapshotRecord = (
   value: unknown,
   now: number,
-  states: ReadonlySet<string> = DEFAULT_STATES,
+  states: ReadonlySet<string>,
   expectedSessionId?: string,
 ): SnapshotParse => {
   if (!isObject(value)) return 'shape-invalid'
-  if (value.v !== 2) return value.v === 1 || value.v === undefined ? 'legacy' : 'shape-invalid'
-  if (typeof value.sessionId !== 'string' || value.sessionId === '' || (expectedSessionId !== undefined && value.sessionId !== expectedSessionId) || typeof value.storedAt !== 'string' || typeof value.expiresAt !== 'string' || !isObject(value.snapshot) || typeof value.snapshot.status !== 'string' || !isObject(value.snapshot.context)) return 'shape-invalid'
 
-  const context = DEFAULT_SNAPSHOT.read(value.snapshot.context, states)
-
-  if (context === undefined || context.sessionId !== value.sessionId) return 'shape-invalid'
-
-  const record: SnapshotRecord = {
-    sessionId: value.sessionId,
-    v: 2,
-    snapshot: { ...value.snapshot, context },
-    storedAt: value.storedAt,
-    expiresAt: value.expiresAt,
-  }
-
-  return isExpired(record, now) ? 'expired' : record
+  return isV2Record(value, expectedSessionId) ? snapshotFromRecord(value, states, now) : absentReasonForVersion(value.v)
 }
 
 export interface SnapshotStorePorts {
@@ -158,6 +211,9 @@ export interface SnapshotStore {
 
 const describe = (cause: unknown): string => cause instanceof Error ? cause.name : 'unknown'
 
+const asRead = (parsed: SnapshotParse): SnapshotRead =>
+  typeof parsed === 'string' ? { status: 'absent', reason: parsed } : { status: 'present', record: parsed }
+
 export const createSnapshotStore = (ports: SnapshotStorePorts): SnapshotStore => {
   const now = ports.now ?? Date.now
 
@@ -165,15 +221,10 @@ export const createSnapshotStore = (ports: SnapshotStorePorts): SnapshotStore =>
     read: (sessionId, states = DEFAULT_STATES) => ports.load(snapshotKey(sessionId)).pipe(
       Effect.match({
         onFailure: cause => ({ status: 'rejected', reason: 'read-failed:' + describe(cause) }) as const,
-        onSuccess: (value): SnapshotRead => {
-          if (value === undefined || value === null) return { status: 'absent', reason: 'missing' }
-
-          const parsed = parseSnapshotRecord(value, now(), states, sessionId)
-
-          if (parsed === 'expired') return { status: 'absent', reason: 'expired' }
-          if (parsed === 'legacy') return { status: 'absent', reason: 'legacy' }
-          return parsed === 'shape-invalid' ? { status: 'absent', reason: 'shape-invalid' } : { status: 'present', record: parsed }
-        },
+        onSuccess: (value): SnapshotRead =>
+          value === undefined || value === null
+            ? { status: 'absent', reason: 'missing' }
+            : asRead(parseSnapshotRecord(value, now(), states, sessionId)),
       }),
     ),
     write: snapshot => Effect.suspend(() => ports.save(

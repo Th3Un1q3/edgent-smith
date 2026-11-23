@@ -1,4 +1,4 @@
-> **Historical design record.** Superseded by `CONTRACT.md` for anything it states about current behaviour; removed action ids appear here only as history, not as the current interface.
+> **Historical design record.** Superseded by `mem:opencode/state-machine-contract` for anything it states about current behaviour; removed action ids appear here only as history, not as the current interface.
 
 # Template files: mechanics
 
@@ -113,7 +113,7 @@ Unknown, and how it is settled: whether the host's module transform preserves `i
 - Unknown tag: throws at render (the value map is runtime data, so load cannot know it), naming the file and the tag.
 - Two tests pin the map: every `TemplateId` has `<name>.md`, and every file stem in `templates/` is a `TemplateId`. A third walks all seven with a full fixture context and asserts no unknown-tag throw, so a typo fails the suite instead of a session.
 
-## 7. CONTRACT.md §5
+## 7. mem:opencode/state-machine-contract §5
 
 The `prompt` row's text becomes a pointer to the files. Replacement sentence, verbatim (only the third clause changes; the rest of the row stays byte-identical):
 
@@ -173,7 +173,7 @@ Structural loader tests go in `tests/state-machine/template-files.test.ts` (1:1 
 1. `TEMPLATE_IDS` + `TemplateId` derived; `renderTemplate`'s switch replaced by `Record<TemplateId, (context) => Values>`; providers call today's text functions. Suite green, no file reads yet. This is the only prerequisite.
 2. **Smallest slice, one commit:** `machines/session/template-files.ts` (parse + render + loader), the seven `.md` files, providers switched to values, `renderTemplate` reading files, parity rows and mapping tests, and deletion of the seven text constants. Text must not have two homes, so the files and the switch-over land together; `definitions.ts:182-212` shrinks to value providers.
 3. Failure-policy tests (missing, malformed, unknown tag) with the injectable loader directory.
-4. Docs: `CONTRACT.md` §5 clause and added sentence, `.opencode/plugins/AGENTS.md` invariant line, `definitions.ts:1-5` header.
+4. Docs: `mem:opencode/state-machine-contract` §5 clause and added sentence, `.opencode/plugins/AGENTS.md` invariant line, `definitions.ts:1-5` header.
 5. Live check, quoting the `[state-machine]` lines: `opencode run --format json --standalone --agent rug --model <authenticated route> --print-logs "…"` for the define-goal and work prompts.
 
 Rollback: step 2 is one revert; templates carry no state and no snapshot field, so nothing persisted has to be migrated. Steps 1 and 4 are independent of step 2 and can stay.

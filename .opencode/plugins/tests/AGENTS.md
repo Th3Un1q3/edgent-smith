@@ -4,8 +4,9 @@
 
 | Path | Purpose | Naming Convention |
 |------|---------|-------------------|
-| `*.test.ts,**/*.test.ts` | Unit and integration tests for the plugin | Structure and file names map 1:1 to source files. eg. source file `todo-enforcer.ts` -> test file `tests/todo-enforcer.test.ts`. Same naming and folder structure with `tests/` directory and `.test.ts` suffix |
-| `__utils__` | Test utilities and helpers, mocks generators, modules mocks | For a module `module-name.mock.ts` (replace `module-name` with the actual module name), for helpers - kebab case filenames representing their domain (eg `context-builder.ts`) |
+| `tests/**/*.test.ts` | Unit and integration tests for the plugin | Structure and file names mirror the source, scope directory included: `gates/run.ts` -> `tests/gates/run.test.ts`, `state-machine/core/signals.ts` -> `tests/state-machine/signals.test.ts`, with a `.test.ts` suffix |
+| `tests/helpers` | Shared test utilities: mock factories, harnesses and fixture builders | Kebab-case filenames naming their domain (`shared-mocks.ts`, `plugin-builder.ts`, `client-factory.ts`), and one folder per source scope (`instructions/`, `runtime/`, `session/`, `state-machine/`, `tool-limit-reminder/`) |
+| `tests/workflow/` | Shared workflow test helpers: harness config, plugin mocks, plugin state and subtask fixtures | Kebab-case filenames naming their domain (`plugin-mocks.ts`, `plugin-state.ts`, `subtask-fixtures.ts`) |
 
 Live checks are delegated CLI/agent runs, not test files, and must not be added to this directory.
 

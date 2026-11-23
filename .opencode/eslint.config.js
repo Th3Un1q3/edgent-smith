@@ -104,15 +104,12 @@ export default [
   {
     files: allFiles,
     rules: {
-      "@typescript-eslint/no-unused-vars": [
-        "error",
-        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
-      ],
+      "@typescript-eslint/no-unused-vars": "error",
       "@typescript-eslint/no-empty-object-type": ["error", { allowInterfaces: "with-single-extends" }],
-      // Disallow all console methods — use @plugins/helpers/logger instead
+      // Disallow all console methods — use @plugins/helpers/runtime/logger instead
       "no-console": "error",
 
-      // reduce/.concat() valid patterns here for array merging (instruction-indexer)
+      // reduce/.concat() valid patterns here for array merging (instructions/indexer)
       "unicorn/no-array-reduce": "off",
 
       // .sort() with spread copy is safe and idiomatic
@@ -180,7 +177,12 @@ export default [
     },
   },
   {
-    files: ["**/plugins/tests/__utils/**/*.ts", "**/plugins/tests/helpers/**/*.ts"],
+    files: [
+      "**/plugins/tests/helpers/**/*.ts",
+      "**/plugins/tests/instructions/**/*.ts",
+      "**/plugins/tests/gates/**/*.ts",
+      "**/plugins/tests/workflow/**/*.ts",
+    ],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
     },
@@ -191,13 +193,27 @@ export default [
       vitest,
     },
     rules: {
-      "@typescript-eslint/no-non-null-assertion": "warn",
-      "max-lines": ["error", { "max": 650, "skipBlankLines": true, "skipComments": true }],
+      "@typescript-eslint/no-non-null-assertion": "error",
+      // TODO: tighten this limit from 450 to 350 lines. Work in iterations, 100 lines at a time, to avoid a massive PR that is hard to review. And to identify reusable helpers and techniques.
+      "max-lines": ["error", { "max": 450, "skipBlankLines": true, "skipComments": true }],
       "unicorn/consistent-function-scoping": "off",
       "unicorn/no-null": "off",
       ...vitest.configs.recommended.rules, // you can also use vitest.configs.all.rules to enable all rules
       'vitest/expect-expect': ['error', { assertFunctionNames: ['expect', 'expectTypeOf'] }],
       'vitest/max-nested-describe': ['error', { max: 3 }], // you can also modify rules' behavior using option like this
+    },
+  },
+
+  // Non-test plugin sources (root, helpers/, scope dirs, types/, config/): 350-line cap so one
+  // file stays reviewable. Blank lines and comments are not counted.
+  // Nesting deeper than 3 levels is an error: each added level multiplies the states a
+  // reader must hold at once.
+  {
+    files: allFiles,
+    ignores: TEST_FILES,
+    rules: {
+      "max-lines": ["error", { "max": 350, "skipBlankLines": true, "skipComments": true }],
+      "max-depth": ["error", 3],
     },
   },
 
@@ -212,7 +228,7 @@ export default [
       'unicorn/name-replacements': ['error', {
         allowList: {
           e: true, i: true, n: true, fn: true, idx: true,
-          len: true, msg: true, res: true, val: true, acc: true, arr: true,
+          len: true, msg: true,
         },
       }],
       '@stylistic/one-var-declaration-per-line': 'error',
@@ -244,22 +260,26 @@ export default [
     },
   },
 
-  // Cyclomatic complexity — uniform max 8 across plugin source and tests.
-  // Source: plugin root files + helpers/ + types/ + config/ (everything under
-  // plugins/ except tests/). Tests (incl. test helpers under plugins/tests/)
-  // are held to the same limit. Fix complexity rather than release it.
+  // Cyclomatic complexity — uniform max 3 across plugin source and tests.
+  // `**/plugins/**/*.ts` matches every file under a plugins/ tree at any
+  // depth, so a new plugin subdirectory is covered without editing this list.
+  // Tests (incl. test helpers under plugins/tests/) are held to the same
+  // limit. Fix complexity rather than release it.
   {
     files: [
-      PLUGIN_ROOT,
-      '**/plugins/helpers/**/*.ts',
-      '**/plugins/types/**/*.ts',
-      '**/plugins/config/**/*.ts',
+      '**/plugins/**/*.ts',
       '**/helpers/**/*.ts',
       '**/types/**/*.ts',
       ...TEST_FILES,
     ],
     rules: {
-      complexity: ['error', { max: 8 }],
+      // Ceiling lowered 5 -> 4 -> 3, one step at a time, each step before/after measured with the
+      // plugin lint on this tree. At max 5: 0 complexity findings. At max 4: 106 sites in 51 files
+      // reported complexity 5 (91 in 39 sources, 15 in 12 tests); those were fixed, leaving 0
+      // findings at max 4. At max 3: 202 sites in 85 files report complexity 4 (164 in 59 sources,
+      // 38 in 26 tests, every site exactly at 4). Owning agents fix those in batches; the pin keeps
+      // the ceiling from being raised back while they land. Max 3 is the target, now the ceiling.
+      complexity: ['error', { max: 3 }],
     },
   },
 ]

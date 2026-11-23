@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest'
 import { createStateMachinePlugin } from '@plugins/state-machine'
 import { loadStateMachineLibrary } from '@plugins/state-machine/core/machine'
 
-import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine-harness'
+import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine/harness'
 
-import type { Harness } from '@tests/helpers/state-machine-harness'
+import type { Harness } from '@tests/helpers/state-machine/harness'
 
 const content = (exit: Exit.Exit<unknown, unknown>): string => {
   if (!Exit.isSuccess(exit)) throw new Error('tool call failed')

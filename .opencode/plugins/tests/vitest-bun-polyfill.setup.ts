@@ -15,7 +15,7 @@ import { vi } from 'vitest'
 if (typeof Bun === 'undefined') {
   Object.assign(globalThis, {
     Bun: {
-      file: vi.fn().mockImplementation((_path: string) => ({
+      file: vi.fn().mockImplementation(() => ({
         exists: vi.fn().mockResolvedValue(false),
         json: vi.fn().mockRejectedValue(new Error('File does not exist')),
         text: vi.fn().mockRejectedValue(new Error('File does not exist')),

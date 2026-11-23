@@ -38,7 +38,7 @@ Anchor: state the session's objective, what you actually shipped or decided, and
 Prioritize the action items per the harness-management skill's Prioritization policy — load the harness-management skill by name using your `skill` tool, then follow its Prioritization section. Each action item has five fields:
 
 - **Domain match** — for each action item, name the skill/domain where the failure occurred and place the change in THAT domain's skill, per the loaded harness-management skill's Domain Match rule.
-- **Change** — the exact modification, specific enough that a fresh-context agent could act on it alone.
+- **Change** — the modification, stated so a reader who was not in this session can act on it and check it: name who acts, in plain words a reader already understands rather than a role invented for this session, and state the observable that shows the change took effect, including what makes it pass or fail. Do not carry over detail that only makes sense to this session's reader — repository-specific paths, sizes, run counts, or a named binary.
 - **Where** — the target artifact: the domain's skill (`.agents/skills/`), else `.opencode/instructions/`, `AGENTS.md`, or `.opencode/agents/`.
 - **Trigger** — the condition that should have invoked this behavior.
 - **Next step** — the single smallest first action.

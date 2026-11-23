@@ -33,6 +33,7 @@ One file, no companions; every section is reachable here.
 | Run the edit loop end to end | [The Edit Loop](#the-edit-loop) |
 | Decide whether a file may change at all | [Scope Is a Promise](#scope-is-a-promise) |
 | Keep the diff free of churn | [Smallest Correct Diff](#smallest-correct-diff) |
+| Replace several call sites with one implementation | [Consolidation Owns the Defaults It Unifies](#consolidation-owns-the-defaults-it-unifies) |
 | Replace text that may not be where I think it is | [Confirm the Anchor](#confirm-the-anchor-before-you-replace) |
 | Prove an edit landed | [Re-read to Prove It](#re-read-to-prove-it) |
 | Diagnose a bad edit habit | [Failure Modes](#failure-modes) |
@@ -71,6 +72,7 @@ Change what the acceptance criteria require and nothing else.
 - Never mix a behavioural change with a style sweep; a reviewer must be able to separate intent from noise.
 - Two independent edits in one artifact are still two edits: land and verify them separately.
 - If the diff touches more lines than the change explains, revert to the pre-edit artifact and redo it smaller.
+- A gate that reformats a file it touches is a second author. Format the file before the substantive edit and land the two separately: a reformat delivered with the edit makes every line of the hunk unattributable, and the next reader cannot separate intent from formatting.
 
 ```diff
  # RIGHT — the guard fix touches the failing line only
@@ -86,6 +88,15 @@ Change what the acceptance criteria require and nothing else.
 +    currency="USD",
 +):
 ```
+
+## Consolidation Owns the Defaults It Unifies
+
+Replacing two or more call sites with one implementation moves each site's default into shared code. The shared code can keep a value and still change how it fails.
+
+- Tabulate before editing: one row per call site — site, previous default, shared default, equal. A `no` in the equal column is a behaviour change; it gets its own test and its own line in the report.
+- Test the invalid path, not the happy one: one malformed or unexpected stored value per site, asserting the returned default. An unchecked cast and a validating decoder both pass the happy path and differ only here.
+- Make the shared parameter required and keep site policy at the call site. A default inside the shared helper adopts the first caller's policy for every later caller.
+- Name the comparison in the report: which reader compared old defaults against new, and for which sites. A consolidation with no default comparison is unverified, however green the suite and the mutation score.
 
 ## Confirm the Anchor Before You Replace
 
@@ -107,6 +118,7 @@ Prove the edit against the artifact, not against your memory of making it. A suc
 - The artifact still satisfies its own structure: code parses or compiles, config and data parse against their schema, headings and links resolve, the section a later step cites still exists.
 - Name the check you ran in the report (`pytest tests/test_x.py::test_y`, `python -c "import ast..."`, `yaml.safe_load`, link check). An unrun check proves nothing.
 - If the re-read shows collateral change, revert that collateral before continuing; do not carry it forward as accepted damage.
+- Prove the change is recorded, not only present. A rename or move performed outside the version-control move command leaves the index holding the old path and the new path untracked, so the tree reads correctly while a commit reintroduces the old name. Read the status listing: a rename entry with no untracked entry for the new path passes; an old path still listed, or a new path untracked, fails.
 
 ## Failure Modes
 
@@ -118,7 +130,7 @@ Each is a habit to refuse, not a preference to weigh.
 | Editing a neighbour to satisfy a gate | A failing lint, test, or validation silenced by touching a file outside scope: weakening a rule, skipping a case, editing the expected fixture, loosening a threshold, widening an ignore list. | Fix the artifact under change or report the gate as unmet. A gate is evidence, never an obstacle. Editing the check to make the change pass is falsifying the proof. |
 | Widening scope to make a test pass | A criterion that can only pass by changing out-of-scope code. | Name the dependency, do not cross the line. Report `outcome: partial` with the failing criterion and the scope it needs; the caller decides. |
 | Whole-artifact rewrite | Regenerating a file to avoid anchor work. | Replace surgically; untouched regions stay byte-identical. |
-| Formatting sweep | A diff that touches most lines of a file you edited once. | Revert and redo minimally; style is a separate change with its own justification. |
+| Formatting sweep | A diff that touches most lines of a file you edited once, or a `--fix` gate that reformats the region you touched. | Revert and redo minimally, or format the file before editing; style is a separate change with its own justification. |
 
 ## Code-Specific Boundary
 

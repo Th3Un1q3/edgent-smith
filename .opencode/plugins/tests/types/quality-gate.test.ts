@@ -2,7 +2,7 @@ import { describe, expectTypeOf, it } from 'vitest'
 
 import type { GateConfig, GateResult, GateRunOutcome } from '@plugins/types/quality-gate'
 
-import type { CommandResult } from '@plugins/helpers/gate-runner'
+import type { CommandResult } from '@plugins/gates/run'
 
 describe('GateResult', () => {
   it('is a union of three string literals', () => {
@@ -13,7 +13,8 @@ describe('GateResult', () => {
     expectTypeOf<GateResult>().not.toEqualTypeOf<'running'>()
 
     // @ts-expect-error — 'running' is not a valid GateResult
-    const _invalid: GateResult = 'running'
+    const invalid: GateResult = 'running'
+    void invalid
   })
 })
 
@@ -37,12 +38,13 @@ describe('GateRunOutcome', () => {
   it('rejects a string where GateConfig is expected', () => {
     expectTypeOf<GateConfig>().not.toEqualTypeOf<string>()
 
-    const _invalid: GateRunOutcome = {
+    const invalid: GateRunOutcome = {
       // @ts-expect-error — string is not assignable to GateConfig
       gate: 'lint',
       previousStatus: 'unknown',
       newStatus: 'pass',
       result: { exitCode: 0, stdout: '', stderr: '' },
     }
+    void invalid
   })
 })

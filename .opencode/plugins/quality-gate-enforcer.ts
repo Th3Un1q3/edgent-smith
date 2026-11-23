@@ -10,12 +10,14 @@
 import { Effect } from 'effect'
 import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
 import { $ } from 'bun'
-import { loadQualityGates } from './helpers/gate-config'
-import { runGate } from './helpers/gate-runner'
-import type { Shell } from './helpers/gate-runner'
-import { isGlobMatch } from './helpers/glob-match'
-import { formatGateBatchResults } from './helpers/gate-formatter'
-import { readFilePath, relativeTo } from './helpers/tool-input'
+import { loadQualityGates } from './gates/loader'
+import { runGate } from './gates/run'
+import type { Shell } from './gates/run'
+import { isGlobMatch } from './helpers/runtime/glob-match'
+import { namespacedStore } from './helpers/runtime/namespaced-store'
+import { appendSynthetic } from './helpers/session/synthetic-append'
+import { formatGateBatchResults } from './gates/format'
+import { readFilePath, relativeTo } from './helpers/runtime/tool-input'
 import type { GateConfig, GateResult, GateRunOutcome } from './types/quality-gate'
 
 const findMatchingGates = (gates: GateConfig[], filePath: string): GateConfig[] =>
@@ -23,32 +25,85 @@ const findMatchingGates = (gates: GateConfig[], filePath: string): GateConfig[] 
 
 const TARGETED_TOOLS = new Set(['edit', 'write'])
 
+const statusOf = (exitCode: number): GateResult => exitCode === 0 ? 'pass' : 'fail'
+
 const TAG = '[quality-gate-enforcer] '
 
 type SessionID = Parameters<Context['session']['synthetic']>[0]['sessionID']
 
-const gatesKey = (sessionID: string): string => 'gates/' + sessionID
+const GATES_PREFIX = 'gates/'
+
+const isStatusRecord = (value: unknown): value is Record<string, GateResult> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const decodeStatuses = (value: unknown): Record<string, GateResult> =>
+  isStatusRecord(value) ? value : {}
+
+const isPreChangeSkip = (isPreChange: boolean, previousStatus: GateResult): boolean =>
+  isPreChange && previousStatus !== 'unknown'
+
+const statusOrUnknown = (statuses: Record<string, GateResult>, gate: GateConfig): GateResult =>
+  statuses[gate.name] ?? 'unknown'
 
 const plugin: Plugin = {
   id: 'opencode.quality-gate-enforcer',
   effect: context => Effect.gen(function* () {
     const { gates } = loadQualityGates()
     const shell = $ as unknown as Shell
+    const gateStore = namespacedStore(context.storage, GATES_PREFIX, decodeStatuses)
 
     const readStatuses = (sessionID: string): Effect.Effect<Record<string, GateResult>> =>
-      Effect.map(context.storage.get(gatesKey(sessionID)), value => (value as Record<string, GateResult> | undefined) ?? {})
+      gateStore.read(sessionID)
 
-    // Runs one gate and reports whether its status changed. Returns undefined when
-    // the pre-change pass skips a gate whose status is already known.
+    // Runs one gate and reports its status plus the transitions it caused (none
+    // when unchanged). Returns undefined when the pre-change pass skips a gate
+    // whose status is already known.
     const evaluateGate = (gate: GateConfig, previousStatus: GateResult, isPreChange: boolean) =>
       Effect.gen(function* () {
-        if (isPreChange && previousStatus !== 'unknown') return
+        if (isPreChangeSkip(isPreChange, previousStatus)) return
         const result = yield* Effect.promise(() => runGate(gate, shell))
-        const newStatus: GateResult = result.exitCode === 0 ? 'pass' : 'fail'
-        const outcome: GateRunOutcome | undefined = newStatus === previousStatus
-          ? undefined
-          : { gate, previousStatus, newStatus, result }
-        return { newStatus, outcome }
+        const newStatus = statusOf(result.exitCode)
+        const outcomes: GateRunOutcome[] = newStatus === previousStatus
+          ? []
+          : [{ gate, previousStatus, newStatus, result }]
+        return { newStatus, outcomes }
+      })
+
+    const applyGateEvaluations = (
+      matched: GateConfig[],
+      statuses: Record<string, GateResult>,
+      isPreChange: boolean,
+    ): Effect.Effect<GateRunOutcome[]> =>
+      Effect.gen(function* () {
+        const outcomes: GateRunOutcome[] = []
+
+        for (const gate of matched) {
+          const evaluated = yield* evaluateGate(gate, statusOrUnknown(statuses, gate), isPreChange)
+          if (evaluated === undefined) continue
+          statuses[gate.name] = evaluated.newStatus
+          outcomes.push(...evaluated.outcomes)
+        }
+
+        return outcomes
+      })
+
+    const appendOutcomeSummary = (sessionID: SessionID, outcomes: GateRunOutcome[], isPreChange: boolean) =>
+      Effect.gen(function* () {
+        const transitionSummary = outcomes
+          .map(outcome => `${outcome.gate.name}: ${outcome.previousStatus} → ${outcome.newStatus}`)
+          .join(', ')
+        yield* appendSynthetic(
+          context.session.synthetic({
+            sessionID,
+            text: formatGateBatchResults(outcomes, isPreChange),
+            description: `Quality gate: ${transitionSummary}`,
+            metadata: {
+              quality_gate: outcomes.map(outcome => outcome.gate.name).join(','),
+              transition: outcomes.map(outcome => `${outcome.previousStatus}->${outcome.newStatus}`).join(','),
+            },
+          }),
+          { _tag: 'log', tag: TAG },
+        )
       })
 
     const runMatched = (sessionID: SessionID, filePath: string, isPreChange: boolean) =>
@@ -57,33 +112,12 @@ const plugin: Plugin = {
         if (matched.length === 0) return
 
         const statuses = yield* readStatuses(sessionID)
-        const outcomes: GateRunOutcome[] = []
+        const outcomes = yield* applyGateEvaluations(matched, statuses, isPreChange)
 
-        for (const gate of matched) {
-          const evaluated = yield* evaluateGate(gate, statuses[gate.name] ?? 'unknown', isPreChange)
-          if (evaluated === undefined) continue
-          statuses[gate.name] = evaluated.newStatus
-          if (evaluated.outcome) outcomes.push(evaluated.outcome)
-        }
-
-        yield* context.storage.set(gatesKey(sessionID), statuses)
+        yield* gateStore.write(sessionID, statuses)
         if (outcomes.length === 0) return
 
-        const transitionSummary = outcomes
-          .map(outcome => `${outcome.gate.name}: ${outcome.previousStatus} → ${outcome.newStatus}`)
-          .join(', ')
-        const appended = yield* Effect.result(context.session.synthetic({
-          sessionID,
-          text: formatGateBatchResults(outcomes, isPreChange),
-          description: `Quality gate: ${transitionSummary}`,
-          metadata: {
-            quality_gate: outcomes.map(outcome => outcome.gate.name).join(','),
-            transition: outcomes.map(outcome => `${outcome.previousStatus}->${outcome.newStatus}`).join(','),
-          },
-        }))
-        if (appended._tag === 'Failure') {
-          yield* Effect.logWarning(TAG + 'synthetic append failed', { error: String(appended.failure) })
-        }
+        yield* appendOutcomeSummary(sessionID, outcomes, isPreChange)
       })
 
     yield* context.tool.hook('execute.before', event => Effect.gen(function* () {

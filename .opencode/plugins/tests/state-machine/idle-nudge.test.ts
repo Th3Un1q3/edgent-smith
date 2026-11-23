@@ -16,10 +16,13 @@ type Machine = Awaited<ReturnType<typeof withMachine>>
 const emittedText = (emits: readonly EmitRequest[]): string => {
   const emitted = emits[0]
 
-  return emitted !== undefined && (emitted.type === 'emit.prompt' || emitted.type === 'emit.dispatch')
-    ? emitted.text
-    : ''
+  return emitted !== undefined && isTextEmit(emitted) ? emitted.text : ''
 }
+
+type TextEmit = EmitRequest & { text: string }
+
+const isTextEmit = (emit: EmitRequest): emit is TextEmit =>
+  emit.type === 'emit.prompt' || emit.type === 'emit.dispatch'
 
 const NUDGE_STATES = [
   {
@@ -77,6 +80,19 @@ const parkIt = async (machine: Machine): Promise<void> => {
   machine.signal({ type: 'RETROSPECTIVE_COMPLETE' }, 'ses_1')
 }
 
+const expectNudged = (machine: Machine, attempt: number): void => {
+  expect(machine.get('ses_1')?.state).toBe('work')
+  expect(machine.get('ses_1')?.context.nudges).toBe(attempt + 1)
+}
+
+const expectState = (machine: Machine, state: string): void => {
+  expect(machine.get('ses_1')?.state).toBe(state)
+}
+
+const expectNudges = (machine: Machine, count: number): void => {
+  expect(machine.get('ses_1')?.context.nudges).toBe(count)
+}
+
 describe('idle nudge', () => {
   it.each(NUDGE_STATES)('nudges $state with its own name and stays in $state', async ({ state, expects, enter }) => {
     const machine = await withMachine()
@@ -84,14 +100,14 @@ describe('idle nudge', () => {
     machine.start('ses_1', 'rug')
     enter(machine)
 
-    expect(machine.get('ses_1')?.state).toBe(state)
+    expectState(machine, state)
 
     const emits = await Effect.runPromise(machine.idle('ses_1'))
 
     expect(emittedText(emits)).toContain(state)
     expect(emittedText(emits)).toContain(expects)
-    expect(machine.get('ses_1')?.state).toBe(state)
-    expect(machine.get('ses_1')?.context.nudges).toBe(1)
+    expectState(machine, state)
+    expectNudges(machine, 1)
   })
 
   it('panics on the fourth idle of a round and records the failure', async () => {
@@ -102,16 +118,14 @@ describe('idle nudge', () => {
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await Effect.runPromise(machine.idle('ses_1'))
-
-      expect(machine.get('ses_1')?.state).toBe('work')
-      expect(machine.get('ses_1')?.context.nudges).toBe(attempt + 1)
+      expectNudged(machine, attempt)
     }
 
     const emits = await Effect.runPromise(machine.idle('ses_1'))
+    const live = machine.get('ses_1')
 
     expect(emittedText(emits)).toContain('idle budget exhausted')
-    expect(machine.get('ses_1')?.state).toBe('panic')
-    expect(machine.get('ses_1')?.context.failure?.reason).toBe('idle budget exhausted')
+    expect(live).toMatchObject({ state: 'panic', context: { failure: { reason: 'idle budget exhausted' } } })
   })
 
   it('ignores idle in parked without spending the budget', async () => {
@@ -120,13 +134,13 @@ describe('idle nudge', () => {
     machine.start('ses_1', 'rug')
     await parkIt(machine)
 
-    expect(machine.get('ses_1')?.state).toBe('parked')
+    expectState(machine, 'parked')
 
     const emits = await Effect.runPromise(machine.idle('ses_1'))
 
     expect(emits.filter(emit => emit.type === 'emit.prompt')).toEqual([])
-    expect(machine.get('ses_1')?.context.nudges).toBe(1)
-    expect(machine.get('ses_1')?.state).toBe('parked')
+    expectNudges(machine, 1)
+    expectState(machine, 'parked')
   })
 
   it('zeroes the budget on reset_goal so the next round starts at one', async () => {

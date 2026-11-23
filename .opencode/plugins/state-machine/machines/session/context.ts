@@ -69,12 +69,16 @@ export interface ContextDefaults {
   readonly memoryLimit?: number | undefined
 }
 
+const limitsOf = (defaults: ContextDefaults): Pick<LoopContext, 'maxAttempts' | 'memoryLimit'> => ({
+  maxAttempts: defaults.maxAttempts ?? MAX_ATTEMPTS,
+  memoryLimit: defaults.memoryLimit ?? MEMORY_LIMIT,
+})
+
 export const freshContext = (defaults: ContextDefaults): LoopContext => ({
   sessionId: defaults.sessionId,
   agent: defaults.agent,
   ...(defaults.parentID !== undefined && { parentID: defaults.parentID }),
-  maxAttempts: defaults.maxAttempts ?? MAX_ATTEMPTS,
-  memoryLimit: defaults.memoryLimit ?? MEMORY_LIMIT,
+  ...limitsOf(defaults),
   goal: '',
   intent: 'none',
   attempts: 0,
@@ -87,6 +91,25 @@ export const freshContext = (defaults: ContextDefaults): LoopContext => ({
   results: {},
 })
 
+const restoreScalars = (previous: Partial<LoopContext>): Partial<LoopContext> => ({
+  ...(typeof previous.goal === 'string' && { goal: previous.goal }),
+  ...(isIntentKind(previous.intent) && { intent: previous.intent }),
+  ...counters(previous),
+})
+
+const restoreLists = (previous: Partial<LoopContext>): Partial<LoopContext> => copyLists(previous)
+
+const restoreRecords = (previous: Partial<LoopContext>): Partial<LoopContext> => ({
+  injected: readInjected(previous.injected) ?? {},
+  results: readResults(previous.results),
+})
+
+const restoreOptionals = (previous: Partial<LoopContext>): Record<string, unknown> =>
+  Object.fromEntries(OPTIONAL_FIELDS.flatMap((key): [string, unknown][] => {
+    const stored = previous[key]
+    return stored === undefined ? [] : [[key, stored]]
+  }))
+
 /**
 The stored context spread over a fresh one, so a field the snapshot predates, or
 one the reader could not validate, keeps its default.
@@ -97,22 +120,13 @@ export const restoreContext = (
 ): LoopContext => {
   const previous = stored as Partial<LoopContext>
 
-  return {
-    ...freshContext(defaults),
-    ...(typeof previous.goal === 'string' && { goal: previous.goal }),
-    ...(isIntentKind(previous.intent) && { intent: previous.intent }),
-    ...(typeof previous.attempts === 'number' && { attempts: previous.attempts }),
-    ...(typeof previous.nudges === 'number' && { nudges: previous.nudges }),
-    ...(isStringArray(previous.memories) && { memories: [...previous.memories] }),
-    ...(isStringArray(previous.improvements) && { improvements: [...previous.improvements] }),
-    ...(isStringArray(previous.injectedSkills) && { injectedSkills: [...previous.injectedSkills] }),
-    ...(isStringArray(previous.memoryTokens) && { memoryTokens: [...previous.memoryTokens] }),
-    ...(isPlainObject(previous.injected) && { injected: readInjected(previous.injected) ?? {} }),
-    ...(isPlainObject(previous.results) && { results: readResults(previous.results) }),
-    ...(previous.policy !== undefined && { policy: previous.policy }),
-    ...(previous.signalsPolicy !== undefined && { signalsPolicy: previous.signalsPolicy }),
-    ...(previous.failure !== undefined && { failure: previous.failure }),
-  }
+  return Object.assign(
+    freshContext(defaults),
+    restoreScalars(previous),
+    restoreLists(previous),
+    restoreRecords(previous),
+    restoreOptionals(previous),
+  )
 }
 
 /**
@@ -130,6 +144,27 @@ const truncate = (text: string, limit: number): string => text.length <= limit ?
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every(item => typeof item === 'string')
 
+const COUNTER_FIELDS = ['attempts', 'nudges'] as const
+const LIST_FIELDS = ['memories', 'improvements', 'injectedSkills', 'memoryTokens'] as const
+const OPTIONAL_FIELDS = ['policy', 'signalsPolicy', 'failure'] as const
+
+type CounterFields = { attempts?: number, nudges?: number }
+type ListFields = { memories?: string[], improvements?: string[], injectedSkills?: string[], memoryTokens?: string[] }
+
+const counters = (source: Readonly<Record<string, unknown>>): CounterFields =>
+  Object.fromEntries(COUNTER_FIELDS.flatMap((key): [string, number][] => {
+    const count = source[key]
+
+    return typeof count === 'number' ? [[key, count]] : []
+  }))
+
+const copyLists = (source: Readonly<Record<string, unknown>>): ListFields =>
+  Object.fromEntries(LIST_FIELDS.flatMap((key): [string, string[]][] => {
+    const list = source[key]
+
+    return isStringArray(list) ? [[key, [...list]]] : []
+  }))
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -141,30 +176,50 @@ const isIntentKind = (value: unknown): value is IntentKind =>
 const isInjectedMemories = (value: unknown): value is InjectedMemories =>
   isPlainObject(value) && isStringArray(value.full) && isStringArray(value.index)
 
+const isDeclaredState = (states: ReadonlySet<string>, stateId: string): boolean =>
+  states.has(stateId) || [...states].some(path => path.endsWith('.' + stateId))
+
+const POLICY_FIELD_CHECKS: Readonly<Record<string, (value: unknown) => boolean>> = {
+  errorMessage: value => typeof value === 'string',
+  allowedTools: isStringArray,
+}
+
+const hasPolicyStateId = (value: unknown): value is Record<string, unknown> & { stateId: string } =>
+  isPlainObject(value) && typeof value.stateId === 'string'
+
 const isPolicy = (value: unknown, states: ReadonlySet<string>): value is ToolPolicyRule => {
-  if (!isPlainObject(value) || typeof value.stateId !== 'string') return false
+  if (!hasPolicyStateId(value)) return false
 
   const stateId = value.stateId
 
-  return (states.has(stateId) || [...states].some(path => path.endsWith('.' + stateId)))
-    && typeof value.errorMessage === 'string'
-    && isStringArray(value.allowedTools)
+  return isDeclaredState(states, stateId)
+    && Object.entries(POLICY_FIELD_CHECKS).every(([field, allowed]) => allowed(value[field]))
 }
 
 const isSignalsPolicy = (value: unknown): value is SignalsPolicy =>
   isPlainObject(value) && isStringArray(value.names)
 
+const isOptionalString = (value: unknown): value is string | undefined =>
+  value === undefined || typeof value === 'string'
+
 const isFailure = (value: unknown): value is Failure =>
   isPlainObject(value)
   && typeof value.reason === 'string'
-  && (value.detail === undefined || typeof value.detail === 'string')
+  && isOptionalString(value.detail)
+
+const OPTIONAL_PAYLOAD_CHECKS: Readonly<Record<string, (value: unknown) => boolean>> = {
+  exitCode: value => value === undefined || typeof value === 'number',
+  output: value => value === undefined || typeof value === 'string',
+  value: value => value === undefined || isInjectedMemories(value),
+}
+
+const hasOptionalPayloadFields = (value: Record<string, unknown>): boolean =>
+  Object.entries(OPTIONAL_PAYLOAD_CHECKS).every(([key, isAllowed]) => isAllowed(value[key]))
 
 const isCallbackPayload = (value: unknown): value is CallbackPayload =>
   isPlainObject(value)
   && typeof value.ok === 'boolean'
-  && (value.exitCode === undefined || typeof value.exitCode === 'number')
-  && (value.output === undefined || typeof value.output === 'string')
-  && (value.value === undefined || isInjectedMemories(value.value))
+  && hasOptionalPayloadFields(value)
 
 /**
 A map with one malformed entry is salvageable: the bad entry is dropped, so a
@@ -191,6 +246,41 @@ const readInjected = (value: unknown): Record<string, InjectedMemories> | undefi
     : undefined
 }
 
+const readScalars = (value: Readonly<Record<string, unknown>>): Record<string, unknown> => ({
+  ...(typeof value.goal === 'string' && { goal: truncate(value.goal, SNAPSHOT_TEXT_LIMIT) }),
+  ...(isIntentKind(value.intent) && { intent: value.intent }),
+  ...counters(value),
+})
+
+const readLists = (value: Readonly<Record<string, unknown>>): Record<string, unknown> => copyLists(value)
+
+const readRecords = (value: Readonly<Record<string, unknown>>): Record<string, unknown> => ({
+  injected: readInjected(value.injected) ?? {},
+  results: readResults(value.results),
+})
+
+const isStorablePolicy = (value: unknown, states: ReadonlySet<string>): value is ToolPolicyRule =>
+  value !== undefined && isPolicy(value, states)
+
+const isStorableSignalsPolicy = (value: unknown): value is SignalsPolicy =>
+  value !== undefined && isSignalsPolicy(value)
+
+const isStorableFailure = (value: unknown): value is Failure =>
+  value !== undefined && isFailure(value)
+
+const OPTIONAL_CHECKS: Readonly<Record<string, (value: unknown, states: ReadonlySet<string>) => boolean>> = {
+  policy: (value, states) => isStorablePolicy(value, states),
+  signalsPolicy: isStorableSignalsPolicy,
+  failure: isStorableFailure,
+}
+
+const readOptionals = (
+  value: Readonly<Record<string, unknown>>,
+  states: ReadonlySet<string>,
+): Record<string, unknown> =>
+  Object.fromEntries(OPTIONAL_FIELDS.flatMap((key): [string, unknown][] =>
+    OPTIONAL_CHECKS[key](value[key], states) ? [[key, value[key]]] : []))
+
 /**
 The context reader: every field it can validate survives, a field it cannot is
 left to the fresh default, and only a record without a usable session id is
@@ -200,26 +290,15 @@ const readStored = (
   value: Readonly<Record<string, unknown>>,
   states: ReadonlySet<string>,
 ): Record<string, unknown> | undefined => {
-  if (typeof value.sessionId !== 'string' || value.sessionId === '') return undefined
-
-  const stored: Record<string, unknown> = {
-    sessionId: value.sessionId,
-    ...(typeof value.goal === 'string' && { goal: truncate(value.goal, SNAPSHOT_TEXT_LIMIT) }),
-    ...(isIntentKind(value.intent) && { intent: value.intent }),
-    ...(typeof value.attempts === 'number' && { attempts: value.attempts }),
-    ...(typeof value.nudges === 'number' && { nudges: value.nudges }),
-    ...(isStringArray(value.memories) && { memories: [...value.memories] }),
-    ...(isStringArray(value.improvements) && { improvements: [...value.improvements] }),
-    ...(isStringArray(value.injectedSkills) && { injectedSkills: [...value.injectedSkills] }),
-    ...(isStringArray(value.memoryTokens) && { memoryTokens: [...value.memoryTokens] }),
-    ...(isPlainObject(value.injected) && { injected: readInjected(value.injected) ?? {} }),
-    ...(isPlainObject(value.results) && { results: readResults(value.results) }),
-    ...(value.policy !== undefined && isPolicy(value.policy, states) && { policy: value.policy }),
-    ...(value.signalsPolicy !== undefined && isSignalsPolicy(value.signalsPolicy) && { signalsPolicy: value.signalsPolicy }),
-    ...(value.failure !== undefined && isFailure(value.failure) && { failure: value.failure }),
-  }
-
-  return stored
+  return typeof value.sessionId !== 'string' || value.sessionId === ''
+    ? undefined
+    : {
+        sessionId: value.sessionId,
+        ...readScalars(value),
+        ...readLists(value),
+        ...readRecords(value),
+        ...readOptionals(value, states),
+      }
 }
 
 type SnapshotField

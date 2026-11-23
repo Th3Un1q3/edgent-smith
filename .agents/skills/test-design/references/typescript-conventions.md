@@ -30,6 +30,14 @@ npx vitest plugins/tests/instructions-loader.test.ts
 npm run test
 ```
 
+### Plugin Test Suite Lint Caps
+
+Every file under `.opencode/plugins/tests/**` is linted at two caps that ordinary test code violates.
+
+- Keep each function at cyclomatic complexity 3 or below: `.opencode/eslint.config.js` sets `complexity: ['error', { max: 3 }]` for `**/plugins/**/*.ts` and the test globs, so split a branchy test into table rows or separate `it()` blocks rather than raising the cap.
+- Replace `.forEach()` with `for (const x of xs)`: the `eslint-plugin-unicorn` recommended config applied to every plugin file enables `unicorn/no-for-each` as an error.
+- Run `just lint` and confirm the file reports no error before handing a plugin test to a verifier: a lint failure found later costs a dispatch round.
+
 ## Structure of Test Files
 
 Concrete patterns for vitest test files. Each example maps one-to-one against a principle in [general-principles.md](./general-principles.md). Use these as your reference whenever writing or reviewing TypeScript tests.
@@ -413,6 +421,16 @@ describe('myFunction', () => {
 })
 
 ```
+
+## Shared Setup Is a Single-Writer File
+
+Vitest evaluates a `vi.hoisted()` factory before any import, so a value one hoisted block exports is still uninitialised when another module imports it. Splitting shared setup across two files while both are being edited turns that into a module-initialisation error that fails every suite importing either file.
+
+- **Treat a hoisted block or shared mock module as single-writer.** Finish the split that owns it before starting a second one, and never add an export to it from the second.
+- **Give each split its own inline `vi.hoisted()` block.** A self-contained block has no import-time dependency on another file's declarations.
+- **Run the whole suite after each split, not at the end.** The breakage shows as six failing suites that none of them reference directly; a run of the split file alone reports green.
+
+Diagnostic when it happens: `ReferenceError: Cannot access 'X' before initialization` naming a symbol you just exported, with failures spread across suites that only import the shared module.
 
 ## Anti-Pattern: Dynamic Imports in vi.mock() Callbacks
 Never use `import("...").then()` or other async loading inside `vi.mock()` mock resolvers. Vitest hoists `vi.mock()` to parse time — the resolver function must be synchronous and available immediately. Dynamic imports that resolve later cause "cannot access before initialization" errors due to module evaluation ordering conflicts. Instead, import factory functions at the top of the test file with a standard synchronous import, then call them directly in the mock resolver:

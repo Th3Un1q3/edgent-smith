@@ -7,6 +7,9 @@ const config = {
   // Which source files to mutate (production code only, not tests or types)
   mutate: [
     'plugins/*.ts',
+    'plugins/instructions/**/*.ts',
+    'plugins/gates/**/*.ts',
+    'plugins/workflow/**/*.ts',
     'plugins/helpers/**/*.ts',
     '!**/__mocks__/**',
     '!**/tests/**',

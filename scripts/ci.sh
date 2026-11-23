@@ -7,7 +7,7 @@
 # ignoreStatic, 451s before; warm incremental re-run ~17s)
 # Parity: remote PR CI runs `just ci` verbatim; keep this script, the `ci` justfile
 # recipe, and .github/workflows/ci.yml in sync. The 13 gates must stay aligned with
-# the harness.config.ts 5-gate subset (superset here).
+# the harness.ts 5-gate subset (superset here).
 # Fast path: SKIP_MUTATION=1 (or CI_FAST=1 alias) skips gate 12 — prints
 # "→ SKIP opencode-mutation (SKIP_MUTATION=1)", counts as pass in Gate Summary,
 # ~20s local iteration.

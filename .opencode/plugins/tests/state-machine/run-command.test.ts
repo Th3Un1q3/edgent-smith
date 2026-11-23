@@ -7,12 +7,12 @@ import { createCommandRunner, createStateMachinePlugin, didCompleteOnSignal } fr
 import { createStateMachine, loadStateMachineLibrary, RETROSPECTIVE_COMPLETE } from '@plugins/state-machine/core/machine'
 import { DEFAULT_MACHINE } from '@plugins/state-machine/machines'
 
-import { makeHarness, sessionCreated, sessionIdle } from '@tests/helpers/state-machine-harness'
+import { makeHarness, sessionCreated, sessionIdle } from '@tests/helpers/state-machine/harness'
 
 import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
 import type { CommandEmit } from '@plugins/state-machine/core/machine'
 import type { RunSubagent } from '@plugins/state-machine'
-import type { Harness } from '@tests/helpers/state-machine-harness'
+import type { Harness } from '@tests/helpers/state-machine/harness'
 
 /**
 The session chart with one added `run_command` entry on `work`, the completion
@@ -230,6 +230,7 @@ describe('run_command', () => {
 
   it('inserts retrospective after memorize: one command raise, idle nudges, completion reaches memorize\'s target', async () => {
     const machine = createStateMachine({ library: await loadStateMachineLibrary(DEFAULT_MACHINE), machine: DEFAULT_MACHINE })
+    const stateOf = (): string | undefined => machine.get('ses_1')?.state
     const gate = Deferred.makeUnsafe<void>()
     const commands = createCommandRunner({ session: { command: () => Deferred.await(gate) } } as unknown as Context)
 
@@ -239,25 +240,25 @@ describe('run_command', () => {
     machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
 
     machine.signal({ type: RETROSPECTIVE_COMPLETE }, 'ses_1')
-    expect(machine.get('ses_1')?.state).toBe('validate')
+    expect(stateOf()).toBe('validate')
 
     machine.signal({ type: 'GOAL_ACHIEVED' }, 'ses_1')
     const entered = machine.signal({ type: 'LESSON', payload: { text: 'read the line' } }, 'ses_1')
 
-    expect(machine.get('ses_1')?.state).toBe('retrospective')
+    expect(stateOf()).toBe('retrospective')
     const command = emitOf(entered.emits)
 
-    expect(command).toEqual({ type: 'emit.command', name: 'retrospective' })
+    expect(command).toEqual({ type: 'emit.command', name: 'sessions/retrospect' })
     expect(entered.emits.filter(emit => emit.type === 'emit.command')).toHaveLength(1)
 
     expect(await Effect.runPromise(commands.raise('ses_1', command))).toEqual({ ok: true })
     expect(await Effect.runPromise(commands.raise('ses_1', command))).toEqual({ ok: false, output: 'command-in-flight' })
 
     machine.idle('ses_1')
-    expect(machine.get('ses_1')?.state).toBe('retrospective')
+    expect(stateOf()).toBe('retrospective')
 
     machine.signal({ type: RETROSPECTIVE_COMPLETE }, 'ses_1')
 
-    expect(machine.get('ses_1')?.state).toBe('parked')
+    expect(stateOf()).toBe('parked')
   })
 })

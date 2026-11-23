@@ -9,7 +9,7 @@
  * `T = limits[agentID] ?? floor(steps * factor)`; `T + padding` is the block
  * edge. An unknown agent or a missing/non-numeric `steps` means unlimited.
  *
- * Config lives in `config/harness.config.ts` under
+ * Config lives in `config/harness.ts` under
  * `plugins['tool-limit-reminder']`; the runtime defaults live in
  * `helpers/tool-limit.ts`.
  */

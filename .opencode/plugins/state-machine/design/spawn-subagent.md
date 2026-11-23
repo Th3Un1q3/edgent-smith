@@ -1,8 +1,8 @@
-> **Historical design record.** Superseded by `CONTRACT.md` for anything it states about current behaviour; removed action ids appear here only as history, not as the current interface.
+> **Historical design record.** Superseded by `mem:opencode/state-machine-contract` for anything it states about current behaviour; removed action ids appear here only as history, not as the current interface.
 
 # spawn_subagent — design
 
-Replaces the dormant `request_dispatch` (`definitions.ts:63-65`, `:116`, `:150`, `:514-518`; `core/machine.ts:157-161`; `CONTRACT.md:97`, `:135-136`, `:150-151`, `:223`). Nothing else changes shape: one action, one emit variant, one plugin port, one callback name.
+Replaces the dormant `request_dispatch` (`definitions.ts:63-65`, `:116`, `:150`, `:514-518`; `core/machine.ts:157-161`; `mem:opencode/state-machine-contract`, `:135-136`, `:150-151`, `:223`). Nothing else changes shape: one action, one emit variant, one plugin port, one callback name.
 
 The action is only worth having if a state emits it. `request_dispatch` was declared, typed, handled by the plugin, and reached by no arm — that is the audit defect, and `spawn_subagent` inherits it the moment it ships without an arm.
 
@@ -27,7 +27,7 @@ export interface SpawnSubagentParameters {
 | `text` | `string` | optional | A literal prompt, delivered verbatim. Wins over `template` when both are present. |
 | `template` \| `text` | — | at least one | An entry with neither is refused when the action runs, exactly as `prompt` does (`definitions.ts:39-46`). |
 | `reportTo` | `CallbackName` | optional | Callback name the verdict arrives under. Defaults to `subagent_ready`. |
-| `timeoutMs` | `number` | optional | Abandonment window. Defaults to `120_000`, mirroring the `runShell` port (`CONTRACT.md:131`). |
+| `timeoutMs` | `number` | optional | Abandonment window. Defaults to `120_000`, mirroring the `runShell` port (`mem:opencode/state-machine-contract`). |
 
 `CallbackName` is `string` (`core/machine.ts:58`), so nothing type-checks `reportTo` against a real arm. A typo would hang the state forever. The assembler must walk the state tree at load and refuse an action whose `reportTo` matches no `callback.<name>` arm — build it (§5, "emit-path validation").
 
@@ -48,7 +48,7 @@ export interface SubagentEmit {
 
 The plugin receives `emit.subagent` through the same drain as every other emit: the action returns it from `dispatch`, `takeEmits` collects it (`core/machine.ts:891-895`), and `deliver` switches on `type` (`state-machine.ts:228-264`). One new `case 'emit.subagent'` calling a new port.
 
-**A subagent facility exists.** `context.session.create({ parentID, agent })` followed by `context.session.prompt({ sessionID, text })` is already wired for the old dispatch path (`state-machine.ts:219-224`), with `context.agent.get` as the existence check (`:212`). So the seam is a port in the `CONTRACT.md:127-133` table, not an invented host interface:
+**A subagent facility exists.** `context.session.create({ parentID, agent })` followed by `context.session.prompt({ sessionID, text })` is already wired for the old dispatch path (`state-machine.ts:219-224`), with `context.agent.get` as the existence check (`:212`). So the seam is a port in the `mem:opencode/state-machine-contract` table, not an invented host interface:
 
 ```ts
 runSubagent(request: {
@@ -122,7 +122,7 @@ A crash is not a hang, and a hang is not a crash: all five rows arrive at the sa
 }
 ```
 
-No `record{op:'fail'}` is needed: `record_callback` already records a `failure` on `ok: false` (`CONTRACT.md:102`), and `quality_check_failed` renders its `reason` and `detail` (`definitions.ts:185-188`). Both arms live in one array under `callback.subagent_ready`, pass first, exactly as `check` splits on `callback_ok` (`machine.json:217-251`).
+No `record{op:'fail'}` is needed: `record_callback` already records a `failure` on `ok: false` (`mem:opencode/state-machine-contract`), and `quality_check_failed` renders its `reason` and `detail` (`definitions.ts:185-188`). Both arms live in one array under `callback.subagent_ready`, pass first, exactly as `check` splits on `callback_ok` (`machine.json:217-251`).
 
 ## 4. Lifecycle
 
@@ -130,8 +130,8 @@ No `record{op:'fail'}` is needed: `record_callback` already records a `failure` 
 |---|---|---|
 | **Creation** | action emits `emit.subagent`; plugin creates the child under the parent session | **core supports delivery** — `EmitRequest` union `core/machine.ts:180`, drain `:891-895`, switch `state-machine.ts:228-264`; the host call exists at `state-machine.ts:219-224`. Only the new union member, switch case and port are missing. |
 | **In-flight guard** | a second spawn while one is pending must not start a second child | **must be built.** `/` The machine needs a context field recording the pending `reportTo` (added to `COPIERS`, `context.ts:235`, or `boundSnapshot` drops it — `core/snapshot.ts`, rule 7), plus a `spawn_pending` guard (added to `GuardType`, `definitions.ts:138-144`). `/` The plugin needs a `Map<sessionId, spawnId>` that answers a duplicate with `{ ok: false, output: "spawn-in-flight" }` rather than dropping it. `/` Precedent for per-session dedupe is `ensure`'s `Deferred` map (`core/machine.ts:845-866`), but it dedupes session *load*, not children. |
-| **Timeout / abandonment** | the child never answers | **must be built.** No core timeout exists for emits; `runShell`'s 120 s bound lives in the port (`CONTRACT.md:131`). The port races `timeoutMs` against the child wait and always settles the callback. |
-| **Cancellation** | the turn is interrupted while a child runs | **partly supported.** `system_interrupted` → `parked` is a root arm (`core/machine.ts:948-952`, `CONTRACT.md:86-89`), so the machine stops cleanly. Cancelling the *child* is not supported: `parked` has no `callback.subagent_ready` arm, so a late verdict is dropped silently by XState, and the child keeps running. Must be built: cancel on interrupt via `session.remove` (`session.d.ts:143`) and add a `parked` arm that records the late verdict. |
+| **Timeout / abandonment** | the child never answers | **must be built.** No core timeout exists for emits; `runShell`'s 120 s bound lives in the port (`mem:opencode/state-machine-contract`). The port races `timeoutMs` against the child wait and always settles the callback. |
+| **Cancellation** | the turn is interrupted while a child runs | **partly supported.** `system_interrupted` → `parked` is a root arm (`core/machine.ts:948-952`, `mem:opencode/state-machine-contract`), so the machine stops cleanly. Cancelling the *child* is not supported: `parked` has no `callback.subagent_ready` arm, so a late verdict is dropped silently by XState, and the child keeps running. Must be built: cancel on interrupt via `session.remove` (`session.d.ts:143`) and add a `parked` arm that records the late verdict. |
 | **Cleanup on session end** | the parent ends with a child alive | **must be built.** The plugin subscribes to exactly four events — `session.created` (`state-machine.ts:355`), `session.inbox.enqueued` (`:374`), `session.idle` (`:402`), `session.execution.interrupted` (`:421`). No deletion event is handled. Snapshot expiry is 30 days (`core/snapshot.ts:19`) and is not cleanup. Whether the host cascades child deletion on parent removal is **not visible**; the design must not assume it. |
 
 ### What core already gives, and what it does not
@@ -150,7 +150,7 @@ How a judge differs from the three existing signals:
 - **It is distinguishable by `spawnId`.** The three port callbacks omit it; a spawned judge's payload always carries it. `field_present` already reads a payload field, but its union is `'goal' | 'text'` today (`definitions.ts:130-132`), so requiring `spawnId` either widens that union or is absorbed by the new `spawn_pending` guard.
 - **Staleness is the one genuinely new condition.** A `skill_ready` has no lifetime; a judge can answer after the state that wanted it is gone. `spawn_pending` compares `payload.spawnId` with the context's pending entry and fails the arm when they differ, so an abandoned child's verdict is recorded and ignored instead of transitioning a state that moved on.
 
-## 6. CONTRACT.md draft
+## 6. mem:opencode/state-machine-contract draft
 
 §5 action row:
 
@@ -170,7 +170,7 @@ How a judge differs from the three existing signals:
 
 **Recommendation:** ship it reachable — one state (`towards_goal.judge`, transient) emits it, the arm pair exists, and the fake port proves both branches — then land the real port body as a second change behind the same contract. The contract and the arms do not move between the two changes.
 
-**Rejected alternative:** declare the action, the emit variant and the plugin case now, and add the emitting state "when a judge agent exists". That is `request_dispatch` reproduced: a handled emit nobody raises, plus a CONTRACT paragraph explaining that nothing raises it (`CONTRACT.md:150-151`).
+**Rejected alternative:** declare the action, the emit variant and the plugin case now, and add the emitting state "when a judge agent exists". That is `request_dispatch` reproduced: a handled emit nobody raises, plus a CONTRACT paragraph explaining that nothing raises it (`mem:opencode/state-machine-contract`).
 
 ## 8. Two forks to settle
 
