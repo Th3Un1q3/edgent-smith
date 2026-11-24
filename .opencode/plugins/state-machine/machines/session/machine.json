@@ -605,7 +605,7 @@
               "type": "prompt",
               "params": {
                 "template": "park_summary",
-                "description": "Report the reached goal and the improvements recorded."
+                "description": "Send a new message to resume the loop from a fresh goal."
               }
             },
             {

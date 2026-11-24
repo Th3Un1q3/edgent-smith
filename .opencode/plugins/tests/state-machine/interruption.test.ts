@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { boot, failureOf, PARKED_PROMPT } from '@tests/helpers/state-machine/session-loop-fixtures'
+import { boot, failureOf } from '@tests/helpers/state-machine/session-loop-fixtures'
 
 import { sessionCreated, sessionInterrupted } from '@tests/helpers/state-machine/harness'
 
 import { templateEnd } from '@tests/helpers/state-machine/template-text'
+
+const PARKED_PROMPT = 'Send a new message to resume the loop from a fresh goal.'
 
 describe('interruption', () => {
   it('parks a working session and sends the parked summary', async () => {

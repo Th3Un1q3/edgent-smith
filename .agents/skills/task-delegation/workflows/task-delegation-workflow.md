@@ -5,9 +5,9 @@ description: >
 license: MIT
 compatibility: Requires OpenCode
 metadata:
-  version: "1.9.6"
+  version: "1.9.9"
   author: "edgent-smith team"
-  delta: "1.9.6 — the reducer budget is the orchestrator's own context cost: the ~8KB envelope trim is gone, so nothing drops logs, result, or steps, and an oversized reducer is a reason to ask for less rather than a truncation the tool performs; a result is resumed on an empty or visibly incomplete report, never on a `truncated` flag. 1.9.5 — a character cap is provisional until the item count is known, and a denied VCS read makes the re-read by a non-author the attribution evidence. 1.9.4 — the timeout passage states the omit, extend, then tail-and-resume rule with no recorded-run evidence; the per-turn budget fact moves behind a SKILL.md pointer; the tool-limit citation names the code that computes the threshold. 1.9.3 — the budgets table no longer implies an uncapped per-child timeout: the row and the prose both say omit by default and set a value only for an expected overrun. 1.9.2 — one statement per topic: resume (task_id) is the default and a fresh child is reserved for wrong context, a different specialist or fresh judgement; gate commands are named while implementation commands and step order stay with the child; provenance has two homes — this version delta for skill-file edits, the report or commit for work artifacts."
+  delta: "1.9.9 — a brief that rewrites a user-visible string, message, or constant names every test and fixture that pins that text and grants the child write access to each; pass is a return with no failing pin on the changed text, fail is a failing pin or a budget spent on one the brief never named. 1.9.8 — the dispatch record keeps each child's `task_id` and one-line scope so a session that dispatched nothing can resume it for an interview, and a brief landing a rule in an existing document names that document's verdict classes, field names and template plus what happens to every consumer of a term it introduces. 1.9.7 — the brief names the governing requirement and the reduced output form when an exhaustive list and a size limit cannot both hold, every anchor it asserts resolves in the working tree before dispatch and its write scope follows from the edit, and the verifier judges a criterion only over the brief's stated terms and finishes every check it starts. 1.9.6 — the reducer budget is the orchestrator's own context cost: the ~8KB envelope trim is gone, so nothing drops logs, result, or steps, and an oversized reducer is a reason to ask for less rather than a truncation the tool performs; a result is resumed on an empty or visibly incomplete report, never on a `truncated` flag. 1.9.5 — a character cap is provisional until the item count is known, and a denied VCS read makes the re-read by a non-author the attribution evidence. 1.9.4 — the timeout passage states the omit, extend, then tail-and-resume rule with no recorded-run evidence; the per-turn budget fact moves behind a SKILL.md pointer; the tool-limit citation names the code that computes the threshold. 1.9.3 — the budgets table no longer implies an uncapped per-child timeout: the row and the prose both say omit by default and set a value only for an expected overrun. 1.9.2 — one statement per topic: resume (task_id) is the default and a fresh child is reserved for wrong context, a different specialist or fresh judgement; gate commands are named while implementation commands and step order stay with the child; provenance has two homes — this version delta for skill-file edits, the report or commit for work artifacts."
 ---
 
 # Task Delegation Workflow
@@ -57,8 +57,8 @@ When a task cannot be decomposed further, the prompt must include a **resume pla
 
 - **Leave `timeout_minutes` unset unless this task is expected to outrun the default.** The default is 15 minutes per subtask and 90 for the workflow (`.opencode/plugins/workflow.ts:228`, `.opencode/plugins/workflow/contracts.ts:160`). Set `timeout_minutes` only to extend a task you expect to run longer than that, such as a full test suite, a gate or CI run, or a large enumeration, and raise the enclosing workflow's `timeout_minutes` above the child's when you do. Never set it to shorten a task, and never size it per dispatch. When a child does expire, `subtask_tail({ task_id })` shows its progress and a `task_id` resume continues the same child with a fresh budget; re-dispatching with a larger guessed value spends a fresh child on work the resume already holds. The retired `timeout_seconds` key is rejected: divide a legacy seconds value by 60 and rename it to `timeout_minutes`. Budget arithmetic, per-turn and not a hard block: [Child Budget Accounting](../SKILL.md#child-budget-accounting).
 - Keep the reducer under about 2KB. Return only counts, statuses and key data. Never return full transcripts, long evidence strings, or whole file contents: the removed envelope trim no longer drops logs, result, or steps for you, so an oversized reducer arrives whole and spends the orchestrator's context before the next round starts.
-- Capture `steps[].task_id` and, on an empty or visibly incomplete result, resume that session for a compact status instead of re-running the work.
-- **Size the cap from a counted inventory, or mark it provisional.** When the dispatch cannot know the item count, the character cap is provisional: the child returns the count and the rows that fit, and the orchestrator sizes or splits the remainder from that count. A cap fixed before the enumeration runs meets a one-row-per-unit rule at 118 units and cuts the tail, sentinel included.
+- **Record each child's `task_id` and one-line scope at dispatch.** The dispatching session writes both to the run record before the work returns, so a session that dispatched nothing can still resume a child for its interview; the same `task_id` resumes a child that returned an empty or visibly incomplete result for a compact status, instead of re-running the work. Pass: every interview entry names a `task_id` the record holds; fail: an entry names none, or the id survives only in the dispatching session's context.
+- **Size the cap from a counted inventory, or mark it provisional.** When the dispatch cannot know the item count, the character cap is provisional: the child returns the count and the rows that fit, and the orchestrator sizes or splits the remainder from that count. A cap fixed before the enumeration runs meets a one-row-per-unit rule at 118 units and cuts the tail, sentinel included. When a brief pairs an exhaustive list with a size limit and no limit admits every row, the brief names the governing requirement and the reduced output form, so the child never has to choose between them.
 
 ### Mandatory Split Gate
 
@@ -103,14 +103,14 @@ Choose the agent based on the task's scope and required expertise. Use this deci
 
 Every subagent prompt must include six elements:
 
-Before dispatch, check the brief against [Prompts Carry Ground Truth, Not Line Numbers](../SKILL.md#prompts-carry-ground-truth-not-line-numbers): at most 3 answerable questions per child, one closing observable and the probe that settles it per question, one authoritative path with no candidate list, and an outcome with no step order. A brief that fails one check is split, not dispatched.
+Before dispatch, check the brief against [Prompts Carry Ground Truth, Not Line Numbers](../SKILL.md#prompts-carry-ground-truth-not-line-numbers): at most 3 answerable questions per child, one closing observable and the probe that settles it per question, one authoritative path with no candidate list, an outcome with no step order, an anchor the brief asserts about existing behavior that returns a hit in the working tree, and a write scope derived from the edit the outcome requires. The orchestrator then names in the brief every test and fixture that pins a user-visible string, message, or constant the outcome rewrites, and grants the child write access to each of those files. Pass: the child returns with every listed pin updated and no failing assertion on the text the brief changed; fail: a failing pin, or a budget spent discovering one the brief did not name. When the outcome lands a rule in an existing document, the same brief names that document's own vocabulary — its verdict classes, field names, and template — alongside the placement, and states what happens to every consumer of a term the child introduces. Pass: every term the child produces appears in the brief and in the target, and each consumer of an introduced term has a stated disposition; fail: the child invents or omits a term, or a consumer of one is left unnamed. A brief that fails one check is split, not dispatched.
 
 ### Required Prompt Structure
 
 | Element | Purpose | Example |
 |---------|---------|---------|
 | **Context** | What the user asked; why this task exists in the larger flow | "The user asked to draft a skill. This is one step in that workflow." |
-| **Scope** | Exactly which files/directories are involved, what to create vs modify | "Create /workspace/.agents/skills/my-skill/SKILL.md with this exact content..." |
+| **Scope** | Exactly which files/directories the outcome requires, what to create vs modify, and nothing a name alone suggested | "Create /workspace/.agents/skills/my-skill/SKILL.md with this exact content..." |
 | **Acceptance Criteria** | Concrete conditions for "done" — verifiable by a separate agent | "[ ] File exists at specified path. [ ] Contains required frontmatter fields." |
 | **Constraints** | What NOT to do — anti-patterns specific to this task | "Do not modify files outside /workspace/.agents/skills/." |
 | **Output Expectations** | How the subagent should report results back | "Report: list all created/modified files, confirm each acceptance criterion." |
@@ -160,6 +160,11 @@ After a subagent reports completion, launch a **separate validation subagent** t
 
 Validation must be asymmetric: the validator challenges the work AND the criteria, not merely certifying that instructions were followed. Give it the task's intent and the target medium/consumer, and never hand it the expected verdict. An element that served only the source medium's consumers, with no equivalent consumer in the target medium, fails validation regardless of fidelity.
 
+### Verifier Terms and Completion
+
+- **Judge a criterion only over the scope and terms the brief states.** When a criterion turns on a scope or a definition the brief never states, report it UNVERIFIABLE and name the missing term as a brief defect the orchestrator fixes in the brief rather than resuming the child for it; do not resolve it from another document and do not widen the scope to reach a verdict, because a verdict that depends on an unstated term is not evidence.
+- **Size the check plan to the calls left, and finish each check before reporting.** A criterion still waiting on work that outlives the budget, or a narrowed check presented as if it covered the full scope, is not a verdict; every criterion in the report carries PASS, FAIL, or UNVERIFIABLE with its evidence.
+
 ### Scope Attribution Needs a Baseline
 
 A diff alone cannot say who changed what, because the tree may already carry edits made before the producer started. Snapshot at dispatch and give the snapshot to the validator.
@@ -194,7 +199,7 @@ VALIDATE by:
 3. Looking for bugs, missing edge cases, or incomplete implementations
 4. Confirming no unintended modifications outside declared scope
 
-REPORT per criterion: PASS or FAIL with evidence
+REPORT per criterion: PASS, FAIL, or UNVERIFIABLE with evidence — an undefined term in the brief is UNVERIFIABLE and a brief defect, never a verdict guessed from another document.
 ```
 
 ## Step 5: Iterate Until Good
@@ -217,7 +222,7 @@ Run the retrospective after the last validation passes and before returning when
 
 - The orchestrator owns the run record: what worked, what failed, which prompt was vague, which subtask needed a retry.
 - Children own their own experience, so the orchestrator interviews only the children that failed, were retried, or produced nothing, one at a time, asking what blocked them, what was ambiguous in their prompt, and what they would change.
-- The orchestrator collects one line per struggling child, keeps the child ids, and hands that bundle alone to one fresh `harness-management` subtask prompted to run the `/sessions/retrospect` command with the bundle as its input. That subtask sorts every lesson into `case` (a specific incident) or `method` (a change to how the orchestrator investigates or verifies), writes one `cases/` memory per `case` and updates `cases/about`, and applies only the `method` rules to the harness. A plan that labels an incident `method` is rejected and re-dispatched once.
+- The orchestrator collects one line per struggling child, takes each child's id from the dispatch record, and hands that bundle alone to one fresh `harness-management` subtask prompted to run the `/sessions/retrospect` command with the bundle as its input. That subtask sorts every lesson into `case` (a specific incident) or `method` (a change to how the orchestrator investigates or verifies), writes one `cases/` memory per `case` and updates `cases/about`, and applies only the `method` rules to the harness. A plan that labels an incident `method` is rejected and re-dispatched once.
 - The same subtask reads `cases/about` first so it does not duplicate an existing case, then writes and reads each memory back, so the report carries every memory name it stored and whether the index changed.
 - The memory write runs only when the bundle is non-empty; otherwise the report notes "no new lesson".
 - The implement step runs only when the plan names applicable harness changes; otherwise the report notes "no applicable changes".

@@ -137,7 +137,7 @@ No `record{op:'fail'}` is needed: `record_callback` already records a `failure` 
 ### What core already gives, and what it does not
 
 - **`pending` / `wake` (`core/machine.ts:722`, `:776`, `:783`, `:798-804`) is not reusable here.** It holds entry emits until the first real user item, and `markAwake` clears it on *any* event (`:880-885`). It answers "is the loop awake", not "is a child running".
-- **The actor is per-session and keyed by session id** (`ensure`, `:845-866`). A child session has no machine; `machine.idle(childId)` returns `[]`. That is why the child cannot report through its own loop and the verdict must ride the parent's callback.
+- **The actor is per-session and keyed by session id.** Every consumer reaches it through `access`, the attach-or-fail accessor in `core/machine-service.ts`: a session with no in-memory entry is restored from its snapshot rather than answered with an empty result, and one that cannot be restored fails instead. The verdict rides the parent's callback, not a read of the child's machine.
 - **Transient states** are the right home for a spawn state: `machines/index.ts:33` lists `check`, and restore treats a stored transient as absent (`core/machine.ts:837`). A new `judge` state joins that list, so a reload mid-spawn starts a fresh spawn instead of waiting on a child that the reload forgot.
 
 ## 5. Callback naming

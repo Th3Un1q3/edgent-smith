@@ -11,18 +11,10 @@ license: MIT
 compatibility: Universal
 metadata:
   version: "1.0.0"
-  delta: >
-    1.0.0 — extracted the software method from the rug-swe.md agent definition when that agent became a general worker and
-    generalized the prompt: test-first rules the harness does not own, per-file
-    work packaging, technical standards, acceptance and proof-of-done criteria,
-    gap policy and anti-patterns. TDD cycle, case design and language tooling
-    deferred by name to the skills that own them.
   author: edgent-smith team
 ---
 
 # Software Engineering
-
-This pack supplies method only. The resident core owns the task contract, the call budget, phases and the report; do not restate them.
 
 Load when the deliverable changes software: a feature, a bug fix, a refactor, a test, a dependency, a migration, a build or CI config. Research, prose, and skill authoring load `general-delivery`.
 
@@ -34,10 +26,8 @@ Load these instead of restating them; this pack adds only what they do not carry
 |---|---|---|
 | Writing or changing a test; RED → GREEN → REFACTOR | `test-driven-development` | Owns the cycle, the iron law, and the watched-failure rule. |
 | Choosing cases, structuring a suite, mocks, flaky tests | `test-design` | Owns case selection and suite conventions. |
-| Python tests and fixtures | `python-testing-patterns` | Language mechanics only. |
-| TypeScript or JavaScript tests | `vitest` | Language mechanics only. |
-| Refactor with no behaviour change | `refactor`, `refactoring-patterns` | Own the transformations. |
-| Multi-file refactor before editing | `refactor-plan` | Owns sequencing and confirmation. |
+| Python, TypeScript, or JavaScript tests and fixtures | `python-testing-patterns`, `vitest` | Language mechanics only. |
+| Refactor with no behaviour change, or a multi-file refactor before editing | `refactor`, `refactoring-patterns`, `refactor-plan` | Own the transformations, sequencing and confirmation. |
 | Click CLI, pydantic-ai agent, Bun build or test | `click-cli`, `building-pydantic-ai-agents`, `bun` | Framework mechanics. |
 | New dependency or tool install | `software-installation` | Owns install guards and pins. |
 | Container, compose, devcontainer change | `docker-patterns`, `devcontainers-best-practices` | Own container mechanics. |
@@ -50,7 +40,7 @@ Load the skills a matching row names before the first edit; each owns mechanics 
 |---|---|---|
 | Write unit or integration tests | "write tests", "add tests", "test this module", "TDD" | `python-testing-patterns`, `test-design`, `test-driven-development` |
 | Refactor or reduce complexity | "refactor", "clean up", "reduce complexity", "extract method", "code smell" | `refactor`, `refactoring-patterns`, `refactor-method-complexity-reduce`, `refactor-plan` |
-| Build, test, or run JS/TS with Bun | "run with bun", "bun test", "bun build", "bun install" | `Bun` |
+| Build, test, or run JS/TS with Bun | "run with bun", "bun test", "bun build", "bun install" | `bun` |
 | Write or test Click CLI commands | "add CLI command", "click command", "click option" | `click-cli-skill` |
 | Build pydantic-ai agents | "build agent", "pydantic-ai", "agent with tools", "structured output agent" | `building-pydantic-ai-agents` |
 | Run or debug conductor workflows | "run workflow", "conductor workflow", "orchestrate agents" | `conductor` |
@@ -90,24 +80,19 @@ Pick the smallest test that pins the behaviour: unit for a function or module, i
 
 ## Package the change into work units
 
-Classify the task before the first read:
-
-- **Exploration** — read, trace, report. No edit.
-- **Implementation** — code and tests.
-- **Mixed** — discover, then write.
-- **Analysis** — review, then report findings.
+Classify the task before the first read — exploration (read, trace, report; no edit), implementation (code and tests), mixed (discover, then write), or analysis (review, then report findings).
 
 Read the code before changing it: trace the flow end to end, including callers of the function you touch, and never guess at architecture.
 
 Split work into units of one behaviour, one source file or source-plus-test pair, and one checkable outcome. Slice vertically, not by layer: finish "parse the header, with its tests" before starting "render the body". Order units so the tree is green after each one: dependency before dependent, fixture before test, schema before serializer, migration before backfill. A unit you cannot verify alone is too big.
 
-Confirm a path before editing it. List the parent directory or read the file first; with `glob` and `grep` denied, list directories and read candidate files.
+When two or more consumers are built in parallel on a shared API introduced or changed in this session, the API's author compiles one consumer against it and writes that consumer's imported names and their signatures into the slice brief before a second slice starts. Pass: the first consumer typechecks or its tests pass, and every later slice cites a symbol the brief lists. Fail: a slice calls a symbol the API does not export, or two slices start before one compiles.
 
 Read the neighbours before writing: the module's imports and public surface, the closest existing test, and the project's check command. Match their style rather than importing a new one.
 
-Per unit: change, run its check, read the observed result, then start the next unit. Verification belongs to the unit, not to the end of the task.
+Per unit: change, run its check, read the observed result, then start the next unit. When two or more writers edit one tree, each shared test file and fixture has exactly one owning writer, and a green is recorded only from a full-suite run on the merged tree. Pass: no shared file has two owners and each recorded pass cites a run made after the merge. Fail: two writers own one test file, or a recorded pass cites a writer's own partial run.
 
-`diff-discipline` owns diff scope. This pack owns how many units there are and in what order.
+`diff-discipline` owns diff scope and shape: style sweeps, renames, and reformatting that are not part of the behaviour change. This pack owns how many units there are and in what order.
 
 ## Standards
 
@@ -173,5 +158,3 @@ A gap report names the missing fact, the candidate readings, and the evidence th
 | Silence a failing test by weakening its assertion or skipping it. | Fix the code, or correct a wrong test premise and state which it was. |
 | Report results from memory of the last edit. | Quote the command and output observed this turn. |
 | Comply with a request that trades quality for speed, such as a feature with no test. | Name the cost, deliver the tested change, and record the trade-off in residual risk. |
-
-`diff-discipline` owns diff shape: style sweeps, renames, reformatting, and other churn that is not part of the behaviour change.

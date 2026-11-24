@@ -340,7 +340,7 @@ describe('an interruption', () => {
     expect(emits).toEqual([{
       type: 'emit.prompt',
       text: expect.stringContaining(templateRendered('park_summary', { goal: 'ship it.', improvements: 'none.' })),
-      description: 'Report the reached goal and the improvements recorded.',
+      description: 'Send a new message to resume the loop from a fresh goal.',
     }, {
       type: 'emit.signals',
       signal_keys: [],

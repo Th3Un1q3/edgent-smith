@@ -42,8 +42,10 @@ const isAnsweredVerdict = (
 ): parsed is { readonly verdict: 'pass' | 'fail', readonly reason: string } =>
   isVerdict(parsed.verdict) && typeof parsed.reason === 'string' && parsed.reason !== ''
 
+export const UNREADABLE_VERDICT_PREFIX = 'verdict-unreadable: '
+
 const unreadableVerdict = (text: string): JudgeVerdict =>
-  ({ ok: false, output: 'verdict-unreadable: ' + text.slice(0, 200) })
+  ({ ok: false, output: UNREADABLE_VERDICT_PREFIX + text.slice(0, 200) })
 
 const parsedVerdict = (text: string): { readonly verdict?: unknown, readonly reason?: unknown } => {
   try {

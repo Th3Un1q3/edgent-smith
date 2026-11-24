@@ -67,4 +67,3 @@ export const acceptedSignals = (path: string): string[] =>
 export const VALIDATOR_PROMPT = 'Ask the agent to judge whether the goal is met.'
 export const GOAL_REQUEST = 'Ask the agent what goal this session should accomplish.'
 export const WORK_PROMPT = 'Remind the agent of the goal and the memories to work from.'
-export const PARKED_PROMPT = 'Report the reached goal and the improvements recorded.'

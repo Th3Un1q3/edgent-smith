@@ -8,6 +8,8 @@ Each question below names the one place to look for its answer:
 
 Never read the entire session file; use targeted lookups via the schema reference at `../references/schema.md`.
 
+**Scope before you reason on a count.** When a count comes from a log or store shared by several sessions, the auditor labels it with the field that identifies the session that produced each row, or marks the count session-agnostic. Pass: every count used as evidence carries a session-identifying field or that mark. Fail: rows lacking a session identifier are counted as this session's activity — drop that conclusion and re-derive it from a source that identifies the session.
+
 `transcript.txt` always exists after `review-start` renders it. If it contains the literal note "Error: transcript render failed", re-render it with `just agent_utils/session-parts --session-file-json <session.json> conversation --format short-human-readable` before the first pass.
 
 ## Questions

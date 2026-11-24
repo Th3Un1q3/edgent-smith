@@ -33,7 +33,13 @@ Anchor: state the session's objective, what you actually shipped or decided, and
 6. What did you learn about this codebase, workflow, or process that was not obvious when you started?
 7. What is the single highest-leverage change for next time — one concrete behavior to start, stop, or keep — and where should it live (an instruction, a skill, `AGENTS.md`, or an agent definition)?
 
-## Step 3: Turn answers into action items
+## Step 3: Interview the subagents
+
+Only the orchestrator — the session that dispatched the children — can interview them, because a session cannot resume a child it did not dispatch. Resume two to four of your own children, chosen among those that struggled, exceeded a budget, contradicted the brief, or had to guess, and ask each three things: what difficulties it experienced during its task, what it would do differently, and what led to those difficulties.
+
+Record the answers in `$FILE` as given and never invent one. If you have no answers to record, the section says so in one line. Use the answers, do not file them: an action item that fixes a briefing defect quotes the child's own words from its answer in the action item's **Change** field from Step 4.
+
+## Step 4: Turn answers into action items
 
 Prioritize the action items per the harness-management skill's Prioritization policy — load the harness-management skill by name using your `skill` tool, then follow its Prioritization section. Each action item has five fields:
 
@@ -45,7 +51,7 @@ Prioritize the action items per the harness-management skill's Prioritization po
 
 Record the items in `$FILE`.
 
-## Step 4: Implement
+## Step 5: Implement
 
 Implement the top 1–3 action items using the harness-management skill:
 

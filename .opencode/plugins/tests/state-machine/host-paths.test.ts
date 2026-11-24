@@ -6,6 +6,7 @@ import { createStateMachinePlugin } from '@plugins/state-machine'
 import { loadStateMachineLibrary } from '@plugins/state-machine/core/machine'
 
 import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine/harness'
+import { failureOf } from '@tests/helpers/state-machine/session-loop-fixtures'
 
 import type { Harness } from '@tests/helpers/state-machine/harness'
 
@@ -65,7 +66,7 @@ describe('host paths', () => {
       .toBe(false)
   })
 
-  it('answers a tool call with no agent by reporting the machine status', async () => {
+  it('refuses a tool call that carries no agent identity', async () => {
     const harness = await boot()
     const tool = harness.tools.get('signal_send')
 
@@ -73,7 +74,12 @@ describe('host paths', () => {
 
     const exit = await Effect.runPromiseExit(tool.execute({ type: 'CLAIM_WORK' }, { sessionID: 'ses_1' }))
 
-    expect(content(exit)).toContain('No state machine is running')
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(failureOf(exit).metadata).toMatchObject({
+      code: 'machine_unavailable',
+      session: 'ses_1',
+      reason: 'no-identity',
+    })
   })
 
   it('reports a shell that cannot start as a failed quality check', async () => {

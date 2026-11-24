@@ -163,6 +163,7 @@ Logs: `~/.local/share/opencode/log/opencode.log`. `--print-logs` writes to stder
 - **A hook that throws fails the caller's tool for exactly the inputs the hook matches.** A tool failing for a subset of paths is a report about the hook's matcher — its `applyTo` glob, its `TARGETED_TOOLS` set — not about the tool's own schema. Enumerate the failing inputs and compare that set with each hook's match condition; the hook whose match set equals the failing set is the suspect.
 - **Attribute before editing anything.** Disable the plugin entry point (or the single hook) and repeat the same failing input. When the call passes disabled and fails enabled, the plugin owns the failure, and no harness-level, permission-level, or file-type claim is admissible. Restore it only after the failing input is explained.
 - **Read the error's origin before its wording.** A schema failure raised inside a plugin call and one raised while validating a tool's `input` carry the same text and different owners; name the throwing call from the stack, then fix that call.
+- **A failure recorded only in a log line or a state field is unreported.** Whoever edits plugin code that records a refusal, error, or verdict also sends its text and the host reason to the session that can act, in that change, via `.opencode/instructions/steering-message.md`. Pass: the next prompt carries that text and a test asserts it. Fail: it exists only in a log or state field, or the reason arrives empty.
 
 ## Avoid
 

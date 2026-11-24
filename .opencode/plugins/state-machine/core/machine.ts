@@ -61,8 +61,12 @@ export { createStateMachine } from './machine-service'
 export type {
   InjectSkill,
   LoadMemories,
+  MachineHandle,
   RunShell,
+  SessionIdentity,
   SessionStart,
   SignalResult,
   StateMachine,
+  UnavailableReason,
 } from './machine-service'
+export { MachineUnavailable } from './machine-service'

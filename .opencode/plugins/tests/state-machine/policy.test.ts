@@ -301,7 +301,7 @@ describe('the hook', () => {
     expect(Exit.isSuccess(exit)).toBe(true)
   })
 
-  it('allows when the session cannot be opened', async () => {
+  it('refuses a gated tool when the session cannot be opened', async () => {
     const harness = makeHarness()
     harness.failStorageReads = true
     await register(harness)
@@ -309,6 +309,7 @@ describe('the hook', () => {
 
     const exit = await runHook(harness, { tool: 'edit', agent: 'rug', sessionID: 'ses_1' })
 
-    expect(Exit.isSuccess(exit)).toBe(true)
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(toolErrorOf(exit).metadata).toMatchObject({ code: 'tool_blocked', tool: 'edit' })
   })
 })

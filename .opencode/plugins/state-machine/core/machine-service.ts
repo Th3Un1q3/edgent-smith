@@ -1,4 +1,4 @@
-import { Deferred, Effect } from 'effect'
+import { Cause, Data, Deferred, Effect, Exit } from 'effect'
 
 import { DEFAULT_MACHINE } from '../machines'
 import type { MachineModule } from '../machines'
@@ -21,7 +21,7 @@ import type {
 } from './machine-contract'
 import { refusalMessage, renderSignals, stateLeaf, stateValuePath, validateSignal } from './signals'
 import type { SignalRefusal, SignalSpec, SignalTable } from './signals'
-import type { AbsentReason, PersistedSnapshot, SnapshotStore, ToolPolicyRule } from './snapshot'
+import type { AbsentReason, PersistedSnapshot, SnapshotRead, SnapshotStore, ToolPolicyRule } from './snapshot'
 
 /**
 The name→spec table for one policy: only the names it enables, each resolved
@@ -41,7 +41,12 @@ const policyTable = (registry: Readonly<Record<string, SignalSpec>>, policy: Sig
   return Object.assign(Object.create(null) as SignalTable, Object.fromEntries(entries))
 }
 
-const NO_MACHINE_MESSAGE = 'No state machine is running for this session.'
+// The factory surface is not a production path: a handle cannot exist without
+// an entry, so a call here for a session with no entry is a caller bug. It fails
+// typed with the path that made it, and the boundary that catches
+// `MachineUnavailable` logs `[state-machine] <path> <sessionId>: no-entry`.
+const missingEntry = (path: string, sessionId: string): MachineUnavailable =>
+  new MachineUnavailable({ sessionId, reason: 'no-entry', detail: path })
 
 interface StateMachineOptions {
   readonly library: StateMachineLibrary
@@ -83,11 +88,50 @@ Reads the remembered preferences for one namespace.
 */
 export type LoadMemories = (namespace: string) => Effect.Effect<InjectedMemories, unknown>
 
+export interface SessionIdentity {
+  readonly agent: string
+  readonly parentID?: string
+}
+
+export type UnavailableReason = 'no-identity' | 'read-failed' | 'no-entry' | 'invalid-snapshot'
+
+export class MachineUnavailable extends Data.TaggedError('MachineUnavailable')<{
+  readonly sessionId: string
+  readonly reason: UnavailableReason
+  readonly detail?: string
+}> {}
+
+/**
+Every read, transition and persist of a session's machine goes through its
+handle, so a caller that holds one cannot reach an entry-less session.
+*/
+export interface MachineHandle {
+  readonly sessionId: string
+  readonly machine: SessionMachine
+  readonly state: LoopStateId
+  readonly policy: ToolPolicyRule | undefined
+  signal(input: unknown): SignalResult
+  signalLine(keys?: readonly string[]): string
+  status(): string
+  wake(): readonly EmitRequest[]
+  userInput(text: string): readonly EmitRequest[]
+  interrupted(reason: InterruptReason): readonly EmitRequest[]
+  callback(name: CallbackName, payload: CallbackPayload): readonly EmitRequest[]
+  idle(): Effect.Effect<readonly EmitRequest[]>
+  persist(): Effect.Effect<'written' | 'skipped' | 'write-failed'>
+}
+
 export interface StateMachine {
   /**
   Creates the session's machine at admission; never on a signal.
   */
   start: (sessionId: string, agent: string) => SessionStart | undefined
+  /**
+  A live handle for the session, restoring it from its snapshot on first
+  access. Fails instead of reporting a machine-less session, because an absent
+  entry is a routine state and a silent empty result hides it.
+  */
+  access: (sessionId: string, identity: SessionIdentity | undefined) => Effect.Effect<MachineHandle, MachineUnavailable>
   /**
   Restores the session from its snapshot on first access, or starts it fresh.
   Concurrent first accesses share one read. Undefined means the read was
@@ -156,7 +200,7 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
   const initialState: LoopStateId
     = (assembly.loop.initial as LoopStateId | undefined) ?? (Object.keys(assembly.loop.states)[0] as LoopStateId)
   const machines = new Map<string, MachineEntry>()
-  const waiting = new Map<string, Deferred.Deferred<SessionStart | undefined>>()
+  const waiting = new Map<string, Deferred.Deferred<SessionStart, MachineUnavailable>>()
 
   /**
   A transient state is left behind on restore whether the module declares it at
@@ -223,14 +267,14 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
   const wake = (sessionId: string): readonly EmitRequest[] => {
     const entry = machines.get(sessionId)
 
-    if (entry === undefined) return []
+    if (entry === undefined) throw missingEntry('wake', sessionId)
 
     const held = entry.pending
     entry.pending = []
     return held
   }
 
-  const start = (sessionId: string, agent: string, parentID?: string): SessionStart | undefined => {
+  const start = (sessionId: string, agent: string, parentID?: string): SessionStart => {
     const existing = machines.get(sessionId)
 
     return existing === undefined ? create(sessionId, agent, contextFor(sessionId, agent, parentID), parentID) : { machine: view(existing), created: false, emits: [] }
@@ -271,56 +315,75 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
     ? create(sessionId, agent, restoredContext(stored.context as Readonly<Record<string, unknown>>, agent, parentID), parentID, stored)
     : { ...create(sessionId, agent, contextFor(sessionId, agent, parentID), parentID), snapshot: 'shape-invalid' }
 
-  const load = (sessionId: string, agent: string, parentID?: string): Effect.Effect<SessionStart | undefined> => Effect.gen(function* () {
+  const startFromRead = (
+    read: SnapshotRead,
+    sessionId: string,
+    agent: string,
+    parentID: string | undefined,
+  ): Effect.Effect<SessionStart, MachineUnavailable> =>
+    read.status === 'rejected'
+      ? Effect.fail(new MachineUnavailable({ sessionId, reason: 'read-failed', detail: read.reason }))
+      : (read.status === 'absent'
+          ? startFromAbsent(read.reason, sessionId, agent, parentID)
+          : Effect.succeed(restoredStart(read.record.snapshot, sessionId, agent, parentID)))
+
+  const load = (sessionId: string, agent: string, parentID?: string): Effect.Effect<SessionStart, MachineUnavailable> => Effect.gen(function* () {
     const snapshot = options.snapshot
 
     if (snapshot === undefined) return start(sessionId, agent, parentID)
 
     const read = yield* snapshot.read(sessionId, stateIds)
 
-    const fromRead = (stored: typeof read): Effect.Effect<SessionStart | undefined> => {
-      if (stored.status === 'rejected') return Effect.succeed(undefined)
-
-      return stored.status === 'absent'
-        ? startFromAbsent(stored.reason, sessionId, agent, parentID)
-        : Effect.succeed(restoredStart(stored.record.snapshot, sessionId, agent, parentID))
-    }
-
-    return yield* fromRead(read)
+    return yield* startFromRead(read, sessionId, agent, parentID)
   })
 
-  const ensure = (sessionId: string, agent: string, parentID?: string): Effect.Effect<SessionStart | undefined> => Effect.suspend(() => {
+  /**
+  Restores or starts the entry on first access. Concurrent first accesses share
+  one read, and every one of them receives the same typed failure when it
+  rejects, so a reload burst cannot create two actors for one session.
+  */
+  const restore = (sessionId: string, agent: string, parentID?: string): Effect.Effect<SessionStart, MachineUnavailable> => Effect.suspend(() => {
     const existing = machines.get(sessionId)
 
-    if (existing !== undefined) return Effect.succeed<SessionStart | undefined>({ machine: view(existing), created: false, emits: [] })
+    if (existing !== undefined) return Effect.succeed<SessionStart>({ machine: view(existing), created: false, emits: [] })
 
     const waitingOn = waiting.get(sessionId)
 
     if (waitingOn !== undefined) return Deferred.await(waitingOn)
 
-    const deferred = Deferred.makeUnsafe<SessionStart | undefined>()
+    const deferred = Deferred.makeUnsafe<SessionStart, MachineUnavailable>()
 
     waiting.set(sessionId, deferred)
 
-    const settle = (value: SessionStart | undefined): Effect.Effect<SessionStart | undefined> =>
-      Deferred.succeed(deferred, value).pipe(Effect.andThen(Effect.succeed(value)))
+    const settle = (exit: Exit.Exit<SessionStart, MachineUnavailable>): Effect.Effect<SessionStart, MachineUnavailable> =>
+      Effect.flatMap(Deferred.done(deferred, exit), () =>
+        Exit.isSuccess(exit) ? Effect.succeed(exit.value) : Effect.failCause(exit.cause))
 
     return load(sessionId, agent, parentID).pipe(
-      Effect.flatMap(value => settle(value)),
-      Effect.catchCause(() => settle(undefined)),
+      Effect.exit,
+      Effect.flatMap(exit => settle(exit)),
       Effect.ensuring(Effect.sync(() => { waiting.delete(sessionId) })),
     )
   })
+
+  const ensure = (sessionId: string, agent: string, parentID?: string): Effect.Effect<SessionStart | undefined> =>
+    restore(sessionId, agent, parentID).pipe(
+      Effect.catchCause(() => Effect.succeed<SessionStart | undefined>(undefined)),
+    )
 
   const persist = (sessionId: string): Effect.Effect<'written' | 'skipped' | 'write-failed'> => Effect.suspend(() => {
     const entry = machines.get(sessionId)
     const snapshot = options.snapshot
 
     return entry === undefined || snapshot === undefined
-      ? Effect.succeed('skipped' as const)
+      ? Effect.logWarning('[state-machine] persist ' + sessionId + ': skipped').pipe(
+          Effect.as('skipped' as const),
+        )
       : snapshot.write(entry.actor.persistedSnapshot()).pipe(
           Effect.map(ok => ok ? 'written' as const : 'write-failed' as const),
-          Effect.catchCause(() => Effect.succeed('write-failed' as const)),
+          Effect.catchCause(cause => Effect.logWarning(
+            '[state-machine] persist ' + sessionId + ': write-failed cause=' + Cause.pretty(cause),
+          ).pipe(Effect.andThen(Effect.succeed('write-failed' as const)))),
         )
   })
 
@@ -344,7 +407,7 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
   const signal = (input: unknown, sessionId: string): SignalResult => {
     const entry = machines.get(sessionId)
 
-    if (entry === undefined) return { text: NO_MACHINE_MESSAGE, emits: [] }
+    if (entry === undefined) throw missingEntry('signal', sessionId)
 
     const state = entry.actor.state()
     const table = policyTable(assembly.registry, liveContext(entry).signalsPolicy)
@@ -365,15 +428,17 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
   const status = (sessionId: string): string => {
     const entry = machines.get(sessionId)
 
-    return entry === undefined ? NO_MACHINE_MESSAGE : 'State: ' + stateLeaf(entry.actor.state()) + '.'
+    if (entry === undefined) throw missingEntry('status', sessionId)
+
+    return 'State: ' + stateLeaf(entry.actor.state()) + '.'
   }
 
   const signalLine = (sessionId: string, signal_keys?: readonly string[]): string => {
     const entry = machines.get(sessionId)
 
-    return entry === undefined
-      ? 'Signals now: none'
-      : renderSignals(policyTable(assembly.registry, liveContext(entry).signalsPolicy), signal_keys)
+    if (entry === undefined) throw missingEntry('signalLine', sessionId)
+
+    return renderSignals(policyTable(assembly.registry, liveContext(entry).signalsPolicy), signal_keys)
   }
 
   const callback = (
@@ -383,34 +448,81 @@ export const createStateMachine = (options: StateMachineOptions): StateMachine =
   ): readonly EmitRequest[] => {
     const entry = machines.get(sessionId)
 
-    return entry === undefined ? [] : dispatch(entry, { type: callbackEvent(name), payload })
+    if (entry === undefined) throw missingEntry('callback', sessionId)
+
+    return dispatch(entry, { type: callbackEvent(name), payload })
   }
 
   const userInput = (sessionId: string, text: string): readonly EmitRequest[] => {
     const entry = machines.get(sessionId)
 
-    return entry === undefined ? [] : dispatch(entry, { type: 'system_user_input', text })
+    if (entry === undefined) throw missingEntry('userInput', sessionId)
+
+    return dispatch(entry, { type: 'system_user_input', text })
   }
 
   const interrupted = (sessionId: string, reason: InterruptReason): readonly EmitRequest[] => {
     const entry = machines.get(sessionId)
 
-    return entry === undefined ? [] : dispatch(entry, { type: 'system_interrupted', reason })
+    if (entry === undefined) throw missingEntry('interrupted', sessionId)
+
+    return dispatch(entry, { type: 'system_interrupted', reason })
   }
 
+  // `idle` already runs in an effect, so a missing entry is logged where it
+  // happens rather than thrown past the subscription that owns the session.
   const idle = (sessionId: string): Effect.Effect<readonly EmitRequest[]> =>
-    Effect.sync(() => {
+    Effect.suspend(() => {
       const entry = machines.get(sessionId)
 
-      return entry === undefined ? [] : dispatch(entry, { type: 'system_idle' })
+      return entry === undefined
+        ? Effect.logWarning('[state-machine] idle ' + sessionId + ': no-entry').pipe(
+            Effect.andThen(Effect.succeed<readonly EmitRequest[]>([])),
+          )
+        : Effect.sync(() => dispatch(entry, { type: 'system_idle' }))
     })
 
   const stateOf = (sessionId: string): LoopStateId | undefined => machines.get(sessionId)?.actor.state()
   const policyOf = (sessionId: string): ToolPolicyRule | undefined =>
     machines.get(sessionId)?.actor.context().policy
 
+  const handleOf = (entry: MachineEntry): MachineHandle => ({
+    sessionId: entry.sessionId,
+    machine: view(entry),
+    state: entry.actor.state(),
+    policy: liveContext(entry).policy,
+    signal: input => signal(input, entry.sessionId),
+    signalLine: keys => signalLine(entry.sessionId, keys),
+    status: () => status(entry.sessionId),
+    wake: () => wake(entry.sessionId),
+    userInput: text => userInput(entry.sessionId, text),
+    interrupted: reason => interrupted(entry.sessionId, reason),
+    callback: (name, payload) => callback(entry.sessionId, name, payload),
+    idle: () => idle(entry.sessionId),
+    persist: () => persist(entry.sessionId),
+  })
+
+  const accessHandle = (sessionId: string): Effect.Effect<MachineHandle, MachineUnavailable> => {
+    const entry = machines.get(sessionId)
+
+    return entry === undefined
+      ? Effect.fail(new MachineUnavailable({ sessionId, reason: 'no-entry' }))
+      : Effect.succeed(handleOf(entry))
+  }
+
+  const access = (
+    sessionId: string,
+    identity: SessionIdentity | undefined,
+  ): Effect.Effect<MachineHandle, MachineUnavailable> => Effect.suspend(() => {
+    const entry = machines.get(sessionId)
+
+    if (entry !== undefined) return Effect.succeed(handleOf(entry))
+
+    return identity === undefined ? Effect.fail(new MachineUnavailable({ sessionId, reason: 'no-identity' })) : Effect.flatMap(restore(sessionId, identity.agent, identity.parentID), () => accessHandle(sessionId))
+  })
+
   return {
-    start, ensure, persist, state: stateOf, policy: policyOf, signalLine, wake, get: (sessionId) => {
+    start, access, ensure, persist, state: stateOf, policy: policyOf, signalLine, wake, get: (sessionId) => {
       const entry = machines.get(sessionId)
       return entry === undefined ? undefined : view(entry)
     }, signal, callback, userInput, interrupted, status, idle,

@@ -8,7 +8,7 @@
  * shell results as callbacks. The entry holds no transition logic; everything
  * lives in `core/machine.ts`.
  */
-import { Effect } from 'effect'
+import { Cause, Effect } from 'effect'
 import type { JsonSchema } from 'effect'
 import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
 import type { Session } from '@opencode/schema/session'
@@ -23,6 +23,7 @@ import { memoryKey, readMemories } from './state-machine/core/memory'
 import {
   createStateMachine,
   loadStateMachineLibrary,
+  MachineUnavailable,
   readStartConfig,
 } from './state-machine/core/machine'
 import type { MachineModule } from './state-machine/machines'
@@ -33,12 +34,15 @@ import type {
   EmitRequest,
   InjectSkill,
   LoadMemories,
+  MachineHandle,
   RunShell,
   SignalsEmit,
+  StateMachine,
   StateMachineLibrary,
 } from './state-machine/core/machine'
 import { reportFailure, runShellCommand } from './state-machine/ports/shell-port'
-import { createSubagentRunner } from './state-machine/ports/subagent-port'
+import { causeText } from './state-machine/ports/cause-text'
+import { createSubagentRunner, UNREADABLE_VERDICT_PREFIX } from './state-machine/ports/subagent-port'
 import type { RunSubagent } from './state-machine/ports/subagent-port'
 import { createCommandRunner, didCompleteOnSignal } from './state-machine/ports/command-port'
 import type { CommandRaise, SendCommand } from './state-machine/ports/command-port'
@@ -59,10 +63,60 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 const orDefault = <Value>(supplied: Value | undefined, otherwise: Value): Value => supplied ?? otherwise
 
+const commandRefusalLine = (name: string, reason: string): string =>
+  'The `' + name + '` command was refused (' + reason + '), so this stage cannot advance until it runs.'
+
+const unreadableVerdictLine = (detail: string): string =>
+  'The validator reply was unreadable, so its verdict was dropped and recorded as a failure: ' + detail
+const COMMAND_REFUSAL_PROMPT_DESCRIPTION = 'A stage command was refused and the loop cannot advance.'
+const UNREADABLE_VERDICT_PROMPT_DESCRIPTION = 'A validator reply was unreadable and its verdict was dropped.'
+
+/**
+The host may refuse a command after the raise has returned, when no completion
+signal will ever arrive; the failure is reported to the session rather than only
+logged, still failing so the runner clears its pending entry.
+*/
+const hostCommandPort = (context: Context): SendCommand | undefined => {
+  const host = (context.session as unknown as { readonly command?: SendCommand }).command
+  return host === undefined ? undefined : request => host({ ...request, sessionID: request.sessionID as Session.ID })
+}
+
+const observedCommandPort = (
+  context: Context,
+  supplied: SendCommand | undefined,
+  prompt: (sessionId: string, name: string, reason: string) => Effect.Effect<void>,
+): SendCommand | undefined => {
+  const send = supplied ?? hostCommandPort(context)
+  return send === undefined
+    ? undefined
+    : request => send(request).pipe(
+      Effect.tapError(cause => prompt(request.sessionID, request.name, causeText(cause))),
+    )
+}
+
 const signalType = (input: unknown): unknown => (isRecord(input) ? input.type : undefined)
 
 const isQuietSnapshot = (status: string | undefined): boolean =>
   status === undefined || ['restored', 'fresh'].includes(status)
+
+const warnLine = (path: string, sessionId: string, reason: string): string =>
+  '[state-machine] ' + path + ' ' + sessionId + ': ' + reason
+
+const unavailableLine = (failure: MachineUnavailable): string =>
+  failure.detail === undefined ? failure.reason : failure.reason + ' (' + failure.detail + ')'
+
+const logUnavailable = (path: string, failure: MachineUnavailable): Effect.Effect<void> =>
+  Effect.logWarning(warnLine(path, failure.sessionId, unavailableLine(failure)))
+
+const toolUnavailable = (failure: MachineUnavailable): Effect.Effect<never, Tool.Error> => {
+  const reason = unavailableLine(failure)
+  const error = new Tool.Error({
+    message: 'No state machine for this session: ' + reason + '.',
+    metadata: { code: 'machine_unavailable', session: failure.sessionId, reason: failure.reason },
+  })
+
+  return logUnavailable('tool', failure).pipe(Effect.andThen(Effect.fail(error)))
+}
 
 const signalInput: JsonSchema.JsonSchema = {
   type: 'object',
@@ -149,26 +203,53 @@ export const createStateMachinePlugin = (
         { _tag: 'report', onFailure: reportFailure('emit.prompt failed for session ' + sessionId) },
       ).pipe(Effect.asVoid)
 
+    const promptCommandRefusal = (sessionId: string, name: string, reason: string): Effect.Effect<void> =>
+      sendPrompt(sessionId, commandRefusalLine(name, reason), COMMAND_REFUSAL_PROMPT_DESCRIPTION)
+
+    const reportUnreadableVerdict = (sessionId: string, payload: CallbackPayload): Effect.Effect<void> => {
+      const output = payload.output ?? ''
+
+      return output.startsWith(UNREADABLE_VERDICT_PREFIX)
+        ? sendPrompt(sessionId, unreadableVerdictLine(output), UNREADABLE_VERDICT_PROMPT_DESCRIPTION)
+        : Effect.void
+    }
+
+    // A verdict answers a spawn that is in flight; it starts no transition of
+    // its own, so a session with no machine drops it loudly.
     const settle = (sessionId: string, reportTo: CallbackName, payload: CallbackPayload): Effect.Effect<void> =>
-      Effect.suspend(() => deliver(sessionId, settleVerdict(
-        (session, name, value) => machine.callback(session, name, value),
-        subagent.pending(sessionId),
-        sessionId,
-        reportTo,
-        payload,
-      ))).pipe(
-        Effect.andThen(Effect.suspend(() => persist(sessionId))),
-        Effect.ignore,
+      machine.access(sessionId, undefined).pipe(
+        Effect.flatMap((handle) => {
+          const pending = subagent.pending(sessionId)
+          const isDropped = reportTo === 'subagent_ready' && pending === undefined
+          const verdicts = settleVerdict(
+            (_session, name, value) => handle.callback(name, value),
+            pending,
+            sessionId,
+            reportTo,
+            payload,
+          )
+
+          return (isDropped
+            ? Effect.logWarning(warnLine('verdict', sessionId, 'subagent_ready dropped, no spawn in flight'))
+            : Effect.void).pipe(
+            Effect.andThen(deliver(sessionId, verdicts)),
+            Effect.andThen(reportUnreadableVerdict(sessionId, payload)),
+            Effect.andThen(persistHandle(handle)),
+          )
+        }),
+        Effect.catchTag('MachineUnavailable', failure => logUnavailable('verdict', failure)),
       )
 
-    const commands = createCommandRunner(context, ports.sendCommand)
+    const commands = createCommandRunner(context, observedCommandPort(context, ports.sendCommand, promptCommandRefusal))
 
-    const offerIdle = (sessionId: string): Effect.Effect<void> => Effect.gen(function* () {
-      const emits = yield* machine.idle(sessionId)
-
-      yield* deliver(sessionId, emits)
-      yield* persist(sessionId)
-    })
+    const offerIdle = (sessionId: string): Effect.Effect<void> =>
+      machine.access(sessionId, undefined).pipe(
+        Effect.flatMap(handle => handle.idle().pipe(
+          Effect.flatMap(emits => deliver(sessionId, emits)),
+          Effect.andThen(persistHandle(handle)),
+        )),
+        Effect.catchTag('MachineUnavailable', failure => logUnavailable('idle', failure)),
+      )
 
     const subagent = createSubagentRunner(context, ports.runSubagent)
 
@@ -179,13 +260,25 @@ export const createStateMachinePlugin = (
       return status === 'read-failed' ? Effect.logWarning(line) : Effect.logDebug(line)
     }
 
-    const persist = (sessionId: string): Effect.Effect<void> =>
-      machine.persist(sessionId).pipe(
+    const reportPersist = (sessionId: string, status: 'written' | 'skipped' | 'write-failed'): Effect.Effect<void> =>
+      status === 'written' ? Effect.void : Effect.logWarning(warnLine('persist', sessionId, status))
+
+    const persistHandle = (handle: MachineHandle): Effect.Effect<void> =>
+      handle.persist().pipe(
+        // The factory logs its own `skipped`; only a rejected write is reported
+        // here, because the caller is the one that can name it without a cause.
         Effect.tap(status => status === 'write-failed'
-          ? Effect.logWarning('[state-machine] snapshot state-machine/' + sessionId + ' write-failed')
+          ? Effect.logWarning(warnLine('persist', handle.sessionId, status))
           : Effect.void),
         Effect.asVoid,
-        Effect.catchCause(() => Effect.void),
+      )
+
+    // An event can arrive for a session with no entry: there is nothing to
+    // save, and the skip is a fact the log carries rather than swallows.
+    const persist = (sessionId: string): Effect.Effect<void> =>
+      machine.access(sessionId, undefined).pipe(
+        Effect.flatMap(handle => persistHandle(handle)),
+        Effect.catchTag('MachineUnavailable', () => reportPersist(sessionId, 'skipped')),
       )
 
     // The factory's `ensure` takes the session's parentID, which admission reads
@@ -196,35 +289,32 @@ export const createStateMachinePlugin = (
       parentID?: string,
     ) => ReturnType<typeof machine.ensure> = machine.ensure
 
+    // `open` goes through `access`, so a rejected read keeps its typed reason
+    // (`read-failed` with its detail, `no-identity`) instead of collapsing to an
+    // untyped empty result.
     const open = (sessionId: string, agent: string, parentID?: string): Effect.Effect<boolean> =>
-      Effect.gen(function* () {
-        const started = yield* ensureSession(sessionId, agent, parentID)
+      machine.access(sessionId, { agent, parentID }).pipe(
+        Effect.as(true),
+        Effect.catchTag('MachineUnavailable', failure => logUnavailable('open', failure).pipe(Effect.as(false))),
+      )
 
-        if (started === undefined) {
-          yield* logSnapshot(sessionId, 'read-failed')
-          return false
-        }
-
-        yield* logSnapshot(sessionId, started.snapshot)
-
-        if (!started.created) return true
-
-        yield* deliver(sessionId, started.emits)
-        return true
-      })
-
-    const reportCommandRefusal = (sessionId: string, outcome: CommandRaise): Effect.Effect<void> =>
+    const reportCommandRefusal = (sessionId: string, emitted: CommandEmit, outcome: CommandRaise): Effect.Effect<void> =>
       outcome.ok
         ? Effect.void
-        : Effect.logWarning('[state-machine] emit.command refused for session ' + sessionId + ': ' + outcome.output)
+        : Effect.logWarning('[state-machine] emit.command refused for session ' + sessionId + ': ' + outcome.output).pipe(
+            Effect.andThen(promptCommandRefusal(sessionId, emitted.name, outcome.output)),
+          )
 
     // Signals and commands settle no callback, so they take no payload and are
     // delivered beside the switch rather than as two more cases in it.
     const deliverNotice = (sessionId: string, emitted: SignalsEmit | CommandEmit): Effect.Effect<void> =>
       emitted.type === 'emit.signals'
-        ? sendPrompt(sessionId, machine.signalLine(sessionId, emitted.signal_keys), SIGNALS_PROMPT_DESCRIPTION)
+        ? machine.access(sessionId, undefined).pipe(
+            Effect.flatMap(handle => sendPrompt(sessionId, handle.signalLine(emitted.signal_keys), SIGNALS_PROMPT_DESCRIPTION)),
+            Effect.catchTag('MachineUnavailable', failure => logUnavailable('signals', failure)),
+          )
         : commands.raise(sessionId, emitted).pipe(
-            Effect.tap(result => reportCommandRefusal(sessionId, result)),
+            Effect.tap(result => reportCommandRefusal(sessionId, emitted, result)),
             Effect.asVoid,
           )
 
@@ -239,14 +329,19 @@ export const createStateMachinePlugin = (
         settle,
       })
 
-    const deliver = (sessionId: string, emits: readonly EmitRequest[]): Effect.Effect<void> =>
-      Effect.forEach(
-        emits,
-        (emitted) => {
-          return emitted.type === 'emit.signals' || emitted.type === 'emit.command' ? deliverNotice(sessionId, emitted) : deliverEmit(sessionId, emitted)
-        },
-        { discard: true },
+    // One emit failing names itself and its cause; the rest of the batch still
+    // runs, because a prompt the host refused must not drop the skill after it.
+    const deliverOne = (sessionId: string, emitted: EmitRequest): Effect.Effect<void> =>
+      (emitted.type === 'emit.signals' || emitted.type === 'emit.command'
+        ? deliverNotice(sessionId, emitted)
+        : deliverEmit(sessionId, emitted)).pipe(
+        Effect.catchCause(cause => Effect.logWarning(
+          warnLine('emit', sessionId, emitted.type + ' failed cause=' + Cause.pretty(cause)),
+        )),
       )
+
+    const deliver = (sessionId: string, emits: readonly EmitRequest[]): Effect.Effect<void> =>
+      Effect.forEach(emits, emitted => deliverOne(sessionId, emitted), { discard: true })
 
     yield* context.tool.transform((editor) => {
       editor.add({
@@ -258,12 +353,16 @@ export const createStateMachinePlugin = (
           Effect.gen(function* () {
             const sessionId = toolContext.sessionID as unknown as string
             const agent = toolContext.agent as unknown as string | undefined
+            const parentID = yield* parentOf(sessionId).pipe(
+              Effect.catchCause(() => toolUnavailable(new MachineUnavailable({ sessionId, reason: 'read-failed' }))),
+            )
+            const handle = yield* (agent === undefined
+              ? toolUnavailable(new MachineUnavailable({ sessionId, reason: 'no-identity' }))
+              : machine.access(sessionId, { agent, parentID }).pipe(
+                  Effect.catchTag('MachineUnavailable', failure => toolUnavailable(failure)),
+                ))
 
-            if (agent === undefined) return { content: machine.status(sessionId) }
-
-            yield* open(sessionId, agent, yield* parentOf(sessionId))
-
-            const result = machine.signal(input, sessionId)
+            const result = handle.signal(input)
 
             if (result.refusal !== undefined) {
               return yield* Effect.fail(new Tool.Error({
@@ -273,7 +372,7 @@ export const createStateMachinePlugin = (
             }
 
             yield* deliver(sessionId, result.emits)
-            yield* persist(sessionId)
+            yield* persistHandle(handle)
 
             yield* Effect.sync(() => didCompleteOnSignal(commands, sessionId, signalType(input)))
 
@@ -286,10 +385,15 @@ export const createStateMachinePlugin = (
 
     // A session's parent id never changes, so the reader's cache is safe here;
     // the mode is named at the call rather than decided by the helper.
-    const parentOf = (sessionId: string): Effect.Effect<string | undefined> =>
+    // A failed read is not "no parent": the hook blocks on the failure instead
+    // of gating a child session as a root, and the line says which read failed.
+    const parentOf = (sessionId: string): Effect.Effect<string | undefined, unknown> =>
       sessionReader.read(sessionId, 'cached').pipe(
         Effect.map(identity => identity.parentID),
-        Effect.orElseSucceed<string | undefined>(() => {}),
+        Effect.catchCause(cause => Effect.flatMap(
+          Effect.logWarning('[state-machine] parent ' + sessionId + ': read-failed'),
+          () => Effect.failCause(cause),
+        )),
       )
 
     const handleExecuteBefore = createExecuteBeforeHook({ machine, open, parentOf })
@@ -301,9 +405,21 @@ export const createStateMachinePlugin = (
       input: payload.input,
     }))
 
+    // An event that finds no machine has nothing to save and returns before its
+    // own `persist` call, so the skip is reported where the machine was refused
+    // and the log still says why nothing was written.
+    const eventMachine: Pick<StateMachine, 'access'> = {
+      access: (sessionId: string, identity: Parameters<StateMachine['access']>[1]) =>
+        machine.access(sessionId, identity).pipe(
+          Effect.tapError(failure => failure.reason === 'no-identity'
+            ? reportPersist(sessionId, 'skipped')
+            : Effect.void),
+        ),
+    }
+
     yield* registerSessionEvents({
       context,
-      machine,
+      machine: eventMachine,
       open,
       ensureSession,
       parentOf,
