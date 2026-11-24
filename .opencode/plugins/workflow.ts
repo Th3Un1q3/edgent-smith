@@ -1,6 +1,8 @@
 /**
  * workflow — OpenCode v2 Effect plugin (migrated).
  *
+ * Surface: subtask_ls, subtask_run, subtask_outputs.
+ *
  * V1 returned a `tool` map; V2 registers custom tools through
  * `ctx.tool.transform(editor => editor.add({ ... }))` with a JSON-Schema input.
  * The runner is reused through a client adapter over `ctx.session`
@@ -17,7 +19,7 @@ import type { SessionsReader } from './workflow/subtask-ls'
 import { createSubtask } from './workflow/subtask'
 import { DEFAULT_MAX_SUBTASKS, DEFAULT_SUBTASK_AGENT } from './workflow/contracts'
 import type { SubtaskParameters } from './workflow/contracts'
-import { recordTailOutput, tailOutputs } from './workflow/subtask-tail'
+import { subtaskOutputsTool } from './workflow/subtask-outputs'
 import { createWorkflowClient } from './workflow/client-adapter'
 import { writeEntry, removeEntry } from './helpers/instructions/entry-client'
 import type { EntryResult } from './helpers/instructions/entry-client'
@@ -33,7 +35,6 @@ export { WORKFLOW_INSTRUCTIONS_SENTINEL }
 
 const SUBTASK_LS_TOOL_NAME = 'subtask_ls'
 const SUBTASK_RUN_TOOL_NAME = 'subtask_run'
-const SUBTASK_TAIL_TOOL_NAME = 'subtask_tail'
 // Server namespaces entry keys as api/<key>; the key must match ^[a-z0-9][a-z0-9._-]*$.
 const WORKFLOW_ENTRY_KEY = 'workflow.instructions'
 
@@ -175,7 +176,7 @@ export const handleSessionEvent = (
 )
 
 // ADR-012: workflow tool retired. Standalone trio (subtask_ls, subtask_run,
-// subtask_tail) is the only execution surface; no script wrapper remains.
+// subtask_outputs) is the only execution surface; no script wrapper remains.
 const SUBTASK_LS_TOOL_DESCRIPTION = [
   'List child subtasks from the sessions reader for the current session.',
   'Returns an array of {description, durationMs, task_id, status}.',
@@ -218,26 +219,6 @@ const SUBTASK_RUN_INPUT = {
   },
   required: ['prompt', 'description'],
   additionalProperties: false,
-}
-
-const SUBTASK_TAIL_TOOL_DESCRIPTION = [
-  'Return the last outputs recorded for a subtask id.',
-  'Returns an array of {task_id, outputText, status, updated_at}.',
-  'An unknown or expired id returns an empty array.',
-].join(' ')
-
-const SUBTASK_TAIL_INPUT = {
-  type: 'object',
-  properties: {
-    task_id: { type: 'string', minLength: 1, description: 'Subtask id to tail; matches the task_id returned by subtask_run.' },
-    count: { type: 'integer', minimum: 1, maximum: 5, default: 3, description: 'Maximum outputs to return (default 3, capped at 5).' },
-  },
-  additionalProperties: false,
-}
-
-interface SubtaskTailArguments {
-  task_id?: string
-  count?: number
 }
 
 const plugin: Plugin = {
@@ -327,8 +308,6 @@ const plugin: Plugin = {
               signal.removeEventListener('abort', abortChild)
             }
           })
-          // TODO: review and retire tail output recording, in favor of using api to query the tail.
-          recordTailOutput(result)
           return {
             content: JSON.stringify(result),
             metadata: {
@@ -339,33 +318,7 @@ const plugin: Plugin = {
           }
         }),
       })
-      editor.add({
-        name: SUBTASK_TAIL_TOOL_NAME,
-        description: SUBTASK_TAIL_TOOL_DESCRIPTION,
-        input: SUBTASK_TAIL_INPUT,
-        execute: input => Effect.gen(function* () {
-          // TODO: use the context to query all the latest agent outputs from a subtask. Since storing in-memory is not reliable.
-          /**
-           * Sample output:
-           * {
-           *    "task_id": "abc123", // Required
-           *    "total_messages": 5, // Nice to have
-           *    "tail_messages": [
-           *     {
-           *       "outputText": "First output", // Required
-           *       "sent_at": "2024-06-01T12:00:00Z", // Good to have
-           *       "status": "ok", // Good to have
-           *     },
-           * }
-           */
-          // TODO: When reworking you must consider creating alternative tool, not to break this one. Implement everything in the alternative tool, compare the results and only then retire this tool. And also you must update downstream documents and examples that show using this tool to be compatible and to consider using new interface over the old one.
-          const arguments_ = input as SubtaskTailArguments
-          const taskId = arguments_.task_id ?? ''
-          const entries = taskId === '' ? [] : tailOutputs(taskId, { count: arguments_.count })
-          const content = JSON.stringify(entries)
-          return { content, metadata: { title: `subtask_tail: ${entries.length} output(s)` } }
-        }),
-      })
+      editor.add(subtaskOutputsTool(directory))
     })
   }),
 }

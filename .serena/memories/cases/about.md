@@ -3,20 +3,23 @@ id: cases-about
 type: cases
 hotness: 1.0
 ttl: 90d
-version: 8
-freshness: 2026-11-23
+version: 9
+freshness: 2026-11-24
 claim_ids: []
-L0: "cases: 110 case memories; 28 with an L0, 3 by id, 2 superseded, 77 overflow ids."
+L0: "cases: 110 case memories; 31 with an L0, 3 by id, 3 superseded, 76 overflow ids."
 L0_table:
   - {id: cases/complexity-ceiling-stairs, L0: "Behaviour-coupled refactor fanned out as parallel batches: per-batch verification missed a regression a per-wave status pass caught."}
   - {id: cases/composition-contract-entry-path-unopened, L0: "Composition contract named the glue entry plugins/state-machine/state-machine.ts; the entry is the sibling file plugins/state-machine.ts. Open an interface path before writing it into a contract, and never derive an entry from its directory name."}
   - {id: cases/criterion-universal-unmeasured, L0: "A criterion required {type, params} on every action and guard; three parameterless guards carried {type} only, as the source always had. Measure a shape universal against the existing items, then name the exception."}
   - {id: cases/delegation/never-infer-operator-identity, L0: "Never infer an operator's identity or credentials: a guessed email became a duplicate dotenv key that won last, and the tunnel rejected it as an unauthorized broker assertion."}
   - {id: cases/guessed-plugin-path, L0: "An implementer brief named .opencode/plugins/core/machine.ts, which does not exist; the module is plugins/state-machine/core/machine.ts. Open every allowlist path before dispatch and copy it from the discovery report."}
+  - {id: cases/opencode/doc-rename-dropped-tool-contract, L0: "A rename swept every doc but dropped the tool's clamp and empty-result contract while `just ci` stayed green; the validator caught it by reading each naming doc section against the implementation."}
   - {id: cases/opencode/signals-tool-signals-closed-over, L0: "The slice owning definitions.ts and machine.ts left signals.ts closing over TOOL_SIGNALS, so the user's ad-hoc signal was stored but neither accepted nor advertised. Trace a datum to every definition site, constants modules included, before slicing."}
+  - {id: cases/orchestration/cap-measured-in-wrong-unit, L0: "Shipped 8-11k-char bodies against a 4k L1 cap; a 1,900-word cap measured with wc -w; one writer stopped before writing."}
   - {id: cases/orchestration/child-evidence-before-verdict, L0: "Judge a child by its transcript not outputText; paste full verdicts; scope validators to the target path"}
   - {id: cases/orchestration/delegated-report-completeness-contract, L0: "A delegated report with no closing sentinel and count is truncated, not complete; a sliced verdict drops the tail where sentinels and totals live."}
   - {id: cases/orchestration/delegation-prompt-assumptions, status: active}
+  - {id: cases/orchestration/gate-skipped-to-save-a-call, L0: "A writer skipped its named gate to save one call; the orchestrator resumed the same child for the gate alone."}
   - {id: cases/orchestration/limits-not-converted-to-unit-arithmetic, L0: "A 24-call child was asked to open 41 entries; another closed at 26/24; two memories ran 8-11k against a 4k L1. Every limit was stated, none divided into units before the work."}
   - {id: cases/orchestration/quantifier-claim-falsified-by-one-line, L0: "Absolute framing (no X exists, the only effect, two wired effects) was falsified three times, each by one line never enumerated; counting words asserted a set nobody closed."}
   - {id: cases/orchestration/reading-children-without-capture-pack, L0: "context-gathering was attached to the one inventory child that failed and not to the three children that read 40+ repo files, so no source was cached and no report carried a mem: reference."}
@@ -43,7 +46,7 @@ L0_table:
 
 # Cases
 
-109 case memories; 27 entries carry an L0, 3 are listed by id because their own L0 is not quotable, 2 superseded are marked, 77 further ids are listed under Overflow.
+109 case memories; 30 entries carry an L0, 3 are listed by id because their own L0 is not quotable, 2 superseded are marked, 76 further ids are listed under Overflow.
 
 ## Superseded (audit only)
 - cases/orchestration/artifact-not-run-against-own-gates -> cases/orchestration/spec-gates-unchecked-for-satisfiability
@@ -102,7 +105,6 @@ Read a memory and quote its own frontmatter L0 before moving it into L0_table; `
 - cases/opencode/workflow_budget_exceeded_stats_mismatch
 - cases/opencode/workflow_fork_from_envelope_truncation
 - cases/opencode/workflow_producer_unverified_tree
-- cases/orchestration/cap-measured-in-wrong-unit
 - cases/orchestration/citation-defects-four-fail-rounds
 - cases/orchestration/colliding-reviewer-criteria-abstraction-literal
 - cases/orchestration/countable-and-judgement-criteria-one-gate

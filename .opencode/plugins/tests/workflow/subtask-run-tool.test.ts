@@ -80,7 +80,7 @@ describe('standalone trio tool registration', () => {
     subtaskMock.createSubtask.mockClear()
   })
 
-  it('registers the standalone trio (subtask_ls/run/tail)', async () => {
+  it('registers the standalone tools (subtask_ls/run/outputs)', async () => {
     const h = makeHarness()
 
     await register(h)
@@ -90,7 +90,7 @@ describe('standalone trio tool registration', () => {
     expect(h.tools).toHaveLength(3)
     expect(names).toContain('subtask_ls')
     expect(names).toContain('subtask_run')
-    expect(names).toContain('subtask_tail')
+    expect(names).toContain('subtask_outputs')
     expect(names).not.toContain('workflow')
   })
 

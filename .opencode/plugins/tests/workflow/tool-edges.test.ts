@@ -10,7 +10,11 @@ const harness = vi.hoisted(() => ({
 
 const subtaskLs = vi.hoisted(() => ({ listSubtasksFromSessions: vi.fn() }))
 
+const serviceClient = vi.hoisted(() => ({ getClient: vi.fn(), listMessages: vi.fn() }))
+
 vi.mock('@plugins/config/harness', () => ({ harnessConfig: harness.config }))
+
+vi.mock('@plugins/helpers/runtime/service-client', () => ({ getClient: serviceClient.getClient }))
 
 vi.mock('@plugins/helpers/instructions/entry-client', () => ({ writeEntry: vi.fn(), removeEntry: vi.fn() }))
 
@@ -19,8 +23,6 @@ vi.mock('@plugins/workflow/subtask', () => ({ createSubtask: vi.fn() }))
 vi.mock('@plugins/workflow/subtask-ls', () => ({ listSubtasksFromSessions: subtaskLs.listSubtasksFromSessions }))
 
 import { writeEntry } from '@plugins/helpers/instructions/entry-client'
-
-import { readTailOutputs, recordTailOutput } from '@plugins/workflow/subtask-tail'
 
 import plugin, { handleSessionEvent } from '@plugins/workflow'
 
@@ -86,32 +88,30 @@ const executeTool = async (tool: Record<string, unknown>, input: unknown, sessio
 }
 
 describe('workflow tool edge inputs', () => {
-  it('returns the documented empty result for subtask_tail with an empty task_id', async () => {
-    recordTailOutput({ outputText: 'live output', task_id: 'task-edge-live', status: 'ok', durationMs: 5 })
-
+  it('returns the documented empty result for subtask_outputs with an empty task_id', async () => {
     const h = makeHarness()
 
     await register(h)
+    serviceClient.getClient.mockResolvedValue({ message: { list: serviceClient.listMessages } })
 
-    const result = await executeTool(findTool(h.tools, 'subtask_tail'), { task_id: '' })
+    const result = await executeTool(findTool(h.tools, 'subtask_outputs'), { task_id: '' })
 
     expect(JSON.parse(result.content)).toEqual([])
-    expect(result.metadata.title).toBe('subtask_tail: 0 output(s)')
-    expect(readTailOutputs('task-edge-live')).toHaveLength(1)
+    expect(result.metadata.title).toBe('subtask_outputs: 0 output(s)')
+    expect(serviceClient.listMessages).not.toHaveBeenCalled()
   })
 
-  it('returns the documented empty result for subtask_tail when task_id is omitted', async () => {
-    recordTailOutput({ outputText: 'live output', task_id: 'task-edge-omitted', status: 'ok', durationMs: 5 })
-
+  it('returns the documented empty result for subtask_outputs when task_id is omitted', async () => {
     const h = makeHarness()
 
     await register(h)
+    serviceClient.getClient.mockResolvedValue({ message: { list: serviceClient.listMessages } })
 
-    const result = await executeTool(findTool(h.tools, 'subtask_tail'), {})
+    const result = await executeTool(findTool(h.tools, 'subtask_outputs'), {})
 
     expect(JSON.parse(result.content)).toEqual([])
-    expect(result.metadata.title).toBe('subtask_tail: 0 output(s)')
-    expect(readTailOutputs('task-edge-omitted')).toHaveLength(1)
+    expect(result.metadata.title).toBe('subtask_outputs: 0 output(s)')
+    expect(serviceClient.listMessages).not.toHaveBeenCalled()
   })
 
   it('returns an empty list when the sessions listing yields no value', async () => {

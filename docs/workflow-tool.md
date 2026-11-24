@@ -4,7 +4,7 @@ The `workflow` tool and its script runner are retired (ADR-012, ADR-017). The pl
 
 - `subtask_run` runs one child subtask and returns its result.
 - `subtask_ls` lists the child subtasks of the calling session.
-- `subtask_tail` returns the last outputs recorded for one subtask id.
+- `subtask_outputs` reads a subtask's latest assistant outputs from its session.
 
 ## subtask_run
 
@@ -130,26 +130,30 @@ Arguments:
 
 Returns an array of `{ description, durationMs, task_id, status }` for the child sessions parented to the calling session. Forks have no `parentID` link and do not appear; use the `task_id` the fork returned. `subtask_ls` strips a leading `[ok]` or `[error]` from a child title before returning it.
 
-## subtask_tail
+## subtask_outputs
+
+The only reader for a child's output. It reads the child session's stored messages through the client `message.list` call, so its output survives a plugin restart.
 
 Arguments:
 
 | Field | Range | Default | Purpose |
 |---|---|---|---|
-| `task_id` | non-empty string | required | Subtask id to tail; matches the `task_id` returned by `subtask_run`. |
-| `count` | 1 to 5 | 3 | Maximum outputs to return. |
+| `task_id` | non-empty string | none | Child session id to read; the `task_id` returned by `subtask_run`. No field is required, and an absent, unknown, or empty id returns an empty array. |
+| `count` | 1 to 5 | 3 | Maximum outputs to return. The tool clamps the value to 1-5. |
 
-Returns an array of `{ task_id, outputText, status, updated_at }` in the order recorded, oldest first. Each entry is returned in full: the tool applies no length clamp and no entry carries a `truncated` flag, so the orchestrator truncates when it compacts a report. The tool caps only the number of entries — `count` (1 to 5, default 3) bounds what one call returns — while the store keeps at most 5 live entries per id and drops entries older than 24 hours. An unknown or expired id returns an empty array.
+Returns an array of `{ task_id, outputText, sent_at, status }`, oldest first. `outputText` is one message's assistant text parts joined with newlines, oldest part first. `sent_at` is an ISO timestamp. `status` is `ok`, or `error` when the message carries an error or finished with `error` or `content-filter`. An absent, empty, or unknown id returns `[]`: an empty array means no output was read, not that the child failed.
+
+Each call titles its result `subtask_outputs: <n> output(s)`.
 
 ## Live progress
 
-The plugin reports no live progress. `subtask_run` returns when the child settles, and its call path wires no toast sink, so no toast fires and no session title carries a run id. Inspect children with `subtask_ls` or `subtask_tail`, or open the session.
+The plugin reports no live progress. `subtask_run` returns when the child settles, and its call path wires no toast sink, so no toast fires and no session title carries a run id. Inspect children with `subtask_ls` or `subtask_outputs`, or open the session.
 
 A newly created child keeps the `description` it was created with; the runtime never rewrites a title and sets none on a fork.
 
 Child sessions are real sessions, so the session list and switcher show them and you can open one directly. A normal subtask sets `parentID` to the calling session when it creates the child; a forked subtask is created via `session.fork` instead, and its parent linkage is established server-side rather than by the plugin. They are not nested inline under the tool call: that nested subagent view is hard-gated to the built-in `task` tool in this opencode version and a plugin tool cannot render it. Open a child from the session list, or resume it with `opencode run --session <id>`.
 
-Each tool call titles its own result: `subtask_run: <status>`, `subtask_ls: <n> subtask(s)`, and `subtask_tail: <n> output(s)`.
+Each tool call titles its own result: `subtask_run: <status>`, `subtask_ls: <n> subtask(s)`, and `subtask_outputs: <n> output(s)`.
 
 ## Debugging
 
@@ -226,5 +230,5 @@ opencode export "$CHILD_SESSION_ID" --sanitize > child.json   # redact sensitive
 | `status: 'timeout'` | Child exceeded `timeout_minutes`. | Raise `timeout_minutes` or send a smaller prompt. |
 | `status: 'error'` | Child reported an error, the call failed, the input was invalid, or a schema reply stayed unusable after the follow-up. | Read `error`, then retry or fall back. |
 | Huge `outputText` | Child returned a long reply; `outputText` carries it in full. | Ask children for short answers. |
-| `subtask_ls` returns `[]` | No child is parented to this session, or the child is a fork. | Use the `task_id` the fork returned, or `subtask_tail`. |
-| `subtask_tail` returns `[]` | Unknown or expired id. | Re-run the subtask or read the child session directly. |
+| `subtask_ls` returns `[]` | No child is parented to this session, or the child is a fork. | Use the `task_id` the fork returned, then `subtask_outputs`. |
+| `subtask_outputs` returns `[]` | The id is absent, unknown, or empty. | Re-run the subtask or read the child session directly. |

@@ -35,7 +35,7 @@ Anchor: state the session's objective, what you actually shipped or decided, and
 
 ## Step 3: Interview the subagents
 
-Only the orchestrator — the session that dispatched the children — can interview them, because a session cannot resume a child it did not dispatch. Resume two to four of your own children, chosen among those that struggled, exceeded a budget, contradicted the brief, or had to guess, and ask each three things: what difficulties it experienced during its task, what it would do differently, and what led to those difficulties.
+Only the orchestrator — the session that dispatched the children — can interview them, because a session cannot resume a child it did not dispatch. Resume two to four of your own children, chosen among those that struggled, exceeded a budget, contradicted the brief, or had to guess, and ask each of the things: what went well in in its task, what difficulties it experienced during their task, what it would do differently, and what led to those difficulties.
 
 Record the answers in `$FILE` as given and never invent one. If you have no answers to record, the section says so in one line. Use the answers, do not file them: an action item that fixes a briefing defect quotes the child's own words from its answer in the action item's **Change** field from Step 4.
 

@@ -7,14 +7,14 @@ import { makeHarness, register } from '@tests/workflow/harness'
 import plugin from '@plugins/workflow'
 
 describe('workflow (v2)', () => {
-  it('registers the standalone trio with JSON-Schema inputs (workflow retired)', async () => {
+  it('registers the standalone tools with JSON-Schema inputs (workflow retired)', async () => {
     const h = makeHarness()
 
     await register(h)
     expect(h.tools).toHaveLength(3)
     expect(h.tools[0].name).toBe('subtask_ls')
     expect(h.tools[1].name).toBe('subtask_run')
-    expect(h.tools[2].name).toBe('subtask_tail')
+    expect(h.tools[2].name).toBe('subtask_outputs')
     expect(typeof h.tools[1].execute).toBe('function')
 
     const names = h.tools.map(tool => tool.name)
@@ -22,7 +22,7 @@ describe('workflow (v2)', () => {
     expect(names).not.toContain('workflow')
   })
 
-  it('accepts only task_id on subtask_tail', async () => {
+  it('accepts only task_id and count on subtask_outputs', async () => {
     const h = makeHarness()
 
     await register(h)

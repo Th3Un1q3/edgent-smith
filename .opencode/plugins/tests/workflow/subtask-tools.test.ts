@@ -8,7 +8,17 @@ import { subtaskFactory } from '@tests/workflow/plugin-state'
 
 import { listSubtasksFromSessions } from '@plugins/workflow/subtask-ls'
 
-import { recordTailOutput } from '@plugins/workflow/subtask-tail'
+const serviceClient = vi.hoisted(() => ({ getClient: vi.fn() }))
+
+vi.mock('@plugins/helpers/runtime/service-client', () => ({ getClient: serviceClient.getClient }))
+
+const message = (text: string, created: number) => ({
+  type: 'assistant',
+  time: { created },
+  content: [{ type: 'text', text }],
+})
+
+const page = (...messages: Array<Record<string, unknown>>) => ({ data: messages })
 
 beforeEach(resetWorkflowMocks)
 
@@ -55,37 +65,46 @@ describe('workflow tool handlers', () => {
     expect(result.metadata.title).toBe('subtask_ls: 0 subtask(s)')
   })
 
-  it('returns an empty array for a task id with no stored output', async () => {
+  it('returns an empty array when the child session reports no assistant output', async () => {
+    const list = vi.fn(() => page())
+
+    serviceClient.getClient.mockResolvedValue({ message: { list } })
+
     const h = makeHarness()
 
     await register(h)
 
     const result = await executeTool<{ content: string, metadata: { title: string } }>(h.tools[2], { task_id: 'task_missing' })
 
+    expect(list).toHaveBeenCalledWith({ sessionID: 'task_missing', type: 'assistant', order: 'desc', limit: 5 })
     expect(JSON.parse(result.content)).toEqual([])
-    expect(result.metadata.title).toBe('subtask_tail: 0 output(s)')
+    expect(result.metadata.title).toBe('subtask_outputs: 0 output(s)')
   })
 
-  it('returns recorded outputs in the order they were recorded', async () => {
+  it('returns the child outputs oldest first regardless of page order', async () => {
+    const list = vi.fn(() => page(message('out-1', 2000), message('out-0', 1000)))
+
+    serviceClient.getClient.mockResolvedValue({ message: { list } })
+
     const h = makeHarness()
 
     await register(h)
-    recordTailOutput({ outputText: 'out-0', task_id: 'task_tail_order', status: 'ok', durationMs: 1 })
-    recordTailOutput({ outputText: 'out-1', task_id: 'task_tail_order', status: 'error', durationMs: 2 })
 
     const result = await executeTool<{ content: string, metadata: { title: string } }>(h.tools[2], { task_id: 'task_tail_order', count: 3 })
     const entries = JSON.parse(result.content) as Array<{ outputText: string }>
 
     expect(entries.map(entry => entry.outputText)).toEqual(['out-0', 'out-1'])
-    expect(result.metadata.title).toBe('subtask_tail: 2 output(s)')
+    expect(result.metadata.title).toBe('subtask_outputs: 2 output(s)')
   })
 
-  it('passes count through to the tail helper', async () => {
+  it('passes count through to the outputs reader', async () => {
+    const list = vi.fn(() => page(message('out-0', 1000), message('out-1', 2000)))
+
+    serviceClient.getClient.mockResolvedValue({ message: { list } })
+
     const h = makeHarness()
 
     await register(h)
-    recordTailOutput({ outputText: 'out-0', task_id: 'task_tail_count', status: 'ok', durationMs: 1 })
-    recordTailOutput({ outputText: 'out-1', task_id: 'task_tail_count', status: 'ok', durationMs: 2 })
 
     const result = await executeTool<{ content: string }>(h.tools[2], { task_id: 'task_tail_count', count: 1 })
     const entries = JSON.parse(result.content) as Array<{ outputText: string }>

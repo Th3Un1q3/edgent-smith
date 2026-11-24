@@ -28,16 +28,16 @@ Turn one request into standalone subtasks, run them with `tools.subtask_run`, an
 |---|---|---|
 | run | `tools.subtask_run({ description, prompt, skills, schema })` | one subtask |
 | resume | `+ task_id` | continue a child; never for validation; skill handling under §Execution envelope |
-| tail | `tools.subtask_tail({ task_id, count })` | last recorded outputs |
+| outputs | `tools.subtask_outputs({ task_id, count })` | the child session's latest outputs |
 | list | `tools.subtask_ls({ count, status })` | audit runs before a retry |
 
 - `prompt` and `description` are required; `description` cuts at 80 chars, so lead with the verb. `agent` defaults to `rug-swe`; override only for a different specialist. `fork_from` and `task_id` exclude each other, and a blank or whitespace-only `fork_from` is rejected. `fork_from` forks that source session at its latest message and needs a reachable OpenCode service client; a fork failure returns `status: 'error'`, never a fallback to the source. `subtask_ls` lists your children plus any fork with the child it was forked from.
-- **`timeout_minutes` is omitted, not chosen.** Dispatch with no value and the child gets the 15-minute default. Set it only when the task is expected to outrun those 15 minutes (a full suite, a CI or gate run, a large enumeration); never shorten it, never size it per dispatch, and **never set it "just in case" or as a safety margin** — setting it on a task that finishes inside 15 minutes is a defect, not caution. Timeout governs wall-clock; it is unrelated to the 24-call budget, and a large task does not need more time, it needs a narrower scope or a discovery subtask first. When a child does expire, do not guess a bigger value: `subtask_tail` shows its progress. `skills` takes names, not paths; the runner injects each named skill as `<task_skills>`, skips a name with no file, and `[]` injects nothing.
+- **`timeout_minutes` is omitted, not chosen.** Dispatch with no value and the child gets the 15-minute default. Set it only when the task is expected to outrun those 15 minutes (a full suite, a CI or gate run, a large enumeration); never shorten it, never size it per dispatch, and **never set it "just in case" or as a safety margin** — setting it on a task that finishes inside 15 minutes is a defect, not caution. Timeout governs wall-clock; it is unrelated to the 24-call budget, and a large task does not need more time, it needs a narrower scope or a discovery subtask first. When a child does expire, do not guess a bigger value: `subtask_outputs` returns that child's last outputs. `skills` takes names, not paths; the runner injects each named skill as `<task_skills>`, skips a name with no file, and `[]` injects nothing.
 - **The result is a JSON string.** Parse it before any field read: `const r = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw))`. A guard written against `raw.status` sees `undefined` and reports a good child as failed. Then require `status === 'ok'`, `truncated === false`, and non-empty `outputText.trim()`.
 - **You cannot see a child's call count.** Never infer a child's spend from its report. Each child gets 24 calls per turn, a `task_id` resume starts a fresh 24-call window, and its report holds about 4000 chars.
 - **A report past the cap ends with a `…[truncated N chars]` marker**, so give each child one report section. `data` exists only with `schema` and is absent on a parse miss, so ask for a schema only when the code consumes the value: one unread `required` key makes every child `error`. The `execute` result truncates too, so a body returning several reports names the one the caller needs first.
 - **The gate blocks tools other than `signal_send`, `execute`, `question` and `skill` until a goal exists**, and a gate rejection is not an execute failure: set the goal, then retry.
-- **Neither can you exercise a tool path in-process.** A subtask session lacks `subtask_run`, `subtask_ls`, and `subtask_tail`; your own toolset is exactly `signal_send`, `execute`, `subtask_run`, `subtask_ls`, `subtask_tail`, and `question`. Dispatch a probe (a subtask whose only job is to exercise one path and report what it observed), then pass a validator the raw session ids and outputs that subtask produced.
+- **Neither can you exercise a tool path in-process.** A subtask session lacks `subtask_run`, `subtask_ls`, and `subtask_outputs`; your own toolset is exactly `signal_send`, `execute`, `subtask_run`, `subtask_ls`, `subtask_outputs`, and `question`. Dispatch a probe (a subtask whose only job is to exercise one path and report what it observed), then pass a validator the raw session ids and outputs that subtask produced.
 
 ## Writing a subtask prompt
 
@@ -77,7 +77,7 @@ If you cannot name the deliverable and its files in one sentence, the first subt
 - **Judge, never rule.** The orchestrator renders no verdict, ranking, comparison, or `PASS`/`FAIL` of its own: not across children's numbers, not on a design trade-off, not in its closing `Criteria:` line. Dispatch a fresh child for the ruling — the [Fresh judge](#fresh-judge) pattern for one artifact, one subtask that compares or ranks several — then forward its line-1 verdict and the evidence it named.
 - **Verdict overflow.** When the verdict exceeds the output cap, forward the section that holds the failing criteria, named by its `##` heading, and list the criteria not forwarded.
 - **Partial input.** A child whose input lacks its expected sentinel stops and names the gap; that refusal is the correct outcome.
-- **Empty result.** An `ok` result with empty `outputText` is recovered inside the envelope's `settle`: it tails the child's transcript and substitutes the last untruncated recorded output.
+- **Empty result.** An `ok` result with empty `outputText` is recovered inside the envelope's `settle`: it reads the child's session outputs and substitutes the last one that carries text.
 
 ## Prompt examples
 
@@ -115,13 +115,13 @@ try {
   const skillsSeen = {}
   const parse = (r) => JSON.parse(typeof r === 'string' ? r : JSON.stringify(r))
   const ok = (r) => r.status === 'ok' && !r.truncated && Boolean(r.outputText?.trim())
-  // an ok child can finish with its report unrecorded on the result; its transcript still holds it
+  // an ok child can finish with its report missing from the result; its session still holds it
   const settle = async (r) => {
     if (r.status !== 'ok' || r.outputText?.trim() || !r.task_id) return r
-    const raw = await tools.subtask_tail({ task_id: r.task_id, count: 3 })
+    const raw = await tools.subtask_outputs({ task_id: r.task_id, count: 3 })
     const entries = typeof raw === 'string' ? JSON.parse(raw) : raw
     const landed = (Array.isArray(entries) ? entries : [])
-      .filter((e) => e && !e.truncated && String(e.outputText || '').trim())
+      .filter((e) => e && e.status === 'ok' && String(e.outputText || '').trim())
       .pop()
     return landed ? { ...r, outputText: landed.outputText.trim() } : r
   }
@@ -328,11 +328,11 @@ The orchestrator is not a courier: do not read a child's output and retype it fo
 
 1. **Reuse the session** — the default. The child keeps its context, working state, and injected skills; nothing crosses the boundary and the prompt carries only the delta. Cost: its context keeps growing.
 2. **Memory** — one subtask stores a finding through the serena gateway (`skills: ['serena-memory']`), and later subtasks read it by name. Right choice: several children need the same data, or the value must outlive the session. Cost: two extra calls (write, read) and a schema-free read, so never for a single hand-off.
-3. **Explicit output text** — the default when the next step must be a fresh child. Take `outputText` from the call result in the same execution, or from `subtask_tail` in a later one, extract only the needed parts in code, and interpolate them into the next prompt. Right choice: a fresh session is required (validator, different specialist, summariser) and an existing output already holds what it needs. Cost: the carried span spends prompt tokens and is a snapshot, not live context.
+3. **Explicit output text** — the default when the next step must be a fresh child. Take `outputText` from the call result in the same execution, or from `subtask_outputs` in a later one, extract only the needed parts in code, and interpolate them into the next prompt. Right choice: a fresh session is required (validator, different specialist, summariser) and an existing output already holds what it needs. Cost: the carried span spends prompt tokens and is a snapshot, not live context.
 4. **Orchestrator-composed payload** — last resort only, after rungs 1-3 were tried and each came up short: the prompt says why the resume, the pointer, and the existing `outputText` cannot carry it. Right choice: the next prompt needs a shape no existing output has — a rewritten brief over several sources — so no child could have said it itself. It never licences composing a decision, verdict, ranking, or comparison: those belong to the child that judges, resumed at rung 1 or dispatched as a [Fresh judge](#fresh-judge), and the orchestrator forwards its ruling. Cost: an extra orchestrator turn, retyped text that can drift, and provenance you must attribute to the source child.
 
-- `subtask_tail` returns the last recorded outputs for one task id (default 3, max 5). It may arrive as a JSON string or as an array: normalise before use. Pass only ids that `subtask_run` or `subtask_ls` returned.
-- **Never demand verbatim stdout.** A child reports its result (summary plus evidence) and the orchestrator either resumes that `task_id` or dispatches a fresh verifier; raw command output stays in the child's transcript and is retrieved via `subtask_tail` only when a verifier needs it. Asking a child to "print stdout verbatim" so the orchestrator can parse it makes the orchestrator a courier of raw output — the exact behaviour the ladder above forbids. If the orchestrator needs a number, it asks the child to report that number with its evidence, or dispatches a verifier; it does not parse a transcript.
+- `subtask_outputs` returns the child session's latest assistant outputs for one task id (default 3, max 5), oldest first, and they survive a plugin restart. It may arrive as a JSON string or as an array: normalise before use. Pass only ids that `subtask_run` or `subtask_ls` returned; an absent, empty, or unknown id returns an empty array.
+- **Never demand verbatim stdout.** A child reports its result (summary plus evidence) and the orchestrator either resumes that `task_id` or dispatches a fresh verifier; raw command output stays in the child's transcript and is retrieved via `subtask_outputs` only when a verifier needs it. Asking a child to "print stdout verbatim" so the orchestrator can parse it makes the orchestrator a courier of raw output — the exact behaviour the ladder above forbids. If the orchestrator needs a number, it asks the child to report that number with its evidence, or dispatches a verifier; it does not parse a transcript.
 
 ```js
 // body for the envelope above
@@ -340,18 +340,18 @@ const id = '<task_id an earlier execution returned>'
 console.log('continuing the implementer in its own session')
 const built = await run({ task_id: id, description: 'finish the implementation', prompt: 'Continue the same task and end the report with a "## Handoff" section naming the changed files and the decision the next child needs.' })
 if (!ok(built)) return { stage: 'resume', status: built.status, error: built.error }
-// the handoff comes from the report we already hold; tail only when the report has no such section
+// the handoff comes from the report we already hold; read the session outputs only when the report has no such section
 let source = built.outputText.trim()
 if (!source.includes('## Handoff')) {
-  console.log(`tailing ${id} for the handoff span`)
-  const raw = await tools.subtask_tail({ task_id: id, count: 3 })
-  const tail = (typeof raw === 'string' ? JSON.parse(raw) : raw).filter((r) => r && !r.truncated && String(r.outputText || '').trim()).pop()
-  if (!tail) return { stage: 'tail', task_id: id, error: 'no untruncated recorded output' }
-  source = tail.outputText
+  console.log(`reading the session outputs of ${id} for the handoff span`)
+  const raw = await tools.subtask_outputs({ task_id: id, count: 3 })
+  const last = (typeof raw === 'string' ? JSON.parse(raw) : raw).filter((r) => r && r.status === 'ok' && String(r.outputText || '').trim()).pop()
+  if (!last) return { stage: 'outputs', task_id: id, error: 'no output with text in that session' }
+  source = last.outputText
 }
 const marker = '## Handoff'
 const at = source.indexOf(marker)
-if (at === -1) return { stage: 'extract', task_id: id, error: 'record has no "## Handoff" section' }
+if (at === -1) return { stage: 'extract', task_id: id, error: 'output has no "## Handoff" section' }
 const span = source.slice(at + marker.length).trim()
 if (!span) return { stage: 'extract', task_id: id, error: 'handoff section is empty' }
 const reviewer = await run({ description: 'review the handoff span', prompt: `Review only this reported change against the criteria the work was dispatched with.\nCriteria: <criteria>\nChange:\n${span}` })
