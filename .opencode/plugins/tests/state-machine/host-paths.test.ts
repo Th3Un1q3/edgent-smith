@@ -44,6 +44,7 @@ describe('host paths', () => {
     const harness = await openMachine(await boot())
 
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
     await harness.emit({
       type: 'session.execution.interrupted',
       data: { sessionID: 'ses_1', reason: 'not-a-known-reason' },
@@ -57,6 +58,7 @@ describe('host paths', () => {
     const harness = await openMachine(await boot())
 
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
     await harness.emit({
       type: 'session.execution.interrupted',
       data: { sessionID: 'ses_1', reason: 42 },
@@ -99,6 +101,7 @@ describe('host paths', () => {
 
     expect(content(await run({ type: 'SET_GOAL', payload: { goal: 'ship it' } })))
       .toContain('Signal accepted.')
+    expect(content(await run({ type: 'PLAN_READY' }))).toContain('Signal accepted.')
     expect(content(await run({ type: 'CLAIM_WORK' }))).toContain('Signal accepted.')
     expect(harness.synthetics.some(message => message.text.includes('Quality check failed')))
       .toBe(true)

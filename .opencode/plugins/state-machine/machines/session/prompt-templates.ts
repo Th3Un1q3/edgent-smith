@@ -55,6 +55,8 @@ const TEMPLATE_VALUES: Record<TemplateId, (context: LoopContext, state: string) 
     memories: joined(context.memories),
     preferences: joined(context.injected['preferences/user']?.full),
   }),
+  plan_stage: () => ({}),
+  retrospective_stage: () => ({}),
 }
 
 export const renderTemplate = (parameters: PromptTemplate, context: LoopContext, state = ''): string =>

@@ -39,6 +39,7 @@ const startedContext = async (): Promise<LoopContext> => {
 
   machine.start('ses_1', 'rug')
   machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+  machine.signal({ type: 'PLAN_READY' }, 'ses_1')
 
   const context = machine.get('ses_1')?.context
 
@@ -73,6 +74,7 @@ describe('update_signals_policy', () => {
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
 
     const signals = harness.synthetics.filter(message => message.text.includes('Signals now:'))
 
@@ -126,6 +128,7 @@ describe('update_signals_policy', () => {
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
     machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
 
     expect(machine.state('ses_1')).toBe('check')

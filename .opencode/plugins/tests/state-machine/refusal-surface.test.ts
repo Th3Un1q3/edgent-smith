@@ -48,6 +48,7 @@ const startPlugin = (harness: Harness, plugin: Plugin): void => {
 const inWork = async (harness: Harness): Promise<void> => {
   await harness.emit(sessionCreated('ses_1', 'rug'))
   await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+  await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
 }
 
 const refusalPrompts = (harness: Harness): SyntheticMessage[] =>

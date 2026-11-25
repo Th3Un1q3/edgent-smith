@@ -57,6 +57,7 @@ describe('synthetic prompt descriptions', () => {
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
     await harness.emit(sessionIdle('ses_1'))
 
     const nudge = harness.synthetics.find(message => message.text.startsWith(IDLE_NUDGE_START))
@@ -72,6 +73,7 @@ describe('synthetic prompt descriptions', () => {
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.emitUserMessage('ses_1', 'user', 'ship it')
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
     await harness.runTool({ type: 'CLAIM_WORK' }, 'ses_1')
 
     expect(harness.synthetics.length).toBeGreaterThan(2)
@@ -88,6 +90,7 @@ describe('the park summary', () => {
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it.' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
     machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
     machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
     machine.signal({ type: 'GOAL_ACHIEVED' }, 'ses_1')

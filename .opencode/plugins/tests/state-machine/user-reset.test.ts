@@ -70,6 +70,7 @@ const startInWork = async (): Promise<Harness> => {
   await register(harness)
   await harness.emit(sessionCreated('ses_1', 'rug'))
   await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } })
+  await harness.runTool({ type: 'PLAN_READY' })
   return harness
 }
 

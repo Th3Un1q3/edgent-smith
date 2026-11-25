@@ -10,6 +10,7 @@ describe('the round lifecycle', () => {
   const enterValidate = (machine: StateMachine): readonly EmitRequest[] => {
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
     machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
     return machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
   }

@@ -106,12 +106,18 @@ describe('the declared policy', () => {
     expect(stateAt('towards_goal.define_goal').exit).toEqual([{ type: 'set_tools_policy', params: { allowedTools: null } }])
   })
 
-  it('declares it in no other state', () => {
+  it('declares a policy only for plan', () => {
     const others = statePaths(SESSION_LOOP.states).filter(state => state !== 'towards_goal.define_goal')
     const declared = others.flatMap(state => actionsOf(state).filter(action =>
-      action.type === 'set_tools_policy'))
+      action.type === 'set_tools_policy').map((action) => {
+      const parameters = action.params as { stateId?: string, allowedTools?: readonly string[] | null }
+      return { stateId: parameters.stateId, allowedTools: parameters.allowedTools }
+    }))
 
-    expect(declared).toEqual([])
+    expect(declared).toEqual([
+      { stateId: 'plan', allowedTools: ['signal_send', 'question', 'skill'] },
+      { stateId: undefined, allowedTools: null },
+    ])
   })
 
   it('declares the four allowed tools', () => {
@@ -159,6 +165,7 @@ describe('the loop', () => {
     const machine = createStateMachine({ library: await loadStateMachineLibrary() })
     machine.start('ses_policy', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_policy')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_policy')
 
     expect(machine.policy('ses_policy')).toBeUndefined()
 
@@ -206,6 +213,7 @@ describe('the hook', () => {
     await register(harness)
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } })
+    await harness.runTool({ type: 'PLAN_READY' })
 
     const exit = await runHook(harness, { tool: 'edit', agent: 'rug', sessionID: 'ses_1' })
 
@@ -245,6 +253,7 @@ describe('the hook', () => {
     await register(harness)
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } })
+    await harness.runTool({ type: 'PLAN_READY' })
 
     const exit = await runHook(harness, { tool: 'edit', agent: 'rug', sessionID: 'ses_1' })
 

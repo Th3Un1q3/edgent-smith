@@ -43,6 +43,7 @@ describe('the retrospective skill activation', () => {
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
     machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
     machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
     machine.signal({ type: 'GOAL_ACHIEVED' }, 'ses_1')

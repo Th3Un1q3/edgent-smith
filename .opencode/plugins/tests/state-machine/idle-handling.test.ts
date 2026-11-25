@@ -16,6 +16,7 @@ describe('idle', () => {
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
 
     await harness.emit(sessionIdle('ses_1'))
 
@@ -44,6 +45,7 @@ describe('idle', () => {
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
     await harness.runTool({ type: 'CLAIM_WORK' }, 'ses_1')
     await harness.runTool({ type: 'GOAL_ACHIEVED' }, 'ses_1')
     await harness.runTool({ type: 'LESSON', payload: { text: 'faster' } }, 'ses_1')
@@ -75,6 +77,7 @@ describe('idle', () => {
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
 
     for (let idle = 0; idle < 4; idle += 1) await harness.emit(sessionIdle('ses_1'))
 
@@ -103,6 +106,7 @@ describe('idle', () => {
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
     await harness.runTool({ type: 'CLAIM_WORK' }, 'ses_1')
     await harness.runTool({ type: 'GOAL_ACHIEVED' }, 'ses_1')
     await harness.runTool({ type: 'LESSON', payload: { text: 'faster' } }, 'ses_1')

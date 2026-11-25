@@ -6,6 +6,8 @@ import { createLoopMachine, emittedText, GOAL_REQUEST, VALIDATOR_PROMPT, WORK_PR
 
 import { templateStart, templateText } from '@tests/helpers/state-machine/template-text'
 
+const PLAN_PROMPT = 'Ask the agent to shape the goal before dispatching any work.'
+
 describe('the emit transport', () => {
   it('holds the goal request for the first user message instead of sending it', async () => {
     const machine = await createLoopMachine()
@@ -24,10 +26,14 @@ describe('the emit transport', () => {
 
     machine.start('ses_1', 'rug')
 
-    const emits = machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1').emits
-    const prompt = emits.find(emitted => emitted.type === 'emit.prompt')
+    const plan = machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1').emits
+    const work = machine.signal({ type: 'PLAN_READY' }, 'ses_1').emits
+    const prompts = [...plan, ...work].filter(emitted => emitted.type === 'emit.prompt')
 
-    expect(prompt).toMatchObject({ description: WORK_PROMPT })
+    expect(prompts).toEqual([
+      expect.objectContaining({ description: PLAN_PROMPT }),
+      expect.objectContaining({ description: WORK_PROMPT }),
+    ])
   })
 
   it('names a prompt emit that supplies no description by its opening words', () => {
@@ -49,7 +55,7 @@ describe('the emit transport', () => {
     const result = machine.signal({ type: 'SET_GOAL', payload: { goal: '  ship it  ' } }, 'ses_1')
 
     expect(result.text).toBe('Signal accepted.')
-    expect(result.emits.map(emitted => emitted.type)).toEqual(['emit.prompt', 'emit.signals', 'emit.skill'])
+    expect(result.emits.map(emitted => emitted.type)).toEqual(['emit.prompt', 'emit.signals'])
     expect(machine.get('ses_1')?.context.goal).toBe('ship it')
   })
 
@@ -74,14 +80,21 @@ describe('the emit transport', () => {
     expect(machine.get('ses_1')?.context.injected['preferences/user']?.full).toEqual(['be terse'])
   })
 
-  it('emits the work prompt and the skill request on SET_GOAL', async () => {
+  it('emits the plan prompt on SET_GOAL and the work prompt and skill request on PLAN_READY', async () => {
     const machine = await createLoopMachine()
 
     machine.start('ses_1', 'rug')
 
-    const result = machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    const goal = machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
 
-    expect(result.emits).toEqual([
+    expect(goal.emits).toEqual([
+      { type: 'emit.prompt', text: expect.stringContaining(templateStart('plan_stage')), description: PLAN_PROMPT },
+      { type: 'emit.signals', signal_keys: ['PLAN_READY'] },
+    ])
+
+    const work = machine.signal({ type: 'PLAN_READY' }, 'ses_1')
+
+    expect(work.emits).toEqual([
       { type: 'emit.prompt', text: expect.stringContaining(templateStart('work_towards_goal') + 'ship it'), description: WORK_PROMPT },
       { type: 'emit.signals', signal_keys: ['CLAIM_WORK'] },
       { type: 'emit.skill', name: 'task-delegation', reportTo: 'skill_ready' },
@@ -93,6 +106,7 @@ describe('the emit transport', () => {
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
     machine.callback('ses_1', 'skill_ready', { ok: true })
 
     expect(machine.get('ses_1')?.context.injectedSkills).toEqual(['skill:task-delegation:complete'])
@@ -115,6 +129,7 @@ describe('the emit transport', () => {
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
 
     for (const text of ['first', 'second', 'third']) {
       machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
@@ -132,6 +147,7 @@ describe('the emit transport', () => {
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
 
     const result = machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
 
@@ -147,6 +163,7 @@ describe('the emit transport', () => {
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
     machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
 
     const emits = machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0, output: 'clean' })
@@ -165,6 +182,7 @@ describe('the emit transport', () => {
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
     machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
 
     const emits = machine.callback('ses_1', 'quality_check_ready', { ok: false, exitCode: 1, output: 'boom' })

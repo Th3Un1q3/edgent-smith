@@ -222,7 +222,7 @@
           ],
           "on": {
             "agent_sent_signal.SET_GOAL": {
-              "target": "work",
+              "target": "plan",
               "actions": [
                 {
                   "type": "record",
@@ -247,6 +247,50 @@
                   }
                 }
               ]
+            }
+          }
+        },
+        "plan": {
+          "entry": [
+            {
+              "type": "prompt",
+              "params": {
+                "template": "plan_stage",
+                "description": "Ask the agent to shape the goal before dispatching any work."
+              }
+            },
+            {
+              "type": "set_tools_policy",
+              "params": {
+                "stateId": "plan",
+                "allowedTools": [
+                  "signal_send",
+                  "question",
+                  "skill"
+                ],
+                "errorMessage": "Plan first: <name> is blocked in plan. Write the decomposition, then signal PLAN_READY."
+              }
+            },
+            {
+              "type": "update_signals_policy",
+              "params": {
+                "set_enabled_signals": [
+                  "PLAN_READY"
+                ]
+              }
+            }
+          ],
+          "exit": [
+            {
+              "type": "set_tools_policy",
+              "params": {
+                "allowedTools": null
+              }
+            }
+          ],
+          "on": {
+            "agent_sent_signal.PLAN_READY": {
+              "target": "work"
             }
           }
         },
@@ -569,6 +613,13 @@
         },
         "retrospective": {
           "entry": [
+            {
+              "type": "prompt",
+              "params": {
+                "template": "retrospective_stage",
+                "description": "Ask the agent to run the retrospective and report when the command finishes."
+              }
+            },
             {
               "type": "activate_skill",
               "params": {

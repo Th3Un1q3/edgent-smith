@@ -216,6 +216,10 @@ Validation result?
 └── All FAIL → context was wrong: launch a fresh child for the whole task with fresh instructions; do not patch partial failures
 ```
 
+## Ledgers That Drive a Move
+
+When a subtask enumerates responsibilities, surfaces, sections, or entries that a later step will move, port, or delete, the producing child gives each ledger row its disposition instead of a bare classification: `MOVE:<target>` for text that leaves, `KEEP:<design section>` for text a recorded decision keeps, `RETIRE:<design section>` for text a recorded decision drops, and prints the count per disposition. An independent auditor then requires zero rows with no home and zero with two homes, reading the disposition column alone. The agent that commissioned the ledger accepts it only when both counts are zero; a row that resolves two ways, or a class column that must be reconciled against a separate list of decisions, is a failed row.
+
 ## Retrospective: Prompt the Command
 
 Run the retrospective after the last validation passes and before returning whenever behavior or docs changed; a run that changed neither skips it. Only the orchestrator observed the whole run, and each child saw only its own session.

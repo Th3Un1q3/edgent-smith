@@ -261,6 +261,7 @@ describe('plugin wiring', () => {
     await harness.emit(sessionCreated('ses_1', 'rug'))
 
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } })
+    await harness.runTool({ type: 'PLAN_READY' })
 
     const written = harness.storageWrites.filter(write => write.key === snapshotKey('ses_1'))
     expect(written.length).toBeGreaterThan(0)
@@ -273,6 +274,7 @@ describe('plugin wiring', () => {
     await register(harness)
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } })
+    await harness.runTool({ type: 'PLAN_READY' })
 
     expect(lastContext(harness).results.skill_ready?.ok).toBe(false)
   })
@@ -294,6 +296,7 @@ describe('plugin wiring', () => {
     harness.failStorageWrites = true
 
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } })
+    await harness.runTool({ type: 'PLAN_READY' })
 
     expect(harness.logs.join('\n')).toContain('write-failed')
   })

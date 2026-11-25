@@ -118,6 +118,16 @@ const cases: readonly RenderCase[] = [
     context: context({ goal: 'ship it', memories: [], injected: {} }),
     values: ['ship it', 'none'],
   },
+  {
+    name: 'plan_stage',
+    context: context(),
+    values: [],
+  },
+  {
+    name: 'retrospective_stage',
+    context: context(),
+    values: [],
+  },
 ]
 
 const UNRENDERED_TAG = /\{\{[^}]*\}\}/

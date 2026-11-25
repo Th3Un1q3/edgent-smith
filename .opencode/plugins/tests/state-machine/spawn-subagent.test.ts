@@ -30,6 +30,7 @@ describe('spawn_subagent', () => {
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
     machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
     machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
     return machine
@@ -194,6 +195,7 @@ describe('spawn_subagent', () => {
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
 
     const emits = machine.callback('ses_1', 'subagent_ready', { ok: true })
 
@@ -235,6 +237,7 @@ describe('spawn_subagent', () => {
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
     machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
     const emits = machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
     const spawns = emits.filter(emit => emit.type === 'emit.subagent')

@@ -18,6 +18,8 @@ export const TEMPLATE_IDS = [
   'park_summary',
   'work_towards_goal',
   'idle_nudge',
+  'plan_stage',
+  'retrospective_stage',
 ] as const
 
 export type TemplateId = (typeof TEMPLATE_IDS)[number]

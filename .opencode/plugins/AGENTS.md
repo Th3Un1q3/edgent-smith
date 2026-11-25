@@ -60,6 +60,27 @@ See `.opencode/instructions/opencode-plugin-interfaces.instructions.md` for deta
 
 The session loop is a machine directory, `state-machine/machines/session/`, holding `machine.json`, `signals.manifest.json`, `context.ts`, the `templates/*.md` wording, and the definition modules that sit beside it. Each definition module owns one kind of body: `action-builders.ts` every action body (`createActions`), `guard-builders.ts` every guard body (`createGuards`), `prompt-templates.ts` prompt rendering and `promptDescription`, `record-actions.ts` the record callbacks that turn an event into context updates, `payload-readers.ts` the reads of host payload shape (`session.inbox.enqueued` fields, callback payloads), `signal-specs.ts` the signal schemas, registry and `updateSignalsPolicySpecs`, `definition-contract.ts` the action, guard, prompt and record parameter types plus `ACTION_TYPES` and `GUARD_TYPES`, and `template-files.ts` the loading and rendering of `templates/*.md`. A reader looks for an action in `action-builders.ts`, a guard in `guard-builders.ts`, a prompt's wording in `templates/` with its rendering in `prompt-templates.ts`, and a signal schema in `signals.manifest.json` beside `signal-specs.ts`. `context.ts` carries the context shape, its defaults, the snapshot field allowlist and its limits. `state-machine/machines/index.ts` is the registry, where each entry carries `{ id, definition, manifest, transientStates, definitions, contexts }`, and the module also exports the default snapshot codec, the default state ids and the callback names. `state-machine/core/` holds the assembler (`core/machine.ts`) and the generic signal engine (`core/signals.ts`), plus generic infrastructure shared across machines, and defines no session field, state, signal, template, callback or machine id. A new machine is one directory under `state-machine/machines/` with `machine.json`, `signals.manifest.json`, `definitions.ts` and `context.ts`, plus one registry entry wiring all four — `core/` is not edited. These invariants came from live sessions and a unit-test suite that stayed green while the host did nothing; keep them when editing it. Edit rules for states, guards, actions, signals and snapshots: `.opencode/instructions/state-machine.instructions.md`.
 
+#### Session states and staged prompts
+
+`machine.json` declares 11 leaves: `admission`, `free_work`, and nine under `towards_goal`. `SET_GOAL` in `define_goal` enters `plan`, and `PLAN_READY` in `plan` enters `work`.
+
+| State | Template delivered |
+|---|---|
+| `define_goal` | `goal_request` |
+| `plan` | `plan_stage` |
+| `work` | `work_towards_goal` |
+| `check` | `quality_check_failed` |
+| `validate` | `validation_self_report`, `quality_check_failed`, `panic_escalation` |
+| `memorize` | `memorize` |
+| `retrospective` | `retrospective_stage` |
+| `parked` | `park_summary` |
+| `admission`, `free_work` | none |
+| `panic` | none on entry; `panic_escalation` sits on the arms that enter it |
+
+Each state's stage guidance lives in its template file, not in the agent definition. A `prompt` action names its `template` and its own `description`; `.opencode/plugins/state-machine/machines/session/templates/<template>.md` holds the wording, and `template-files.ts` loads and renders it with the loop context. One `TemplateId` maps to one file in both directions, the file stem is exactly the id in snake_case with no prefix or suffix, and a mapping test fails when a name or a file is added alone. A new stage is a `TemplateId`, its file, and the `prompt` action that names it — never a lookup keyed by state id, which stays forbidden for text and descriptions alike; a state that needs different wording gets a different template, and the description travels with the action.
+
+A stage prompt may be declared on every arm that enters its state, as `panic_escalation` is, so a re-entered state re-delivers its text once per entry rather than once per session. `plan` is the only state after `define_goal` that carries a tool policy: it allows `signal_send`, `question` and `skill`, refuses the rest with an error naming `PLAN_READY`, and clears the policy on exit. The policy, not the text, is what refuses a dispatch in `plan`, so a restored session that missed the prompt still cannot dispatch an unshaped subtask.
+
 - **The loop never speaks first.** A fresh session's entry emits are held on the machine and handed over by `wake()` on the first real user message; a state change before that drops them. Do not deliver `define_goal`'s prompt at `session.created` — the agent invents a goal from an empty chat.
 - **Only waiting states reset.** `parked` and `panic` return to `define_goal` on a real user item. The active work state does not: the message that started the turn arrives after `SET_GOAL` and would wipe the goal mid-work. A new reset arm needs a reason the goal cannot be lost.
 - **Idle is one arm on `towards_goal`.** `system_idle` sits on the compound `towards_goal` state, where the `counter_below` guard on `nudges` (limit 3) increments the counter and prompts `idle_nudge`, and the fourth idle records `idle budget exhausted` and moves to `panic`. `parked` and `panic` declare empty `system_idle` arms, so an idle there changes nothing.

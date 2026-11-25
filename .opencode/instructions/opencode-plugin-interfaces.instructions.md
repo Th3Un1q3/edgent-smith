@@ -97,7 +97,7 @@ export default plugin
 
 Tool `options` sets exposure. `Tool.Info.options` takes `Options`: `codemode` omitted or `true` puts the tool in the Code Mode catalog, so a model calls it as `tools.<name>({ ... })` from an `execute` block, and `codemode: false` keeps it out of that catalog. `pinned` sits on the `codemode?: true` branch and is typed `pinned?: never` when `codemode` is `false`, so a tool that opts out of Code Mode cannot be pinned. The installed type is `/workspace/.opencode/node_modules/@opencode/schema/dist/tool.d.ts`.
 
-`.opencode/plugins/state-machine.ts` registers `signal_send` with `options: { codemode: true }`, so `tools.signal_send({ type, payload })` runs from an `execute` block. For `rug`, the gate blocks every tool outside `define_goal`'s allowlist until `SET_GOAL` carries a goal.
+`.opencode/plugins/state-machine.ts` registers `signal_send` with `options: { codemode: true }`, so `tools.signal_send({ type, payload })` runs from an `execute` block. For `rug`, the gate blocks every tool outside `define_goal`'s allowlist until `SET_GOAL` carries a goal, and then outside `plan`'s allowlist until `PLAN_READY`.
 
 Events are a scoped stream, not a plugin key: `yield* context.event.subscribe().pipe(Stream.filter(...), Stream.runForEach(...), Effect.forkScoped)`.
 

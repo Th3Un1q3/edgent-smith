@@ -67,6 +67,7 @@ describe('signal payloads', () => {
     const actor = library.createActor(loopAt('define_goal'), 'towards_goal', context())
 
     actor.send({ type: 'agent_sent_signal.SET_GOAL', payload: { goal: 'ship' } })
+    actor.send({ type: 'agent_sent_signal.PLAN_READY' })
 
     expect(actor.state()).toBe('work')
     expect(actor.context().goal).toBe('ship')

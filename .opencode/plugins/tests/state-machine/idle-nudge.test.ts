@@ -28,13 +28,17 @@ const NUDGE_STATES = [
   {
     state: 'work',
     expects: 'CLAIM_WORK',
-    enter: (machine: Machine) => machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1'),
+    enter: (machine: Machine) => {
+      machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+      machine.signal({ type: 'PLAN_READY' }, 'ses_1')
+    },
   },
   {
     state: 'check',
     expects: 'quality check',
     enter: (machine: Machine) => {
       machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+      machine.signal({ type: 'PLAN_READY' }, 'ses_1')
       machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
     },
   },
@@ -43,6 +47,7 @@ const NUDGE_STATES = [
     expects: 'GOAL_ACHIEVED',
     enter: (machine: Machine) => {
       machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+      machine.signal({ type: 'PLAN_READY' }, 'ses_1')
       machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
       machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
     },
@@ -52,6 +57,7 @@ const NUDGE_STATES = [
     expects: 'LESSON',
     enter: (machine: Machine) => {
       machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+      machine.signal({ type: 'PLAN_READY' }, 'ses_1')
       machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
       machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
       machine.signal({ type: 'GOAL_ACHIEVED' }, 'ses_1')
@@ -62,6 +68,7 @@ const NUDGE_STATES = [
     expects: 'RETROSPECTIVE_COMPLETE',
     enter: (machine: Machine) => {
       machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+      machine.signal({ type: 'PLAN_READY' }, 'ses_1')
       machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
       machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
       machine.signal({ type: 'GOAL_ACHIEVED' }, 'ses_1')
@@ -72,6 +79,7 @@ const NUDGE_STATES = [
 
 const parkIt = async (machine: Machine): Promise<void> => {
   machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+  machine.signal({ type: 'PLAN_READY' }, 'ses_1')
   await Effect.runPromise(machine.idle('ses_1'))
   machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
   machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
@@ -115,6 +123,7 @@ describe('idle nudge', () => {
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await Effect.runPromise(machine.idle('ses_1'))

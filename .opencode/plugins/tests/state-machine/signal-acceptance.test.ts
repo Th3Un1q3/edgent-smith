@@ -22,6 +22,10 @@ describe('transitions', () => {
     const result = content(await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1'))
 
     expect(result).toContain('Signal accepted.')
+
+    const planned = content(await harness.runTool({ type: 'PLAN_READY' }, 'ses_1'))
+
+    expect(planned).toContain('Signal accepted.')
     expect(harness.synthetics.at(-1)?.text).toContain('CLAIM_WORK')
   })
 
@@ -53,6 +57,7 @@ describe('transitions', () => {
     const harness = await withMachine()
 
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
 
     const result = content(await harness.runTool({ type: 'CLAIM_WORK' }, 'ses_1'))
 
@@ -69,6 +74,7 @@ describe('transitions', () => {
 
     harness.shellResult = { ok: false, exitCode: 1, output: 'type error' }
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
 
     const result = content(await harness.runTool({ type: 'CLAIM_WORK' }, 'ses_1'))
 
@@ -86,6 +92,7 @@ describe('transitions', () => {
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.emitUserMessage('ses_1', 'user', 'ship it')
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
 
     expect(harness.injectedSkills).toEqual(['task-delegation'])
 
@@ -98,6 +105,7 @@ describe('transitions', () => {
     const harness = await withMachine()
 
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
     await harness.runTool({ type: 'CLAIM_WORK' }, 'ses_1')
     await harness.runTool({ type: 'GOAL_ACHIEVED' }, 'ses_1')
     await harness.runTool({ type: 'LESSON', payload: { text: 'faster' } }, 'ses_1')

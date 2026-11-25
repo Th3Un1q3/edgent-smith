@@ -59,6 +59,9 @@ describe('the entry contract', () => {
 
     expect(Exit.isSuccess(exit)).toBe(true)
     expect(harness.logs.some(line => line.startsWith('[state-machine] emit ses_1: emit.prompt failed cause='))).toBe(true)
+
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
+
     expect(harness.injectedSkills).toEqual(['task-delegation'])
   })
 
@@ -76,6 +79,7 @@ describe('the entry contract', () => {
     harness.failStorageWrites = true
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
 
     expect(harness.logs).toContain('[state-machine] persist ses_1: write-failed')
   })

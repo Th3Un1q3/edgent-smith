@@ -8,6 +8,7 @@ import { createStateMachine, loadStateMachineLibrary, RETROSPECTIVE_COMPLETE } f
 import { DEFAULT_MACHINE } from '@plugins/state-machine/machines'
 
 import { makeHarness, sessionCreated, sessionIdle } from '@tests/helpers/state-machine/harness'
+import { templateStart } from '@tests/helpers/state-machine/template-text'
 
 import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
 import type { CommandEmit } from '@plugins/state-machine/core/machine'
@@ -69,6 +70,7 @@ const startPlugin = (harness: Harness, plugin: Plugin): void => {
 const inWork = async (harness: Harness): Promise<void> => {
   await harness.emit(sessionCreated('ses_1', 'rug'))
   await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+  await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
 }
 
 describe('run_command', () => {
@@ -77,7 +79,8 @@ describe('run_command', () => {
     const machine = createStateMachine({ library: await loadStateMachineLibrary(module), machine: module })
 
     machine.start('ses_1', 'rug')
-    const result = machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    const result = machine.signal({ type: 'PLAN_READY' }, 'ses_1')
 
     expect(emitOf(result.emits)).toEqual(command)
     expect(machine.get('ses_1')?.state).toBe('work')
@@ -138,7 +141,8 @@ describe('run_command', () => {
     const commands = createCommandRunner(context)
 
     machine.start('ses_1', 'rug')
-    const goal = machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    const goal = machine.signal({ type: 'PLAN_READY' }, 'ses_1')
     const raised = commands.raise('ses_1', emitOf(goal.emits))
 
     expect(machine.get('ses_1')?.state).toBe('work')
@@ -165,7 +169,7 @@ describe('run_command', () => {
     const nudge = harness.synthetics.find(message => message.text.includes('idle in `work`'))
 
     expect(nudge?.text).toContain('CLAIM_WORK')
-    expect(harness.synthetics.some(message => message.text.includes('Verdict'))).toBe(false)
+    expect(harness.synthetics.some(message => message.text.startsWith(templateStart('validation_self_report')))).toBe(false)
     expect(nudge?.text).toContain('act rather than stop')
   })
 
@@ -236,6 +240,7 @@ describe('run_command', () => {
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    machine.signal({ type: 'PLAN_READY' }, 'ses_1')
     machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
     machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
 

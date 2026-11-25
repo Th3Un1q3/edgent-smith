@@ -42,6 +42,7 @@ describe('idle after a reload', () => {
 
     await first.emit(sessionCreated('ses_1', 'rug'))
     await first.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await first.runTool({ type: 'PLAN_READY' }, 'ses_1')
 
     const restarted = await reload(first)
 
@@ -62,6 +63,7 @@ describe('idle after a reload', () => {
 
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
 
     failFirstIdentityRead(harness, 'ses_1')
 
