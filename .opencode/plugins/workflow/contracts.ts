@@ -57,6 +57,7 @@ export interface SubtaskParameters {
   skills?: string[]
   task_id?: string
   fork_from?: string
+  label?: string
   timeout_minutes?: number
   schema?: Record<string, unknown>
 }
@@ -67,6 +68,7 @@ export interface SubtaskResult {
   outputText: string
   task_id: string
   forked_from?: string
+  label?: string
   status: SubtaskStatus
   error?: string
   durationMs: number
@@ -120,4 +122,5 @@ export interface LsEntry {
   durationMs: number
   task_id: string
   status: SubtaskStatus
+  label?: string
 }

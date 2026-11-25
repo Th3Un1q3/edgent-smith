@@ -18,6 +18,7 @@ Arguments:
 | `skills` | No | none | Skill names resolved through the session's native skill list and injected into the child prompt as a `<task_skills>` envelope: one `<skill name="...">` element per skill, holding a `description:` line when the skill declares one, a `path:` line relative to the session directory when the record exposes a path inside it, and then the skill body with its YAML frontmatter stripped. Nothing is read from `.agents/skills/` on disk. Unknown names are skipped and logged. |
 | `task_id` | No | none | Resume an existing child session instead of creating or forking one. Mutually exclusive with `fork_from`. |
 | `fork_from` | No | none | Fork this session id, copy its conversation history up to the latest message, and deliver this subtask's prompt as the followup on the fork. The result's `task_id` is the new fork id. Surrounding whitespace is trimmed, and a blank or whitespace-only value is rejected: the subtask returns `status: 'error'` with an error naming a non-empty session id. Mutually exclusive with `task_id`. |
+| `label` | No | none | Session-scoped alias for the child. The first call binds the label to the child it creates, every later call with that label resumes the same child, and a label never rebinds; a finished child resumes, while a running or dead (`error`/`aborted`) one returns `status: 'error'`. Mutually exclusive with `task_id` and `fork_from`. |
 | `timeout_minutes` | No | `15` | Per-subtask timeout in minutes. On expiry the subtask returns `status: 'timeout'` and an `error` naming the limit in minutes. |
 | `schema` | No | none | JSON Schema object requesting structured output. See Structured output. |
 
@@ -36,6 +37,7 @@ Result fields:
 | `outputText` | string | Text parts joined with newlines, in full. |
 | `task_id` | string | Child session id. Pass it back to continue the conversation. On a forked subtask this is the fork id. |
 | `forked_from` | string, absent unless forked | Source session id when `fork_from` was set. |
+| `label` | string, absent unless labelled | The child's session-scoped alias, echoed from the call's `label`; present only when the call carried one. |
 | `status` | string | One of `ok`, `error`, `empty`, `timeout`, `aborted`. |
 | `error` | string, absent on success | Failure message. |
 | `durationMs` | number | Wall time for the call. |
@@ -151,7 +153,7 @@ The plugin reports no live progress. `subtask_run` returns when the child settle
 
 A newly created child keeps the `description` it was created with; the runtime never rewrites a title and sets none on a fork.
 
-Child sessions are real sessions, so the session list and switcher show them and you can open one directly. A normal subtask sets `parentID` to the calling session when it creates the child; a forked subtask is created via `session.fork` instead, and its parent linkage is established server-side rather than by the plugin. They are not nested inline under the tool call: that nested subagent view is hard-gated to the built-in `task` tool in this opencode version and a plugin tool cannot render it. Open a child from the session list, or resume it with `opencode run --session <id>`.
+Child sessions are real sessions, so the session switcher shows them and you can open one directly; `opencode session list` prints top-level sessions only, so a child is reached by id. A normal subtask sets `parentID` to the calling session when it creates the child; a forked subtask is created via `session.fork` instead, and its parent linkage is established server-side rather than by the plugin. They are not nested inline under the tool call: that nested subagent view is hard-gated to the built-in `task` tool in this opencode version and a plugin tool cannot render it. Open a child from the session list, or resume it with `opencode run --session <id>`.
 
 Each tool call titles its own result: `subtask_run: <status>`, `subtask_ls: <n> subtask(s)`, and `subtask_outputs: <n> output(s)`.
 
@@ -159,68 +161,74 @@ Each tool call titles its own result: `subtask_run: <status>`, `subtask_ls: <n> 
 
 Children are normal sessions, so you can inspect them after the fact.
 
+These recipes were verified against opencode v2.4.1 on 2026-11-24. That version has no `db` subcommand and no top-level `export`: sessions are exported with `opencode session export`, and the store is queried through Python's `sqlite3` module because no `sqlite3` binary is on PATH. Current sessions live in `session_v2`, `session_message`, and `session_part`; the older `session`, `message`, and `part` tables stopped taking rows on 2026-10-05, so a query against them returns nothing for a new session.
+
 Capture the session id. The run prints it, and you can also read the newest session:
 
 ```bash
-opencode db "SELECT id, title FROM session ORDER BY time_created DESC LIMIT 5"
+opencode session list -n 5 --format json
 ```
 
 Export the session to JSON:
 
 ```bash
-opencode export "$SESSION_ID" > session.json
+opencode session export "$SESSION_ID" > session.json
 ```
+
+Tool calls live in each assistant message's `content[]` array, where an entry with `type: "tool"` carries `name` and `state`.
 
 Pull the `subtask_run` call and its result:
 
 ```bash
-jq '.. | objects | select(.tool? == "subtask_run") | {status: .state.status, output: .state.output}' session.json
+jq '.. | objects | select(.name? == "subtask_run") | {status: .state.status, output: .state.output}' session.json
 ```
 
 Parse the result from the tool output:
 
 ```bash
-jq -r '.. | objects | select(.tool? == "subtask_run") | .state.output | fromjson? | {status, error, task_id}' session.json
+jq -r '.. | objects | select(.name? == "subtask_run") | .state.output | fromjson? | {status, error, task_id}' session.json
 ```
 
-If `jq` is unavailable or the export is missing, query the SQLite store directly. Tool calls live in `part.data` as JSON text:
+If `jq` is unavailable or the export is missing, query the SQLite store directly. Tool calls live in `session_part.data` as JSON text, with the tool name at `$.name` and the call state at `$.state`. The store is `/home/vscode/.local/share/opencode/opencode.db` on this machine; another machine's path differs, and `opencode debug paths` prints the `db` line for it.
 
 ```bash
-opencode db "SELECT p.id, p.time_created, p.data FROM part p WHERE p.session_id = '$SESSION_ID' AND p.data LIKE '%\"tool\":\"subtask_run\"%'" --format json
+DB=$(opencode debug paths | awk '/^db /{print $2}')
+q() { python3 -c 'import sqlite3,sys,json
+c=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True)
+cur=c.execute(sys.argv[2])
+print(json.dumps([dict(zip([d[0] for d in cur.description],r)) for r in cur]))' "$DB" "$1"; }
+
+q "SELECT p.message_id, p.call_id, p.time_created FROM session_part p WHERE p.session_id = '$SESSION_ID' AND p.type = 'tool' AND json_extract(p.data,'$.name') = 'subtask_run'"
 ```
 
-Open the database interactively when you need to explore other tables:
-
-```bash
-opencode db
-```
+Opening the store with `mode=ro` leaves the running server's write-ahead log untouched. There is no interactive `db` shell; add further queries to the same `q` call.
 
 ## Inspecting subsessions
 
 A new child session is created with the `description` (truncated to 80 characters) as its title, with no run-id prefix and no lifecycle marker; the runtime never updates the title, and it sets none on a fork. A normal subtask creates a child session parented to the session that called `subtask_run`; one with `fork_from` forks the named session instead, and its `forked_from` field records the source id. These parented child sessions are real sessions, so the session list and switcher expose them; opening one is the supported way to inspect a child, since the inline nested view under the tool call is not available to plugin tools. The result carries the handle you need: each subtask result has `task_id`.
 
-`opencode session list --format json -n 20` lists sessions, but reports only `id`, `title`, `updated`, `created`, `projectId`, and `directory`. It does not expose the parent link, so query the store for relationships.
+`opencode session list --format json -n 20` prints top-level sessions only, so a child never appears, and reports only `id`, `title`, `updated`, `created`, `projectId`, and `directory`. It does not expose the parent link, so query the store for relationships with `q` and `DB` from Debugging.
 
 ```bash
 # Children of any session, newest first.
-opencode db "SELECT id, parent_id, title, datetime(time_created/1000,'unixepoch') AS created FROM session WHERE parent_id IS NOT NULL ORDER BY time_created DESC LIMIT 20" --format json
+q "SELECT id, parent_id, title, datetime(time_created/1000,'unixepoch') AS created FROM session_v2 WHERE parent_id IS NOT NULL ORDER BY time_created DESC LIMIT 20"
 
 # Children of one parent.
-opencode db "SELECT id, title FROM session WHERE parent_id = '$PARENT_SESSION_ID' ORDER BY time_created" --format tsv
+q "SELECT id, title FROM session_v2 WHERE parent_id = '$PARENT_SESSION_ID' ORDER BY time_created"
 
 # Messages and parts of a child session.
-opencode db "SELECT id, json_extract(data,'$.role') AS role, datetime(time_created/1000,'unixepoch') AS created FROM message WHERE session_id='$CHILD_SESSION_ID' ORDER BY time_created" --format tsv
-opencode db "SELECT id, message_id, json_extract(data,'$.type') AS type FROM part WHERE session_id='$CHILD_SESSION_ID' ORDER BY time_created" --format tsv
+q "SELECT id, type, datetime(time_created/1000,'unixepoch') AS created FROM session_message WHERE session_id='$CHILD_SESSION_ID' ORDER BY seq"
+q "SELECT message_id, ordinal, type FROM session_part WHERE session_id='$CHILD_SESSION_ID' ORDER BY ordinal"
 
-# Export the child, then pull its parts from the JSON.
-opencode export "$CHILD_SESSION_ID" > child.json        # pass the id; no-arg opencode export goes interactive
-opencode export "$CHILD_SESSION_ID" --sanitize > child.json   # redact sensitive transcript and file data
+# Export the child, then read its tool calls from the JSON.
+opencode session export "$CHILD_SESSION_ID" > child.json        # pass the id; no-arg export goes interactive
+opencode session export "$CHILD_SESSION_ID" --sanitize > child.json   # redact sensitive transcript and file data
 ```
 
-- `session.parent_id` names the parent and `session.id` the child. `time_created` and `time_updated` are Unix milliseconds, so use `datetime(time_created/1000,'unixepoch')`; the naive `datetime(time_created)` returns null.
-- `opencode export` writes `{info, messages[]}`. `info.parentID` names the parent; each message pairs `info` (role, id, sessionID) with `parts` (text, reasoning, tool calls).
+- `session_v2.parent_id` names the parent and `session_v2.id` the child. `time_created` and `time_updated` are Unix milliseconds, so use `datetime(time_created/1000,'unixepoch')`; the naive `datetime(time_created)` returns null.
+- `opencode session export` writes `{info, messages[]}`. `info.parentID` names the parent; each message is `{id, type, text, time, files}` for prose, and an assistant turn adds `agent`, `model`, `content[]`, `tokens`, `cost`, and `finish`; `type` is the role (`user`, `assistant`, `system`) and each `content[]` entry with `type: "tool"` carries `name` and `state`.
 - Resume a child directly with `opencode run --session "$CHILD_SESSION_ID" "follow-up"`. `--fork` branches instead of appending, and `--continue` resumes the last session.
-- There is no CLI busy or status field. For live runs, poll `session.time_updated` in the store or re-run `opencode session list`, which orders by `updated`.
+- There is no CLI busy or status field. For live runs, poll `session_v2.time_updated` in the store or re-run `opencode session list`, which orders by `updated`.
 
 ## Troubleshooting
 

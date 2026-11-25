@@ -1,5 +1,6 @@
 import { MAX_DESCRIPTION_CHARS } from './contracts'
 import type { SubtaskInput, SubtaskParameters } from './contracts'
+import { parseLabel } from './subtask-labels'
 
 export const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -47,6 +48,44 @@ const assertSourceUnambiguous = (forkFrom: string | undefined, taskId: string | 
   if (forkFrom !== undefined && taskId !== undefined) {
     throw new TypeError('subtask task_id and fork_from are mutually exclusive; pass only one')
   }
+}
+
+// A label names a new child: forking breaks the alias it would carry, and a
+// label beside task_id gives one call two sources of child identity. Both
+// pairs are refused here, before any child is created, resumed or forked.
+const assertLabelForkExclusive = (
+  label: string | undefined,
+  forkFrom: string | undefined,
+): void => {
+  if (label !== undefined && forkFrom !== undefined) {
+    throw new TypeError('label_fork_conflict: subtask label and fork_from are mutually exclusive')
+  }
+}
+
+const assertLabelTaskExclusive = (
+  label: string | undefined,
+  taskId: string | undefined,
+): void => {
+  if (label !== undefined && taskId !== undefined) {
+    throw new TypeError('label_task_conflict: subtask label and task_id are mutually exclusive')
+  }
+}
+
+// Rejects rather than normalizes (no trimming, no lowercasing), so an invalid
+// label fails before a child exists.
+const normalizeLabel = (value: unknown): string | undefined => {
+  return value === undefined ? undefined : parseLabel(value)
+}
+
+// The labelled dispatch strips `label` before the shared normalizer sees it, so
+// the dispatch calls this first or the syntax and exclusion rules never run.
+export const assertLabelCallAllowed = (
+  label: unknown,
+  parameters: Pick<SubtaskParameters, 'task_id' | 'fork_from'>,
+): void => {
+  const parsed = normalizeLabel(label)
+  assertLabelForkExclusive(parsed, parameters.fork_from)
+  assertLabelTaskExclusive(parsed, parameters.task_id)
 }
 
 const requirePrompt = (value: unknown): string => {
@@ -116,7 +155,10 @@ const normalizeObjectInput = (input: Record<string, unknown>): NormalizedSubtask
   validateSchema(input.schema)
   const forkFrom = normalizeSessionId(input.fork_from, 'fork_from')
   const taskId = normalizeSessionId(input.task_id, 'task_id')
+  const label = normalizeLabel(input.label)
   assertSourceUnambiguous(forkFrom, taskId)
+  assertLabelForkExclusive(label, forkFrom)
+  assertLabelTaskExclusive(label, taskId)
   return {
     prompt,
     description,
@@ -124,6 +166,7 @@ const normalizeObjectInput = (input: Record<string, unknown>): NormalizedSubtask
     skills: normalizeSkills(input.skills),
     task_id: taskId,
     fork_from: forkFrom,
+    label,
     timeout_minutes: normalizeTimeoutMinutes(input.timeout_minutes),
     schema: input.schema as Record<string, unknown> | undefined,
   }

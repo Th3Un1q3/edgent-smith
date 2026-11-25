@@ -1,0 +1,9 @@
+---
+type: about
+L0: "Subtask tool reference: subtask_run/ls/outputs arguments and results, structured output, model inheritance, orchestration patterns, live progress, debugging, troubleshooting."
+freshness: 2026-11-24
+L0_table: ["projects/opencode-workflows/workflow-tool/debugging: Debugging children and subsession inspection — session id, export, jq, SQLite queries, resume flags", "projects/opencode-workflows/workflow-tool/live-progress-and-sessions: No live progress; inspecting children; real sessions and parent linkage; result titles; description as title", "projects/opencode-workflows/workflow-tool/model-inheritance: Children run on the parent session's model; agent selects the handler, not the model", "projects/opencode-workflows/workflow-tool/orchestration-patterns: Chain, fork fan-out, map-reduce, structured classification, branch and retry patterns", "projects/opencode-workflows/workflow-tool/structured-output: JSON Schema requests, result_json block, parse order, corrective follow-up and limits", "projects/opencode-workflows/workflow-tool/subtask-ls: subtask_ls arguments (count, status) and the child array it returns", "projects/opencode-workflows/workflow-tool/subtask-outputs: subtask_outputs arguments (task_id, count) and the stored outputs it returns", "projects/opencode-workflows/workflow-tool/subtask-run-arguments: subtask_run arguments, task_id resume, fork_from, label and timeout modes", "projects/opencode-workflows/workflow-tool/subtask-run-result: subtask_run result fields and the ok, error, empty, timeout and aborted statuses", "projects/opencode-workflows/workflow-tool/troubleshooting: Symptom, likely cause and fix for each subtask failure mode"]
+---
+# workflow-tool
+
+Reference for the three subtask tools the OpenCode workflow plugin registers: `subtask_run`, `subtask_ls`, `subtask_outputs`. Source: docs/workflow-tool.md.

@@ -103,7 +103,7 @@ describe('the emit transport', () => {
 
     const emits = machine.signal({ type: 'LESSON', payload: { text: 'retry' } }, 'ses_1').emits
 
-    expect(emits.some(emitted => emitted.type === 'emit.skill')).toBe(false)
+    expect(emits).not.toContainEqual({ type: 'emit.skill', name: 'task-delegation', reportTo: 'skill_ready' })
   })
 
   it('drops the oldest lesson past the memory limit', async () => {

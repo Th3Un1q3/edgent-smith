@@ -29,6 +29,7 @@ export const workflowConfig = workflowConfigState
 const entryClientState = vi.hoisted(() => ({
   writeEntry: vi.fn(),
   removeEntry: vi.fn(),
+  findEntry: vi.fn(),
 }))
 
 export const entryClient = entryClientState

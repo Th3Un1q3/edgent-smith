@@ -3,10 +3,10 @@ id: cases-about
 type: cases
 hotness: 1.0
 ttl: 90d
-version: 9
+version: 10
 freshness: 2026-11-24
 claim_ids: []
-L0: "cases: 110 case memories; 31 with an L0, 3 by id, 3 superseded, 76 overflow ids."
+L0: "cases: 111 case memories; 32 with an L0, 3 by id, 3 superseded, 76 overflow ids."
 L0_table:
   - {id: cases/complexity-ceiling-stairs, L0: "Behaviour-coupled refactor fanned out as parallel batches: per-batch verification missed a regression a per-wave status pass caught."}
   - {id: cases/composition-contract-entry-path-unopened, L0: "Composition contract named the glue entry plugins/state-machine/state-machine.ts; the entry is the sibling file plugins/state-machine.ts. Open an interface path before writing it into a contract, and never derive an entry from its directory name."}
@@ -36,6 +36,7 @@ L0_table:
   - {id: cases/serena-memory/round4-recall-friction, L0: "Round 4 (post round-4 fixes): recall 3 gateway calls (1 list + 2 reads); scope unambiguous (case); skill surfaced; read-back echo verified"}
   - {id: cases/serena-memory/untyped-orchestrator-supplied-id, status: unstated}
   - {id: cases/session-2026-11-21-aidlc-research, L0: "Session ledger: the 14 failures of the 2026-11-21 awslabs/aidlc-workflows run in five groups, each group naming the case that carries its lesson."}
+  - {id: cases/session-2026-11-24-labelled-subagent-sessions, L0: "Lessons: a child's report is its last action and its budget is counted in units; enumerate and check from the artifact that runs; a lock narrower than the document it replaces loses writes."}
   - {id: cases/shell-denied-in-subtask, L0: "A child told to clone via shell hit \"Permission denied: shell\" on every git/curl call, spent its 24-call budget confirming it, and shipped 0 of 1 artifacts. Name the acquisition route the environment allows."}
   - {id: cases/spec-field-list-omits-invariant, L0: "A manifest spec listed fields per signal but not the rule that every signal carries a JSON schema; three schema-less signals shipped though the request named schemas. A data spec states per-item fields plus cross-item invariants."}
   - {id: cases/ts-excess-property-computed-keys, L0: "TypeScript skips excess-property checks on computed keys: an `on` map keyed by computed event names accepts a bogus event, so a mistyping experiment proves nothing about those keys unless it uses a literal key."}
@@ -46,7 +47,7 @@ L0_table:
 
 # Cases
 
-109 case memories; 30 entries carry an L0, 3 are listed by id because their own L0 is not quotable, 2 superseded are marked, 76 further ids are listed under Overflow.
+110 case memories; 31 entries carry an L0, 3 are listed by id because their own L0 is not quotable, 2 superseded are marked, 76 further ids are listed under Overflow.
 
 ## Superseded (audit only)
 - cases/orchestration/artifact-not-run-against-own-gates -> cases/orchestration/spec-gates-unchecked-for-satisfiability

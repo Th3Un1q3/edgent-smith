@@ -18,9 +18,10 @@ import { listSubtasksFromSessions } from './workflow/subtask-ls'
 import type { SessionsReader } from './workflow/subtask-ls'
 import { createSubtask } from './workflow/subtask'
 import { DEFAULT_MAX_SUBTASKS, DEFAULT_SUBTASK_AGENT } from './workflow/contracts'
-import type { SubtaskParameters } from './workflow/contracts'
+import type { LsEntry, SubtaskParameters, SubtaskResult } from './workflow/contracts'
 import { subtaskOutputsTool } from './workflow/subtask-outputs'
 import { createWorkflowClient } from './workflow/client-adapter'
+import { readLabels, runLabelled } from './workflow/subtask-label-dispatch'
 import { writeEntry, removeEntry } from './helpers/instructions/entry-client'
 import type { EntryResult } from './helpers/instructions/entry-client'
 
@@ -196,6 +197,24 @@ interface SubtaskLsArguments {
   status?: 'ok' | 'error'
 }
 
+// ADR-024: the ls path only reads the session's label document; an unreadable
+// store degrades to no labels so listing never fails on the binding state.
+const labelLookup = async (sessionID: string, directory: string): Promise<Map<string, string>> => {
+  try {
+    const document = await readLabels(sessionID, directory)
+    return new Map(document.bindings.map(binding => [binding.taskId, binding.label] as const))
+  }
+  catch {
+    return new Map()
+  }
+}
+
+const withLabels = (entries: LsEntry[], labels: Map<string, string>): LsEntry[] =>
+  entries.map((entry) => {
+    const label = labels.get(entry.task_id)
+    return label === undefined ? entry : { ...entry, label }
+  })
+
 const SUBTASK_RUN_TOOL_DESCRIPTION = [
   'Run a single subtask directly without a workflow script.',
   'Accepts description and prompt plus the standard subtask passthrough',
@@ -213,12 +232,45 @@ const SUBTASK_RUN_INPUT = {
     agent: { type: 'string', description: 'Override the child agent (default rug-swe).' },
     skills: { type: 'array', items: { type: 'string' }, description: 'Skill names loaded into the child prompt.' },
     task_id: { type: 'string', description: 'Continue/resume an existing child session.' },
+    label: { type: 'string', description: 'Session-scoped child alias: the first call binds it, later calls resolve and resume the same child. Exclusive with fork_from and task_id.' },
     fork_from: { type: 'string', description: 'Fork a session at its latest message and run the child there.' },
     timeout_minutes: { type: 'number', description: 'Per-subtask timeout in minutes (default 15).' },
     schema: { type: 'object', description: 'JSON Schema for a structured <result_json> reply.' },
   },
   required: ['prompt', 'description'],
   additionalProperties: false,
+}
+
+const runSubtaskParameters = async (
+  context: Context,
+  sessionID: string,
+  parameters: SubtaskParameters,
+  signal: AbortSignal,
+): Promise<SubtaskResult> => {
+  const controller = new AbortController()
+  const abortChild = (): void => controller.abort()
+  const directory = context.location.directory as unknown as string
+  const subtask = createSubtask({
+    client: createWorkflowClient(context.session, directory),
+    parentSessionID: sessionID,
+    directory,
+    signal: controller.signal,
+    defaultAgent: DEFAULT_SUBTASK_AGENT,
+    maxSubtasks: DEFAULT_MAX_SUBTASKS,
+    budget: { used: 0 },
+    steps: [],
+    logs: [],
+    active: new Set<AbortController>(),
+  })
+
+  signal.addEventListener('abort', abortChild, { once: true })
+  if (signal.aborted) abortChild()
+  try {
+    return await subtask(parameters)
+  }
+  finally {
+    signal.removeEventListener('abort', abortChild)
+  }
 }
 
 const plugin: Plugin = {
@@ -265,11 +317,15 @@ const plugin: Plugin = {
           const arguments_ = input as SubtaskLsArguments
           const options = { count: arguments_.count, status: arguments_.status }
           const reader = context.session as unknown as SessionsReader
+          const sessionID = toolContext.sessionID as unknown as string
           const fromSessions = yield* Effect.promise(
-            () => listSubtasksFromSessions(reader, toolContext.sessionID as unknown as string, options),
+            () => listSubtasksFromSessions(reader, sessionID, options),
           ).pipe(Effect.orElseSucceed(() => {}))
-          const entries = fromSessions ?? []
-          const content = JSON.stringify(entries)
+          const entries: LsEntry[] = fromSessions ?? []
+          const labels = yield* Effect.promise(
+            () => labelLookup(sessionID, context.location.directory as unknown as string),
+          )
+          const content = JSON.stringify(withLabels(entries, labels))
           return { content, metadata: { title: `subtask_ls: ${entries.length} subtask(s)` } }
         }),
       })
@@ -279,41 +335,27 @@ const plugin: Plugin = {
         input: SUBTASK_RUN_INPUT,
         execute: (input, toolContext) => Effect.gen(function* () {
           const parameters = input as SubtaskParameters
-          // One cancellation source per call: the runner links this signal to
-          // the child controller and session, so interrupting the tool call
-          // aborts the running subtask instead of orphaning it.
-          const controller = new AbortController()
-          const abortChild = (): void => controller.abort()
-          const subtask = createSubtask({
-            client: createWorkflowClient(context.session, context.location.directory as unknown as string),
-            parentSessionID: toolContext.sessionID as unknown as string,
-            directory: context.location.directory as unknown as string,
-            signal: controller.signal,
-            defaultAgent: DEFAULT_SUBTASK_AGENT,
-            maxSubtasks: DEFAULT_MAX_SUBTASKS,
-            budget: { used: 0 },
-            steps: [],
-            logs: [],
-            active: new Set<AbortController>(),
-          })
-          const result = yield* Effect.promise(async (signal) => {
-            signal.addEventListener('abort', abortChild, { once: true })
-            if (signal.aborted) {
-              abortChild()
-            }
-            try {
-              return await subtask(parameters)
-            }
-            finally {
-              signal.removeEventListener('abort', abortChild)
-            }
-          })
+          const directory = context.location.directory as unknown as string
+          const sessionID = toolContext.sessionID as unknown as string
+          const run = (next: SubtaskParameters, signal: AbortSignal): Promise<SubtaskResult> =>
+            runSubtaskParameters(context, sessionID, next, signal)
+          const result = parameters.label === undefined
+            ? yield* Effect.promise(signal => run(parameters, signal))
+            : yield* runLabelled({
+              parameters,
+              label: parameters.label,
+              sessionID,
+              directory,
+              reader: context.session as unknown as SessionsReader,
+              run,
+            })
           return {
             content: JSON.stringify(result),
             metadata: {
               title: `subtask_run: ${result.status}`,
               status: result.status,
               task_id: result.task_id,
+              label: result.label,
             },
           }
         }),

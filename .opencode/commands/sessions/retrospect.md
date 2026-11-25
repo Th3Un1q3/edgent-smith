@@ -41,7 +41,7 @@ Record the answers in `$FILE` as given and never invent one. If you have no answ
 
 ## Step 4: Turn answers into action items
 
-Prioritize the action items per the harness-management skill's Prioritization policy — load the harness-management skill by name using your `skill` tool, then follow its Prioritization section. Each action item has five fields:
+Prioritize the action items per the harness-management skill's Prioritization policy — the harness-management skill is already active in this session, so follow its Prioritization section. Each action item has five fields:
 
 - **Domain match** — for each action item, name the skill/domain where the failure occurred and place the change in THAT domain's skill, per the loaded harness-management skill's Domain Match rule.
 - **Change** — the modification, stated so a reader who was not in this session can act on it and check it: name who acts, in plain words a reader already understands rather than a role invented for this session, and state the observable that shows the change took effect, including what makes it pass or fail. Do not carry over detail that only makes sense to this session's reader — repository-specific paths, sizes, run counts, or a named binary.
@@ -55,7 +55,7 @@ Record the items in `$FILE`.
 
 Implement the top 1–3 action items using the harness-management skill:
 
-Load the harness-management skill by name using your `skill` tool, then follow its Change Type Reference and matching workflow.
+The harness-management skill is already active in this session. Follow its Change Type Reference and matching workflow.
 
 Select the change type (scoped instructions, skill, `AGENTS.md`, or agent definition), read the matching workflow, and execute the changes.
 

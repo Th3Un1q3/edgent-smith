@@ -26,18 +26,30 @@ Turn one request into standalone subtasks, run them with `tools.subtask_run`, an
 
 | Op | Call | Use |
 |---|---|---|
-| run | `tools.subtask_run({ description, prompt, skills, schema })` | one subtask |
+| run | `tools.subtask_run({ description, prompt, skills, schema, label })` | one subtask; a `label` names it for a later resume (§When to label) |
 | resume | `+ task_id` | continue a child; never for validation; skill handling under §Execution envelope |
 | outputs | `tools.subtask_outputs({ task_id, count })` | the child session's latest outputs |
 | list | `tools.subtask_ls({ count, status })` | audit runs before a retry |
 
 - `prompt` and `description` are required; `description` cuts at 80 chars, so lead with the verb. `agent` defaults to `rug-swe`; override only for a different specialist. `fork_from` and `task_id` exclude each other, and a blank or whitespace-only `fork_from` is rejected. `fork_from` forks that source session at its latest message and needs a reachable OpenCode service client; a fork failure returns `status: 'error'`, never a fallback to the source. `subtask_ls` lists your children plus any fork with the child it was forked from.
+- **A `label` is a session-scoped alias.** The first call binds it to the child it creates; every later call with that label resumes that child and returns the same `task_id`. A finished child resumes; a label never rebinds, and a running or dead child is refused with its id. `label` is exclusive with `task_id` and `fork_from`. The binding is written to the session entry `workflow.labels`, so it survives compaction and appears in the session context. A new session starts with no bindings, so a label introduced there binds anew and never inherits another session's child. A labelled resume re-injects every skill the call names, so name only what that child still needs.
 - **`timeout_minutes` is omitted, not chosen.** Dispatch with no value and the child gets the 15-minute default. Set it only when the task is expected to outrun those 15 minutes (a full suite, a CI or gate run, a large enumeration); never shorten it, never size it per dispatch, and **never set it "just in case" or as a safety margin** — setting it on a task that finishes inside 15 minutes is a defect, not caution. Timeout governs wall-clock; it is unrelated to the 24-call budget, and a large task does not need more time, it needs a narrower scope or a discovery subtask first. When a child does expire, do not guess a bigger value: `subtask_outputs` returns that child's last outputs. `skills` takes names, not paths; the runner injects each named skill as `<task_skills>`, skips a name with no file, and `[]` injects nothing.
 - **The result is a JSON string.** Parse it before any field read: `const r = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw))`. A guard written against `raw.status` sees `undefined` and reports a good child as failed. Then require `status === 'ok'`, `truncated === false`, and non-empty `outputText.trim()`.
 - **You cannot see a child's call count.** Never infer a child's spend from its report. Each child gets 24 calls per turn, a `task_id` resume starts a fresh 24-call window, and its report holds about 4000 chars.
 - **A report past the cap ends with a `…[truncated N chars]` marker**, so give each child one report section. `data` exists only with `schema` and is absent on a parse miss, so ask for a schema only when the code consumes the value: one unread `required` key makes every child `error`. The `execute` result truncates too, so a body returning several reports names the one the caller needs first.
 - **The gate blocks tools other than `signal_send`, `execute`, `question` and `skill` until a goal exists**, and a gate rejection is not an execute failure: set the goal, then retry.
 - **Neither can you exercise a tool path in-process.** A subtask session lacks `subtask_run`, `subtask_ls`, and `subtask_outputs`; your own toolset is exactly `signal_send`, `execute`, `subtask_run`, `subtask_ls`, `subtask_outputs`, and `question`. Dispatch a probe (a subtask whose only job is to exercise one path and report what it observed), then pass a validator the raw session ids and outputs that subtask produced.
+
+## When to label
+
+Label when the same child will be needed again later in the session and its identifier may be lost: the usual case is a role you keep returning to (a reviewer, a researcher, a memory writer, a builder you revisit), or a child whose accumulated context is the point. Do not label a one-off dispatch — discard its id instead — and do not relabel to start fresh: a label never rebinds, so a fresh child takes a new label.
+
+```js
+// body for the envelope above
+const review = await run({ label: 'reviewer', description: 'review the change', prompt: 'The user asked: "<request>". Review the artifact and report each criterion.' })
+if (!ok(review)) return { stage: 'review', status: review.status, error: review.error }
+const recheck = await run({ label: 'reviewer', description: 'recheck the review', prompt: `The producer pushed the fixes; recheck the same criteria.\n${review.outputText.trim()}` })
+```
 
 ## Writing a subtask prompt
 
@@ -83,9 +95,9 @@ If you cannot name the deliverable and its files in one sentence, the first subt
 
 ```text
 <request>"Add a --config <path> flag to the CLI."</request>
-SCOPE: modify cli/main.py, cli/commands/run.py; create tests/test_cli_config_flag.py; do NOT touch cli/services/, pyproject.toml.
+SCOPE: modify cli/main.py, cli/commands/validate.py, tests/test_cli_validate.py; do NOT touch cli/services/, pyproject.toml.
 ACCEPTANCE CRITERIA:
-- [ ] --config path loads and the run command receives its values
+- [ ] --config path loads and the validate command receives its values
 - [ ] A missing path exits non-zero and names the path
 - [ ] A test covers both cases
 CONSTRAINTS: Do NOT add a dependency; use the pinned YAML library; do NOT substitute any technology the user specified.
@@ -94,9 +106,9 @@ REPORT: open with <validation>, one line per criterion with its evidence and PAS
 
 ```text
 A previous agent was asked to: <request>"Add a --config <path> flag to the CLI."</request>
-Artifact: cli/main.py, cli/commands/run.py, tests/test_cli_config_flag.py
+Artifact: cli/main.py, cli/commands/validate.py, tests/test_cli_validate.py
 Criteria:
-- --config path loads values into the run command
+- --config path loads values into the validate command
 - a missing path exits non-zero and names the path
 - a test covers both cases
 Output PASS, FAIL, or UNVERIFIABLE alone on line 1. Then, per criterion: PASS or FAIL with file:line evidence or gate output; UNVERIFIABLE names the evidence that is missing.

@@ -570,6 +570,12 @@
         "retrospective": {
           "entry": [
             {
+              "type": "activate_skill",
+              "params": {
+                "name": "harness-management"
+              }
+            },
+            {
               "type": "run_command",
               "params": {
                 "name": "sessions/retrospect"
