@@ -322,3 +322,74 @@ describe('the hook', () => {
     expect(toolErrorOf(exit).metadata).toMatchObject({ code: 'tool_blocked', tool: 'edit' })
   })
 })
+
+const planRule = (): ToolPolicyRule => {
+  const entries = stateAt('towards_goal.plan').entry as readonly MachineActionSpec[]
+  const action = entries.find(candidate => candidate.type === 'set_tools_policy')
+  if (action === undefined) throw new Error('plan declares no set_tools_policy action')
+  const { params } = action as Extract<ActionSpec, { type: 'set_tools_policy' }>
+  if (params.allowedTools === null) throw new Error('plan declares a clearing set_tools_policy action')
+  return { stateId: params.stateId, errorMessage: params.errorMessage, allowedTools: params.allowedTools }
+}
+
+const enteredPlan = async (): Promise<Harness> => {
+  const harness = makeHarness()
+  await register(harness)
+  await harness.emit(sessionCreated('ses_1', 'rug'))
+  await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } })
+  return harness
+}
+
+const executePayload = (code: string): Record<string, unknown> => ({
+  tool: 'execute',
+  agent: 'rug',
+  sessionID: 'ses_1',
+  input: { code },
+})
+
+describe('an execute body in a gated state', () => {
+  it('admits a body in plan that calls only tools.signal_send', async () => {
+    const harness = await enteredPlan()
+
+    const exit = await runHook(harness, executePayload('return await tools.signal_send({ type: \'PLAN_READY\' })'))
+
+    expect(Exit.isSuccess(exit)).toBe(true)
+  })
+
+  it('refuses a body in plan that calls tools.subtask_run', async () => {
+    const harness = await enteredPlan()
+
+    const exit = await runHook(harness, executePayload('return await tools.subtask_run({ prompt: \'x\' })'))
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(toolErrorOf(exit).message).toBe(renderPolicyMessage(planRule(), 'execute'))
+  })
+
+  it('refuses a body in plan that mixes an allowed and a refused tool', async () => {
+    const harness = await enteredPlan()
+
+    const exit = await runHook(harness, executePayload(
+      'await tools.signal_send({ type: \'PLAN_READY\' })\nreturn await tools.subtask_run({ prompt: \'x\' })',
+    ))
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(toolErrorOf(exit).message).toBe(renderPolicyMessage(planRule(), 'execute'))
+  })
+
+  it('admits a body in plan that names no tool', async () => {
+    const harness = await enteredPlan()
+
+    const exit = await runHook(harness, executePayload('return 1 + 1'))
+
+    expect(Exit.isSuccess(exit)).toBe(true)
+  })
+
+  it('admits a body in work that calls tools.subtask_run', async () => {
+    const harness = await enteredPlan()
+    await harness.runTool({ type: 'PLAN_READY' })
+
+    const exit = await runHook(harness, executePayload('return await tools.subtask_run({ prompt: \'x\' })'))
+
+    expect(Exit.isSuccess(exit)).toBe(true)
+  })
+})

@@ -67,8 +67,8 @@ generic homes below are fallbacks, not defaults — see Domain Match in `SKILL.m
   record, not a skill; a rule scoped to one file type is rule 3; one agent's behavior is
   rule 2.
 - **Workflow:** [workflows/manage-skill.md](../workflows/manage-skill.md).
-- **Verify/restart:** run the shaping gate and link/fence audits. OpenCode v2 hot-reloads
-  skills; no manual restart needed.
+- **Verify/restart:** run the shaping gate and link/fence audits. A successful load
+  hot-reloads skills; a failed plugin load stays cached until a config change alters the plugin id set or the process restarts.
 
 ## 6. A learning that cannot yet become a solid, reusable skill — a Serena memory
 

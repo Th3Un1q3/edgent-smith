@@ -128,7 +128,7 @@ For a recurring failure, the harness change belongs in the SKILL that governs th
 
 ### OpenCode-specific (step 4)
 
-4. No manual restart needed — OpenCode v2 hot-reloads these changes: instructions, commands, config, and plugins reload automatically, and agent and skill edits follow the same hot-reload path. Restart only for unwatched local plugin dependencies, and start a new session after editing a nested `AGENTS.md` (not auto-detected after load). Model-level live tests are not the shell ledger above; they are delegated runs with a real agent and model.
+4. Only a successful load is hot — OpenCode v2 reloads instructions, commands, config, and plugins, and agent and skill edits follow the same path; a failed plugin load stays cached for the process lifetime until a config change alters the plugin id set or the process restarts. Restart for unwatched local plugin dependencies or a cached failed load, and start a new session after editing a nested `AGENTS.md` (not auto-detected after load). Model-level live tests are not the shell ledger above; they are delegated runs with a real agent and model.
 
 ### DeepSeek-specific
 

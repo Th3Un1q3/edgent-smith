@@ -19,9 +19,19 @@ Turn one request into standalone subtasks, run them with `tools.subtask_run`, an
 
 Stage guidance arrives as its own message when a stage opens, so the method for the moment is the last message you hold — except in `check` and after a restore, which emit nothing: there, and in `panic` re-entered without an arm text, work from this file and its [Stage map](#stage-map) notes. A stage's message is sent once: a restored or compacted session never receives it again, so before acting in a state whose message you do not hold, dispatch a reader for `.opencode/plugins/state-machine/machines/session/templates/<template>.md` — `work` included, since `validate` and `panic` need its envelope.
 
+## Stage map
+
+- `check` — no text on entry; the `quality_check_failed` branch is the only one that speaks.
+- `panic` — no arm text; work from this file until the machine returns to `work`.
+- `admission` — no text; `admit` routes to `towards_goal` or `free_work`.
+- `free_work` — no text and no exit transition; the machine is not driving the work.
+- `child` — no stage message exists for a subtask, so the dispatch prompt is its whole method.
+
 ## Signalling
 
 Use `signal_send` to confirm certain stage completion. Follow instructions you receive to send right signals only when needed.
+
+If `signal_send` is not among the available tools, the state machine is not attached: say so in one line and ask before proceeding rather than running unbounded.
 
 ## Tooling
 

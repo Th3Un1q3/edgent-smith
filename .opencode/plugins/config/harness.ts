@@ -72,9 +72,10 @@ const workflowPlugin: { instructions: string, agents: string[] } = {
 
 const stateMachine: { readonly startStates: Readonly<Record<string, LoopStateId>> } = {
   startStates: {
-    'rug': 'define_goal',
-    'rug-swe': 'define_goal',
-    'rug-team-coach': 'define_goal',
+    // Only `rug` runs the loop; `rug-swe` and `rug-team-coach` are subagents that
+    // land in free_work and never drive it. Entries must name a dotted loop path
+    // (`towards_goal.define_goal`), which is how the map is validated.
+    rug: 'towards_goal.define_goal',
   },
 }
 

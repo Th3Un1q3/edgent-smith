@@ -94,6 +94,31 @@ const handleOrBlock = (
 
 const allowedToolsOf = (handle: MachineHandle): readonly string[] => handle.policy?.allowedTools ?? []
 
+const TOOL_REFERENCE = /\btools\s*(?:\.\s*([A-Za-z_$][\w$]*)|\[\s*['"]([A-Za-z_$][\w$]*)['"]\s*\])/g
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+/**
+ * The tools an `execute` body names, or nothing when the request carries no code
+ * body. Matching text over-reports a name inside a string or comment, which
+ * refuses conservatively rather than admitting a call the pattern missed.
+ */
+const bodyTools = (input: unknown): readonly string[] | undefined => {
+  const code = isRecord(input) ? input['code'] : undefined
+  return typeof code === 'string' ? Array.from(code.matchAll(TOOL_REFERENCE), match => match[1] ?? match[2] ?? '') : undefined
+}
+
+/**
+ * On this host every tool call arrives inside `execute`, so the carrier name
+ * alone refuses a body whose own calls the policy allows; a body naming no tool
+ * has no other effect to judge.
+ */
+const isExecuteBodyAdmitted = (request: ExecuteBeforeRequest, allowed: readonly string[]): boolean => {
+  const tools = request.tool === 'execute' ? bodyTools(request.input) : undefined
+  return tools !== undefined && tools.every(tool => allowed.includes(tool))
+}
+
 const rejectIfDenied = (decision: GateDecision, handle: MachineHandle, tool: string): Effect.Effect<void, Tool.Error> =>
   decision.allowed
     ? Effect.void
@@ -119,7 +144,8 @@ const runGate = (machine: StateMachine, request: ExecuteBeforeRequest): Effect.E
       tool: request.tool,
     })
 
-    return yield* rejectIfDenied(decision, handle, request.tool)
+    const isAdmitted = isExecuteBodyAdmitted(request, allowedToolsOf(handle))
+    return yield* rejectIfDenied(isAdmitted ? { allowed: true } : decision, handle, request.tool)
   })
 
 /**

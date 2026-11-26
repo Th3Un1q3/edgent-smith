@@ -28,8 +28,8 @@ Use this change type when:
    - `.opencode/plugins/state-machine.ts` owns the `signal_send` tool, the per-state tool policy, the snapshot and the reset loop.
    - `.opencode/plugins/workflow.ts` registers the workflow tool that runs workflow envelopes.
    The full set of entry points and helper roles is in `.opencode/plugins/AGENTS.md`.
-3. Write the hook as a named-export async function that returns the registration object. Store per-session state through `helpers/runtime/kv-store.ts` (`SessionStorage`) and log through `helpers/runtime/logger.ts`. Namespace every state key so two plugins do not clobber each other.
-4. Make the hook fail closed. An exception must report failure, never skip the check. `quality-gate-enforcer.ts` sets the reference: a thrown gate error becomes `{ exitCode: 1 }` (lines 89 to 96), so an errored gate counts as failed. For a new hook, trace what the caller sees when the check cannot run. If the error path allows, fix it.
+3. Write the hook as a named-export async function that returns the registration object. Store per-session state through `helpers/runtime/kv-store.ts` (`SessionStorage`) and log through `helpers/runtime/logger.ts`. Namespace every state key so two plugins do not clobber each other. Keep the entry an unconditional link: no module-scope I/O and no static import of a module a same-tree edit can break. Load risky implementation through dynamic `import()` inside `try`/`catch` so failure still registers the plugin, logs one `ERROR`, appends one synthetic `machine unavailable` notice per affected session, and retries on the next event; `.opencode/plugins/AGENTS.md` owns the contract and the process-lifetime cache that makes an entry failure invisible.
+4. Once registered, make the hook fail closed. An exception must report failure, never skip the check. `quality-gate-enforcer.ts` sets the reference: a thrown gate error becomes `{ exitCode: 1 }` (lines 89 to 96), so an errored gate counts as failed. For a new hook, trace what the caller sees when the check cannot run. If the error path allows, fix it.
 5. Add tests under `.opencode/plugins/tests/` that match the source file name, per `.opencode/plugins/AGENTS.md`.
 6. Run the plugin quality gates before declaring done.
 
@@ -42,12 +42,12 @@ Use this change type when:
 ## Verify
 
 - Run the plugin gates. From `/workspace`: `just opencode::test`, `just opencode::lint`, `just opencode::typecheck` (`.opencode/justfile`). For a single test file, use the per-file form documented in `.opencode/plugins/AGENTS.md`.
-- Confirm the hook fires on the intended event, not a neighboring one. Check this in the plugin tests; a passing unit test alone does not prove live wiring.
+- Confirm the hook fires on the intended event, not a neighboring one. Check this in the plugin tests; a passing unit test alone does not prove live wiring. Run a live probe only when no other writer touches the plugin tree, after typecheck and tests pass; a probe started beside a sibling write is invalid evidence even when it fails.
 - Force the error path and confirm it reports failure, not success. This is the fail-closed check from step 4.
 
 ## Apply
 
-- OpenCode v2 hot-reloads plugin changes; no manual restart needed. Unit tests cannot prove live hook wiring; restart only for unwatched local plugin dependencies.
+- OpenCode v2 hot-reloads plugin changes that load successfully; a failed entry load stays in a per-process negative cache, and file edits do not refresh it. The only in-process recovery is a config change that alters the plugin id set; the reliable action is a process restart, verified with `grep '[state-machine] attached' <host log>`. Unit tests cannot prove live hook wiring; an unwatched local plugin dependency also needs a restart.
 
 ## Done When
 
