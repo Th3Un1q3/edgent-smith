@@ -230,7 +230,7 @@ const SUBTASK_RUN_INPUT = {
     prompt: { type: 'string', minLength: 1, description: 'Subtask prompt; what the child should do.' },
     description: { type: 'string', minLength: 1, description: 'One-line indication of what the subtask does.' },
     agent: { type: 'string', description: 'Override the child agent (default rug-swe).' },
-    skills: { type: 'array', items: { type: 'string' }, description: 'Skill names loaded into the child prompt.' },
+    skills: { type: 'array', items: { type: 'string' }, description: 'Skill names loaded natively into the child session for the run.' },
     task_id: { type: 'string', description: 'Continue/resume an existing child session.' },
     label: { type: 'string', description: 'Session-scoped child alias: the first call binds it, later calls resolve and resume the same child. Exclusive with fork_from and task_id.' },
     fork_from: { type: 'string', description: 'Fork a session at its latest message and run the child there.' },

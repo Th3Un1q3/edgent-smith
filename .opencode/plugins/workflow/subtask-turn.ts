@@ -6,23 +6,32 @@ import type { ParsedStructured } from './subtask-structured'
 import type { ParentModel } from './subtask-model'
 import type { SubtaskParameters, WorkflowContext, WorkflowSdkClient } from './contracts'
 
+// Absent or empty ids leave the body exactly as a skill-less call, so no key
+// reaches the SDK and the adapter's own omission stays the only guard.
+const skillField = (skills: string[] | undefined): { skills?: string[] } =>
+  skills === undefined || skills.length === 0 ? {} : { skills }
+
 const buildPromptBody = (
   parameters: SubtaskParameters,
   text: string,
   defaultAgent: string,
+  skills: string[] | undefined,
   model?: ParentModel,
 ): {
   agent: string
   parts: Array<{ type: 'text', text: string }>
+  skills?: string[]
   model?: ParentModel
 } => {
   const body: {
     agent: string
     parts: Array<{ type: 'text', text: string }>
+    skills?: string[]
     model?: ParentModel
   } = {
     agent: parameters.agent ?? defaultAgent,
     parts: [{ type: 'text', text }],
+    ...skillField(skills),
   }
   return model === undefined ? body : { ...body, model }
 }
@@ -56,12 +65,13 @@ const promptOnce = (
   child: AbortController,
   parameters: SubtaskParameters,
   text: string,
+  skills: string[] | undefined,
   model: ParentModel | undefined,
 ): Promise<PromptResponse> =>
   context.client.session.prompt({
     path: { id: sessionID },
     signal: child.signal,
-    body: buildPromptBody(parameters, text, context.defaultAgent, model),
+    body: buildPromptBody(parameters, text, context.defaultAgent, skills, model),
   })
 
 const isUnusableOutput = (response: PromptResponse, parsed: ParsedStructured): boolean =>
@@ -84,20 +94,24 @@ export const runTurn = async (
   child: AbortController,
   parameters: SubtaskParameters,
   basePrompt: string,
+  skills: string[] | undefined,
   model: ParentModel | undefined,
   isTimedOut: () => boolean,
 ): Promise<TurnOutcome> => {
   const { schema } = parameters
   if (schema === undefined) {
-    return { response: await promptOnce(context, sessionID, child, parameters, basePrompt, model) }
+    return { response: await promptOnce(context, sessionID, child, parameters, basePrompt, skills, model) }
   }
   const text = `${basePrompt}\n\n${schemaBlock(SCHEMA_INSTRUCTION, schema)}`
-  const response = await promptOnce(context, sessionID, child, parameters, text, model)
+  const response = await promptOnce(context, sessionID, child, parameters, text, skills, model)
   const parsed = parseStructured(extractOutputText(response.data), schema)
   if (!shouldRetryStructured(response, parsed, isTimedOut(), context.signal.aborted)) {
     return { response, parsed }
   }
-  const retry = await promptOnce(context, sessionID, child, parameters, schemaBlock(SCHEMA_RETRY_INSTRUCTION, schema), model)
+  // The retry rides the first prompt's message, so the session already holds the
+  // skill content; the host renders one <skill_content> per attachment on every
+  // prompt, so re-sending the ids here would duplicate that text in the child.
+  const retry = await promptOnce(context, sessionID, child, parameters, schemaBlock(SCHEMA_RETRY_INSTRUCTION, schema), undefined, model)
   return { response: retry, parsed: parseStructured(extractOutputText(retry.data), schema) }
 }
 

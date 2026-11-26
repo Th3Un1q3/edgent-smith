@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createSubtask, parseStructured } from '@plugins/workflow/subtask'
 import type { SubtaskInput, SubtaskResult, WorkflowContext } from '@plugins/workflow/contracts'
+import type { SkillAwareContext } from '@plugins/workflow/subtask-attempt'
 
 // ── helpers ──────────────────────────────────────────────────────
 
@@ -17,7 +18,7 @@ const createClient = (options: { prompt?: any } = {}): any => ({
   },
 })
 
-const makeContext = (client: any, partial: Partial<WorkflowContext> = {}): WorkflowContext => ({
+const makeContext = (client: any, partial: Partial<SkillAwareContext> = {}): WorkflowContext => ({
   client,
   parentSessionID: 'ses_parent',
   signal: new AbortController().signal,
@@ -164,6 +165,24 @@ describe('createSubtask structured output', () => {
     expect(retryPrompt).toContain('did not contain a usable <result_json>')
     expect(retryPrompt).toContain('markdown fence')
     expect(retryPrompt).toContain(SCHEMA_BLOCK)
+  })
+
+  it('carries the resolved skill ids on the first turn but not on the schema retry', async () => {
+    prompt.mockResolvedValueOnce(text('Only prose, no JSON.')).mockResolvedValueOnce(text('<result_json>{"answer":1}</result_json>'))
+    const skillContext = makeContext(context.client, {
+      skill: async () => [{ name: 'demo', content: 'demo body' }],
+    })
+    const result = await createSubtask(skillContext)({
+      prompt: 'emit',
+      description: 'emit structured',
+      skills: ['demo'],
+      schema: SCHEMA,
+    } as SubtaskInput)
+
+    expect(result).toMatchObject({ status: 'ok' })
+    expect(prompt.mock.calls[0][0].body.skills).toEqual(['demo'])
+    expect(prompt.mock.calls[1][0].body).not.toHaveProperty('skills')
+    expect(prompt.mock.calls[1][0].body.parts[0].text).toContain('did not contain a usable <result_json>')
   })
 
   it('keeps prose in outputText while returning the tagged data', async () => {

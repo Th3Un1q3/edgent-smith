@@ -212,18 +212,34 @@ describe('createSubtask', () => {
     expect(result.error).toBe('network')
   })
 
-  it('injects skills into the prompt body', async () => {
+  it('forwards the resolved skill ids on the prompt body', async () => {
     const client = createClient()
     const context = makeContext(client, { directory: workspace, skill: skillList([demoSkill()]) })
 
     await createSubtask(context)({ prompt: 'PROMPT', description: 'skill work', skills: ['demo'] })
 
-    expect(client.session.prompt.mock.calls[0][0].body.parts[0].text).toBe(
-      '<task_skills>\n'
-      + '<skill name="demo">\ndescription: Demo skill\npath: .agents/skills/demo/SKILL.md\n'
-      + 'DEMO BODY\n\n---\n\nlater rule\n</skill>\n'
-      + '</task_skills>\n\nPROMPT',
-    )
+    expect(client.session.prompt.mock.calls[0][0].body.skills).toEqual(['demo'])
+  })
+
+  it('sends the caller prompt as the whole text part', async () => {
+    const client = createClient()
+    const context = makeContext(client, { directory: workspace, skill: skillList([demoSkill()]) })
+
+    await createSubtask(context)({ prompt: 'PROMPT', description: 'skill work', skills: ['demo'] })
+
+    expect(client.session.prompt.mock.calls[0][0].body.parts[0].text).toBe('PROMPT')
+  })
+
+  it('forwards no skills key for an empty or absent skills input', async () => {
+    const client = createClient()
+    const context = makeContext(client, { directory: workspace, skill: skillList([demoSkill()]) })
+    const subtask = createSubtask(context)
+
+    await subtask({ prompt: 'PROMPT', description: 'empty skills', skills: [] })
+    await subtask({ prompt: 'PROMPT', description: 'absent skills' })
+
+    expect(client.session.prompt.mock.calls[0][0].body).not.toHaveProperty('skills')
+    expect(client.session.prompt.mock.calls[1][0].body).not.toHaveProperty('skills')
   })
 
   it('returns a long output whole without a truncation marker', async () => {

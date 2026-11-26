@@ -1,82 +1,81 @@
 import { describe, expect, it } from 'vitest'
 
-import { injectSkills } from '@plugins/workflow/subtask'
-import type { SkillLister, SkillRecord } from '@plugins/workflow/subtask'
+import type { SkillLister } from '@plugins/workflow/subtask'
+import { resolveSkillIds } from '@plugins/workflow/subtask-skills'
 import { demoSkill, skillList, workspace } from '@tests/workflow/subtask-fixtures'
 
 // ── skills ───────────────────────────────────────────────────────
 
-const render = (records: SkillRecord[], skills: string[] = ['demo']): Promise<string> =>
-  injectSkills('PROMPT', skills, { directory: workspace, list: skillList(records) })
+const collectLogs = (): { logs: string[], log: (message: unknown) => void } => {
+  const logs: string[] = []
+  const log = (message: unknown): void => {
+    logs.push(String(message))
+  }
+  return { logs, log }
+}
 
-const skillCases: Array<[string, SkillRecord, string[], string[]]> = [
-  [
-    'strips the leading frontmatter, keeps the description and the relative path',
-    demoSkill(),
-    ['description: Demo skill', 'path: .agents/skills/demo/SKILL.md', 'DEMO BODY\n\n---\n\nlater rule\n</skill>'],
-    ['name: demo', 'Frontmatter description', workspace],
-  ],
-  ['falls back to the frontmatter description', demoSkill({ description: undefined }), ['description: Frontmatter description'], []],
-  ['omits a missing path', demoSkill({ path: undefined }), ['<skill name="demo">'], ['path:']],
-  ['omits a path outside the directory', demoSkill({ path: '/elsewhere/x/SKILL.md' }), [], ['path:', '/elsewhere']],
-]
+describe('resolveSkillIds', () => {
+  it('keeps the requested ids in the requested order and reads the list once', async () => {
+    let calls = 0
+    const records = [demoSkill({ name: 'second' }), demoSkill({ name: 'first' }), demoSkill({ name: 'unused' })]
+    const list: SkillLister = async () => {
+      calls += 1
+      return records
+    }
 
-describe('injectSkills', () => {
-  it.each(skillCases)('%s', async (_label, record, present, absent) => {
-    const result = await render([record])
-    for (const expected of present) {
-      expect(result).toContain(expected)
-    }
-    for (const unexpected of absent) {
-      expect(result).not.toContain(unexpected)
-    }
+    const result = await resolveSkillIds(['first', 'second'], { directory: workspace, list })
+
+    expect(result).toEqual(['first', 'second'])
+    expect(calls).toBe(1)
   })
 
-  it('preserves the envelope, the element, and the requested order', async () => {
-    const records = [
-      demoSkill({ name: 'second', content: 'SECOND', path: undefined, description: 'Second skill' }),
-      demoSkill({ name: 'first', content: 'FIRST', path: undefined, description: 'First skill' }),
-    ]
-    const result = await injectSkills('PROMPT', ['first', 'second'], {
+  it('drops an unknown name and logs the miss', async () => {
+    const { logs, log } = collectLogs()
+
+    const result = await resolveSkillIds(['demo', 'missing'], {
       directory: workspace,
-      list: skillList(records),
+      list: skillList([demoSkill()]),
+      log,
     })
 
-    expect(result).toBe(
-      '<task_skills>\n'
-      + '<skill name="first">\ndescription: First skill\nFIRST\n</skill>\n'
-      + '<skill name="second">\ndescription: Second skill\nSECOND\n</skill>\n'
-      + '</task_skills>\n\nPROMPT',
-    )
+    expect(result).toEqual(['demo'])
+    expect(logs).toEqual(['skill not found: missing'])
   })
 
-  it('logs a miss for an unknown or invalid name and skips it', async () => {
-    const logs: string[] = []
-    const result = await injectSkills('PROMPT', ['missing', '../secret'], {
+  it('drops a name that fails the name pattern and logs the miss', async () => {
+    const { logs, log } = collectLogs()
+
+    const result = await resolveSkillIds(['../secret', 'demo'], {
       directory: workspace,
-      list: skillList([]),
-      log: (message) => { logs.push(String(message)) },
+      list: skillList([demoSkill()]),
+      log,
     })
-    expect(result).toBe('PROMPT')
-    expect(logs).toEqual(['skill not found: missing', 'skill not found: ../secret'])
+
+    expect(result).toEqual(['demo'])
+    expect(logs).toEqual(['skill not found: ../secret'])
   })
 
-  it('leaves the prompt unchanged and logs when the native list fails', async () => {
-    const logs: string[] = []
+  it('passes pattern-valid names through when the list fails', async () => {
+    const { logs, log } = collectLogs()
     const list: SkillLister = async () => {
       throw new Error('surface down')
     }
-    const result = await injectSkills('PROMPT', ['demo'], {
-      directory: workspace,
-      list,
-      log: (message) => { logs.push(String(message)) },
-    })
-    expect(result).toBe('PROMPT')
+
+    const result = await resolveSkillIds(['demo', '../secret', 'other'], { directory: workspace, list, log })
+
+    expect(result).toEqual(['demo', 'other'])
     expect(logs).toEqual(['skill list failed: surface down'])
   })
 
-  it('leaves the prompt unchanged when no skills are requested', async () => {
-    await expect(injectSkills('PROMPT', undefined, { directory: workspace })).resolves.toBe('PROMPT')
-    await expect(injectSkills('PROMPT', [], { directory: workspace })).resolves.toBe('PROMPT')
+  it('returns no ids and skips the list when no skills are requested', async () => {
+    let calls = 0
+    const list: SkillLister = async () => {
+      calls += 1
+      return [demoSkill()]
+    }
+
+    await expect(resolveSkillIds(undefined, { directory: workspace, list })).resolves.toEqual([])
+    await expect(resolveSkillIds([], { directory: workspace, list })).resolves.toEqual([])
+    expect(calls).toBe(0)
   })
 })

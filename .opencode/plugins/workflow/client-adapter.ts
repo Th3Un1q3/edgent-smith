@@ -19,6 +19,7 @@
  */
 import { Effect } from 'effect'
 import type { Context } from '@opencode/plugin/effect/plugin'
+import type { Skill } from '@opencode/schema/skill'
 import { getClient } from '../helpers/runtime/service-client'
 import type { WorkflowSdkClient } from './contracts'
 
@@ -57,6 +58,13 @@ const assistantTextParts = (messages: ReadonlyArray<unknown>): Array<{ type: str
 const errorInfoOf = (assistant: V2Message | undefined): { error: unknown } | undefined =>
   assistant?.error === undefined ? undefined : { error: assistant.error }
 
+// The SDK call must omit the key entirely when no skill was requested, so an
+// empty or absent list leaves the prompt body exactly as a skill-less call.
+const skillAttachments = (names: ReadonlyArray<string> | undefined): { skills?: Array<{ id: Skill.ID }> } =>
+  names === undefined || names.length === 0
+    ? {}
+    : { skills: names.map(name => ({ id: name as Skill.ID })) }
+
 export const createWorkflowClient = (session: Session, directory?: string): WorkflowSdkClient => ({
   session: {
     fork: async (input) => {
@@ -78,7 +86,7 @@ export const createWorkflowClient = (session: Session, directory?: string): Work
           model: { id: body.model.modelID, providerID: body.model.providerID } as never,
         }))
       }
-      await run(session.prompt({ sessionID: path.id as never, text }))
+      await run(session.prompt({ sessionID: path.id as never, text, ...skillAttachments(body.skills) }))
       await run(session.wait({ sessionID: path.id as never }))
       const messages = await run(session.context({ sessionID: path.id as never }))
       const assistant = lastAssistant(messages)

@@ -272,6 +272,64 @@ describe('createWorkflowClient prompt request', () => {
   })
 })
 
+describe('createWorkflowClient skill attachments', () => {
+  it('converts a single skill name into one attachment with that id', async () => {
+    const session = sessionStub()
+    const client = createWorkflowClient(asSession(session), '/workspace/project')
+
+    await client.session.prompt({
+      path: { id: 'ses_child' },
+      body: { agent: 'rug-swe', parts: [{ type: 'text', text: 'go' }], skills: ['alpha'] },
+    })
+
+    expect(session.prompt).toHaveBeenCalledWith({
+      sessionID: 'ses_child',
+      text: 'go',
+      skills: [{ id: 'alpha' }],
+    })
+  })
+
+  it('keeps several skill names in the requested order', async () => {
+    const session = sessionStub()
+    const client = createWorkflowClient(asSession(session), '/workspace/project')
+
+    await client.session.prompt({
+      path: { id: 'ses_child' },
+      body: {
+        agent: 'rug-swe',
+        parts: [{ type: 'text', text: 'go' }],
+        skills: ['alpha', 'beta', 'gamma'],
+      },
+    })
+
+    expect(session.prompt).toHaveBeenCalledWith({
+      sessionID: 'ses_child',
+      text: 'go',
+      skills: [{ id: 'alpha' }, { id: 'beta' }, { id: 'gamma' }],
+    })
+  })
+
+  it('forwards no skills key when the skill list is absent or empty', async () => {
+    const session = sessionStub()
+    const client = createWorkflowClient(asSession(session), '/workspace/project')
+
+    await client.session.prompt({
+      path: { id: 'ses_child' },
+      body: { agent: 'rug-swe', parts: [{ type: 'text', text: 'go' }] },
+    })
+    await client.session.prompt({
+      path: { id: 'ses_child' },
+      body: { agent: 'rug-swe', parts: [{ type: 'text', text: 'go' }], skills: [] },
+    })
+
+    const [withoutSkills, emptySkills] = session.prompt.mock.calls.map(
+      (call: [{ skills?: unknown }]) => call[0],
+    )
+    expect(withoutSkills).not.toHaveProperty('skills')
+    expect(emptySkills).not.toHaveProperty('skills')
+  })
+})
+
 describe('createWorkflowClient messages', () => {
   it('maps a model-less message onto the V1 info shape', async () => {
     const session = sessionStub()

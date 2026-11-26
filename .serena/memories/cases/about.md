@@ -3,10 +3,10 @@ id: cases-about
 type: cases
 hotness: 1.0
 ttl: 90d
-version: 10
-freshness: 2026-11-24
+version: 11
+freshness: 2026-11-26
 claim_ids: []
-L0: "cases: 111 case memories; 32 with an L0, 3 by id, 3 superseded, 76 overflow ids."
+L0: "cases: the L0 table and the overflow id list below index every case memory; check both before writing a new case."
 L0_table:
   - {id: cases/complexity-ceiling-stairs, L0: "Behaviour-coupled refactor fanned out as parallel batches: per-batch verification missed a regression a per-wave status pass caught."}
   - {id: cases/composition-contract-entry-path-unopened, L0: "Composition contract named the glue entry plugins/state-machine/state-machine.ts; the entry is the sibling file plugins/state-machine.ts. Open an interface path before writing it into a contract, and never derive an entry from its directory name."}
@@ -97,6 +97,7 @@ Read a memory and quote its own frontmatter L0 before moving it into L0_table; `
 - cases/opencode/sdk_detached_method_this
 - cases/opencode/sdk_skills_injection
 - cases/opencode/skill_catalog_name_mismatch
+- cases/opencode/stale-guidance-surface-after-plugin-contract-change
 - cases/opencode/state-machine-snapshot-read-during-init
 - cases/opencode/stryker_static_mutant_amplification
 - cases/opencode/subtask_tail_process_local
@@ -131,3 +132,4 @@ Read a memory and quote its own frontmatter L0 before moving it into L0_table; `
 - cases/rug/empty-child-result-and-self-graded-ledger
 - cases/serena-memory/round2-recall-friction
 - cases/serena-memory/round3-recall-friction
+- cases/serena-memory/stale-memory-records-after-contract-change

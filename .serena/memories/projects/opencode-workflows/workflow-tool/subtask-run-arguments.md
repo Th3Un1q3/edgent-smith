@@ -2,7 +2,7 @@
 id: projects/opencode-workflows/workflow-tool/subtask-run-arguments
 type: entities
 L0: "subtask_run takes required prompt and description plus optional agent, skills, task_id, fork_from, label, timeout_minutes and schema; task_id, fork_from and label are mutually exclusive"
-freshness: 2026-11-24
+freshness: 2026-11-26
 directory: projects/opencode-workflows/workflow-tool
 ttl: 180d
 provenance: docs/workflow-tool.md — section subtask_run Arguments (## subtask_run, arguments table and prose, lines 11-31)
@@ -14,7 +14,7 @@ provenance: docs/workflow-tool.md — section subtask_run Arguments (## subtask_
 | `prompt` | Yes | none | Text sent to the child session. Must be non-empty. |
 | `description` | Yes | none | One-line indication of what the subtask does, truncated to 80 characters. |
 | `agent` | No | `rug-swe` | Agent that handles the child prompt. Child tool access follows that agent's permission scopes. |
-| `skills` | No | none | Skill names resolved through the session's native skill list and injected into the child prompt as a `<task_skills>` envelope: one `<skill name="...">` element per skill, holding a `description:` line when the skill declares one, a `path:` line relative to the session directory when the record exposes a path inside it, then the skill body with its YAML frontmatter stripped. Nothing is read from `.agents/skills/` on disk. Unknown names are skipped and logged. |
+| `skills` | No | none | `resolveSkillIds` (`workflow/subtask-skills.ts`) resolves names to ids: pattern-invalid names are dropped, unmatched names are dropped and logged `skill not found: <name>`, a failed skill-list call lets pattern-valid names through. `workflow/subtask-turn.ts` adds them to the child prompt under `skillField`; `workflow/client-adapter.ts` sends `{id}` attachments via `session.prompt`, rendered by the host as `<skill_content name="...">`. No SKILL.md read or frontmatter parsing. |
 | `task_id` | No | none | Resume an existing child session instead of creating or forking one. Mutually exclusive with `fork_from`. |
 | `fork_from` | No | none | Fork this session id, copy its conversation history up to the latest message, and deliver this subtask's prompt as the followup on the fork. The result's `task_id` is the new fork id. Mutually exclusive with `task_id`. |
 | `label` | No | none | Session-scoped alias for the child. Mutually exclusive with `task_id` and `fork_from`. |

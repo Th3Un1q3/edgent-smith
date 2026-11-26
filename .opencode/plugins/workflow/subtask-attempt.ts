@@ -1,7 +1,7 @@
 import { classifyError, classifyResponse } from './subtask-classify'
 import { createLogger } from './subtask-log'
 import { attemptConfig, makeResult, recordStep, toStep } from './subtask-result'
-import { injectSkills } from './subtask-skills'
+import { resolveSkillIds } from './subtask-skills'
 import { resolveSessionID, runTurn } from './subtask-turn'
 import type { NormalizedSubtaskParameters } from './subtask-parameters'
 import type { ParentModel } from './subtask-model'
@@ -57,9 +57,6 @@ const finalizeAttempt = (
   context.active.delete(child)
 }
 
-const hasSkills = (skills: string[] | undefined): boolean =>
-  skills !== undefined && skills.length > 0
-
 type CompletedTurn = Awaited<ReturnType<typeof runTurn>>
 
 // A finished turn becomes a recorded result: classification decides the status,
@@ -94,18 +91,6 @@ const completeAttempt = (
 export interface SkillAwareContext extends WorkflowContext {
   skill?: SkillLister
 }
-
-const resolvePromptText = async (
-  context: SkillAwareContext,
-  parameters: NormalizedSubtaskParameters,
-): Promise<string> =>
-  hasSkills(parameters.skills)
-    ? injectSkills(parameters.prompt, parameters.skills, {
-        directory: context.directory,
-        list: context.skill,
-        log: createLogger(context.logs),
-      })
-    : parameters.prompt
 
 const recoverAttempt = (
   error: unknown,
@@ -178,7 +163,13 @@ export const runAttempt = async (
     }
     forkedFrom = resolved.forkedFrom
 
-    const finalPrompt = await resolvePromptText(context, parameters)
+    // Skill ids ride the prompt body so the adapter attaches them natively;
+    // the child's text stays exactly the caller's prompt.
+    const skills = await resolveSkillIds(parameters.skills, {
+      directory: context.directory,
+      list: context.skill,
+      log: createLogger(context.logs),
+    })
 
     let isSessionAborted = false
     const abortChildSession = (): void => {
@@ -198,7 +189,7 @@ export const runAttempt = async (
     }, timeoutMs)
 
     const model = await resolveModelOnce()
-    const turn = await runTurn(context, sessionID, child, parameters, finalPrompt, model, () => isTimedOut)
+    const turn = await runTurn(context, sessionID, child, parameters, parameters.prompt, skills, model, () => isTimedOut)
 
     // Clear before classifying so a timer that fires after the turn already
     // completed cannot retroactively flip a success into a timeout.

@@ -24,6 +24,9 @@ export interface WorkflowSdkClient {
       body: {
         agent: string
         parts: Array<{ type: 'text', text: string }>
+        // Skill names ride the prompt body so the harness loads them natively;
+        // the adapter turns them into SDK skill attachments.
+        skills?: string[]
         model?: { providerID: string, modelID: string }
       }
     }): Promise<{ data?: { info?: { error?: unknown }, parts?: Array<{ type?: string, text?: string }> } }>

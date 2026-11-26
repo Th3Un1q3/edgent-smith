@@ -14,7 +14,7 @@ A prompt carries these five parts in this order. Item 1, the quoted-request rule
 5. **Report shape** — exact fields, in order, opened by a `<validation>` block: one line per criterion with its evidence and PASS/FAIL.
 6. **Goal, not commands** — outcome and why; the child owns the how.
 
-Never prescribe commands, tool names, or step order, except a technology the user specified: echo it as non-negotiable and forbid substitutes. The exception beyond that: a subtask that recalls or writes memory gets `skills: ['serena-memory']`, whose injected file carries the gateway chain. Attach a skill only on a step-3 reader's match verdict for that step, never because its name sounds relevant. Bad: "Fix the failing tests." Good: "The user asked `<request>`. Make the `cli` suite pass; scope `cli/commands/`; do not touch `cli/services/`; report each criterion with evidence."
+Never prescribe commands, tool names, or step order, except a technology the user specified: echo it as non-negotiable and forbid substitutes. The exception beyond that: a subtask that recalls or writes memory gets `skills: ['serena-memory']`, whose rendered content carries the gateway chain. Attach a skill only on a step-3 reader's match verdict for that step, never because its name sounds relevant. Bad: "Fix the failing tests." Good: "The user asked `<request>`. Make the `cli` suite pass; scope `cli/commands/`; do not touch `cli/services/`; report each criterion with evidence."
 
 ## Shape each subtask
 
