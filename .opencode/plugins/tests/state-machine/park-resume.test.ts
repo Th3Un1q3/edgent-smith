@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { sessionCreated, sessionInterrupted } from '@tests/helpers/state-machine/harness'
 import { boot } from '@tests/helpers/state-machine/session-loop-fixtures'
-import { templateStart } from '@tests/helpers/state-machine/template-text'
+import { stageStart } from '@tests/helpers/state-machine/stage-text'
 
 interface Synthetic {
   readonly text: string
@@ -10,7 +10,7 @@ interface Synthetic {
 }
 
 const parkSummaries = (messages: readonly Synthetic[]): readonly Synthetic[] =>
-  messages.filter(message => message.text.startsWith(templateStart('park_summary')))
+  messages.filter(message => message.text.startsWith(stageStart('park_summary')))
 
 /**
 The claim is that the description names the two slots a parked reader needs: an

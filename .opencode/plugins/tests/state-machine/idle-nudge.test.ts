@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 
 import { createStateMachine, loadStateMachineLibrary } from '@plugins/state-machine/core/machine'
 
+import { stageRendered } from '@tests/helpers/state-machine/stage-text'
+
 import type { EmitRequest } from '@plugins/state-machine/core/machine'
 
 const withMachine = async () => {
@@ -25,6 +27,18 @@ const isTextEmit = (emit: EmitRequest): emit is TextEmit =>
   emit.type === 'emit.prompt' || emit.type === 'emit.dispatch'
 
 const NUDGE_STATES = [
+  {
+    state: 'define_goal',
+    expects: 'Send SET_GOAL',
+    enter: () => {},
+  },
+  {
+    state: 'plan',
+    expects: 'Continue the work this state waits for.',
+    enter: (machine: Machine) => {
+      machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    },
+  },
   {
     state: 'work',
     expects: 'CLAIM_WORK',
@@ -114,6 +128,7 @@ describe('idle nudge', () => {
 
     expect(emittedText(emits)).toContain(state)
     expect(emittedText(emits)).toContain(expects)
+    expect(emittedText(emits)).toBe(stageRendered('idle_nudge', { state }))
     expectState(machine, state)
     expectNudges(machine, 1)
   })

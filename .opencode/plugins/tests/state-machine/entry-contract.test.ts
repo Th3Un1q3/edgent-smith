@@ -2,7 +2,9 @@ import { Effect, Exit, Logger } from 'effect'
 import { describe, expect, it } from 'vitest'
 
 import { boot, failureOf } from '@tests/helpers/state-machine/session-loop-fixtures'
-import { sessionCreated, sessionInterrupted } from '@tests/helpers/state-machine/harness'
+import { promptCalls, sessionCreated, sessionInterrupted } from '@tests/helpers/state-machine/harness'
+
+import { stageStart } from '@tests/helpers/state-machine/stage-text'
 
 import type { Harness } from '@tests/helpers/state-machine/harness'
 
@@ -31,10 +33,12 @@ const runWithoutAgent = (harness: Harness, input: unknown, sessionID: string): P
   ))
 
 const failPrompts = (harness: Harness): void => {
-  const session = (harness.context as unknown as { session: { synthetic: () => never } }).session
+  const session = (harness.context as unknown as { session: { prompt: (input: unknown) => unknown } }).session
+  const deliver = session.prompt
 
-  session.synthetic = () => {
-    throw new Error('synthetic exploded')
+  session.prompt = () => {
+    session.prompt = deliver
+    throw new Error('prompt exploded')
   }
 }
 
@@ -59,10 +63,15 @@ describe('the entry contract', () => {
 
     expect(Exit.isSuccess(exit)).toBe(true)
     expect(harness.logs.some(line => line.startsWith('[state-machine] emit ses_1: emit.prompt failed cause='))).toBe(true)
+    expect(harness.synthetics.some(message => message.text.includes('PLAN_READY'))).toBe(true)
 
     await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
 
-    expect(harness.injectedSkills).toEqual(['task-delegation'])
+    expect(promptCalls).toContainEqual({
+      sessionID: 'ses_1',
+      text: expect.stringContaining(stageStart('work_towards_goal') + 'ship it'),
+      skills: [{ id: 'progressive-work' }, { id: 'task-delegation' }],
+    })
   })
 
   it('warns instead of discarding a persist with no entry to write', async () => {

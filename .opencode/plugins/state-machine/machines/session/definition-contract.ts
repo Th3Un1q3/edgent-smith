@@ -4,18 +4,22 @@ import type {
   LoopStateId,
 } from '../../core/machine'
 
-import type { TemplateId } from './template-files'
-
-export type PromptTemplate = { readonly template: TemplateId }
+/**
+The line shown beside the prompt, and the skills it asks the agent to load. The
+constant guidance lives in a skill, so a prompt carries only the values that
+changed this turn.
+*/
+export interface PromptFields {
+  readonly description: string
+  readonly skills?: readonly string[]
+}
 
 /**
-A prompt names one of the templates, carries a literal line, or both. A literal
-`text` is delivered verbatim and wins over `template`; an entry with neither is
-a defect the action refuses when it runs.
+A prompt carries its templated line, plus the line shown beside it and the
+skills it asks the agent to load. `${...}` interpolates the loop context, the
+leaf state or `sentence`.
 */
-export type PromptParameters
-  = | (PromptTemplate & { readonly description: string, readonly text?: string })
-    | { readonly description: string, readonly text: string }
+export type PromptParameters = PromptFields & { readonly text: string }
 
 export type RecordSource
   = | { readonly from: 'payload', readonly field: string }
@@ -39,20 +43,21 @@ fills from the session the emit was raised in.
 export type RunCommandParameters = Omit<CommandEmit, 'type'>
 
 /**
-The child a spawn runs, the line shown beside it, and where its verdict returns.
-A literal `text` is delivered verbatim and wins over `template`, exactly as
-`prompt` reads its parameters; an entry carrying neither refuses when it runs.
+The child a spawn runs, the literal line shown beside it, and where its verdict
+returns.
 */
 export interface SpawnSubagentFields {
   readonly agent: string
   readonly description: string
+  /**
+  Skills the spawn asks the child to load, rendered and injected the same way a prompt's are.
+  */
+  readonly skills?: readonly string[]
   readonly reportTo?: CallbackName
   readonly timeoutMs?: number
 }
 
-export type SpawnSubagentParameters
-  = | (PromptTemplate & SpawnSubagentFields & { readonly text?: string })
-    | ({ readonly text: string } & SpawnSubagentFields)
+export type SpawnSubagentParameters = { readonly text: string } & SpawnSubagentFields
 
 /**
 The callback every spawn's verdict arrives under. One name per purpose: the
@@ -64,10 +69,6 @@ export const SUBAGENT_READY: CallbackName = 'subagent_ready'
 The abandonment window a spawn's `timeoutMs` cannot exceed.
 */
 export const SUBAGENT_TIMEOUT_MS = 120_000
-
-export interface ActivateSkillParameters {
-  readonly name: string
-}
 
 export interface RecallMemoriesParameters {
   readonly namespace: string
@@ -92,10 +93,6 @@ export interface UpdateSignalsPolicyParameters {
   readonly set_enabled_signals: readonly EnabledSignal[]
 }
 
-export interface MarkSkillParameters {
-  readonly name: string
-}
-
 export interface RecordCallbackParameters {
   readonly reportTo: CallbackName
   readonly key?: string
@@ -116,11 +113,9 @@ export type ActionSpec
     | { readonly type: 'run_shell', readonly params: RunShellParameters }
     | { readonly type: 'run_command', readonly params: RunCommandParameters }
     | { readonly type: 'spawn_subagent', readonly params: SpawnSubagentParameters }
-    | { readonly type: 'activate_skill', readonly params: ActivateSkillParameters }
     | { readonly type: 'recall_memories', readonly params: RecallMemoriesParameters }
     | { readonly type: 'update_signals_policy', readonly params: UpdateSignalsPolicyParameters }
     | { readonly type: 'record_callback', readonly params: RecordCallbackParameters }
-    | { readonly type: 'mark_skill', readonly params: MarkSkillParameters }
     | { readonly type: 'set_tools_policy', readonly params: ToolsPolicyParameters }
     | { readonly type: 'admit_identity', readonly params: Record<string, never> }
     | { readonly type: 'emit_parent', readonly params: EmitParentParameters }
@@ -156,11 +151,9 @@ export const ACTION_TYPES = [
   'run_shell',
   'run_command',
   'spawn_subagent',
-  'activate_skill',
   'recall_memories',
   'update_signals_policy',
   'record_callback',
-  'mark_skill',
   'set_tools_policy',
   'admit_identity',
   'emit_parent',

@@ -37,7 +37,6 @@ export type {
   SignalRequest,
   SignalsEmit,
   SignalsPolicy,
-  SkillEmit,
   StateMachineLibrary,
   SubagentEmit,
   SystemInterrupted,
@@ -59,7 +58,6 @@ export { loadStateMachineLibrary } from './machine-library'
 
 export { createStateMachine } from './machine-service'
 export type {
-  InjectSkill,
   LoadMemories,
   MachineHandle,
   RunShell,

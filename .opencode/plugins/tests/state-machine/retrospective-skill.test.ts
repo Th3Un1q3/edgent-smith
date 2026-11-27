@@ -4,6 +4,8 @@ import { createStateMachine, loadStateMachineLibrary, RETROSPECTIVE_COMPLETE } f
 
 import { stateAt } from '@tests/helpers/state-machine/session-loop-fixtures'
 
+import { stageText } from '@tests/helpers/state-machine/stage-text'
+
 const RETROSPECTIVE = 'towards_goal.retrospective'
 const SKILL = 'harness-management'
 const COMMAND = 'sessions/retrospect'
@@ -21,16 +23,22 @@ const isNamed = (action: EntryAction, name: string): boolean => action.params?.n
 const indexOf = (type: string, name: string): number =>
   entry().findIndex(action => action.type === type && isNamed(action, name))
 
+const indexOfType = (type: string): number =>
+  entry().findIndex(action => action.type === type)
+
 const emitIndexOf = (emits: readonly { readonly type: string }[], type: string): number =>
   emits.findIndex(emitted => emitted.type === type)
 
 describe('the retrospective skill activation', () => {
-  it('activates harness-management before raising the retrospective command', () => {
-    const skill = indexOf('activate_skill', SKILL)
+  it('delivers harness-management before raising the retrospective command', () => {
+    const prompt = indexOfType('prompt')
     const command = indexOf('run_command', COMMAND)
 
-    expect(entry()[skill]).toEqual({ type: 'activate_skill', params: { name: SKILL } })
-    expect(skill).toBeLessThan(command)
+    expect(entry()[prompt]).toMatchObject({
+      type: 'prompt',
+      params: { text: stageText('retrospective_stage'), skills: ['progressive-retrospective', SKILL] },
+    })
+    expect(prompt).toBeLessThan(command)
     expect(entry()[command]).toEqual({ type: 'run_command', params: { name: COMMAND } })
     expect(entry()).toContainEqual({
       type: 'update_signals_policy',
@@ -53,10 +61,14 @@ describe('the retrospective skill activation', () => {
     const entered = machine.signal({ type: 'LESSON', payload: { text: 'read the line' } }, 'ses_1')
 
     expect(machine.get('ses_1')?.state).toBe('retrospective')
-    expect(entered.emits).toContainEqual({ type: 'emit.skill', name: SKILL, reportTo: 'skill_ready' })
+    expect(entered.emits).toContainEqual(expect.objectContaining({
+      type: 'emit.prompt',
+      text: stageText('retrospective_stage'),
+      skills: ['progressive-retrospective', SKILL],
+    }))
     expect(entered.emits.filter(emitted => emitted.type === 'emit.command')).toEqual([
       { type: 'emit.command', name: COMMAND },
     ])
-    expect(emitIndexOf(entered.emits, 'emit.skill')).toBeLessThan(emitIndexOf(entered.emits, 'emit.command'))
+    expect(emitIndexOf(entered.emits, 'emit.prompt')).toBeLessThan(emitIndexOf(entered.emits, 'emit.command'))
   })
 })

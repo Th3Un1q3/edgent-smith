@@ -4,7 +4,7 @@ import { boot, failureOf } from '@tests/helpers/state-machine/session-loop-fixtu
 
 import { sessionCreated, sessionInterrupted } from '@tests/helpers/state-machine/harness'
 
-import { templateEnd } from '@tests/helpers/state-machine/template-text'
+import { stageEnd } from '@tests/helpers/state-machine/stage-text'
 
 const PARKED_PROMPT = 'Send a new message to resume the loop from a fresh goal.'
 
@@ -34,7 +34,7 @@ describe('interruption', () => {
       undefined,
     )
 
-    expect(parked?.text).toContain(templateEnd('park_summary'))
+    expect(parked?.text).toContain(stageEnd('park_summary'))
     expect(parked?.description).toBe(PARKED_PROMPT)
   })
 

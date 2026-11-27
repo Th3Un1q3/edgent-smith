@@ -1,13 +1,11 @@
-import type { CallbackName, CommandEmit, LoopContext, LoopEvent } from '../../core/machine'
+import type { CommandEmit, LoopContext, LoopEvent, PromptEmit, SubagentEmit } from '../../core/machine'
 import { skillKey } from '../../core/memory'
 
 import { SUBAGENT_READY, SUBAGENT_TIMEOUT_MS } from './definition-contract'
 import type {
-  ActivateSkillParameters,
   ActionType,
   ActorSelf,
   EmitParentParameters,
-  MarkSkillParameters,
   PromptParameters,
   RecallMemoriesParameters,
   RecordCallbackParameters,
@@ -20,7 +18,7 @@ import type {
   XStateRuntime,
 } from './definition-contract'
 import { leafState } from './payload-readers'
-import { renderPrompt } from './prompt-templates'
+import { renderPromptText } from './prompt-template'
 import { applyRecord, applyRecordCallback } from './record-actions'
 import type { SignalSources } from './signal-specs'
 import { updateSignalsPolicySpecs } from './signal-specs'
@@ -36,14 +34,25 @@ interface SignalsPolicyArguments {
 }
 
 /**
-The part of the collect-actions argument `activate_skill` reads. Outside `setup`
-nothing supplies the context type, so it is named here.
+The part of the collect-actions argument `prompt` reads. It emits the text and,
+when it names skills, records them.
 */
-interface SkillArguments {
+interface PromptArguments {
   readonly context: LoopContext
+  readonly self: ActorSelf
   readonly enqueue: {
-    emit(event: { readonly type: string, readonly name: string, readonly reportTo: CallbackName }): void
+    assign: (assigner: Partial<LoopContext>) => void
+    emit: (event: PromptEmit) => void
   }
+}
+
+/**
+The part of the collect-actions argument `spawn_subagent` reads: the same
+render scope `prompt` uses, so a spawn's text resolves the same expressions.
+*/
+interface SpawnArguments {
+  readonly context: LoopContext
+  readonly self: ActorSelf
 }
 
 /**
@@ -54,12 +63,41 @@ interface ParentRaiseArguments {
   readonly enqueue: { raise(event: { readonly type: string }): void }
 }
 
-export const createActions = (runtime: XStateRuntime, sources: SignalSources) => ({
-  prompt: runtime.emit(({ context, self }: { context: LoopContext, self: ActorSelf }, parameters: PromptParameters) => ({
-    type: 'emit.prompt' as const,
-    text: renderPrompt(parameters, context, leafState(self)),
+const unrecordedSkills = (current: readonly string[], names: readonly string[]): string[] =>
+  names.map(name => skillKey(name)).filter(key => !current.includes(key))
+
+const promptEmit = (parameters: PromptParameters, context: LoopContext, state: string): PromptEmit => {
+  const skills = parameters.skills
+
+  return {
+    type: 'emit.prompt',
+    text: renderPromptText(parameters.text, { context, state }),
     description: parameters.description,
-  })),
+    ...(skills !== undefined && { skills }),
+  }
+}
+
+const withSkills = (skills: readonly string[] | undefined): Pick<SubagentEmit, 'skills'> =>
+  skills === undefined ? {} : { skills }
+
+const subagentEmit = (parameters: SpawnSubagentParameters, context: LoopContext, state: string): SubagentEmit => ({
+  type: 'emit.subagent',
+  agent: parameters.agent,
+  text: renderPromptText(parameters.text, { context, state }),
+  description: parameters.description,
+  ...withSkills(parameters.skills),
+  reportTo: parameters.reportTo ?? SUBAGENT_READY,
+  timeoutMs: Math.min(parameters.timeoutMs ?? SUBAGENT_TIMEOUT_MS, SUBAGENT_TIMEOUT_MS),
+})
+
+export const createActions = (runtime: XStateRuntime, sources: SignalSources) => ({
+  prompt: runtime.enqueueActions(({ context, self, enqueue }: PromptArguments, parameters: PromptParameters) => {
+    enqueue.emit(promptEmit(parameters, context, leafState(self)))
+
+    const unrecorded = unrecordedSkills(context.injectedSkills, parameters.skills ?? [])
+
+    if (unrecorded.length > 0) enqueue.assign({ injectedSkills: [...context.injectedSkills, ...unrecorded] })
+  }),
   record: runtime.assign(({ context, event }: { context: LoopContext, event: LoopEvent }, parameters: RecordParameters) =>
     applyRecord(context, event, parameters)),
   run_shell: runtime.emit((_arguments, parameters: RunShellParameters) => ({
@@ -75,19 +113,8 @@ export const createActions = (runtime: XStateRuntime, sources: SignalSources) =>
     type: 'emit.command',
     ...parameters,
   })),
-  spawn_subagent: runtime.emit(({ context }: { context: LoopContext }, parameters: SpawnSubagentParameters) => ({
-    type: 'emit.subagent' as const,
-    agent: parameters.agent,
-    text: renderPrompt(parameters, context),
-    description: parameters.description,
-    reportTo: parameters.reportTo ?? SUBAGENT_READY,
-    timeoutMs: Math.min(parameters.timeoutMs ?? SUBAGENT_TIMEOUT_MS, SUBAGENT_TIMEOUT_MS),
-  })),
-  activate_skill: runtime.enqueueActions(({ context, enqueue }: SkillArguments, parameters: ActivateSkillParameters) => {
-    if (context.injectedSkills.includes(skillKey(parameters.name))) return
-
-    enqueue.emit({ type: 'emit.skill', name: parameters.name, reportTo: 'skill_ready' })
-  }),
+  spawn_subagent: runtime.emit(({ context, self }: SpawnArguments, parameters: SpawnSubagentParameters) =>
+    subagentEmit(parameters, context, leafState(self))),
   recall_memories: runtime.emit((_arguments, parameters: RecallMemoriesParameters) => ({
     type: 'emit.memories' as const,
     namespace: parameters.namespace,
@@ -100,11 +127,6 @@ export const createActions = (runtime: XStateRuntime, sources: SignalSources) =>
 
     enqueue.assign({ signalsPolicy: { names } })
   }),
-  mark_skill: runtime.assign(({ context }: { context: LoopContext }, parameters: MarkSkillParameters) => ({
-    injectedSkills: context.injectedSkills.includes(skillKey(parameters.name))
-      ? context.injectedSkills
-      : [...context.injectedSkills, skillKey(parameters.name)],
-  })),
   record_callback: runtime.assign(({ context, event }: { context: LoopContext, event: LoopEvent }, parameters: RecordCallbackParameters) =>
     applyRecordCallback(context, event, parameters)),
   set_tools_policy: runtime.assign(({ context }: { context: LoopContext }, parameters: ToolsPolicyParameters) => {

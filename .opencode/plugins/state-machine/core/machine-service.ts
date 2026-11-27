@@ -79,11 +79,6 @@ Runs one emitted shell command outside the actor and reports the outcome.
 export type RunShell = (command: string, cwd: string) => Effect.Effect<CallbackPayload>
 
 /**
-Injects one skill into the session and reports completion.
-*/
-export type InjectSkill = (sessionId: string, name: string) => Effect.Effect<void, unknown>
-
-/**
 Reads the remembered preferences for one namespace.
 */
 export type LoadMemories = (namespace: string) => Effect.Effect<InjectedMemories, unknown>

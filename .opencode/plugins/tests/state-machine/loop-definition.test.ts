@@ -4,6 +4,8 @@ import { createStateMachine, loadStateMachineLibrary, LOOP_STATE_IDS, SESSION_LO
 
 import { acceptedSignals, GOAL_REQUEST, stateAt, WORK_PROMPT } from '@tests/helpers/state-machine/session-loop-fixtures'
 
+import { stageTemplate, stageText } from '@tests/helpers/state-machine/stage-text'
+
 import type { LoopDefinition } from '@plugins/state-machine/core/machine'
 
 describe('the loop definition', () => {
@@ -24,7 +26,8 @@ describe('the loop definition', () => {
       {
         type: 'prompt',
         params: {
-          template: 'goal_request',
+          text: stageText('goal_request'),
+          skills: ['progressive-goal-setting'],
           description: GOAL_REQUEST,
         },
       },
@@ -40,9 +43,15 @@ describe('the loop definition', () => {
       },
     ])
     expect(stateAt('towards_goal.work').entry).toEqual([
-      { type: 'prompt', params: { template: 'work_towards_goal', description: WORK_PROMPT } },
+      {
+        type: 'prompt',
+        params: {
+          text: stageTemplate('work_towards_goal'),
+          skills: ['progressive-work', 'task-delegation'],
+          description: WORK_PROMPT,
+        },
+      },
       { type: 'update_signals_policy', params: { set_enabled_signals: ['CLAIM_WORK'] } },
-      { type: 'activate_skill', params: { name: 'task-delegation' } },
     ])
     expect(stateAt('towards_goal.define_goal').on.system_idle).toBeUndefined()
     expect(stateAt('towards_goal.work').on.system_idle).toBeUndefined()
@@ -61,7 +70,7 @@ describe('the loop definition', () => {
       guard: { type: 'counter_below', params: { key: 'nudges', limit: 3 } },
       actions: [
         { type: 'record', params: { op: 'increment', key: 'nudges' } },
-        { type: 'prompt', params: { template: 'idle_nudge' } },
+        { type: 'prompt', params: { text: stageTemplate('idle_nudge') } },
       ],
     })
     expect(idle[0]?.target).toBeUndefined()

@@ -5,9 +5,11 @@ description: >
 license: MIT
 compatibility: Universal
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
   author: edgent-smith team
   delta: >
+    1.2.0 — added the template-assertion checklist clause: one assertion per required
+    element beside the derived copy-equality test, plus a renderer failure-path test.
     1.1.0 — added "Extend the Existing Suite Before Building a Harness": reuse the
     suite's fixtures, drive the real module, justify a new harness, and run through
     the canonical target; prompted by a subtask that wrote a hand-rolled harness for
@@ -56,6 +58,7 @@ Load only the files relevant to the current task.
 | I want to... | File |
 |---|---|
 | Understand what principles to apply to test design (language-agnostic) | [references/general-principles.md](./references/general-principles.md) |
+| Understand mock configuration, assertion grouping, and quality-gate rules | [references/mock-and-gate-principles.md](./references/mock-and-gate-principles.md) |
 | Learn what TypeScript specific conventions to follow | [references/typescript-conventions.md](./references/typescript-conventions.md) |
 
 ## High-Quality Test Checklist
@@ -66,6 +69,7 @@ Load only the files relevant to the current task.
 - [ ] All setup and teardown logic is centralized in shared hooks (e.g., `beforeEach` for vitest, `@patch` decorators or fixtures for pytest)
 - [ ] Every test case is independent and does not rely on the state or order of other tests
 - [ ] Every test case tests a single behavior or scenario; avoid multiple assertions that test different behaviors in one test case
+- [ ] Where rendered text moves into a template or its text source is replaced, one assertion per required element (each signal name, each named field) sits beside the derived copy-equality test, one test covers the renderer failure path where a bad template expression raises an error naming that expression, and deleting a required element from the template fails a test
 - [ ] Test follows the language-specific conventions for the project (e.g., TypeScript or Python)
 - [ ] Test passes, and any failures are reproducible and clearly indicate the cause of failure
 - [ ] Test file has no linter or type errors, and adheres to the project's coding standards

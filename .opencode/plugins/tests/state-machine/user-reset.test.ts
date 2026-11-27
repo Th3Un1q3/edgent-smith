@@ -32,16 +32,16 @@ const seeded = (context: Partial<StoredSession> = {}, value: unknown = 'towards_
   children: {},
 })
 
-import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine/harness'
-import { templateRendered, templateText } from '@tests/helpers/state-machine/template-text'
+import { makeHarness, promptCalls, register, sessionCreated } from '@tests/helpers/state-machine/harness'
+import { stageRendered, stageText } from '@tests/helpers/state-machine/stage-text'
 
 import type { Harness } from '@tests/helpers/state-machine/harness'
 
 const statePathOf = (value: unknown): string =>
   typeof value === 'string' ? value : Object.entries(value as Record<string, unknown>).map(([id, child]) => id + '.' + statePathOf(child)).join('.')
 
-const goalRequests = (harness: Harness): number =>
-  harness.synthetics.filter(message => message.text.includes(templateText('goal_request'))).length
+const goalRequests = (): number =>
+  promptCalls.filter(call => call.text.includes(stageText('goal_request'))).length
 
 const lastState = (harness: Harness): string | undefined => {
   const writes = harness.storageWrites.filter(write => write.key === 'state-machine/ses_1')
@@ -107,7 +107,7 @@ describe('a real user message', () => {
 
     await harness.emitUserMessage('ses_1', 'user', 'new direction')
 
-    expect(goalRequests(harness)).toBe(0)
+    expect(goalRequests()).toBe(0)
     expect(lastState(harness)).toBe('towards_goal.work')
   })
 
@@ -148,7 +148,7 @@ describe('a real user message', () => {
 
     await harness.emitUserMessage('ses_1', 'user', 'ship it')
 
-    expect(goalRequests(harness)).toBe(1)
+    expect(goalRequests()).toBe(1)
   })
 
   it('clears the round and keeps what was learned', async () => {
@@ -169,7 +169,7 @@ describe('a real user message', () => {
     expect(context.attempts).toBe(0)
     expect(context.memories).toEqual(['keep this lesson'])
     expect(context.improvements).toEqual(['keep this improvement'])
-    expect(context.injectedSkills).toEqual(['task-delegation'])
+    expect(context.injectedSkills).toEqual(['task-delegation', 'skill:progressive-goal-setting:complete'])
   })
 
   it('persists the reset before the next call', async () => {
@@ -198,7 +198,7 @@ describe('a real user message', () => {
 
     await harness.emitUserMessage('ses_1', 'synthetic', 'plugin prompt')
 
-    expect(goalRequests(harness)).toBe(0)
+    expect(goalRequests()).toBe(0)
     expect(lastState(harness)).toBe('towards_goal.work')
   })
 
@@ -235,7 +235,7 @@ describe('a real user message', () => {
 
     await harness.emitUserMessage('ses_1', 'user', 'new direction')
 
-    expect(goalRequests(harness)).toBeGreaterThan(0)
+    expect(goalRequests()).toBeGreaterThan(0)
   })
 })
 
@@ -340,7 +340,7 @@ describe('an interruption', () => {
     expect(machine.state('ses_api')).toBe('parked')
     expect(emits).toEqual([{
       type: 'emit.prompt',
-      text: expect.stringContaining(templateRendered('park_summary', { goal: 'ship it.', improvements: 'none.' })),
+      text: expect.stringContaining(stageRendered('park_summary', { goal: 'ship it.', improvements: 'none.' })),
       description: 'Send a new message to resume the loop from a fresh goal.',
     }, {
       type: 'emit.signals',

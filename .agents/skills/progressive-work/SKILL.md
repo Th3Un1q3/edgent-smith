@@ -1,4 +1,9 @@
-Work towards: {{goal}}. Memories: {{memories}}. Preferences: {{preferences}}
+---
+name: progressive-work
+description: Load when a session enters the work stage and must dispatch subtasks towards the goal, because every effect is a dispatch and a body written outside the envelope loses the children it started.
+---
+
+# Progressive Work
 
 You are in the work stage: every effect is a dispatch, so this text is the shape of each body you write. Scout before the stage's first producer, put every body inside the envelope, then pick the pattern that matches the dispatch you are about to send.
 
@@ -31,48 +36,7 @@ const result = { stage: 'explore', artifact: implement.outputText.trim() }
 ## Put every body inside the envelope
 
 `execute({ code })` binds `tools` and returns the body's value. Failure handling lives only here, so each body below omits it and starts at statement level. A throw ends the run with a serialised message carrying an audit of the children that were live plus the error; read that `audit` and resume each id it lists instead of losing the run. `console.log` lines report progress: their output returns to the caller under `Logs:` and survives a throw.
-
-```js
-try {
-  console.log('<progress message>')
-  const skillsSeen = {}
-  const parse = (r) => JSON.parse(typeof r === 'string' ? r : JSON.stringify(r))
-  const ok = (r) => r.status === 'ok' && !r.truncated && Boolean(r.outputText?.trim())
-  // an ok child can finish with its report missing from the result; its session still holds it
-  const settle = async (r) => {
-    if (r.status !== 'ok' || r.outputText?.trim() || !r.task_id) return r
-    const raw = await tools.subtask_outputs({ task_id: r.task_id, count: 3 })
-    const entries = typeof raw === 'string' ? JSON.parse(raw) : raw
-    const landed = (Array.isArray(entries) ? entries : [])
-      .filter((e) => e && e.status === 'ok' && String(e.outputText || '').trim())
-      .pop()
-    return landed ? { ...r, outputText: landed.outputText.trim() } : r
-  }
-  const pick = (id, names = []) => (id ? names.filter((n) => !(skillsSeen[id] ?? []).includes(n)) : names)
-  const note = (r, names = [], id) => {
-    const key = r?.task_id ?? id
-    if (key && names.length) skillsSeen[key] = [...new Set([...(skillsSeen[key] ?? []), ...names])]
-  }
-  const run = async (args) => {
-    const first = await settle(parse(await tools.subtask_run({ ...args, skills: pick(args.task_id, args.skills) })))
-    note(first, args.skills, args.task_id)
-    if (ok(first)) return first
-    // a failure that already reported output is not an interruption
-    if (args.task_id || !first.task_id || first.outputText?.trim()) return first
-    // fork_from cannot travel with task_id: the runner rejects both
-    const resumed = await settle(parse(await tools.subtask_run({ task_id: first.task_id, description: args.description, agent: args.agent, schema: args.schema, prompt: `${args.prompt}\nYou were interrupted; continue and return your result.` })))
-    return ok(resumed) ? resumed : first
-  }
-  // orchestration: a body below replaces this comment
-  return result
-} catch (e) {
-  const updatedMessage = JSON.stringify({
-    audit: await tools.subtask_ls({ count: 10 }),
-    error: String(e)
-  })
-  throw updatedMessage
-}
-```
+The envelope body, with its failure handling and resume path, is in [references/dispatch-envelope.md](./references/dispatch-envelope.md); every body below is a body for that envelope.
 
 ## Set the dispatch before you send it
 
@@ -154,7 +118,7 @@ Apply this ladder in order and stop at the first rung that fits; a fresh child i
 1. **Reuse the session** — the default. The child keeps its context, working state, and injected skills; nothing crosses the boundary and the prompt carries only the delta. Cost: its context keeps growing.
 2. **Memory** — one subtask stores a finding through the serena gateway (`skills: ['serena-memory']`), and later subtasks read it by name. Right choice: several children need the same data, or the value must outlive the session. Cost: two extra calls (write, read) and a schema-free read, so never for a single hand-off.
 3. **Explicit output text** — the default when the next step must be a fresh child. Take `outputText` from the call result in the same execution, or from `subtask_outputs` in a later one, extract only the needed parts in code, and interpolate them into the next prompt. Right choice: a fresh session is required (validator, different specialist, summariser) and an existing output already holds what it needs. Cost: the carried span spends prompt tokens and is a snapshot, not live context.
-4. **Orchestrator-composed payload** — last resort only, after rungs 1-3 were tried and each came up short: the prompt says why the resume, the pointer, and the existing `outputText` cannot carry it. Right choice: the next prompt needs a shape no existing output has — a rewritten brief over several sources — so no child could have said it itself. It never licences composing a decision, verdict, ranking, or comparison: those belong to the child that judges, resumed at rung 1 or dispatched as a [Fresh judge](validation_self_report.md#fresh-judge), and the orchestrator forwards its ruling. Cost: an extra orchestrator turn, retyped text that can drift, and provenance you must attribute to the source child.
+4. **Orchestrator-composed payload** — last resort only, after rungs 1-3 were tried and each came up short: the prompt says why the resume, the pointer, and the existing `outputText` cannot carry it. Right choice: the next prompt needs a shape no existing output has — a rewritten brief over several sources — so no child could have said it itself. It never licences composing a decision, verdict, ranking, or comparison: those belong to the child that judges, resumed at rung 1 or dispatched as a [Fresh judge](../progressive-validation/SKILL.md#fresh-judge), and the orchestrator forwards its ruling. Cost: an extra orchestrator turn, retyped text that can drift, and provenance you must attribute to the source child.
 
 A fresh judge is a subtask that never received the producer's `task_id`.
 
@@ -182,3 +146,9 @@ const reviewer = await run({ description: 'review the handoff span', prompt: `Re
 if (!ok(reviewer)) return { stage: 'review', status: reviewer.status, error: reviewer.error }
 const result = { status: 'reviewed', from: id, verdict: reviewer.outputText.trim() }
 ```
+
+## Files
+
+| I want to... | File |
+|---|---|
+| Copy the `execute({ code })` envelope every body sits in | [references/dispatch-envelope.md](./references/dispatch-envelope.md) |

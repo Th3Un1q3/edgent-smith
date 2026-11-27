@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import { boot, failureOf } from '@tests/helpers/state-machine/session-loop-fixtures'
 
-import { sessionCreated } from '@tests/helpers/state-machine/harness'
+import { promptCalls, sessionCreated } from '@tests/helpers/state-machine/harness'
 
-import { templateText } from '@tests/helpers/state-machine/template-text'
+import { stageText } from '@tests/helpers/state-machine/stage-text'
 
 describe('session start', () => {
   it('opens silently in define_goal and asks for the goal once the person speaks', async () => {
@@ -18,10 +18,15 @@ describe('session start', () => {
 
     const texts = harness.synthetics.map(message => message.text)
 
-    expect(texts).toHaveLength(2)
-    expect(texts[0]).toContain(templateText('goal_request'))
-    expect(texts[1]).toContain('Signals now:')
-    expect(texts[1]).toContain('- SET_GOAL — State the goal')
+    const prompts = promptCalls.filter(call => call.text === stageText('goal_request'))
+
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]?.sessionID).toBe('ses_1')
+    expect(prompts[0]?.skills.map(skill => skill.id)).toEqual(['progressive-goal-setting'])
+
+    expect(texts).toHaveLength(1)
+    expect(texts[0]).toContain('Signals now:')
+    expect(texts[0]).toContain('- SET_GOAL — State the goal')
   })
 
   it('admits an unmapped agent to free_work and sends nothing', async () => {
@@ -52,6 +57,6 @@ describe('session start', () => {
 
     await harness.emitUserMessage('ses_1', 'user', 'ship it')
 
-    expect(harness.synthetics.filter(message => message.text.includes(templateText('goal_request')))).toHaveLength(1)
+    expect(promptCalls.filter(call => call.text.includes(stageText('goal_request')))).toHaveLength(1)
   })
 })

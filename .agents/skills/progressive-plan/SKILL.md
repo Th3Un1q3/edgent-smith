@@ -1,3 +1,10 @@
+---
+name: progressive-plan
+description: Load when a session enters the plan stage and must shape the goal before dispatch, because `execute` is blocked in that state and the plan is the whole of the work.
+---
+
+# Progressive Plan
+
 Plan stage: shape the goal before dispatch. `execute` is blocked in this state, so the plan is the whole of the work: restate the request, state the criteria, split it into subtasks, shape each one, and order the stages. The plan is the set of prompts you will dispatch in the next state, in the order you will dispatch them; signal `PLAN_READY` when it holds.
 
 ## Restate and split

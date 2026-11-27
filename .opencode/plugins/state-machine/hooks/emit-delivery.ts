@@ -6,7 +6,6 @@ import type {
   CallbackPayload,
   CommandEmit,
   EmitRequest,
-  InjectSkill,
   LoadMemories,
   RunShell,
   SignalsEmit,
@@ -27,10 +26,9 @@ type EmitHandlers = {
 export interface EmitDeliveryPorts {
   readonly directory: string
   readonly runShell: RunShell
-  readonly injectSkill: InjectSkill
   readonly loadMemories: LoadMemories
   readonly subagent: SubagentRunner
-  readonly sendPrompt: (sessionId: string, text: string, description: string) => Effect.Effect<void>
+  readonly sendPrompt: (sessionId: string, text: string, description: string, skills?: readonly string[]) => Effect.Effect<void>
   readonly settle: (sessionId: string, reportTo: CallbackName, payload: CallbackPayload) => Effect.Effect<void>
 }
 
@@ -42,7 +40,7 @@ const emitHandlers = (ports: EmitDeliveryPorts): EmitHandlers => ({
   'emit.subagent': (sessionId, emitted) =>
     ports.subagent.spawn(sessionId, emitted, payload => ports.settle(sessionId, emitted.reportTo, payload)),
   'emit.prompt': (sessionId, emitted) =>
-    ports.sendPrompt(sessionId, emitted.text, promptDescription(emitted)),
+    ports.sendPrompt(sessionId, emitted.text, promptDescription(emitted), emitted.skills),
   'emit.dispatch': sessionId =>
     ports.settle(sessionId, 'subagent_ready', {
       ok: false,
@@ -50,14 +48,6 @@ const emitHandlers = (ports: EmitDeliveryPorts): EmitHandlers => ({
     }),
   'emit.shell': (sessionId, emitted) =>
     ports.runShell(emitted.cmd, ports.directory).pipe(
-      Effect.flatMap(payload => ports.settle(sessionId, emitted.reportTo, payload)),
-    ),
-  'emit.skill': (sessionId, emitted) =>
-    ports.injectSkill(sessionId, emitted.name).pipe(
-      Effect.match({
-        onFailure: cause => ({ ok: false, output: String(cause) }),
-        onSuccess: () => ({ ok: true }),
-      }),
       Effect.flatMap(payload => ports.settle(sessionId, emitted.reportTo, payload)),
     ),
   'emit.memories': (sessionId, emitted) =>

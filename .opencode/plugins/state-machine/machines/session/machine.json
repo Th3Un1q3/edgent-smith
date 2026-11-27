@@ -8,22 +8,6 @@
         "type": "not_parked",
         "params": {}
       }
-    },
-    "callback.skill_ready": {
-      "actions": [
-        {
-          "type": "record_callback",
-          "params": {
-            "reportTo": "skill_ready"
-          }
-        },
-        {
-          "type": "mark_skill",
-          "params": {
-            "name": "task-delegation"
-          }
-        }
-      ]
     }
   },
   "states": {
@@ -98,7 +82,7 @@
               {
                 "type": "prompt",
                 "params": {
-                  "template": "idle_nudge",
+                  "text": "You are idle in `${state}`, which has not finished. ${state === 'define_goal' ? 'Send SET_GOAL with the goal this session should accomplish.' : state === 'work' ? 'Call signal_send with CLAIM_WORK when the current work unit is done.' : state === 'check' ? 'The quality check is running; wait for its result instead of stopping.' : state === 'validate' ? 'Answer the validation prompt, or send GOAL_ACHIEVED or GOAL_INCOMPLETE.' : state === 'memorize' ? 'Send LESSON with what this attempt taught.' : state === 'retrospective' ? 'Run the retrospective command and send RETROSPECTIVE_COMPLETE.' : 'Continue the work this state waits for.'} The loop stays in `${state}` until a signal or command moves it on, so act rather than stop.",
                   "description": "Nudge the agent to do what the active state waits for instead of idling."
                 }
               }
@@ -117,7 +101,10 @@
               {
                 "type": "prompt",
                 "params": {
-                  "template": "panic_escalation",
+                  "text": "The loop is blocked. Report what stopped it, revert nothing without the user line, and ask before any destructive step. Parked for investigation: ${context.failure?.reason ?? 'unknown'}${context.failure?.detail ? ' (' + context.failure.detail + ')' : ''}. Follow the progressive-panic skill.",
+                  "skills": [
+                    "progressive-panic"
+                  ],
                   "description": "Report that the idle budget ran out and the loop is parked."
                 }
               }
@@ -180,7 +167,10 @@
             {
               "type": "prompt",
               "params": {
-                "template": "goal_request",
+                "text": "Follow progressive-goal-setting skill.",
+                "skills": [
+                  "progressive-goal-setting"
+                ],
                 "description": "Ask the agent what goal this session should accomplish."
               }
             },
@@ -255,7 +245,10 @@
             {
               "type": "prompt",
               "params": {
-                "template": "plan_stage",
+                "text": "Follow progressive-plan skill.",
+                "skills": [
+                  "progressive-plan"
+                ],
                 "description": "Ask the agent to shape the goal before dispatching any work."
               }
             },
@@ -299,7 +292,11 @@
             {
               "type": "prompt",
               "params": {
-                "template": "work_towards_goal",
+                "text": "Work towards: ${sentence(context.goal)} Memories: ${context.memories.join(' | ') || 'none'}. Preferences: ${sentence(context.injected['preferences/user']?.full.join(' | ') || 'none')} Follow the progressive-work skill.",
+                "skills": [
+                  "progressive-work",
+                  "task-delegation"
+                ],
                 "description": "Remind the agent of the goal and the memories to work from."
               }
             },
@@ -309,12 +306,6 @@
                 "set_enabled_signals": [
                   "CLAIM_WORK"
                 ]
-              }
-            },
-            {
-              "type": "activate_skill",
-              "params": {
-                "name": "task-delegation"
               }
             }
           ],
@@ -374,7 +365,7 @@
                   {
                     "type": "prompt",
                     "params": {
-                      "template": "quality_check_failed",
+                      "text": "Quality check failed: ${context.failure?.reason ?? 'unknown'}${context.failure?.detail ? ' (' + context.failure.detail + ')' : ''}. Parked in panic for investigation.",
                       "description": "Report that the quality check failed and the loop is parked."
                     }
                   }
@@ -388,7 +379,10 @@
             {
               "type": "prompt",
               "params": {
-                "template": "validation_self_report",
+                "text": "Follow progressive-validation skill.",
+                "skills": [
+                  "progressive-validation"
+                ],
                 "description": "Ask the agent to judge whether the goal is met."
               }
             },
@@ -486,7 +480,10 @@
                   {
                     "type": "prompt",
                     "params": {
-                      "template": "panic_escalation",
+                      "text": "The loop is blocked. Report what stopped it, revert nothing without the user line, and ask before any destructive step. Parked for investigation: ${context.failure?.reason ?? 'unknown'}${context.failure?.detail ? ' (' + context.failure.detail + ')' : ''}. Follow the progressive-panic skill.",
+                      "skills": [
+                        "progressive-panic"
+                      ],
                       "description": "Report that the attempts ran out and the loop is parked."
                     }
                   }
@@ -527,7 +524,7 @@
                   {
                     "type": "prompt",
                     "params": {
-                      "template": "quality_check_failed",
+                      "text": "The judge answered: ${context.results.subagent_ready?.output ?? context.failure?.reason ?? 'unknown'}. Parked in panic for investigation.",
                       "description": "Report the judge's reason and park the loop."
                     }
                   }
@@ -551,7 +548,7 @@
             {
               "type": "prompt",
               "params": {
-                "template": "memorize",
+                "text": "${context.intent === 'improvement' ? 'Name one improvement.' : 'Name what to change next attempt.'}",
                 "description": "Request a lesson to carry into the next attempt."
               }
             },
@@ -616,14 +613,12 @@
             {
               "type": "prompt",
               "params": {
-                "template": "retrospective_stage",
+                "text": "Follow progressive-retrospective skill.",
+                "skills": [
+                  "progressive-retrospective",
+                  "harness-management"
+                ],
                 "description": "Ask the agent to run the retrospective and report when the command finishes."
-              }
-            },
-            {
-              "type": "activate_skill",
-              "params": {
-                "name": "harness-management"
               }
             },
             {
@@ -661,7 +656,7 @@
             {
               "type": "prompt",
               "params": {
-                "template": "park_summary",
+                "text": "Goal reached: ${sentence(context.goal)} Improvements: ${sentence(context.improvements.join(' | ') || 'none')} Waiting for your next instruction.",
                 "description": "Send a new message to resume the loop from a fresh goal."
               }
             },

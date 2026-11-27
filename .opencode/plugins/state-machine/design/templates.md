@@ -1,4 +1,4 @@
-> **Historical design record.** Superseded by `mem:opencode/state-machine-contract` for anything it states about current behaviour; removed action ids appear here only as history, not as the current interface.
+> **Historical design record, superseded 2026-11-26** by `mem:opencode/state-machine-contract` for anything it states about current behaviour; removed action ids appear here only as history, not as the current interface.
 
 # Template files: mechanics
 

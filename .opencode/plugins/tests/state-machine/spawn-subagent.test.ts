@@ -6,10 +6,12 @@ import { createSubagentRunner, settleVerdict } from '@plugins/state-machine'
 
 import { createStateMachine, loadStateMachineLibrary } from '@plugins/state-machine/core/machine'
 
-import { makeHarness } from '@tests/helpers/state-machine/harness'
+import { DEFAULT_MACHINE } from '@plugins/state-machine/machines'
 
-import type { StateMachine } from '@plugins/state-machine/core/machine'
-import type { CallbackPayload } from '@plugins/state-machine/core/machine'
+import { makeHarness, promptCalls } from '@tests/helpers/state-machine/harness'
+
+import type { CallbackPayload, EmitRequest, StateMachine, SubagentEmit } from '@plugins/state-machine/core/machine'
+import type { MachineModule } from '@plugins/state-machine/machines'
 import type { Context } from '@opencode/plugin/effect/plugin'
 
 /**
@@ -24,16 +26,49 @@ const judged = (verdict: 'pass' | 'fail', output: string): CallbackPayload => {
 }
 
 describe('spawn_subagent', () => {
-  const inValidate = async (): Promise<StateMachine> => {
-    const library = await loadStateMachineLibrary()
-    const machine = createStateMachine({ library })
+  const enterValidate = async (module: MachineModule = DEFAULT_MACHINE): Promise<{ machine: StateMachine, emits: readonly EmitRequest[] }> => {
+    const library = await loadStateMachineLibrary(module)
+    const machine = createStateMachine({ library, machine: module })
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
     machine.signal({ type: 'PLAN_READY' }, 'ses_1')
     machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
-    machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
+    const emits = machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
+    return { machine, emits }
+  }
+
+  const inValidate = async (): Promise<StateMachine> => {
+    const { machine } = await enterValidate()
     return machine
+  }
+
+  // The shipped declaration fixes the spawn text, so a test that needs a template
+  // or a skills list patches that one action rather than rebuilding the builder.
+  const withSpawn = (parameters: Record<string, unknown>): MachineModule => {
+    const definition = structuredClone(DEFAULT_MACHINE.definition) as {
+      states: {
+        towards_goal: {
+          states: {
+            validate: { entry: Array<{ type: string, params: Record<string, unknown> }> }
+          }
+        }
+      }
+    }
+    const entry = definition.states.towards_goal.states.validate.entry
+    const spawn = entry.find(action => action.type === 'spawn_subagent')
+
+    if (spawn === undefined) throw new Error('validate declares no spawn_subagent action')
+    spawn.params = { ...spawn.params, ...parameters }
+    return { ...DEFAULT_MACHINE, definition }
+  }
+
+  const spawnedOnEntry = async (parameters: Record<string, unknown>): Promise<SubagentEmit> => {
+    const { emits } = await enterValidate(withSpawn(parameters))
+    const spawn = emits.find((emit): emit is SubagentEmit => emit.type === 'emit.subagent')
+
+    if (spawn === undefined) throw new Error('validate entry emits no spawn_subagent')
+    return spawn
   }
 
   const judge = {
@@ -249,6 +284,49 @@ describe('spawn_subagent', () => {
     expect(spawn.reportTo).toBe('subagent_ready')
     expect(spawn.text).toContain('{"verdict":"pass"|"fail"')
     expect(machine.get('ses_1')?.context.results.subagent_ready).toBeUndefined()
+  })
+
+  it('renders a spawn text template in the fixture scope instead of emitting the expression', async () => {
+    const spawn = await spawnedOnEntry({ text: 'Judge whether ${context.goal} is met.' })
+
+    expect(spawn.text).toBe('Judge whether ship it is met.')
+    expect(spawn.text).not.toContain('${')
+  })
+
+  it('carries a spawn skills list to the child prompt as id attachments', async () => {
+    const spawn = await spawnedOnEntry({ skills: ['progressive-validation'] })
+    const settled = signalOf<CallbackPayload>()
+    const runner = createSubagentRunner(makeHarness().context)
+
+    expect(spawn.skills).toEqual(['progressive-validation'])
+
+    await Effect.runPromise(Effect.gen(function* () {
+      yield* runner.spawn('ses_1', spawn, forward(settled))
+      yield* Deferred.await(settled)
+    }))
+
+    expect(promptCalls).toHaveLength(1)
+    expect(promptCalls[0]).toStrictEqual({
+      sessionID: 'ses_child_1',
+      text: spawn.text,
+      skills: [{ id: 'progressive-validation' }],
+    })
+  })
+
+  it('prompts a spawn with no skills exactly as a plain text prompt', async () => {
+    const spawn = await spawnedOnEntry({})
+    const settled = signalOf<CallbackPayload>()
+    const runner = createSubagentRunner(makeHarness().context)
+
+    expect('skills' in spawn).toBe(false)
+
+    await Effect.runPromise(Effect.gen(function* () {
+      yield* runner.spawn('ses_1', spawn, forward(settled))
+      yield* Deferred.await(settled)
+    }))
+
+    expect(promptCalls).toHaveLength(1)
+    expect(promptCalls[0]).toStrictEqual({ sessionID: 'ses_child_1', text: spawn.text })
   })
 
   it('records an unavailable port without panicking or leaving validate', async () => {

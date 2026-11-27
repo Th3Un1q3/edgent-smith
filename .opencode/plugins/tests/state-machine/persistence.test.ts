@@ -9,8 +9,8 @@ import { createStateMachine, loadStateMachineLibrary } from '@plugins/state-mach
 import type { PersistedSnapshot, SnapshotRecord, SnapshotStore } from '@plugins/state-machine/core/snapshot'
 import type { StoredSession } from '@plugins/state-machine/machines/session/context'
 
-import { makeHarness, register, sessionCreated } from '@tests/helpers/state-machine/harness'
-import { templateText } from '@tests/helpers/state-machine/template-text'
+import { makeHarness, promptCalls, register, sessionCreated } from '@tests/helpers/state-machine/harness'
+import { stageText } from '@tests/helpers/state-machine/stage-text'
 
 import type { Harness } from '@tests/helpers/state-machine/harness'
 
@@ -49,6 +49,13 @@ const statePathOf = (value: unknown): string =>
 // The context of the last snapshot the plugin wrote, as the two outcome cases read it.
 const lastContext = (harness: Harness): StoredSession =>
   (harness.storageWrites.at(-1)?.value as SnapshotRecord).snapshot.context as StoredSession
+
+// The state path of the last snapshot written for a session, for the entry-state cases.
+const writtenStateOf = (harness: Harness, sessionID: string): string => {
+  const writes = harness.storageWrites.filter(write => write.key === snapshotKey(sessionID))
+
+  return statePathOf((writes.at(-1)?.value as SnapshotRecord).snapshot.value)
+}
 
 interface Stored {
   readonly writes: Array<{ key: string, value: unknown }>
@@ -268,15 +275,21 @@ describe('plugin wiring', () => {
     expect(statePathOf((written.at(-1)?.value as SnapshotRecord).snapshot.value)).toBe('towards_goal.work')
   })
 
-  it('records a failed skill injection as an outcome', async () => {
+  it('reports a failed skill delivery as a logged error without fabricating an outcome', async () => {
     const harness = makeHarness()
-    harness.failSkillInjection = true
+    const session = harness.context.session as unknown as { prompt: unknown }
+    session.prompt = () => Effect.fail(new Error('prompt refused'))
     await register(harness)
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } })
     await harness.runTool({ type: 'PLAN_READY' })
 
-    expect(lastContext(harness).results.skill_ready?.ok).toBe(false)
+    expect(harness.logs.some(line => line.includes('emit.prompt failed for session ses_1'))).toBe(true)
+    expect(lastContext(harness).results).toEqual({})
+
+    const exit = await harness.runTool({ type: 'CLAIM_WORK' })
+
+    expect(exit._tag).toBe('Success')
   })
 
   it('records a failed memory read as an outcome', async () => {
@@ -307,9 +320,9 @@ describe('plugin wiring', () => {
     await harness.emit(sessionCreated('ses_1', 'rug'))
     await harness.emitUserMessage('ses_1', 'user', 'ship it')
 
-    const written = harness.storageWrites.filter(write => write.key === snapshotKey('ses_1'))
-    expect(statePathOf((written.at(-1)?.value as SnapshotRecord).snapshot.value)).toBe('towards_goal.define_goal')
-    expect(harness.synthetics[0]?.text).toContain(templateText('goal_request'))
+    expect(writtenStateOf(harness, 'ses_1')).toBe('towards_goal.define_goal')
+    expect(promptCalls[0]?.sessionID).toBe('ses_1')
+    expect(promptCalls[0]?.text).toContain(stageText('goal_request'))
   })
 
   it('reports the tool a Code Mode call runs in execute.before', async () => {

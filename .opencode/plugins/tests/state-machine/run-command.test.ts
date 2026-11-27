@@ -7,8 +7,8 @@ import { createCommandRunner, createStateMachinePlugin, didCompleteOnSignal } fr
 import { createStateMachine, loadStateMachineLibrary, RETROSPECTIVE_COMPLETE } from '@plugins/state-machine/core/machine'
 import { DEFAULT_MACHINE } from '@plugins/state-machine/machines'
 
-import { makeHarness, sessionCreated, sessionIdle } from '@tests/helpers/state-machine/harness'
-import { templateStart } from '@tests/helpers/state-machine/template-text'
+import { makeHarness, promptCalls, sessionCreated, sessionIdle } from '@tests/helpers/state-machine/harness'
+import { stageRendered, stageStart } from '@tests/helpers/state-machine/stage-text'
 
 import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
 import type { CommandEmit } from '@plugins/state-machine/core/machine'
@@ -168,8 +168,8 @@ describe('run_command', () => {
 
     const nudge = harness.synthetics.find(message => message.text.includes('idle in `work`'))
 
-    expect(nudge?.text).toContain('CLAIM_WORK')
-    expect(harness.synthetics.some(message => message.text.startsWith(templateStart('validation_self_report')))).toBe(false)
+    expect(nudge?.text).toBe(stageRendered('idle_nudge', { state: 'work' }))
+    expect(harness.synthetics.some(message => message.text.startsWith(stageStart('validation_self_report')))).toBe(false)
     expect(nudge?.text).toContain('act rather than stop')
   })
 
@@ -190,7 +190,7 @@ describe('run_command', () => {
     await harness.emit(sessionIdle('ses_1'))
 
     expect(harness.synthetics.filter(message => message.text.includes('idle in `work`'))).toHaveLength(3)
-    expect(harness.synthetics.some(message => message.text.includes('idle budget exhausted'))).toBe(true)
+    expect(promptCalls.some(call => call.text.includes('idle budget exhausted'))).toBe(true)
   })
 
   it('dispatches an idle while a spawn is pending instead of holding it', async () => {

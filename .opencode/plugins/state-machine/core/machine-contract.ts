@@ -133,6 +133,10 @@ export interface PromptEmit {
   that omits it is named by its opening words.
   */
   readonly description?: string
+  /**
+  Skills the prompt asks the agent to load, by name.
+  */
+  readonly skills?: readonly string[]
 }
 
 export interface ShellEmit {
@@ -157,14 +161,12 @@ export interface SubagentEmit {
   readonly agent: string
   readonly text: string
   readonly description: string
+  /**
+  Skills the child is asked to load, by name.
+  */
+  readonly skills?: readonly string[]
   readonly reportTo: CallbackName
   readonly timeoutMs: number
-}
-
-export interface SkillEmit {
-  readonly type: 'emit.skill'
-  readonly name: string
-  readonly reportTo: CallbackName
 }
 
 export interface MemoriesEmit {
@@ -197,7 +199,6 @@ export type EmitRequest
     | ShellEmit
     | DispatchEmit
     | SubagentEmit
-    | SkillEmit
     | MemoriesEmit
     | SignalsEmit
     | CommandEmit

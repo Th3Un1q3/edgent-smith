@@ -132,7 +132,7 @@ export const restoreContext = (
 /**
 The callback names this machine answers. Core treats them as opaque strings.
 */
-export const CALLBACK_NAMES = ['quality_check_ready', 'skill_ready', 'memories_ready', 'subagent_ready'] as const
+export const CALLBACK_NAMES = ['quality_check_ready', 'memories_ready', 'subagent_ready'] as const
 
 /**
 Characters kept for one snapshot text field; a longer result is cut, not rejected.

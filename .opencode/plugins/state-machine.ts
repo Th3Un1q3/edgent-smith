@@ -12,7 +12,6 @@ import { Cause, Effect } from 'effect'
 import type { JsonSchema } from 'effect'
 import type { Context, Plugin } from '@opencode/plugin/effect/plugin'
 import type { Session } from '@opencode/schema/session'
-import type { Skill } from '@opencode/schema/skill'
 import { Tool } from '@opencode/schema/tool'
 
 import { harnessConfig } from './config/harness'
@@ -20,6 +19,7 @@ import { createSnapshotStore } from './state-machine/core/snapshot'
 import { appendSynthetic } from './helpers/session/synthetic-append'
 import { createSessionReader } from './helpers/session/read'
 import { memoryKey, readMemories } from './state-machine/core/memory'
+import { skillAttachments } from './state-machine/machines/session/skill-attachments'
 import {
   createStateMachine,
   loadStateMachineLibrary,
@@ -32,7 +32,6 @@ import type {
   CallbackPayload,
   CommandEmit,
   EmitRequest,
-  InjectSkill,
   LoadMemories,
   MachineHandle,
   RunShell,
@@ -136,7 +135,6 @@ const signalInput: JsonSchema.JsonSchema = {
 
 export interface PluginPorts {
   readonly runShell?: RunShell
-  readonly injectSkill?: InjectSkill
   readonly loadMemories?: LoadMemories
   readonly runSubagent?: RunSubagent
   readonly sendCommand?: SendCommand
@@ -159,12 +157,6 @@ export const createStateMachinePlugin = (
   id: 'opencode.state-machine',
   effect: context => Effect.gen(function* () {
     const runShell: RunShell = orDefault(ports.runShell, runShellCommand)
-    const injectSkill: InjectSkill = orDefault(ports.injectSkill, (sessionId, name) =>
-      context.session.prompt({
-        sessionID: sessionId as Session.ID,
-        text: '',
-        skills: [{ id: name as Skill.ID }],
-      }).pipe(Effect.asVoid))
     const loadMemories: LoadMemories = orDefault(ports.loadMemories, namespace => Effect.tryPromise({
       try: () => readMemories(context.location.directory, namespace),
       catch: cause => new Error(String(cause)),
@@ -192,16 +184,14 @@ export const createStateMachinePlugin = (
       }),
     })
 
-    const sendPrompt = (sessionId: string, text: string, description: string): Effect.Effect<void> =>
-      appendSynthetic(
-        context.session.synthetic({
-          sessionID: sessionId as Session.ID,
-          text,
-          description,
-          resume: true,
-        }),
-        { _tag: 'report', onFailure: reportFailure('emit.prompt failed for session ' + sessionId) },
-      ).pipe(Effect.asVoid)
+    const sendPrompt = (sessionId: string, text: string, description: string, skills: readonly string[] = []): Effect.Effect<void> =>
+      skills.length === 0
+        ? appendSynthetic(
+            context.session.synthetic({ sessionID: sessionId as Session.ID, text, description, resume: true }),
+            { _tag: 'report', onFailure: reportFailure('emit.prompt failed for session ' + sessionId) },
+          ).pipe(Effect.asVoid)
+        : context.session.prompt({ sessionID: sessionId as Session.ID, text, ...skillAttachments(skills) })
+            .pipe(Effect.catchCause(reportFailure('emit.prompt failed for session ' + sessionId)))
 
     const promptCommandRefusal = (sessionId: string, name: string, reason: string): Effect.Effect<void> =>
       sendPrompt(sessionId, commandRefusalLine(name, reason), COMMAND_REFUSAL_PROMPT_DESCRIPTION)
@@ -322,7 +312,6 @@ export const createStateMachinePlugin = (
       = createEmitDelivery({
         directory: context.location.directory,
         runShell,
-        injectSkill,
         loadMemories,
         subagent,
         sendPrompt,

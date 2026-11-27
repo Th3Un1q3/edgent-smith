@@ -1,11 +1,8 @@
 /**
  * The loop's behaviour: the action bodies and guard bodies the JSON workflow
- * names by type, plus the values its prompt templates fill. The table in
- * `machine.json` supplies the parameters; this module supplies the code, and
- * `templates/` supplies the wording.
+ * names by type. The table in `machine.json` supplies the parameters; this
+ * module supplies the code.
  */
-export type { TemplateId } from './template-files'
-
 export {
   ACTION_TYPES,
   GUARD_TYPES,
@@ -15,7 +12,6 @@ export {
 export type {
   ActionSpec,
   ActionType,
-  ActivateSkillParameters,
   AdHocSignal,
   CounterBelowParameters,
   EmitParentParameters,
@@ -23,9 +19,7 @@ export type {
   FieldPresentParameters,
   GuardSpec,
   GuardType,
-  MarkSkillParameters,
   PromptParameters,
-  PromptTemplate,
   RecallMemoriesParameters,
   RecordCallbackParameters,
   RecordParameters,
@@ -39,8 +33,6 @@ export type {
   UpdateSignalsPolicyParameters,
   XStateRuntime,
 } from './definition-contract'
-
-export { promptDescription, renderPrompt, renderTemplate } from './prompt-templates'
 
 export {
   createSignalRegistry,

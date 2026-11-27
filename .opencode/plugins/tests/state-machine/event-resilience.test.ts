@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { boot, content } from '@tests/helpers/state-machine/session-loop-fixtures'
 import { sessionCreated, sessionIdle, sessionInterrupted } from '@tests/helpers/state-machine/harness'
 
+import { stageRendered } from '@tests/helpers/state-machine/stage-text'
+
 import type { Harness } from '@tests/helpers/state-machine/harness'
 
 // A reload keeps the host storage and loses the factory's in-memory entries.
@@ -50,7 +52,7 @@ describe('idle after a reload', () => {
 
     await restarted.emit(sessionIdle('ses_1'))
 
-    expect(restarted.synthetics.some(message => message.text.includes('CLAIM_WORK'))).toBe(true)
+    expect(restarted.synthetics.some(message => message.text.includes(stageRendered('idle_nudge', { state: 'work' })))).toBe(true)
     expect(restarted.storageWrites.filter(write => write.key.endsWith('/ses_1')).length).toBeGreaterThan(writesBefore)
 
     const accepted = await restarted.runTool({ type: 'CLAIM_WORK' }, 'ses_1')
@@ -75,7 +77,7 @@ describe('idle after a reload', () => {
 
     await harness.emit(sessionIdle('ses_1'))
 
-    expect(harness.synthetics.slice(spoken).some(message => message.text.includes('CLAIM_WORK'))).toBe(true)
+    expect(harness.synthetics.slice(spoken).some(message => message.text.includes(stageRendered('idle_nudge', { state: 'work' })))).toBe(true)
   })
 })
 

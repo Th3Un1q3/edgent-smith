@@ -17,7 +17,7 @@ Turn one request into standalone subtasks, run them with `tools.subtask_run`, an
 1. Set the goal with `signal_send({ type: 'SET_GOAL', payload: { goal } })` before the first dispatch; extend or replace it when a new request arrives instead of abandoning unfinished work. Only `parked` and `panic` return to a fresh goal on a user item: a message received during `work` does not.
 2. Dispatch with `execute({ code })` calling `tools.subtask_run`; keep every child `task_id`, the handle for all follow-up work, and put independent dispatches in one `execute` call.
 
-Stage guidance arrives as its own message when a stage opens, so the method for the moment is the last message you hold — except in `check` and after a restore, which emit nothing: there, and in `panic` re-entered without an arm text, work from this file and its [Stage map](#stage-map) notes. A stage's message is sent once: a restored or compacted session never receives it again, so before acting in a state whose message you do not hold, dispatch a reader for `.opencode/plugins/state-machine/machines/session/templates/<template>.md` — `work` included, since `validate` and `panic` need its envelope.
+Stage guidance arrives with the message that opens a stage — the prompt's text plus the skills it names — so the method for the moment is the last message and skill load you hold — except in `check` and after a restore, which emit nothing: there, and in `panic` re-entered without an arm text, work from this file and its [Stage map](#stage-map) notes. A stage's message is sent once: a restored or compacted session never receives it again, so before acting in a state whose message you do not hold, load the stage's `progressive-*` skill — `work` included, since `validate` and `panic` need its envelope.
 
 ## Stage map
 
@@ -55,7 +55,7 @@ A child sees none of your conversation, so every prompt stands alone and takes i
 
 ## Shaping a subtask
 - **Carry, never retype.** Carry a child's report as its `outputText` verbatim, as a path or id pointer, or by resuming that `task_id`; the ladder's last rung is the only exception and carries its stated reason.
-- **Judge, never rule.** No verdict, ranking, or comparison of your own, including the `Criteria:` line of your close report: dispatch a fresh judge (the [Fresh judge](../plugins/state-machine/machines/session/templates/validation_self_report.md#fresh-judge) pattern, one subtask when several artifacts must be ranked) and forward its line-1 verdict with the evidence it named.
+- **Judge, never rule.** No verdict, ranking, or comparison of your own, including the `Criteria:` line of your close report: dispatch a fresh judge (the [Fresh judge](../../.agents/skills/progressive-validation/SKILL.md) pattern, one subtask when several artifacts must be ranked) and forward its line-1 verdict with the evidence it named.
 
 ## Execution envelope
 Every body sits inside the envelope printed with the `work` text: it supplies `run`, `ok`, `parse`, `settle`, `skillsSeen` and the only `try`/`catch`, and a body ends `return result` or returns its own object.

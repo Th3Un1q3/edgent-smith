@@ -2,8 +2,10 @@ import { Effect } from 'effect'
 import type { Context } from '@opencode/plugin/effect/plugin'
 import type { Agent } from '@opencode/schema/agent'
 import type { Session } from '@opencode/schema/session'
+import type { Skill } from '@opencode/schema/skill'
 
 import { causeText } from './cause-text'
+import { skillAttachments } from '../machines/session/skill-attachments'
 import type { CallbackPayload, SubagentEmit } from '../core/machine'
 
 /**
@@ -14,6 +16,7 @@ export type RunSubagent = (request: {
   readonly parentID: string
   readonly agent: string
   readonly text: string
+  readonly skills?: readonly string[]
   readonly timeoutMs: number
 }) => Effect.Effect<CallbackPayload, unknown>
 
@@ -76,7 +79,11 @@ hanging, and the read mechanism behind `wait` stays the host's business.
 const sessionSubagentPort = (context: Context): RunSubagent => request => Effect.gen(function* () {
   const session = context.session as unknown as {
     readonly create?: (input: { parentID: Session.ID, agent: Agent.ID }) => Effect.Effect<{ id: string }, unknown>
-    readonly prompt?: (input: { sessionID: Session.ID, text: string }) => Effect.Effect<unknown>
+    readonly prompt?: (input: {
+      sessionID: Session.ID
+      text: string
+      skills?: ReadonlyArray<{ readonly id: Skill.ID }>
+    }) => Effect.Effect<unknown>
     readonly wait?: (input: { sessionID: Session.ID }) => Effect.Effect<unknown>
   }
 
@@ -87,8 +94,9 @@ const sessionSubagentPort = (context: Context): RunSubagent => request => Effect
   }
 
   const port = session as Required<typeof session>
+  const attachments = skillAttachments(request.skills)
   const child = yield* port.create({ parentID: request.parentID as Session.ID, agent: request.agent as Agent.ID })
-  yield* port.prompt({ sessionID: child.id as Session.ID, text: request.text })
+  yield* port.prompt({ sessionID: child.id as Session.ID, text: request.text, ...attachments })
 
   return readVerdict(replyText(yield* port.wait({ sessionID: child.id as Session.ID })))
 })
@@ -124,7 +132,7 @@ export const createSubagentRunner = (
       pending.set(sessionId, sessionId)
 
       const child = Effect.timeoutOption(
-        run({ parentID: sessionId, agent: emit.agent, text: emit.text, timeoutMs: emit.timeoutMs }),
+        run({ parentID: sessionId, agent: emit.agent, text: emit.text, skills: emit.skills, timeoutMs: emit.timeoutMs }),
         emit.timeoutMs,
       ).pipe(
         Effect.match({

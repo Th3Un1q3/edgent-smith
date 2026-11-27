@@ -1,8 +1,13 @@
+---
+name: progressive-panic
+description: Load when the loop is blocked or the round cap of 3 is hit with failed changes in the tree, because the session must park, ask the user before any destructive step, and revert only the paths the failed child named.
+---
+
+# Progressive Panic
+
 The loop is blocked. Report what stopped it, revert nothing without the user's own line, and ask before any destructive step.
 
-Parked for investigation: {{reason}}{{#detail}} ({{detail}}){{/detail}}
-
-### Rollback and revisit
+## Rollback and revisit
 
 **Intent**: a task or loop stops making progress — at the while-loop cap of 3 rounds — so the orchestrator interviews the child that made the changes, asks the user before anything destructive, reverts from the interview's own path list, and re-executes from the clean state. **When**: the round cap is hit with failed changes in the tree. **Combine**: with While loop when the clean-state retry must survive repeated judging; with skill exploration when the re-plan needs a capability the first attempt lacked.
 

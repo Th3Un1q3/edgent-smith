@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createLoopMachine, emittedText } from '@tests/helpers/state-machine/session-loop-fixtures'
 
-import { templateEnd, templateRendered, templateText } from '@tests/helpers/state-machine/template-text'
+import { stageEnd, stageRendered, stageText } from '@tests/helpers/state-machine/stage-text'
 
 import type { EmitRequest, StateMachine } from '@plugins/state-machine/core/machine'
 
@@ -29,7 +29,7 @@ describe('the round lifecycle', () => {
     const emits = enterValidate(machine)
 
     expect(machine.get('ses_1')?.state).toBe('validate')
-    expect(emittedText(emits)).toContain(templateText('validation_self_report'))
+    expect(emittedText(emits)).toContain(stageText('validation_self_report'))
   })
 
   it('records an achieved goal and asks for an improvement', async () => {
@@ -56,7 +56,7 @@ describe('the round lifecycle', () => {
 
     expect(machine.get('ses_1')?.state).toBe('parked')
     expect(machine.get('ses_1')?.context.improvements).toEqual(['faster'])
-    expect(emittedText(emits)).toContain(templateEnd('park_summary'))
+    expect(emittedText(emits)).toContain(stageEnd('park_summary'))
   })
 
   it('starts a new round on user input from parked', async () => {
@@ -72,7 +72,7 @@ describe('the round lifecycle', () => {
 
     expect(live?.state).toBe('define_goal')
     expect(live?.context).toMatchObject({ goal: '', intent: 'none', attempts: 0 })
-    expect(emittedText(emits)).toContain(templateText('goal_request'))
+    expect(emittedText(emits)).toContain(stageText('goal_request'))
   })
 
   it('starts a new round on user input from panic', async () => {
@@ -88,7 +88,7 @@ describe('the round lifecycle', () => {
 
     expect(machine.get('ses_1')?.state).toBe('define_goal')
     expect(machine.get('ses_1')?.context.attempts).toBe(0)
-    expect(emittedText(emits)).toContain(templateText('goal_request'))
+    expect(emittedText(emits)).toContain(stageText('goal_request'))
   })
 
   it('counts an incomplete goal and asks for a lesson', async () => {
@@ -102,7 +102,7 @@ describe('the round lifecycle', () => {
       state: 'memorize',
       context: { attempts: 1, intent: 'lesson' },
     })
-    expect(emittedText(emits)).toContain(templateRendered('memorize', { improvement: false }))
+    expect(emittedText(emits)).toContain(stageRendered('memorize', { improvement: false }))
   })
 
   it('records a lesson and returns to work', async () => {

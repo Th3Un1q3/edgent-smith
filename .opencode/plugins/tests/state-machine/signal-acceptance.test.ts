@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { boot, content, failureOf, VALIDATOR_PROMPT } from '@tests/helpers/state-machine/session-loop-fixtures'
+import { boot, content, failureOf } from '@tests/helpers/state-machine/session-loop-fixtures'
 
-import { sessionCreated } from '@tests/helpers/state-machine/harness'
+import { promptCalls, sessionCreated } from '@tests/helpers/state-machine/harness'
 
-import { templateStart, templateText } from '@tests/helpers/state-machine/template-text'
+import { stageStart, stageText } from '@tests/helpers/state-machine/stage-text'
 
 import type { Harness } from '@tests/helpers/state-machine/harness'
 
@@ -64,9 +64,11 @@ describe('transitions', () => {
     expect(harness.shellCommands).toEqual(['just opencode::typecheck'])
     expect(result).toContain('Signal accepted.')
     expect(harness.createdSessions).toHaveLength(0)
-    expect(harness.synthetics.some(message => message.text.includes(templateText('validation_self_report')))).toBe(true)
-    expect(harness.synthetics.find(message => message.text.includes(templateText('validation_self_report')))?.description)
-      .toBe(VALIDATOR_PROMPT)
+    expect(promptCalls).toContainEqual({
+      sessionID: 'ses_1',
+      text: stageText('validation_self_report'),
+      skills: [{ id: 'progressive-validation' }],
+    })
   })
 
   it('records the quality check failure and parks in panic', async () => {
@@ -80,7 +82,7 @@ describe('transitions', () => {
 
     expect(result).toContain('Signal accepted.')
 
-    const failurePrompt = harness.synthetics.find(message => message.text.includes(templateStart('quality_check_failed')))
+    const failurePrompt = harness.synthetics.find(message => message.text.includes(stageStart('quality_check_failed')))
 
     expect(failurePrompt?.text).toContain('type error')
   })
@@ -94,9 +96,13 @@ describe('transitions', () => {
     await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
     await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
 
-    expect(harness.injectedSkills).toEqual(['task-delegation'])
+    expect(promptCalls).toContainEqual({
+      sessionID: 'ses_1',
+      text: expect.stringContaining(stageStart('work_towards_goal') + 'ship it'),
+      skills: [{ id: 'progressive-work' }, { id: 'task-delegation' }],
+    })
 
-    const prompt = harness.synthetics.find(message => message.text.includes(templateStart('work_towards_goal') + 'ship it'))
+    const prompt = promptCalls.find(call => call.text.includes(stageStart('work_towards_goal') + 'ship it'))
 
     expect(prompt?.text).toContain('be terse')
   })

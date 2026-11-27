@@ -2,23 +2,31 @@ import { describe, expect, it } from 'vitest'
 
 import { createStateMachine, loadStateMachineLibrary, promptDescription } from '@plugins/state-machine/core/machine'
 
-import { createLoopMachine, emittedText, GOAL_REQUEST, VALIDATOR_PROMPT, WORK_PROMPT } from '@tests/helpers/state-machine/session-loop-fixtures'
+import { boot, createLoopMachine, emittedText, VALIDATOR_PROMPT, WORK_PROMPT } from '@tests/helpers/state-machine/session-loop-fixtures'
 
-import { templateStart, templateText } from '@tests/helpers/state-machine/template-text'
+import { promptCalls, sessionCreated } from '@tests/helpers/state-machine/harness'
+
+import { stageStart, stageText } from '@tests/helpers/state-machine/stage-text'
 
 const PLAN_PROMPT = 'Ask the agent to shape the goal before dispatching any work.'
 
 describe('the emit transport', () => {
   it('holds the goal request for the first user message instead of sending it', async () => {
-    const machine = await createLoopMachine()
-    const started = machine.start('ses_1', 'rug')
+    const harness = await boot()
 
-    expect(started?.emits).toEqual([])
-    expect(machine.wake('ses_1')).toContainEqual({
-      type: 'emit.prompt',
-      text: expect.stringContaining(templateText('goal_request')),
-      description: GOAL_REQUEST,
+    await harness.emit(sessionCreated('ses_1', 'rug'))
+
+    expect(promptCalls).toEqual([])
+    expect(harness.synthetics.some(message => message.text.includes(stageText('goal_request')))).toBe(false)
+
+    await harness.emitUserMessage('ses_1', 'user', 'ship it')
+
+    expect(promptCalls).toContainEqual({
+      sessionID: 'ses_1',
+      text: stageText('goal_request'),
+      skills: [{ id: 'progressive-goal-setting' }],
     })
+    expect(harness.synthetics.some(message => message.text.includes(stageText('goal_request')))).toBe(false)
   })
 
   it('carries the description the action supplied on every prompt emit', async () => {
@@ -80,44 +88,57 @@ describe('the emit transport', () => {
     expect(machine.get('ses_1')?.context.injected['preferences/user']?.full).toEqual(['be terse'])
   })
 
-  it('emits the plan prompt on SET_GOAL and the work prompt and skill request on PLAN_READY', async () => {
-    const machine = await createLoopMachine()
+  it('delivers the plan prompt on SET_GOAL and the work prompt with its skills on PLAN_READY', async () => {
+    const harness = await boot()
 
-    machine.start('ses_1', 'rug')
+    await harness.emit(sessionCreated('ses_1', 'rug'))
+    await harness.runTool({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
 
-    const goal = machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
+    expect(promptCalls).toContainEqual({
+      sessionID: 'ses_1',
+      text: stageText('plan_stage'),
+      skills: [{ id: 'progressive-plan' }],
+    })
+    expect(harness.synthetics.some(message => message.text.includes(stageText('plan_stage')))).toBe(false)
 
-    expect(goal.emits).toEqual([
-      { type: 'emit.prompt', text: expect.stringContaining(templateStart('plan_stage')), description: PLAN_PROMPT },
-      { type: 'emit.signals', signal_keys: ['PLAN_READY'] },
-    ])
+    await harness.runTool({ type: 'PLAN_READY' }, 'ses_1')
 
-    const work = machine.signal({ type: 'PLAN_READY' }, 'ses_1')
-
-    expect(work.emits).toEqual([
-      { type: 'emit.prompt', text: expect.stringContaining(templateStart('work_towards_goal') + 'ship it'), description: WORK_PROMPT },
-      { type: 'emit.signals', signal_keys: ['CLAIM_WORK'] },
-      { type: 'emit.skill', name: 'task-delegation', reportTo: 'skill_ready' },
-    ])
+    expect(promptCalls).toContainEqual({
+      sessionID: 'ses_1',
+      text: expect.stringContaining(stageStart('work_towards_goal') + 'ship it'),
+      skills: [{ id: 'progressive-work' }, { id: 'task-delegation' }],
+    })
+    expect(harness.synthetics.some(message => message.text.includes(stageStart('work_towards_goal') + 'ship it'))).toBe(false)
   })
 
-  it('records the injected skill and does not request it twice', async () => {
+  it('records the skills a prompt carries once and does not add them again on re-entry', async () => {
     const machine = await createLoopMachine()
 
     machine.start('ses_1', 'rug')
     machine.signal({ type: 'SET_GOAL', payload: { goal: 'ship it' } }, 'ses_1')
     machine.signal({ type: 'PLAN_READY' }, 'ses_1')
-    machine.callback('ses_1', 'skill_ready', { ok: true })
 
-    expect(machine.get('ses_1')?.context.injectedSkills).toEqual(['skill:task-delegation:complete'])
+    const delivered = [
+      'skill:progressive-goal-setting:complete',
+      'skill:progressive-plan:complete',
+      'skill:progressive-work:complete',
+      'skill:task-delegation:complete',
+    ]
+
+    expect(machine.get('ses_1')?.context.injectedSkills).toEqual(delivered)
 
     machine.signal({ type: 'CLAIM_WORK' }, 'ses_1')
     machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0 })
     machine.signal({ type: 'GOAL_INCOMPLETE' }, 'ses_1')
+    machine.signal({ type: 'LESSON', payload: { text: 'retry' } }, 'ses_1')
+    machine.signal({ type: 'RETROSPECTIVE_COMPLETE' }, 'ses_1')
 
-    const emits = machine.signal({ type: 'LESSON', payload: { text: 'retry' } }, 'ses_1').emits
-
-    expect(emits).not.toContainEqual({ type: 'emit.skill', name: 'task-delegation', reportTo: 'skill_ready' })
+    expect(machine.get('ses_1')?.context.injectedSkills).toEqual([
+      ...delivered,
+      'skill:progressive-validation:complete',
+      'skill:progressive-retrospective:complete',
+      'skill:harness-management:complete',
+    ])
   })
 
   it('drops the oldest lesson past the memory limit', async () => {
@@ -169,7 +190,7 @@ describe('the emit transport', () => {
     const emits = machine.callback('ses_1', 'quality_check_ready', { ok: true, exitCode: 0, output: 'clean' })
 
     expect(machine.get('ses_1')?.state).toBe('validate')
-    expect(emittedText(emits)).toContain(templateText('validation_self_report'))
+    expect(emittedText(emits)).toContain(stageText('validation_self_report'))
     expect(machine.get('ses_1')?.context.results.quality_check_ready).toEqual({
       ok: true,
       exitCode: 0,
@@ -187,7 +208,7 @@ describe('the emit transport', () => {
 
     const emits = machine.callback('ses_1', 'quality_check_ready', { ok: false, exitCode: 1, output: 'boom' })
 
-    expect(emittedText(emits)).toContain(templateStart('quality_check_failed'))
+    expect(emittedText(emits)).toContain(stageStart('quality_check_failed'))
     expect(machine.get('ses_1')?.state).toBe('panic')
     expect(machine.get('ses_1')?.context.failure).toMatchObject({ detail: 'boom' })
   })

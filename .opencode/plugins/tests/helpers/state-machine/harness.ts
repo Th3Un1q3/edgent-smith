@@ -56,6 +56,16 @@ export interface SyntheticMessage {
   resume?: boolean
 }
 
+// The `session.prompt` payload the plugin sends when a prompt carries skills:
+// the stage line plus the ids it asks the agent to load.
+export interface PromptCall {
+  readonly sessionID: string
+  readonly text: string
+  readonly skills: ReadonlyArray<{ readonly id: string }>
+}
+
+export const promptCalls: PromptCall[] = []
+
 export interface Harness {
   context: Context
   synthetics: SyntheticMessage[]
@@ -121,6 +131,7 @@ const runSignalTool = async (
 }
 
 export const makeHarness = (): Harness => {
+  promptCalls.length = 0
   const queues: Array<Queue.Queue<Event>> = []
   const synthetics: Harness['synthetics'] = []
   const storageWrites: Harness['storageWrites'] = []
@@ -208,7 +219,8 @@ export const makeHarness = (): Harness => {
             }),
         get: (input?: { sessionID?: string }) => Effect.succeed(sessionInfo(h, input?.sessionID)),
         synthetic: (input: SyntheticMessage) => Effect.sync(() => { synthetics.push(input) }),
-        prompt: () => Effect.void,
+        prompt: (input: PromptCall) => Effect.sync(() => { promptCalls.push(input) }),
+        wait: () => Effect.succeed('{"verdict":"pass","reason":"the goal is met"}'),
         hook: () => Effect.succeed({ dispose: Effect.void }),
       },
       storage: {
@@ -241,11 +253,6 @@ export const start = (h: Harness): Fiber.Fiber<never, never> => {
       h.shellCommands.push(command)
       return Effect.succeed(h.shellResult)
     },
-    injectSkill: (_sessionId, name) => h.failSkillInjection
-      ? Effect.fail(new Error('skill refused'))
-      : Effect.sync(() => {
-          h.injectedSkills.push(name)
-        }),
     loadMemories: () => h.failMemories ? Effect.fail(new Error('memory refused')) : Effect.succeed(h.memories),
   })
   const program = Effect.scoped(Effect.flatMap(plugin.effect(h.context), () => Effect.never))

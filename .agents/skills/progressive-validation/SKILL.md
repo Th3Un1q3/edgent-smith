@@ -1,3 +1,10 @@
+---
+name: progressive-validation
+description: Load when a session enters the validate stage and must judge an artifact by a fresh child's quoted verdict, because the producer's own done is the only evidence and GOAL_ACHIEVED is refused without a quoted PASS.
+---
+
+# Progressive Validation
+
 You are in `validate`: the only verdict this stage accepts is a fresh child's, quoted from its own report.
 
 Verdict: call signal_send with type GOAL_ACHIEVED when the goal is met, or GOAL_INCOMPLETE when it is not.
@@ -97,8 +104,8 @@ const result = { status: 'capped', rounds: 3, last_report: lastReport, feedback 
 |---|---|---|
 | `subtask_failed` | read `error`; retry once narrower or canonically; then escalate | a row here plus one Failure Modes rule |
 | `validation_failed` | fresh producer carrying the `FAIL` report; re-validate; stop at the cap | [While loop](#while-loop-ralph-loop) body |
-| `cap_hit` | shrink scope or split, then resume the same `task_id`; ask | [Rollback and revisit](panic_escalation.md#rollback-and-revisit) |
-| `objective_complete` | retrospective stage, then return | [Retrospective: Prompt the Command](../../../../../../.agents/skills/task-delegation/workflows/task-delegation-workflow.md#retrospective-prompt-the-command) |
+| `cap_hit` | shrink scope or split, then resume the same `task_id`; ask | [Rollback and revisit](../progressive-panic/SKILL.md#rollback-and-revisit) |
+| `objective_complete` | retrospective stage, then return | [Retrospective: Prompt the Command](../task-delegation/workflows/task-delegation-workflow.md#retrospective-prompt-the-command) |
 | `objective_blocked` | `question` with evidence and options | Failure Modes → stop triggers |
 
 ## Close the task

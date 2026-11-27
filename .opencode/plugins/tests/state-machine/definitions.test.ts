@@ -4,13 +4,11 @@ import {
   createActions,
   createGuards,
   declaredPolicyParameters,
-  promptDescription,
-  renderTemplate,
 } from '@plugins/state-machine/machines/session/definitions'
 
 import { signalEvent } from '@plugins/state-machine/core/machine'
 
-import { templateEnd, templateRendered, templateStart } from '@tests/helpers/state-machine/template-text'
+import { stageEnd, stageRendered, stageStart } from '@tests/helpers/state-machine/stage-text'
 
 import type { LoopContext, LoopEvent } from '@plugins/state-machine/core/machine'
 import type { XStateRuntime } from '@plugins/state-machine/machines/session/definitions'
@@ -48,62 +46,41 @@ const actions = createActions(runtime, { signals: {}, codecs: {} })
 const record = (parameters: unknown, event: LoopEvent, base: LoopContext = context()): unknown =>
   call(actions.record, { context: base, event }, parameters)
 
-describe('promptDescription', () => {
-  it('names an emit that supplies no description by its opening words', () => {
-    expect(promptDescription({ text: 'Ask the operator for a decision' }))
-      .toBe('Sent synthetic message: Ask the operator for...')
-  })
-
-  it('keeps the description the action supplied', () => {
-    expect(promptDescription({ text: 'Ask the operator for a decision', description: 'Judge the goal' }))
-      .toBe('Judge the goal')
-  })
-})
-
-describe('failure templates', () => {
+describe('failure prompt text', () => {
   it('names an unknown quality-check reason and omits a missing detail', () => {
-    const text = renderTemplate({ template: 'quality_check_failed' }, context())
+    const text = stageRendered('quality_check_failed')
 
-    expect(templateStart('quality_check_failed')).not.toBe('')
+    expect(stageStart('quality_check_failed')).not.toBe('')
     expect(text).toContain('unknown')
     expect(text).not.toContain('undefined')
-    expect(text.startsWith(templateStart('quality_check_failed'))).toBe(true)
-    expect(text).toBe(templateRendered('quality_check_failed', { reason: 'unknown', detail: undefined }))
+    expect(text.startsWith(stageStart('quality_check_failed'))).toBe(true)
+    expect(text.endsWith(stageEnd('quality_check_failed'))).toBe(true)
   })
 
   it('renders the quality-check reason and its detail when both exist', () => {
-    const text = renderTemplate(
-      { template: 'quality_check_failed' },
-      context({ failure: { reason: 'exit 1', detail: 'type error' } }),
-    )
+    const text = stageRendered('quality_check_failed', { reason: 'exit 1', detail: 'type error' })
 
-    expect(templateEnd('quality_check_failed')).not.toBe('')
     expect(text).toContain('exit 1')
     expect(text).toContain('type error')
-    expect(text.endsWith(templateEnd('quality_check_failed'))).toBe(true)
-    expect(text).toBe(templateRendered('quality_check_failed', { reason: 'exit 1', detail: 'type error' }))
+    expect(text.endsWith(stageEnd('quality_check_failed'))).toBe(true)
   })
 
   it('names an unknown escalation reason and omits a missing detail', () => {
-    const text = renderTemplate({ template: 'panic_escalation' }, context())
+    const text = stageRendered('panic_escalation')
 
-    expect(templateStart('panic_escalation')).not.toBe('')
+    expect(stageStart('panic_escalation')).not.toBe('')
     expect(text).toContain('unknown')
     expect(text).not.toContain('undefined')
-    expect(text.startsWith(templateStart('panic_escalation'))).toBe(true)
-    expect(text).toBe(templateRendered('panic_escalation', { reason: 'unknown', detail: undefined }))
+    expect(text.startsWith(stageStart('panic_escalation'))).toBe(true)
+    expect(text.endsWith(stageEnd('panic_escalation'))).toBe(true)
   })
 
   it('renders the escalation reason and its detail when both exist', () => {
-    const text = renderTemplate(
-      { template: 'panic_escalation' },
-      context({ failure: { reason: 'attempts exhausted', detail: 'three tries' } }),
-    )
+    const text = stageRendered('panic_escalation', { reason: 'attempts exhausted', detail: 'three tries' })
 
-    expect(templateStart('panic_escalation')).not.toBe('')
     expect(text).toContain('attempts exhausted')
     expect(text).toContain('three tries')
-    expect(text).toBe(templateRendered('panic_escalation', { reason: 'attempts exhausted', detail: 'three tries' }))
+    expect(text.startsWith(stageStart('panic_escalation'))).toBe(true)
   })
 })
 
@@ -174,15 +151,6 @@ describe('record action', () => {
 
     expect(next.results.quality_check_ready).toEqual({ ok: false })
     expect(next.failure?.reason).toBe('quality_check_ready failed')
-  })
-
-  it('keeps one skill marker when the skill is marked twice', () => {
-    const base = context({ injectedSkills: ['skill:task-delegation:complete'] })
-    const next = call(actions.mark_skill, { context: base }, { name: 'task-delegation' }) as {
-      injectedSkills: readonly string[]
-    }
-
-    expect(next.injectedSkills).toEqual(['skill:task-delegation:complete'])
   })
 
   const recall = (base: LoopContext, namespace: string): Partial<LoopContext> =>
