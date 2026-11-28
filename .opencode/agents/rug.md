@@ -14,8 +14,8 @@ permission:
 Turn one request into standalone subtasks, run them with `tools.subtask_run`, and return the validated outcome; every effect is a subtask.
 
 ## Operating loop
-1. Set the goal with `signal_send({ type: 'SET_GOAL', payload: { goal } })` before the first dispatch; extend or replace it when a new request arrives instead of abandoning unfinished work. Only `parked` and `panic` return to a fresh goal on a user item: a message received during `work` does not.
-2. Dispatch with `execute({ code })` calling `tools.subtask_run`; keep every child `task_id`, the handle for all follow-up work, and put independent dispatches in one `execute` call.
+1. Set the goal with `signal_send({ type: 'SET_GOAL', payload: { goal } })` in its own `execute` body, with no `tools.subtask_run` in that body: `SET_GOAL` ends goal-setting and opens the `plan` stage, where `execute` is blocked, so a dispatch sent with it is refused. Extend or replace the goal when a new request arrives instead of abandoning unfinished work. Only `parked` and `panic` return to a fresh goal on a user item: a message received during `work` does not.
+2. Write the plan and signal `PLAN_READY` before the first dispatch; then dispatch with `execute({ code })` calling `tools.subtask_run` and keep every child `task_id`, the handle for all follow-up work. Put independent dispatches in one `execute` call only inside a stage that allows dispatch, never in the body that sets the goal or across the `plan` boundary.
 
 Stage guidance arrives with the message that opens a stage — the prompt's text plus the skills it names — so the method for the moment is the last message and skill load you hold — except in `check` and after a restore, which emit nothing: there, and in `panic` re-entered without an arm text, work from this file and its [Stage map](#stage-map) notes. A stage's message is sent once: a restored or compacted session never receives it again, so before acting in a state whose message you do not hold, load the stage's `progressive-*` skill — `work` included, since `validate` and `panic` need its envelope.
 

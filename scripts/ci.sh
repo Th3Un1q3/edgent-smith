@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # scripts/ci.sh — local CI gate runner (13 gates, sequential).
+# opencode-deps is gate 0: verify-thresholds resolves eslint by importing it from
+# .opencode/node_modules, which a clean checkout does not have yet.
 # Gates (order matters):
-#  0) verify-thresholds  1) verify-agents  2) format-check  3) lint  4) markdownlint  5) typecheck  6) test
-#  7) workflow-security  8) opencode-deps  9) opencode-test  10) opencode-lint
+#  0) opencode-deps  1) verify-thresholds  2) verify-agents  3) format-check  4) lint  5) markdownlint
+#  6) typecheck  7) test  8) workflow-security  9) opencode-test  10) opencode-lint
 # 11) opencode-typecheck  12) opencode-mutation (dominant; measured ~193s locally with
 # ignoreStatic, 451s before; warm incremental re-run ~17s)
 # Parity: remote PR CI runs `just ci` verbatim; keep this script, the `ci` justfile
@@ -62,6 +64,7 @@ run_check() {
   rm -f "$output_file"
 }
 
+run_check opencode-deps just .opencode/deps
 run_check verify-thresholds bash scripts/verify_thresholds.sh
 run_check verify-agents just verify-agents
 run_check format-check just format-check
@@ -70,7 +73,6 @@ run_check markdownlint just docs::lint
 run_check typecheck just typecheck
 run_check test just test
 run_check workflow-security uv run python scripts/validate_workflow_security.py
-run_check opencode-deps just .opencode/deps
 run_check opencode-test just .opencode/test --coverage
 run_check opencode-lint just .opencode/lint
 run_check opencode-typecheck just .opencode/typecheck

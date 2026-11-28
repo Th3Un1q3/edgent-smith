@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# scripts/verify_thresholds.sh — L1 Gate #0 fail-closed pin for critical thresholds + config escapes.
+# scripts/verify_thresholds.sh — L1 Gate #1 fail-closed pin for critical thresholds + config escapes.
 # Fails closed: any threshold downgrade or banned escape triggers non-zero exit.
 # Semantic family checks: thresholds via numeric compare, rule downgrades via family grep, SKIP export-tolerant, per-file ignores.
-# Idempotent, no side effects. Run via: bash scripts/verify_thresholds.sh or just verify-agents (Gate #0).
+# Idempotent, no side effects. Run via: bash scripts/verify_thresholds.sh or just verify-agents (Gate #1).
 set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -286,7 +286,7 @@ complexity_cov_dirs=$(echo "$complexity_cov_out" | grep -c '^OK ' || true)
 if [ "$complexity_cov_rc" -eq 0 ] && [ "$complexity_cov_dirs" -ge 1 ]; then
   ok "eslint complexity resolves (error, max 3) for all $complexity_cov_dirs plugin subdirectory probes"
 else
-  fail_msg "eslint complexity unresolved for a plugin subdirectory — fix the complexity block globs in .opencode/eslint.config.js (rc=$complexity_cov_rc): $complexity_cov_out"
+  fail_msg "eslint complexity unresolved for a plugin subdirectory — fix the complexity block globs in .opencode/eslint.config.js (rc=$complexity_cov_rc); if eslint cannot be imported, install the .opencode/node_modules tree with just .opencode/deps: $complexity_cov_out"
 fi
 
 # 7) Per-file escape bans (Ruff/mypy/ts/eslint) — scoped to source dirs, not .venv/.git/node_modules/.dsh

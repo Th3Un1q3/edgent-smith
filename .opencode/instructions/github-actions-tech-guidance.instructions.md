@@ -50,7 +50,8 @@ Apply to every `.github/workflows/*.yml` that uses `devcontainers/ci`:
    ```
    Downstream `ci` must allow skip: `if: always() && (needs.prebuild-devcontainer.result == 'success' || needs.prebuild-devcontainer.result == 'skipped')`.
 4. **Parity:** remote runs `just ci` inside the DevContainer (`runCmd` invokes `just ci` and preserves its exit code). Keep `scripts/ci.sh` and `.github/workflows/ci.yml` in sync.
-5. **Gate it:** `scripts/verify_thresholds.sh` check #8 asserts `grep -R "devcontainers/ci@"` count = 5; it runs as Gate #0 inside `just verify-agents`.
+5. **Gate it:** `scripts/verify_thresholds.sh` check #8 asserts `grep -R "devcontainers/ci@"` count = 5; it runs as Gate #1 in `scripts/ci.sh` and is also invoked by `just verify-agents`.
+6. **Install before the gate that resolves it:** a gate or workflow step that runs a tool from an installed dependency tree comes after the step that provides that tree, whether the image, a feature, or an explicit install, in the same job. `scripts/ci.sh` runs `just .opencode/deps` as gate 0 ahead of `scripts/verify_thresholds.sh`, which imports eslint from `.opencode/node_modules`. A fail-closed check whose prerequisite is missing names the prerequisite and the command that provides it (`just .opencode/deps`) instead of exiting nonzero with no message. The gate-order test in `tests/test_ci_workflow.py` pins the install ahead of the dependent gate: moving the install after it must fail that test.
 
 ## Stryker incremental cache
 

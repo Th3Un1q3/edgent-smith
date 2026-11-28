@@ -108,6 +108,7 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
 
     assert result.returncode == 1
     assert command_log.read_text().splitlines() == [
+        "just .opencode/deps",
         "just verify-agents",
         "just format-check",
         "just lint",
@@ -115,7 +116,6 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
         "just typecheck",
         "just test",
         "uv run python scripts/validate_workflow_security.py",
-        "just .opencode/deps",
         "just .opencode/test --coverage",
         "just .opencode/lint",
         "just .opencode/typecheck",
@@ -123,14 +123,15 @@ def test_ci_script_preserves_check_order_and_failure_reporting(tmp_path: pathlib
     ]
 
     output = result.stdout
+    assert output.index("── opencode-deps") < output.index("── verify-thresholds")
+    assert output.index("── verify-thresholds") < output.index("── verify-agents")
     assert output.index("── verify-agents") < output.index("── format-check")
     assert output.index("── format-check") < output.index("── lint")
     assert output.index("── lint") < output.index("── markdownlint")
     assert output.index("── markdownlint") < output.index("── typecheck")
     assert output.index("── typecheck") < output.index("── test")
     assert output.index("── test") < output.index("── workflow-security")
-    assert output.index("── workflow-security") < output.index("── opencode-deps")
-    assert output.index("── opencode-deps") < output.index("── opencode-test")
+    assert output.index("── workflow-security") < output.index("── opencode-test")
     assert output.index("── opencode-test") < output.index("── opencode-lint")
     assert output.index("── opencode-lint") < output.index("── opencode-typecheck")
     assert output.index("── opencode-typecheck") < output.index("── opencode-mutation")
